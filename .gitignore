@@ -1,0 +1,11 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# MacOS
+**/.DS_Store
+
+# VSCode
+.vscode/
+!.vscode/launch.json
+!.vscode/tasks.json
