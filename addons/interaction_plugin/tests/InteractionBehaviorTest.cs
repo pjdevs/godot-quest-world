@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
+using QuestWorld.Interaction;
 using static GdUnit4.Assertions;
 
 [TestSuite]

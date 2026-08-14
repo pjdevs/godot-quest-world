@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Character;
+
 /// <summary>
 /// Camera-independent input consumed by the character motor for one physics tick.
 /// View angles are absolute character-local angles so the same input can be replayed remotely.

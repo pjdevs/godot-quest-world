@@ -2,14 +2,16 @@
 
 ## Purpose
 
-Reusable Godot 4.7 C# `CharacterBody3D` for gameplay prototyping. It provides camera-relative movement, FPS/TPS views, eight-direction locomotion, sprint, jump/fall/landing, turn-in-place, upper-body pitch and procedural camera effects.
+The reusable Godot 4.7 C# `CharacterBody3D` lives in the `dummy_character_plugin` addon under the `QuestWorld.Character` namespace. It provides camera-relative movement, FPS/TPS views, eight-direction locomotion, sprint, jump/fall/landing, turn-in-place, upper-body pitch and procedural camera effects.
+
+The game keeps a global `Character` subclass at [`quest_world/character/Character.cs`](../../quest_world/character/Character.cs). Its scene composes the generic addon scene with the project's `InteractionInteractor` and `InteractionPresenter`, so the addon remains reusable without an interaction dependency.
 
 ## Architecture
 
 The root is an ordered motor/orchestrator surrounded by focused components:
 
 ```text
-CharacterPlayerController
+QuestWorld.Character.CharacterPlayerController
         |
         v
 CharacterInputFrame (raw local input, one physics sample)
@@ -18,7 +20,7 @@ CharacterInputFrame (raw local input, one physics sample)
 CharacterSimulationInput (camera-independent command)
         |
         v
-Character.cs / Simulate (motor + MoveAndSlide)
+QuestWorld.Character.Character / Simulate (motor + MoveAndSlide)
         |
         v
 CharacterFrameState (immutable post-move snapshot)
@@ -26,23 +28,18 @@ CharacterFrameState (immutable post-move snapshot)
         v                             v
 CharacterAnimationController   CharacterCameraEffects
 
-CharacterCameraRig applies look/view configuration from the same input frame.
-CharacterLookPitchModifier remains a post-animation skeleton modifier.
+`QuestWorld.Character.CharacterCameraRig` applies look/view configuration from the same input frame.
+`QuestWorld.Character.CharacterLookPitchModifier` remains a post-animation skeleton modifier.
 
-The canonical `Character.tscn` also hosts `InteractionInteractor` and `InteractionPresenter`. The interactor uses the active camera as its view origin; `CharacterPlayerController` owns the `interact` action and forwards press/release to the interactor.
+The global project `Character` subclass hosts `InteractionInteractor` and `InteractionPresenter`. The interactor uses the active camera as its view origin; the subclass samples the `interact` action and forwards press/release to the interactor.
 ```
 
 The components are:
 
-- `Character.cs`: deterministic movement authority, floor transitions and orchestration. `Simulate` consumes only `CharacterSimulationInput`; the local physics callback adapts camera input and applies presentation separately.
-- `CharacterPlayerController.cs`: global input sampling and explicit `Possess`/`Unpossess` authority.
-- `CharacterInputFrame.cs`: raw local move, look delta, jump and sprint sampled once per physics tick.
-- `CharacterSimulationInput.cs`: absolute character-local view yaw/pitch plus movement actions consumed by the camera-independent motor.
-- `CharacterFrameState.cs`: shared movement, grounded, jump, landing, sprint and impact result produced by `Simulate`.
-- `CharacterAnimationController.cs`: AnimationTree validation, blend space, airborne priority, turn-in-place and landing one-shot.
-- `CharacterCameraRig.cs`: yaw/pitch, clamps, FPS/TPS placement and active-camera ownership.
-- `CharacterCameraEffects.cs`: render-frame bob, sway, FOV and impact-scaled impulses from the latest physics snapshot.
-- `CharacterLookPitchModifier.cs`: additive upper-body look pitch after animation.
+- `addons/dummy_character_plugin/scripts/Character.cs`: deterministic movement authority, floor transitions and orchestration. `Simulate` consumes only `CharacterSimulationInput`; the local physics callback adapts camera input and applies presentation separately.
+- `addons/dummy_character_plugin/scripts/CharacterPlayerController.cs`: global movement input sampling and explicit `Possess`/`Unpossess` authority.
+- `quest_world/character/Character.cs`: project-only interaction composition and `interact` input forwarding.
+- The remaining `CharacterInputFrame`, `CharacterSimulationInput`, `CharacterFrameState`, animation, camera and pitch scripts stay in the addon namespace `QuestWorld.Character`.
 
 The current version is a clean, focused refactor: `Character.cs` remains the compact orchestration facade, while `Simulate` is an explicit camera-independent motor boundary. Presentation systems do not resample global input or independently infer floor transitions; local-only look deltas are passed directly to camera presentation.
 
@@ -58,7 +55,7 @@ The current version is a clean, focused refactor: `Character.cs` remains the com
 - Left click: recapture the mouse if UI did not consume the click.
 - `E`: start/end the focused interaction while held; the action is configurable through `CharacterPlayerController.InteractionAction`.
 
-The test world contains one player controller with `InitialPawnPath = ../Character`. Additional characters remain simulated but unpossessed until `Possess(character)` is called.
+The test world contains one player controller with the project `res://quest_world/character/Character.tscn` as its spawned scene. Additional characters remain simulated but unpossessed until `Possess(character)` is called.
 
 ## Movement and orientation
 
@@ -91,7 +88,7 @@ Bone lookup supports common aliases, lists every missing requested bone explicit
 
 ## Focused regression tests
 
-`quest_world/character/tests/CharacterBehaviorTest.cs` intentionally freezes only brittle truths:
+`addons/dummy_character_plugin/tests/CharacterBehaviorTest.cs` intentionally freezes only brittle truths of the generic Character:
 
 - initial floor contact does not trigger landing;
 - a stronger impact produces a stronger landing effect;
@@ -115,4 +112,4 @@ Validated on 2026-08-14 with Godot 4.7.1 Mono:
 
 - `dotnet build quest-world.sln`: 0 warnings, 0 errors.
 - Six focused GdUnit4Net C# tests pass.
-- `test_world.tscn` runs headless for 120 frames without scene, C# or node-path errors.
+- `test_world.tscn` runs headless for 120 frames without scene, C# or node-path errors; the project subclass is validated through the project scene.

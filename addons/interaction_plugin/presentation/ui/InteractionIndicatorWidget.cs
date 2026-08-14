@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Interaction;
+
 public partial class InteractionIndicatorWidget : PanelContainer, IInteractionWidget
 {
     private Label _label = null!;

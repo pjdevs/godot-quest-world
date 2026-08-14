@@ -1,0 +1,19 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="PackedScene" path="res://addons/dummy_character_plugin/Character.tscn" id="1_base"]
+[ext_resource type="Script" path="res://quest_world/character/Character.cs" id="2_project_character"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" id="3_interactor"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" id="4_presenter"]
+
+[node name="Character" instance=ExtResource("1_base")]
+script = ExtResource("2_project_character")
+
+[node name="InteractionInteractor" type="Node" parent="."]
+script = ExtResource("3_interactor")
+view_origin_path = NodePath("CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")
+interaction_action_name = &"interact"
+
+[node name="InteractionPresenter" type="CanvasLayer" parent="."]
+script = ExtResource("4_presenter")
+interactor_path = NodePath("InteractionInteractor")
+camera_path = NodePath("CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")

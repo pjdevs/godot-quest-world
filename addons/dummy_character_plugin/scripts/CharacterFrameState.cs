@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Character;
+
 /// <summary>
 /// Immutable result of one character physics tick, shared by presentation systems.
 /// </summary>

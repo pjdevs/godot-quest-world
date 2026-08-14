@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Interaction;
+
 public partial class InteractionPresenter : CanvasLayer
 {
     [Export]

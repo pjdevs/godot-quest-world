@@ -1,12 +1,10 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://quest_world/character/scripts/Character.cs" id="1_8gjjr"]
-[ext_resource type="PackedScene" path="res://quest_world/character/ual_character.tscn" id="2_pbax8"]
-[ext_resource type="Script" path="res://quest_world/character/scripts/CharacterCameraRig.cs" id="3_camera_rig"]
-[ext_resource type="Script" path="res://quest_world/character/scripts/CharacterCameraEffects.cs" id="4_camera_effects"]
-[ext_resource type="Script" path="res://quest_world/character/scripts/CharacterAnimationController.cs" id="5_animation_controller"]
-[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" id="6_interactor"]
-[ext_resource type="Script" path="res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" id="7_presenter"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/scripts/Character.cs" id="1_8gjjr"]
+[ext_resource type="PackedScene" path="res://addons/dummy_character_plugin/ual_character.tscn" id="2_pbax8"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/scripts/CharacterCameraRig.cs" id="3_camera_rig"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/scripts/CharacterCameraEffects.cs" id="4_camera_effects"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/scripts/CharacterAnimationController.cs" id="5_animation_controller"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_woadn"]
 radius = 0.4
@@ -185,13 +183,3 @@ current = false
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
 replication_config = SubResource("SceneReplicationConfig_character")
-
-[node name="InteractionInteractor" type="Node" parent="."]
-script = ExtResource("6_interactor")
-view_origin_path = NodePath("CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")
-interaction_action_name = &"interact"
-
-[node name="InteractionPresenter" type="CanvasLayer" parent="."]
-script = ExtResource("7_presenter")
-interactor_path = NodePath("InteractionInteractor")
-camera_path = NodePath("CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")

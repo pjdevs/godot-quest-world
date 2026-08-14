@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Character;
+
 public partial class Character : CharacterBody3D
 {
     public enum ViewMode
@@ -82,7 +84,6 @@ public partial class Character : CharacterBody3D
     private CharacterCameraRig _cameraRig = null!;
     private CharacterCameraEffects _cameraEffects = null!;
     private CharacterAnimationController _animationController = null!;
-    private InteractionInteractor _interactionInteractor = null!;
     private CharacterInputFrame _pendingInput;
     private CharacterFrameState _latestFrame;
     private float _airborneDuration;
@@ -111,8 +112,6 @@ public partial class Character : CharacterBody3D
 
     public float MouseSensitivity => _cameraRig?.MouseSensitivity ?? 0.002f;
 
-    public InteractionInteractor InteractionInteractor => _interactionInteractor;
-
     public override void _EnterTree()
     {
         if (NetworkPlayerIdentity.TryGetPeerId(Name, out int peerId))
@@ -140,7 +139,6 @@ public partial class Character : CharacterBody3D
 
         _cameraRig.FirstPersonCameraOffset = _firstPersonCameraOffset;
         _cameraEffects.Initialize(this);
-        ConfigureInteraction();
         ApplyViewMode();
         _cameraRig.SetActive(_isPossessed);
     }
@@ -261,12 +259,6 @@ public partial class Character : CharacterBody3D
         _pendingInput = inputFrame;
     }
 
-    public bool TryStartInteractionInput() =>
-        _interactionInteractor != null && _interactionInteractor.TryStartInteractionInput();
-
-    public bool TryEndInteractionInput() =>
-        _interactionInteractor != null && _interactionInteractor.TryEndInteractionInput();
-
     internal void TakePossession(CharacterPlayerController controller)
     {
         _possessingController = controller;
@@ -325,7 +317,6 @@ public partial class Character : CharacterBody3D
         _cameraEffects = GetNodeOrNull<CharacterCameraEffects>(
             "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects")!;
         _animationController = GetNodeOrNull<CharacterAnimationController>("AnimationController")!;
-        _interactionInteractor = GetNodeOrNull<InteractionInteractor>("InteractionInteractor")!;
 
         bool valid = true;
         valid &= RequireNode(_visual, "Visual");
@@ -333,20 +324,6 @@ public partial class Character : CharacterBody3D
         valid &= RequireNode(_cameraEffects, "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects");
         valid &= RequireNode(_animationController, "AnimationController");
         return valid;
-    }
-
-    private void ConfigureInteraction()
-    {
-        if (_interactionInteractor == null)
-        {
-            return;
-        }
-
-        _interactionInteractor.OwnerPeerId = OwnerPeerId;
-        if (IsInsideTree())
-        {
-            _interactionInteractor.SetMultiplayerAuthority(OwnerPeerId);
-        }
     }
 
     private bool RequireNode(Node node, string path)

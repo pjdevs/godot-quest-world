@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Character;
+
 public partial class CharacterCameraRig : Node3D
 {
     [ExportGroup("Look")]

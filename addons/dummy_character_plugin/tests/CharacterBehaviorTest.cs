@@ -4,13 +4,15 @@ using System;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
+using Character = QuestWorld.Character.Character;
+using QuestWorld.Character;
 using static GdUnit4.Assertions;
 
 [TestSuite]
 [RequireGodotRuntime]
 public sealed class CharacterBehaviorTest
 {
-    private const string CharacterScenePath = "res://quest_world/character/Character.tscn";
+    private const string CharacterScenePath = "res://addons/dummy_character_plugin/Character.tscn";
     private const string CameraEffectsPath = "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects";
     private const string CameraPath = $"{CameraEffectsPath}/Camera3D";
 

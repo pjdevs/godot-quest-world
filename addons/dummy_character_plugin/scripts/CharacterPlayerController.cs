@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Character;
+
 public partial class CharacterPlayerController : Node
 {
     [ExportGroup("Possession")]
@@ -24,9 +26,6 @@ public partial class CharacterPlayerController : Node
 
     [Export]
     public string SprintAction { get; set; } = "sprint";
-
-    [Export]
-    public string InteractionAction { get; set; } = "interact";
 
     private Character _controlledCharacter = null!;
     private Vector2 _lookAccumulator;
@@ -119,15 +118,6 @@ public partial class CharacterPlayerController : Node
             Input.IsActionJustPressed(JumpAction),
             Input.IsActionPressed(SprintAction));
         _lookAccumulator = Vector2.Zero;
-        if (Input.IsActionJustPressed(InteractionAction))
-        {
-            _controlledCharacter.TryStartInteractionInput();
-        }
-        else if (Input.IsActionJustReleased(InteractionAction))
-        {
-            _controlledCharacter.TryEndInteractionInput();
-        }
-
         _controlledCharacter.SubmitInputFrame(this, frame);
     }
 
@@ -160,7 +150,6 @@ public partial class CharacterPlayerController : Node
         _controlledCharacter = null!;
         if (hadControlledCharacter)
         {
-            previousCharacter.TryEndInteractionInput();
             previousCharacter.ReleasePossession(this);
         }
 
@@ -185,8 +174,7 @@ public partial class CharacterPlayerController : Node
             MoveLeftAction,
             MoveRightAction,
             JumpAction,
-            SprintAction,
-            InteractionAction
+            SprintAction
         };
 
         bool valid = true;

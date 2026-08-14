@@ -2,7 +2,7 @@
 
 This addon ports the Unreal interaction boundaries to Godot 4.7 C# without an autoload or hidden input actions.
 
-Add `InteractionInteractor` to a locally controlled character and assign its `ViewOriginPath`. The Quest World `Character.tscn` already includes the interactor and presenter, with `CharacterPlayerController` forwarding the `interact` action. Add `InteractiveComponent` and `InteractionStateful` to an object with an `Area3D`, and implement `IInteractionHandler` on the object's owner. The handler evaluates custom conditions and decides whether a long phase should call `StartInteractionPhase` and `EndInteractionPhase`.
+The addon is namespaced under `QuestWorld.Interaction` and has no Character dependency. Add `InteractionInteractor` to a locally controlled character and assign its `ViewOriginPath`. Add `InteractiveComponent` and `InteractionStateful` to an object with an `Area3D`, and implement `IInteractionHandler` on the object's owner. The handler evaluates custom conditions and decides whether a long phase should call `StartInteractionPhase` and `EndInteractionPhase`.
 
 `InteractionInteractor.TryStartInteractionInput()` and `TryEndInteractionInput()` are the only input entry points. Offline/listen-server mode uses the authoritative path directly; clients send reliable RPC intentions which the server revalidates against its own candidates, distance, angle, state and rules.
 

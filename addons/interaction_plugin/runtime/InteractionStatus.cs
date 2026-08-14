@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Interaction;
+
 public sealed record InteractionAllowed
 {
     public static InteractionAllowed Instance { get; } = new();

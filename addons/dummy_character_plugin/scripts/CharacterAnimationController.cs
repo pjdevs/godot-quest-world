@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Character;
+
 public partial class CharacterAnimationController : Node
 {
     private const string LocomotionState = "Locomotion";

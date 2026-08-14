@@ -1,6 +1,8 @@
 using Godot;
 using System.Collections.Generic;
 
+namespace QuestWorld.Character;
+
 public partial class CharacterLookPitchModifier : SkeletonModifier3D
 {
     [ExportGroup("Look Pitch")]

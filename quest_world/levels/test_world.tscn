@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://cs4drhmc1bql5"]
 
 [ext_resource type="PackedScene" path="res://quest_world/character/Character.tscn" id="1_character"]
-[ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://quest_world/character/scripts/CharacterPlayerController.cs" id="2_player_controller"]
+[ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="2_player_controller"]
 [ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/NetworkSession.cs" id="3_network_session"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_edcox"]

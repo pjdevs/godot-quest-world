@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using Godot;
 
+namespace QuestWorld.Interaction;
+
 public partial class InteractiveComponent : Node
 {
     [Signal]

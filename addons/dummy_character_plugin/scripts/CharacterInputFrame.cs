@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Character;
+
 /// <summary>
 /// Immutable input sampled once for a character physics tick.
 /// </summary>

@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Character;
+
 public partial class CharacterCameraEffects : Node3D
 {
     [ExportGroup("Camera Effects")]

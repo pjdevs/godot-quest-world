@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.Character;
 
 public partial class NetworkSession : Node
 {

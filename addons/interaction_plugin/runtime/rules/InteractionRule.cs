@@ -1,5 +1,7 @@
 using Godot;
 
+namespace QuestWorld.Interaction;
+
 public abstract partial class InteractionRule : Resource
 {
     public abstract InteractionStatus Evaluate(in InteractionContext context);

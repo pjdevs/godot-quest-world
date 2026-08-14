@@ -1,3 +1,5 @@
+namespace QuestWorld.Interaction;
+
 public interface IInteractionHandler
 {
     InteractionStatus EvaluateCustomInteractionStatus(in InteractionContext context);

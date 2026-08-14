@@ -1,6 +1,8 @@
 using System;
 using Godot;
 
+namespace QuestWorld.Interaction;
+
 public partial class InteractionStateful : Node
 {
     public const int CurrentSaveVersion = 1;

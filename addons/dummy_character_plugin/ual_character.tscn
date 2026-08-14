@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://ci7b2yr6ystqg"]
 
 [ext_resource type="PackedScene" uid="uid://c270m70jtgk68" path="res://addons/universal_animation_library/UAL1.glb" id="1_ywj1b"]
-[ext_resource type="Script" path="res://quest_world/character/scripts/CharacterLookPitchModifier.cs" id="2_look_pitch"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/scripts/CharacterLookPitchModifier.cs" id="2_look_pitch"]
 
 [node name="UALCharacter" unique_id=1190744522 instance=ExtResource("1_ywj1b")]
 
