@@ -121,7 +121,9 @@ public partial class CharacterPlayerController : Node
 
 	public void Possess(Character character)
 	{
-		if (!IsInstanceValid(character) || character == _controlledCharacter)
+		if (!IsInstanceValid(character)
+			|| character == _controlledCharacter
+			|| !character.IsLocalNetworkAuthority)
 		{
 			return;
 		}

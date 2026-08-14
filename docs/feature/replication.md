@@ -163,3 +163,40 @@ La première étape du refacto est implémentée :
 Cette frontière permet à la future couche réseau d’appeler le moteur avec un input rejouable sans dépendre d’une caméra locale. Le RPC, le spawn, les snapshots et la prédiction restent volontairement hors du périmètre de cette étape.
 
 Note de l’audit initial : une modification non commitée de `CharacterPlayerController.cs` avait été signalée dans le worktree ; l’étape 1 ne change pas son comportement.
+
+## Étape 1.5 — Bootstrap réseau et spike client-authoritative
+
+Le bootstrap multi-instance est maintenant disponible pour expérimenter le flow réseau avant l’autorité serveur complète :
+
+- `NetworkLaunchOptions` parse les modes `offline`, `host`, `server` et `client`, ainsi que l’adresse, le port et le nombre maximal de joueurs.
+- `NetworkSession` configure `ENetMultiplayerPeer`, connecte les signaux de connexion et possède le cycle de vie des joueurs.
+- `Players` est le conteneur réseau stable et `PlayerSpawner` est un `MultiplayerSpawner` dont l’autorité est le serveur.
+- Le serveur ajoute un Character nommé `Player_<peerId>` à chaque connexion et le retire à la déconnexion. Les late joins reçoivent les joueurs déjà présents via le spawner.
+- Chaque copie du Character extrait son `OwnerPeerId` de son nom dans `_EnterTree()` et applique `SetMultiplayerAuthority()` avant le démarrage du synchronizer.
+- Seul le Character autoritaire local consomme l’input et exécute `Simulate()`. Un contrôleur local refuse également de posséder un Character distant.
+- `MultiplayerSynchronizer` réplique pour ce spike la position, la rotation racine, la vélocité, l’orientation visuelle et les angles de caméra.
+- Les proxies ne simulent pas la physique, mais rejouent leur présentation d’animation depuis la vélocité et l’état grounded synchronisés. Cela couvre locomotion, sprint, saut, chute et détection locale de l’atterrissage pour le spike.
+
+### Lancer les instances
+
+Dans `Debug > Customize Run Instances`, chaque instance doit avoir `Override Main Run Args` activé. Sinon Godot conserve les arguments principaux et ignore les chaînes propres à l’instance ; le fichier `.godot/editor/project_metadata.cfg` doit donc contenir `"override_args": true` pour les deux entrées.
+
+Les arguments applicatifs se placent après `--`, qui sépare les arguments Godot des arguments du projet :
+
+```powershell
+# Serveur dédié sans caméra ni joueur local
+godot --headless --path . --scene res://quest_world/levels/test_world.tscn -- --server --port=7000 --max-players=8
+
+# Listen-server avec un joueur local
+godot --path . --scene res://quest_world/levels/test_world.tscn -- --host --port=7000
+
+# Client graphique
+godot --path . --scene res://quest_world/levels/test_world.tscn -- --client --connect=127.0.0.1 --port=7000
+
+# Client headless de smoke test
+godot --headless --path . --scene res://quest_world/levels/test_world.tscn -- --client --connect=127.0.0.1 --port=7000
+```
+
+Sans mode explicite, la scène reste jouable en offline et le `NetworkSession` crée localement `Player_1`. Les peer IDs ENet clients étant aléatoires, ils sont ramenés à seize slots bornés uniquement pour le placement visuel de ce prototype.
+
+Ce spike ne constitue pas encore l’architecture finale : le client peut déplacer son Character et publier directement sa pose, il n’y a ni validation serveur, ni commandes RPC, ni prédiction/réconciliation, ni interpolation dédiée. Les collisions entre clients peuvent donc diverger et le mouvement reste facilement falsifiable. Les prochains points peuvent réutiliser le bootstrap, les chemins de scène, le cycle de spawn et les identités sans conserver ce modèle d’autorité.

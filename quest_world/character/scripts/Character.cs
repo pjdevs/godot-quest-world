@@ -69,6 +69,13 @@ public partial class Character : CharacterBody3D
 	[Export]
 	public float MinimumLandingStrength { get; set; } = 0.35f;
 
+	[ExportGroup("Networking")]
+	[Export]
+	public int OwnerPeerId { get; private set; } = 1;
+
+	[Export]
+	public bool NetworkIsGrounded { get; set; } = true;
+
 	private ViewMode _currentViewMode = ViewMode.ThirdPerson;
 	private Vector3 _firstPersonCameraOffset = new(0.0f, 0.0f, -0.2f);
 	private Node3D _visual = null!;
@@ -84,6 +91,9 @@ public partial class Character : CharacterBody3D
 	private bool _isPossessed;
 	private CharacterPlayerController _possessingController = null!;
 	private ulong _frameNumber;
+	private ulong _networkPresentationFrameNumber;
+	private bool _networkPresentationHasGroundSample;
+	private bool _networkPresentationWasGrounded;
 
 	public bool IsPossessed => _isPossessed;
 
@@ -93,10 +103,21 @@ public partial class Character : CharacterBody3D
 
 	public CharacterFrameState LatestFrame => _latestFrame;
 
+	public bool IsLocalNetworkAuthority => IsMultiplayerAuthority();
+
 	public Node3D CameraPitchNode => _cameraRig?.CameraPitch
 		?? GetNodeOrNull<Node3D>("CameraYaw/CameraPitch")!;
 
 	public float MouseSensitivity => _cameraRig?.MouseSensitivity ?? 0.002f;
+
+	public override void _EnterTree()
+	{
+		if (NetworkPlayerIdentity.TryGetPeerId(Name, out int peerId))
+		{
+			OwnerPeerId = peerId;
+			SetMultiplayerAuthority(peerId);
+		}
+	}
 
 	public override void _Ready()
 	{
@@ -122,7 +143,7 @@ public partial class Character : CharacterBody3D
 
 	public override void _PhysicsProcess(double delta)
 	{
-		if (!_configurationValid)
+		if (!_configurationValid || !IsMultiplayerAuthority())
 		{
 			return;
 		}
@@ -139,6 +160,16 @@ public partial class Character : CharacterBody3D
 		);
 		Simulate(simulationInput, delta);
 		ApplyLocalPresentation(simulationInput, input.LookDelta, yawDelta, (float)delta);
+	}
+
+	public override void _Process(double delta)
+	{
+		if (!_configurationValid || IsMultiplayerAuthority())
+		{
+			return;
+		}
+
+		ApplyRemotePresentation((float)delta);
 	}
 
 	/// <summary>
@@ -218,6 +249,7 @@ public partial class Character : CharacterBody3D
 			sprinting,
 			impactSpeed,
 			landingStrength);
+		NetworkIsGrounded = isGrounded;
 	}
 
 	public void SubmitInputFrame(CharacterInputFrame inputFrame)
@@ -312,6 +344,46 @@ public partial class Character : CharacterBody3D
 		UpdateVisualOrientation(input.ViewYaw, _latestFrame.MoveDirection, delta);
 		_animationController.ApplyFrame(_latestFrame, _currentViewMode, yawDelta, delta);
 		_cameraEffects.PushFrame(_latestFrame, lookDelta);
+	}
+
+	private void ApplyRemotePresentation(float delta)
+	{
+		Vector3 replicatedVelocity = Velocity;
+		Vector3 horizontalVelocity = new(replicatedVelocity.X, 0.0f, replicatedVelocity.Z);
+		float runSpeed = Mathf.Max(RunSpeed, 0.001f);
+		Vector3 localVelocity = GlobalBasis.Inverse() * horizontalVelocity;
+		Vector2 moveInput = new Vector2(localVelocity.X / runSpeed, -localVelocity.Z / runSpeed).LimitLength(1.0f);
+		Vector3 moveDirection = horizontalVelocity.LengthSquared() > 0.0001f
+			? horizontalVelocity.Normalized()
+			: Vector3.Zero;
+		bool wasGrounded = _networkPresentationHasGroundSample && _networkPresentationWasGrounded;
+		bool landed = _networkPresentationHasGroundSample
+			&& !_networkPresentationWasGrounded
+			&& NetworkIsGrounded;
+
+		CharacterSimulationInput presentationInput = new(
+			moveInput,
+			_cameraRig.Rotation.Y,
+			_cameraRig.CameraPitch.Rotation.X,
+			false,
+			false);
+		_networkPresentationFrameNumber++;
+		_latestFrame = new CharacterFrameState(
+			_networkPresentationFrameNumber,
+			presentationInput,
+			moveDirection,
+			replicatedVelocity,
+			wasGrounded,
+			NetworkIsGrounded,
+			false,
+			landed,
+			NetworkIsGrounded && horizontalVelocity.Length() >= runSpeed * 0.9f,
+			Mathf.Max(-replicatedVelocity.Y, 0.0f),
+			0.0f);
+
+		_animationController.ApplyFrame(_latestFrame, _currentViewMode, 0.0f, delta);
+		_networkPresentationWasGrounded = NetworkIsGrounded;
+		_networkPresentationHasGroundSample = true;
 	}
 
 	private Vector3 GetViewRelativeDirection(Vector2 input, float viewYaw)
