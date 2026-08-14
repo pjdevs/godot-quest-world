@@ -19,7 +19,7 @@ public partial class InteractionPresenter : CanvasLayer
         _camera = ResolveNode<Camera3D>(CameraPath);
         if (_interactor == null || _camera == null)
         {
-            GD.PushError($"{GetPath()}: InteractionPresenter requires an Interactor and a Camera3D.");
+            GD.PushError($"{GetPath()}: InteractionPresenter requires an Interactor and a Camera3D (interactor path: '{InteractorPath}', camera path: '{CameraPath}').");
             SetProcess(false);
             return;
         }
@@ -125,7 +125,8 @@ public partial class InteractionPresenter : CanvasLayer
             }
         }
 
-        return GetParent()?.GetNodeOrNull<T>(typeof(T) == typeof(Camera3D) ? "Camera" : "Interactor")!;
+        T sibling = GetParent()?.GetNodeOrNull<T>(typeof(T) == typeof(Camera3D) ? "Camera" : "Interactor")!;
+        return sibling ?? FindFirstNode<T>(GetParent())!;
     }
 
     private static void FreeWidget(ref Control widget)
@@ -135,5 +136,29 @@ public partial class InteractionPresenter : CanvasLayer
             widget.QueueFree();
             widget = null!;
         }
+    }
+
+    private static T FindFirstNode<T>(Node root) where T : Node
+    {
+        if (root == null)
+        {
+            return null!;
+        }
+
+        if (root is T match)
+        {
+            return match;
+        }
+
+        foreach (Node child in root.GetChildren())
+        {
+            T nested = FindFirstNode<T>(child);
+            if (nested != null)
+            {
+                return nested;
+            }
+        }
+
+        return null!;
     }
 }

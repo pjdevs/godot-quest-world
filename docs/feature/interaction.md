@@ -20,10 +20,15 @@ L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interacti
 
 ## Integration
 
-1. Ajouter `InteractionInteractor` au personnage local et assigner `ViewOriginPath` vers un `Marker3D` ou une caméra.
-2. Ajouter `InteractionArea`, `InteractiveComponent` et `InteractionStateful` au même propriétaire Node3D ; les chemins explicites peuvent être configurés dans l’inspecteur.
-3. Implémenter `IInteractionHandler` sur le propriétaire. Pour une phase longue, appeler `Stateful.StartInteractionPhase(context.Interactor)` synchroniquement dans `OnStartInteractionInput`, puis `EndInteractionPhase(nextState)` quand l’opération métier se termine.
-4. Ajouter `InteractionPresenter` seulement si une UI est souhaitée, avec `InteractorPath` et `CameraPath`. L’absence de scène de widget est valide.
+1. Pour le Character du projet, `Character.tscn` inclut déjà `InteractionInteractor` (origine = caméra) et `InteractionPresenter`. Le `CharacterPlayerController` échantillonne l'action `interact` (`E` par défaut) et appelle les deux points d'entrée de l'interactor.
+2. Pour un personnage custom, ajouter `InteractionInteractor` au personnage local et assigner `ViewOriginPath` vers un `Marker3D` ou une caméra, puis appeler `TryStartInteractionInput()` / `TryEndInteractionInput()` depuis son contrôleur d'input.
+3. Ajouter `InteractionArea`, `InteractiveComponent` et `InteractionStateful` au même propriétaire Node3D ; les chemins explicites peuvent être configurés dans l'inspecteur.
+4. Implémenter `IInteractionHandler` sur le propriétaire. Pour une phase longue, appeler `Stateful.StartInteractionPhase(context.Interactor)` synchroniquement dans `OnStartInteractionInput`, puis `EndInteractionPhase(nextState)` quand l'opération métier se termine.
+5. Ajouter `InteractionPresenter` seulement si une UI est souhaitée, avec `InteractorPath` et `CameraPath`. L'absence de scène de widget est valide.
+
+## Base scene
+
+[`scenes/InteractiveActor.tscn`](../../addons/interaction_plugin/scenes/InteractiveActor.tscn) est le prefab de départ duplicable : zones d'interaction et d'indication, ancre, composant, état répliqué et widgets par défaut. Son script d'exemple réalise une activation longue avec réservation, annulation au relâchement et passage à `Activated`; il suffit de remplacer/étendre le handler pour un objet métier.
 
 ## Persistence boundary
 
@@ -46,4 +51,5 @@ Les tests couvrent les deux cas du statut union, l’ordre des règles, le focus
 - Le transport reste `SceneMultiplayer`; les personnages/interactables dynamiques doivent conserver des chemins identiques via le système de spawn du projet.
 - La synchronisation est portée par `MultiplayerSynchronizer` sur `ReplicatedState`; l’identité/progression de l’interacteur actif restent server-only en V1.
 - Godot 4.7.1 Mono charge les assemblies avec .NET 10. Le projet cible donc `net10.0`, conserve `LangVersion=preview` et fournit un shim minimal `IUnion`/`UnionAttribute` pour utiliser le contrat union C# preview sans référence runtime .NET 11. Voir [`godot-dotnet-runtime-target.md`](../memory/godot-dotnet-runtime-target.md).
-- La persistance réelle, les intégrations Quest/Dialog/Inventory, les combinateurs de règles, l’occlusion, les widgets 3D cliquables et les transports hors `SceneMultiplayer` restent hors V1.
+- La persistance réelle, les intégrations Quest/Dialog/Inventory, les combinateurs de règles, l'occlusion, les widgets 3D cliquables et les transports hors `SceneMultiplayer` restent hors V1.
+- Le Character utilise la touche `E` via l'action projet `interact`; un jeu hôte peut remplacer cette action dans `CharacterPlayerController.InteractionAction`.

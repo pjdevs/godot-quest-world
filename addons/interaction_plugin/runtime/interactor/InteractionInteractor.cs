@@ -63,7 +63,7 @@ public partial class InteractionInteractor : Node
         _configurationValid = _viewOrigin != null;
         if (!_configurationValid)
         {
-            GD.PushError($"{GetPath()}: InteractionInteractor requires a ViewOrigin.");
+            GD.PushError($"{GetPath()}: InteractionInteractor requires a ViewOrigin (configured path: '{ViewOriginPath}').");
             SetProcess(false);
             return;
         }
@@ -429,7 +429,8 @@ public partial class InteractionInteractor : Node
         }
 
         return GetNodeOrNull<Node3D>("ViewOrigin")
-            ?? GetParent()?.GetNodeOrNull<Node3D>("ViewOrigin")!;
+            ?? GetParent()?.GetNodeOrNull<Node3D>("ViewOrigin")
+            ?? FindFirstNode<Camera3D>(GetParent())!;
     }
 
     private bool IsLocalAuthority() => !IsInsideTree() || IsMultiplayerAuthority();
@@ -451,5 +452,29 @@ public partial class InteractionInteractor : Node
         {
             _focusedInteractive = null!;
         }
+    }
+
+    private static T FindFirstNode<T>(Node root) where T : Node
+    {
+        if (root == null)
+        {
+            return null!;
+        }
+
+        if (root is T match)
+        {
+            return match;
+        }
+
+        foreach (Node child in root.GetChildren())
+        {
+            T nested = FindFirstNode<T>(child);
+            if (nested != null)
+            {
+                return nested;
+            }
+        }
+
+        return null!;
     }
 }

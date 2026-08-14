@@ -28,6 +28,8 @@ CharacterAnimationController   CharacterCameraEffects
 
 CharacterCameraRig applies look/view configuration from the same input frame.
 CharacterLookPitchModifier remains a post-animation skeleton modifier.
+
+The canonical `Character.tscn` also hosts `InteractionInteractor` and `InteractionPresenter`. The interactor uses the active camera as its view origin; `CharacterPlayerController` owns the `interact` action and forwards press/release to the interactor.
 ```
 
 The components are:
@@ -54,6 +56,7 @@ The current version is a clean, focused refactor: `Character.cs` remains the com
 - Mouse: camera yaw/pitch while captured.
 - `Escape`: release the mouse.
 - Left click: recapture the mouse if UI did not consume the click.
+- `E`: start/end the focused interaction while held; the action is configurable through `CharacterPlayerController.InteractionAction`.
 
 The test world contains one player controller with `InitialPawnPath = ../Character`. Additional characters remain simulated but unpossessed until `Possess(character)` is called.
 
