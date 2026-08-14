@@ -68,15 +68,12 @@ public partial class Character : CharacterBody3D
     private CharacterCameraRig _cameraRig = null!;
     private CharacterCameraEffects _cameraEffects = null!;
     private CharacterAnimationController _animationController = null!;
+    private CharacterMovement _movement = null!;
     private CharacterInputFrame _pendingInput;
     private CharacterFrameState _latestFrame;
-    private float _airborneDuration;
-    private bool _hasFloorSample;
-    private bool _wasGrounded;
     private bool _configurationValid;
     private bool _isPossessed;
     private CharacterPlayerController _possessingController = null!;
-    private ulong _frameNumber;
     private ulong _networkPresentationFrameNumber;
     private bool _networkPresentationHasGroundSample;
     private bool _networkPresentationWasGrounded;
@@ -88,6 +85,8 @@ public partial class Character : CharacterBody3D
     public bool IsTurnInPlaceActive => _animationController?.IsTurnInPlaceActive ?? false;
 
     public CharacterFrameState LatestFrame => _latestFrame;
+
+    public CharacterMovement Movement => _movement;
 
     public bool IsLocalNetworkAuthority => IsMultiplayerAuthority();
 
@@ -107,6 +106,7 @@ public partial class Character : CharacterBody3D
 
     public override void _Ready()
     {
+        _movement = new CharacterMovement(this);
         _configurationValid = ResolveNodes();
         if (!_configurationValid)
         {
@@ -162,79 +162,13 @@ public partial class Character : CharacterBody3D
     /// </summary>
     public void Simulate(CharacterSimulationInput input, double delta)
     {
-        if (!_configurationValid)
+        if (!_configurationValid || _movement == null)
         {
             return;
         }
 
-        float frameDelta = (float)delta;
-        bool groundedBeforeMove = IsOnFloor();
-        bool wasGrounded = _hasFloorSample && _wasGrounded;
-        Vector3 moveDirection = GetViewRelativeDirection(input.Move, input.ViewYaw);
-        bool sprintRequested = groundedBeforeMove
-            && input.SprintHeld
-            && -input.Move.Y >= Mathf.Clamp(SprintForwardInputThreshold, 0.0f, 1.0f);
-        float targetSpeed = sprintRequested ? RunSpeed : WalkSpeed;
-        Vector3 targetVelocity = moveDirection * targetSpeed;
-        float acceleration = groundedBeforeMove ? Acceleration : AirAcceleration;
-        bool jumped = false;
-
-        Vector3 velocity = Velocity;
-        velocity.X = Mathf.MoveToward(velocity.X, targetVelocity.X, acceleration * frameDelta);
-        velocity.Z = Mathf.MoveToward(velocity.Z, targetVelocity.Z, acceleration * frameDelta);
-        if (groundedBeforeMove)
-        {
-            if (input.JumpPressed)
-            {
-                velocity.Y = JumpVelocity;
-                jumped = true;
-            }
-            else if (velocity.Y < 0.0f)
-            {
-                velocity.Y = -0.1f;
-            }
-        }
-        else
-        {
-            velocity += GetGravity() * frameDelta;
-        }
-
-        float impactSpeed = Mathf.Max(-velocity.Y, 0.0f);
-        Velocity = velocity;
-        MoveAndSlide();
-
-        bool isGrounded = IsOnFloor();
-        bool sprinting = isGrounded && sprintRequested;
-        float sampledAirTime = _airborneDuration;
-        if (!groundedBeforeMove || !isGrounded)
-        {
-            sampledAirTime += frameDelta;
-        }
-
-        bool landed = _hasFloorSample
-            && !_wasGrounded
-            && isGrounded
-            && sampledAirTime >= Mathf.Max(MinimumLandingAirTime, 0.0f)
-            && impactSpeed >= Mathf.Max(MinimumLandingImpactSpeed, 0.0f);
-        float landingStrength = landed ? CalculateLandingStrength(impactSpeed) : 0.0f;
-        _airborneDuration = isGrounded ? 0.0f : sampledAirTime;
-        _wasGrounded = isGrounded;
-        _hasFloorSample = true;
-
-        _frameNumber++;
-        _latestFrame = new CharacterFrameState(
-            _frameNumber,
-            input,
-            moveDirection,
-            GetRealVelocity(),
-            wasGrounded,
-            isGrounded,
-            jumped,
-            landed,
-            sprinting,
-            impactSpeed,
-            landingStrength);
-        NetworkIsGrounded = isGrounded;
+        _latestFrame = _movement.Simulate(input, delta, GetMovementSettings());
+        NetworkIsGrounded = _latestFrame.IsGrounded;
     }
 
     public void SubmitInputFrame(CharacterInputFrame inputFrame)
@@ -371,20 +305,6 @@ public partial class Character : CharacterBody3D
         _networkPresentationHasGroundSample = true;
     }
 
-    private Vector3 GetViewRelativeDirection(Vector2 input, float viewYaw)
-    {
-        Basis viewBasis = new(Vector3.Up, viewYaw);
-        Basis viewGlobalBasis = GlobalBasis * viewBasis;
-        Vector3 forward = -viewGlobalBasis.Z;
-        forward.Y = 0.0f;
-        forward = forward.Normalized();
-        Vector3 right = viewGlobalBasis.X;
-        right.Y = 0.0f;
-        right = right.Normalized();
-        Vector3 direction = right * input.X + forward * -input.Y;
-        return direction.LengthSquared() > 1.0f ? direction.Normalized() : direction;
-    }
-
     private void UpdateVisualOrientation(float viewYaw, Vector3 moveDirection, float delta)
     {
         float targetLocalYaw = _visual.Rotation.Y;
@@ -416,14 +336,18 @@ public partial class Character : CharacterBody3D
         _visual.Rotation = visualRotation;
     }
 
-    private float CalculateLandingStrength(float impactSpeed)
+    private CharacterMovementSettings GetMovementSettings()
     {
-        float minimumImpact = Mathf.Max(MinimumLandingImpactSpeed, 0.0f);
-        float fullImpact = Mathf.Max(FullLandingImpactSpeed, minimumImpact + 0.001f);
-        float normalizedImpact = Mathf.Clamp(
-            (impactSpeed - minimumImpact) / (fullImpact - minimumImpact),
-            0.0f,
-            1.0f);
-        return Mathf.Lerp(Mathf.Clamp(MinimumLandingStrength, 0.0f, 1.0f), 1.0f, normalizedImpact);
+        return new CharacterMovementSettings(
+            WalkSpeed,
+            RunSpeed,
+            Acceleration,
+            AirAcceleration,
+            JumpVelocity,
+            SprintForwardInputThreshold,
+            MinimumLandingAirTime,
+            MinimumLandingImpactSpeed,
+            FullLandingImpactSpeed,
+            MinimumLandingStrength);
     }
 }

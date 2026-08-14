@@ -20,7 +20,10 @@ CharacterInputFrame (raw local input, one physics sample)
 CharacterSimulationInput (camera-independent command)
         |
         v
-QuestWorld.Character.Character / Simulate (motor + MoveAndSlide)
+QuestWorld.Character.Character / Simulate (orchestration facade)
+        |
+        v
+QuestWorld.Character.CharacterMovement / Simulate (motor + MoveAndSlide)
         |
         v
 CharacterFrameState (immutable post-move snapshot)
@@ -38,12 +41,13 @@ The global project `Character` subclass hosts `InteractionInteractor` and `Inter
 
 The components are:
 
-- `addons/dummy_character_plugin/scripts/Character.cs`: deterministic movement authority, floor transitions and orchestration. `Simulate` consumes only `CharacterSimulationInput`; the local physics callback adapts camera input and applies presentation separately.
+- `addons/dummy_character_plugin/scripts/Character.cs`: Godot composition root and orchestration facade. It resolves scene nodes, owns the exported character configuration, adapts camera/input state and applies presentation. Its public `Simulate` method remains as the stable entry point.
+- `addons/dummy_character_plugin/scripts/CharacterMovement.cs`: plain C# movement motor. It owns deterministic movement state, floor transitions and `MoveAndSlide`; `Simulate` consumes `CharacterSimulationInput` plus a plain `CharacterMovementSettings` snapshot and returns `CharacterFrameState`.
 - `addons/dummy_character_plugin/scripts/CharacterPlayerController.cs`: global movement input sampling and explicit `Possess`/`Unpossess` authority.
 - `quest_world/character/Character.cs`: project-only interaction composition and `interact` input forwarding.
 - The remaining `CharacterInputFrame`, `CharacterSimulationInput`, `CharacterFrameState`, animation, camera and pitch scripts stay in the addon namespace `QuestWorld.Character`.
 
-The current version is a clean, focused refactor: `Character.cs` remains the compact orchestration facade, while `Simulate` is an explicit camera-independent motor boundary. Presentation systems do not resample global input or independently infer floor transitions; local-only look deltas are passed directly to camera presentation.
+The movement configuration stays serialized on `Character`; `CharacterMovementSettings` is only a plain value snapshot, not a `Resource` or a second set of exported properties. This keeps one inspector-facing source of truth while allowing the motor implementation to evolve independently and later support alternative movement modes. Presentation systems do not resample global input or independently infer floor transitions; local-only look deltas are passed directly to camera presentation.
 
 ## Possession and controls
 

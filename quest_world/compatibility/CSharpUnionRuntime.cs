@@ -13,15 +13,15 @@ public interface IUnion
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false)]
 public sealed class UnionAttribute : Attribute
 {
-	public UnionAttribute()
-	{
-		Cases = Array.Empty<Type>();
-	}
+    public UnionAttribute()
+    {
+        Cases = Array.Empty<Type>();
+    }
 
-	public UnionAttribute(params Type[] cases)
-	{
-		Cases = cases;
-	}
+    public UnionAttribute(params Type[] cases)
+    {
+        Cases = cases;
+    }
 
-	public Type[] Cases { get; }
+    public Type[] Cases { get; }
 }
