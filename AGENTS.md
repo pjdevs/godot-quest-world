@@ -27,5 +27,6 @@ Vertical, one folder per feature with subfolder `scripts` etc.
 
 - After each code task run `dotnet build`
 - After each task maintain a doc per feature in `docs/feature/<thedoc>.md`
-- After each pitfall of user correction, document it in `docs/memory/<desc_of_things>.md`
+- After each workflow pitfall or hard user correction on the implementation (not tweaking a feature or corrections),
+  document it in `docs/memory/<desc_of_things>.md`
 - Before each task, check if docs or memory can be useful

@@ -38,7 +38,9 @@ The camera hierarchy is `SpringArm3D → CameraAnchor → CameraEffects → Came
 
 ## AnimationTree
 
-The state machine starts in `Locomotion` at zero blend (`Idle`). It travels through `Jump` and `Fall` based on physical state. The imported UAL animation names are `Idle`, `Jog_Fwd`, `Jog_Bwd`, `Jog_Left`, `Jog_Right`, `Sprint`, `Jump_Start` and `Jump`.
+The state machine starts in `Locomotion` at zero blend (`Idle`). It travels through `Jump` and `Fall` based on physical state, uses the front-loaded `Jump_Land` animation for `0.25` seconds on air-to-ground transitions, then blends back to locomotion over `0.25` seconds. The whole tree is driven through an `AnimationNodeTimeScale`, with `AnimationPlaybackSpeed` defaulting to `1.5`; the imported `AnimationPlayer` remains the animation library. The imported UAL animation names are `Idle`, `Jog_Fwd`, `Jog_Bwd`, `Jog_Left`, `Jog_Right`, `Sprint`, `Jump_Start`, `Jump`, `Jump_Land`, `Turn90_L` and `Turn90_R`.
+
+In first-person, turn-in-place is only triggered while grounded and essentially idle. Camera yaw is accumulated until it reaches `45` degrees, then the matching 90-degree turn clip plays while normal visual orientation smoothing continues; movement cancels an active turn override without a forced final snap. Sprint is available only while grounded and stops immediately after takeoff.
 
 ## Validation
 

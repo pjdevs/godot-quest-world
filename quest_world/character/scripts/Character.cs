@@ -11,7 +11,12 @@ public partial class Character : CharacterBody3D
 	private const string LocomotionState = "Locomotion";
 	private const string JumpState = "Jump";
 	private const string FallState = "Fall";
-	private const string BlendPositionPath = "parameters/Locomotion/blend_position";
+	private const string LandState = "Land";
+	private const string TurnLeftState = "TurnLeft";
+	private const string TurnRightState = "TurnRight";
+	private const string PlaybackPath = "parameters/StateMachine/playback";
+	private const string BlendPositionPath = "parameters/StateMachine/Locomotion/blend_position";
+	private const string AnimationTimeScalePath = "parameters/TimeScale/scale";
 
 	private static readonly string[] RequiredAnimations =
 	{
@@ -22,7 +27,10 @@ public partial class Character : CharacterBody3D
 		"Jog_Right",
 		"Sprint",
 		"Jump_Start",
-		"Jump"
+		"Jump",
+		"Jump_Land",
+		"Turn90_L",
+		"Turn90_R"
 	};
 
 	[ExportGroup("View")]
@@ -46,6 +54,22 @@ public partial class Character : CharacterBody3D
 
 	[Export]
 	public float ThirdPersonForwardAlignmentThreshold { get; set; } = 0.75f;
+
+	[Export]
+	public bool TurnInPlaceEnabled { get; set; } = true;
+
+	[Export]
+	public float TurnInPlaceThresholdDegrees { get; set; } = 45.0f;
+
+	[Export]
+	public float TurnInPlaceSpeedThreshold { get; set; } = 0.15f;
+
+	[ExportGroup("Animation")]
+	[Export]
+	public float AnimationPlaybackSpeed { get; set; } = 1.5f;
+
+	[Export]
+	public float LandingAnimationDuration { get; set; } = 0.25f;
 
 	[ExportGroup("Camera Effects")]
 	[Export]
@@ -85,13 +109,13 @@ public partial class Character : CharacterBody3D
 	public float JumpCameraOffset { get; set; } = 0.025f;
 
 	[Export]
-	public float LandingCameraOffset { get; set; } = 0.04f;
+	public float LandingCameraOffset { get; set; } = 0.05f;
 
 	[Export]
 	public float JumpCameraPitchDegrees { get; set; } = 1.0f;
 
 	[Export]
-	public float LandingCameraPitchDegrees { get; set; } = -1.0f;
+	public float LandingCameraPitchDegrees { get; set; } = -1.25f;
 
 	[Export]
 	public float CameraImpulseResponseSpeed { get; set; } = 14.0f;
@@ -144,6 +168,7 @@ public partial class Character : CharacterBody3D
 	private Node3D _cameraAnchor = null!;
 	private Node3D _cameraEffects = null!;
 	private Camera3D _camera = null!;
+	private AnimationPlayer _animationPlayer = null!;
 	private AnimationTree _animationTree = null!;
 	private AnimationNodeStateMachinePlayback _playback = null!;
 	private Vector2 _mouseMotionAccumulator;
@@ -154,6 +179,9 @@ public partial class Character : CharacterBody3D
 	private float _cameraImpulsePitch;
 	private float _cameraImpulseTargetPitch;
 	private float _cameraSwayRoll;
+	private float _turnYawAccumulator;
+	private string _animationOverrideState = string.Empty;
+	private float _animationOverrideRemaining;
 	private bool _wasOnFloor;
 	private string _lastRequestedState = string.Empty;
 	private bool _configurationValid;
@@ -168,7 +196,8 @@ public partial class Character : CharacterBody3D
 		}
 
 		_animationTree.Active = true;
-		_playback = (AnimationNodeStateMachinePlayback)_animationTree.Get("parameters/playback");
+		_animationTree.Set(AnimationTimeScalePath, Mathf.Max(AnimationPlaybackSpeed, 0.01f));
+		_playback = (AnimationNodeStateMachinePlayback)_animationTree.Get(PlaybackPath);
 		if (_playback == null)
 		{
 			GD.PushError($"{Name}: AnimationTree is missing the state-machine playback parameter.");
@@ -208,7 +237,12 @@ public partial class Character : CharacterBody3D
 			return;
 		}
 
-		_cameraYaw.RotateY(-motion.Relative.X * MouseSensitivity);
+		float yawDelta = -motion.Relative.X * MouseSensitivity;
+		_cameraYaw.RotateY(yawDelta);
+		if (CurrentViewMode == ViewMode.FirstPerson)
+		{
+			_turnYawAccumulator += yawDelta;
+		}
 		_cameraPitch.RotateX(-motion.Relative.Y * MouseSensitivity);
 		_mouseMotionAccumulator += motion.Relative;
 		Vector3 pitch = _cameraPitch.Rotation;
@@ -226,7 +260,7 @@ public partial class Character : CharacterBody3D
 		float frameDelta = (float)delta;
 		Vector2 inputVector = Input.GetVector(MoveLeftAction, MoveRightAction, MoveForwardAction, MoveBackwardAction);
 		Vector3 moveDirection = GetCameraRelativeDirection(inputVector);
-		bool sprinting = Input.IsActionPressed(SprintAction) && inputVector.LengthSquared() > 0.0001f;
+		bool sprinting = IsOnFloor() && Input.IsActionPressed(SprintAction) && inputVector.LengthSquared() > 0.0001f;
 		float targetSpeed = sprinting ? RunSpeed : WalkSpeed;
 		Vector3 targetVelocity = moveDirection * targetSpeed;
 		float acceleration = IsOnFloor() ? Acceleration : AirAcceleration;
@@ -264,17 +298,26 @@ public partial class Character : CharacterBody3D
 		else if (!_wasOnFloor && onFloor)
 		{
 			TriggerCameraImpulse(-LandingCameraOffset, LandingCameraPitchDegrees);
+			BeginAnimationOverride(LandState);
 		}
 		_wasOnFloor = onFloor;
+
+		if (IsTurnInPlaceAnimationActive && inputVector.LengthSquared() > 0.0001f)
+		{
+			EndAnimationOverride();
+		}
+		TryStartTurnInPlace(inputVector, onFloor);
 
 		UpdateVisualOrientation(moveDirection, frameDelta);
 		UpdateAnimationParameters();
 		UpdateCameraEffects(frameDelta, inputVector, sprinting);
+		AdvanceAnimationOverride(frameDelta);
 	}
 
 	public void SetViewMode(ViewMode mode)
 	{
 		CurrentViewMode = mode;
+		_turnYawAccumulator = 0.0f;
 		if (_springArm == null || _cameraEffects == null || _camera == null)
 		{
 			return;
@@ -306,6 +349,7 @@ public partial class Character : CharacterBody3D
 		_cameraAnchor = GetNodeOrNull<Node3D>("CameraYaw/CameraPitch/SpringArm3D/CameraAnchor")!;
 		_cameraEffects = GetNodeOrNull<Node3D>("CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects")!;
 		_camera = GetNodeOrNull<Camera3D>("CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")!;
+		_animationPlayer = GetNodeOrNull<AnimationPlayer>("Visual/UALCharacter/AnimationPlayer")!;
 		_animationTree = GetNodeOrNull<AnimationTree>("AnimationTree")!;
 
 		bool valid = true;
@@ -316,6 +360,7 @@ public partial class Character : CharacterBody3D
 		valid &= RequireNode(_cameraAnchor, "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor");
 		valid &= RequireNode(_cameraEffects, "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects");
 		valid &= RequireNode(_camera, "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D");
+		valid &= RequireNode(_animationPlayer, "Visual/UALCharacter/AnimationPlayer");
 		valid &= RequireNode(_animationTree, "AnimationTree");
 		return valid;
 	}
@@ -347,8 +392,7 @@ public partial class Character : CharacterBody3D
 
 	private bool ValidateAnimations()
 	{
-		AnimationPlayer animationPlayer = GetNodeOrNull<AnimationPlayer>("Visual/UALCharacter/AnimationPlayer");
-		if (animationPlayer == null)
+		if (_animationPlayer == null)
 		{
 			GD.PushError($"{Name}: expected UAL AnimationPlayer at 'Visual/UALCharacter/AnimationPlayer'.");
 			return false;
@@ -357,7 +401,7 @@ public partial class Character : CharacterBody3D
 		bool valid = true;
 		foreach (string animationName in RequiredAnimations)
 		{
-			if (!animationPlayer.HasAnimation(animationName))
+			if (!_animationPlayer.HasAnimation(animationName))
 			{
 				GD.PushError($"{Name}: UAL AnimationPlayer is missing required animation '{animationName}'.");
 				valid = false;
@@ -482,6 +526,12 @@ public partial class Character : CharacterBody3D
 
 	private void UpdateAnimationParameters()
 	{
+		if (!string.IsNullOrEmpty(_animationOverrideState))
+		{
+			RequestAnimationState(_animationOverrideState);
+			return;
+		}
+
 		Vector3 horizontalVelocity = new(Velocity.X, 0.0f, Velocity.Z);
 		Vector3 localVelocity = _visual.GlobalBasis.Inverse() * horizontalVelocity;
 		float speedRadius = Mathf.Max(RunSpeed, 0.001f);
@@ -493,6 +543,85 @@ public partial class Character : CharacterBody3D
 			? LocomotionState
 			: Velocity.Y > 0.0f ? JumpState : FallState;
 		RequestAnimationState(state);
+	}
+
+	private bool IsTurnInPlaceAnimationActive =>
+		_animationOverrideState == TurnLeftState || _animationOverrideState == TurnRightState;
+
+	private void TryStartTurnInPlace(Vector2 inputVector, bool onFloor)
+	{
+		float horizontalSpeed = new Vector2(Velocity.X, Velocity.Z).Length();
+		if (!TurnInPlaceEnabled || CurrentViewMode != ViewMode.FirstPerson || !onFloor || inputVector.LengthSquared() > 0.0001f || horizontalSpeed > Mathf.Max(TurnInPlaceSpeedThreshold, 0.0f) || _animationOverrideState != string.Empty)
+		{
+			_turnYawAccumulator = 0.0f;
+			return;
+		}
+
+		float threshold = Mathf.DegToRad(Mathf.Max(TurnInPlaceThresholdDegrees, 0.0f));
+		if (Mathf.Abs(_turnYawAccumulator) < threshold)
+		{
+			return;
+		}
+
+		string turnState = _turnYawAccumulator > 0.0f ? TurnLeftState : TurnRightState;
+		_turnYawAccumulator = 0.0f;
+		BeginAnimationOverride(turnState);
+	}
+
+	private void BeginAnimationOverride(string state)
+	{
+		_animationOverrideState = state;
+		float animationLength = GetAnimationLength(GetAnimationName(state));
+		if (state == LandState)
+		{
+			animationLength = Mathf.Min(animationLength, Mathf.Max(LandingAnimationDuration, 0.01f));
+		}
+		_animationOverrideRemaining = Mathf.Max(animationLength, 0.01f);
+		RequestAnimationState(state);
+	}
+
+	private void AdvanceAnimationOverride(float delta)
+	{
+		if (string.IsNullOrEmpty(_animationOverrideState))
+		{
+			return;
+		}
+
+		_animationOverrideRemaining -= delta;
+		if (_animationOverrideRemaining <= 0.0f)
+		{
+			EndAnimationOverride();
+		}
+	}
+
+	private void EndAnimationOverride()
+	{
+		bool wasTurnAnimation = IsTurnInPlaceAnimationActive;
+		_animationOverrideState = string.Empty;
+		_animationOverrideRemaining = 0.0f;
+		if (wasTurnAnimation)
+		{
+			_turnYawAccumulator = 0.0f;
+		}
+
+		RequestAnimationState(LocomotionState);
+	}
+
+	private string GetAnimationName(string state)
+	{
+		return state switch
+		{
+			LandState => "Jump_Land",
+			TurnLeftState => "Turn90_L",
+			TurnRightState => "Turn90_R",
+			_ => state
+		};
+	}
+
+	private float GetAnimationLength(string animationName)
+	{
+		Animation animation = _animationPlayer.GetAnimation(animationName);
+		return animation == null ? 0.0f : (float)animation.Length;
 	}
 
 	private void RequestAnimationState(string state)

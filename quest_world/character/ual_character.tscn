@@ -64,4 +64,4 @@ bones/62/rotation = Quaternion(0.17016652, 0.6288975, -0.7586356, 0.0018641949)
 bones/63/rotation = Quaternion(-6.703263e-08, 1, 8.940697e-08, 2.1454163e-09)
 
 [node name="AnimationPlayer" parent="." index="1" unique_id=244317612]
-speed_scale = 1.5
+speed_scale = 1.0

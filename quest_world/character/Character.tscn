@@ -31,6 +31,15 @@ animation = &"Jog_Right"
 [sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_mxxis"]
 animation = &"Sprint"
 
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_land"]
+animation = &"Jump_Land"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_turn_left"]
+animation = &"Turn90_L"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_turn_right"]
+animation = &"Turn90_R"
+
 [sub_resource type="AnimationNodeBlendSpace2D" id="AnimationNodeBlendSpace2D_e3fll"]
 blend_point_0/node = SubResource("AnimationNodeAnimation_2fkie")
 blend_point_0/pos = Vector2(0, 0)
@@ -63,14 +72,51 @@ xfade_time = 0.15
 [sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_xgwmf"]
 xfade_time = 0.15
 
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_land_from_fall"]
+xfade_time = 0.1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_land_from_jump"]
+xfade_time = 0.1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_land_to_locomotion"]
+xfade_time = 0.25
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_turn_left"]
+xfade_time = 0.1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_turn_right"]
+xfade_time = 0.1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_turn_left_to_locomotion"]
+xfade_time = 0.1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_turn_right_to_locomotion"]
+xfade_time = 0.1
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_character"]
+scale = 1.0
+
 [sub_resource type="AnimationNodeStateMachine" id="AnimationNodeStateMachine_gl8e6"]
 states/Fall/node = SubResource("AnimationNodeAnimation_wye7m")
 states/Fall/position = Vector2(500, 0)
 states/Jump/node = SubResource("AnimationNodeAnimation_04ykt")
 states/Jump/position = Vector2(250, -100)
+states/Land/node = SubResource("AnimationNodeAnimation_land")
+states/Land/position = Vector2(500, 100)
 states/Locomotion/node = SubResource("AnimationNodeBlendSpace2D_e3fll")
 states/Locomotion/position = Vector2(0, 0)
-transitions = ["Start", "Locomotion", SubResource("AnimationNodeStateMachineTransition_wu3k4"), "Locomotion", "Jump", SubResource("AnimationNodeStateMachineTransition_xok31"), "Jump", "Fall", SubResource("AnimationNodeStateMachineTransition_cv4cp"), "Fall", "Locomotion", SubResource("AnimationNodeStateMachineTransition_xgwmf")]
+states/TurnLeft/node = SubResource("AnimationNodeAnimation_turn_left")
+states/TurnLeft/position = Vector2(-250, 0)
+states/TurnRight/node = SubResource("AnimationNodeAnimation_turn_right")
+states/TurnRight/position = Vector2(-250, 100)
+transitions = ["Start", "Locomotion", SubResource("AnimationNodeStateMachineTransition_wu3k4"), "Locomotion", "Jump", SubResource("AnimationNodeStateMachineTransition_xok31"), "Jump", "Fall", SubResource("AnimationNodeStateMachineTransition_cv4cp"), "Fall", "Locomotion", SubResource("AnimationNodeStateMachineTransition_xgwmf"), "Fall", "Land", SubResource("AnimationNodeStateMachineTransition_land_from_fall"), "Jump", "Land", SubResource("AnimationNodeStateMachineTransition_land_from_jump"), "Land", "Locomotion", SubResource("AnimationNodeStateMachineTransition_land_to_locomotion"), "Locomotion", "TurnLeft", SubResource("AnimationNodeStateMachineTransition_turn_left"), "Locomotion", "TurnRight", SubResource("AnimationNodeStateMachineTransition_turn_right"), "TurnLeft", "Locomotion", SubResource("AnimationNodeStateMachineTransition_turn_left_to_locomotion"), "TurnRight", "Locomotion", SubResource("AnimationNodeStateMachineTransition_turn_right_to_locomotion")]
+
+[sub_resource type="AnimationNodeBlendTree" id="AnimationNodeBlendTree_character"]
+nodes/StateMachine/node = SubResource("AnimationNodeStateMachine_gl8e6")
+nodes/StateMachine/position = Vector2(0, 0)
+nodes/TimeScale/node = SubResource("AnimationNodeTimeScale_character")
+nodes/TimeScale/position = Vector2(300, 0)
+node_connections = [&"output", 0, &"TimeScale", &"TimeScale", 0, &"StateMachine"]
 
 [node name="Character" type="CharacterBody3D" unique_id=121661981]
 script = ExtResource("1_8gjjr")
@@ -85,10 +131,11 @@ shape = SubResource("CapsuleShape3D_woadn")
 rotation = Vector3(0, 3.1415927, 0)
 
 [node name="AnimationTree" type="AnimationTree" parent="." unique_id=825379154]
-tree_root = SubResource("AnimationNodeStateMachine_gl8e6")
+tree_root = SubResource("AnimationNodeBlendTree_character")
 anim_player = NodePath("../Visual/UALCharacter/AnimationPlayer")
 active = true
-parameters/Locomotion/blend_position = Vector2(0, 0)
+parameters/StateMachine/Locomotion/blend_position = Vector2(0, 0)
+parameters/TimeScale/scale = 1.5
 
 [node name="CameraYaw" type="Node3D" parent="." unique_id=902288204]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
