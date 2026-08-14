@@ -4,6 +4,10 @@ namespace QuestWorld.Interaction;
 
 public partial class InteractionPresenter : CanvasLayer
 {
+    [ExportGroup("Projection")]
+    [Export]
+    public Vector2 IndicationScreenOffset { get; set; } = new(0.0f, -32.0f);
+
     [Export]
     public NodePath InteractorPath { get; set; } = new();
 
@@ -33,8 +37,8 @@ public partial class InteractionPresenter : CanvasLayer
 
     public override void _Process(double delta)
     {
-        UpdateProjection(_prompt);
-        UpdateProjection(_indication);
+        UpdateProjection(_prompt, Vector2.Zero);
+        UpdateProjection(_indication, IndicationScreenOffset);
     }
 
     private void OnFocusedInteractiveChanged(Node interactive) => Refresh();
@@ -95,7 +99,7 @@ public partial class InteractionPresenter : CanvasLayer
         (current as IInteractionWidget)?.Bind(presentation);
     }
 
-    private void UpdateProjection(Control control)
+    private void UpdateProjection(Control control, Vector2 screenOffset)
     {
         if (control == null || _interactor?.FocusedInteractive == null)
         {
@@ -106,7 +110,7 @@ public partial class InteractionPresenter : CanvasLayer
         control.Visible = !_camera.IsPositionBehind(worldPosition);
         if (control.Visible)
         {
-            control.Position = _camera.UnprojectPosition(worldPosition) - control.Size / 2.0f;
+            control.Position = _camera.UnprojectPosition(worldPosition) - control.Size / 2.0f + screenOffset;
         }
     }
 

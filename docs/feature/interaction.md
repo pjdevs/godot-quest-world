@@ -15,7 +15,7 @@ L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interacti
 - `InteractionStateful` expose `Idle`, `Activating`, `Activated`, `Deactivating`, réserve l’interacteur actif, applique les callbacks d’autorité/présentation et expose `SaveState()` / `LoadState()`.
 - Les RPC fiables résident dans l’interacteur. Le serveur vérifie l’identité du peer, le chemin reçu, l’appartenance aux candidats serveur, distance/angle, état, règles et hook custom avant d’appeler le handler.
 - `InteractionRule` fournit `AlwaysBlockedInteractionRule` et `InteractorGroupInteractionRule`. Le pipeline s’arrête à la première raison bloquante avant le hook custom.
-- `InteractionPresenter`, `InteractionPromptWidget` et `InteractionIndicatorWidget` constituent la présentation facultative screen-space. Un widget projet peut implémenter `IInteractionWidget`.
+- `InteractionPresenter`, `InteractionPromptWidget` et `InteractionIndicatorWidget` constituent la présentation facultative screen-space. Le prompt reste centré sur l’ancre et l’indicateur applique un offset écran configurable pour apparaître au-dessus. Un widget projet peut implémenter `IInteractionWidget`.
 - `scenes/InteractiveActor.tscn` et `examples/InteractionDemo.tscn` fournissent un objet à activation longue avec réservation, transition vers `Activated`, synchroniseur d’état et widgets de démonstration.
 
 ## Integration

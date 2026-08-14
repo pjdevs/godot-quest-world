@@ -25,11 +25,51 @@ public partial class Character : CharacterBody3D
         set
         {
             _firstPersonCameraOffset = value;
-            if (_cameraRig != null)
-            {
-                _cameraRig.FirstPersonCameraOffset = value;
-                _cameraRig.SetViewMode(_currentViewMode);
-            }
+            ConfigureCameraRigView();
+        }
+    }
+
+    [Export]
+    public float MouseSensitivity
+    {
+        get => _mouseSensitivity;
+        set
+        {
+            _mouseSensitivity = value;
+            ConfigureCameraRigView();
+        }
+    }
+
+    [Export]
+    public float PitchMinDegrees
+    {
+        get => _pitchMinDegrees;
+        set
+        {
+            _pitchMinDegrees = value;
+            ConfigureCameraRigView();
+        }
+    }
+
+    [Export]
+    public float PitchMaxDegrees
+    {
+        get => _pitchMaxDegrees;
+        set
+        {
+            _pitchMaxDegrees = value;
+            ConfigureCameraRigView();
+        }
+    }
+
+    [Export]
+    public float ThirdPersonDistance
+    {
+        get => _thirdPersonDistance;
+        set
+        {
+            _thirdPersonDistance = value;
+            ConfigureCameraRigView();
         }
     }
 
@@ -80,6 +120,10 @@ public partial class Character : CharacterBody3D
 
     private ViewMode _currentViewMode = ViewMode.ThirdPerson;
     private Vector3 _firstPersonCameraOffset = new(0.0f, 0.0f, -0.2f);
+    private float _mouseSensitivity = 0.002f;
+    private float _pitchMinDegrees = -70.0f;
+    private float _pitchMaxDegrees = 70.0f;
+    private float _thirdPersonDistance = 4.0f;
     private Node3D _visual = null!;
     private CharacterCameraRig _cameraRig = null!;
     private CharacterCameraEffects _cameraEffects = null!;
@@ -110,8 +154,6 @@ public partial class Character : CharacterBody3D
     public Node3D CameraPitchNode => _cameraRig?.CameraPitch
         ?? GetNodeOrNull<Node3D>("CameraYaw/CameraPitch")!;
 
-    public float MouseSensitivity => _cameraRig?.MouseSensitivity ?? 0.002f;
-
     public override void _EnterTree()
     {
         if (NetworkPlayerIdentity.TryGetPeerId(Name, out int peerId))
@@ -137,7 +179,7 @@ public partial class Character : CharacterBody3D
             return;
         }
 
-        _cameraRig.FirstPersonCameraOffset = _firstPersonCameraOffset;
+        ConfigureCameraRigView();
         _cameraEffects.Initialize(this);
         ApplyViewMode();
         _cameraRig.SetActive(_isPossessed);
@@ -308,6 +350,22 @@ public partial class Character : CharacterBody3D
         _cameraRig.SetViewMode(_currentViewMode);
         _cameraEffects?.ResetPose();
         _animationController?.OnViewModeChanged(_currentViewMode);
+    }
+
+    private void ConfigureCameraRigView()
+    {
+        if (_cameraRig == null)
+        {
+            return;
+        }
+
+        _cameraRig.ConfigureView(
+            _firstPersonCameraOffset,
+            _mouseSensitivity,
+            _pitchMinDegrees,
+            _pitchMaxDegrees,
+            _thirdPersonDistance);
+        _cameraRig.SetViewMode(_currentViewMode);
     }
 
     private bool ResolveNodes()

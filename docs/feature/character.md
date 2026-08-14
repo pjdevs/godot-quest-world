@@ -31,6 +31,8 @@ CharacterAnimationController   CharacterCameraEffects
 `QuestWorld.Character.CharacterCameraRig` applies look/view configuration from the same input frame.
 `QuestWorld.Character.CharacterLookPitchModifier` remains a post-animation skeleton modifier.
 
+The serialized view configuration belongs to `Character` (`CurrentViewMode`, first-person offset, third-person distance, mouse sensitivity and pitch limits). `CharacterCameraRig` only receives and applies those values at runtime, so inherited scene overrides cannot compete with the pawn configuration.
+
 The global project `Character` subclass hosts `InteractionInteractor` and `InteractionPresenter`. The interactor uses the active camera as its view origin; the subclass samples the `interact` action and forwards press/release to the interactor.
 ```
 
@@ -64,6 +66,8 @@ The test world contains one player controller with the project `res://quest_worl
 - World directions are converted through the character root basis before assigning the local `Visual.Rotation.Y`, so rotated scene instances stay aligned.
 - Sprint is gated by `SprintForwardInputThreshold` because the current AnimationTree only has a forward sprint clip. Sideways and backward input keep walk speed and directional jog clips.
 - Assigning `CurrentViewMode` invokes the same backed transition as `SetViewMode`, resetting camera effects and incompatible turn state.
+
+The camera rig has no serialized view settings of its own; its look and distance values are configured by the owning `Character` at runtime.
 
 ## Landing
 
