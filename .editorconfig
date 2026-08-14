@@ -2,3 +2,21 @@ root = true
 
 [*]
 charset = utf-8
+
+[*.cs]
+
+max_line_length = 120
+
+indent_style = space
+indent_size = 4
+
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
+
+csharp_new_line_before_open_brace = all
+
+dotnet_style_qualification_for_field = false
+dotnet_style_qualification_for_property = false
+dotnet_style_qualification_for_method = false
+dotnet_style_qualification_for_event = false
