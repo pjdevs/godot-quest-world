@@ -40,7 +40,9 @@ Character : CharacterBody3D
 └── CameraYaw : Node3D
     └── CameraPitch : Node3D
         └── SpringArm3D
-            └── Camera3D
+            └── CameraAnchor : Node3D
+                └── CameraEffects : Node3D
+                    └── Camera3D
 ```
 
 Responsibilities:
@@ -51,6 +53,8 @@ Responsibilities:
 - `CameraYaw` rotates horizontally from mouse input and remains independent of `Visual`.
 - `CameraPitch` rotates vertically and clamps between approximately `-70` and `+70` degrees.
 - `SpringArm3D` provides third-person camera collision handling.
+- `CameraAnchor` is the spring-arm-owned endpoint and remains free of cosmetic animation.
+- `CameraEffects` applies head bob, mouse sway and jump/landing impulses after spring-arm placement.
 - The camera pivot is placed near eye height so both view modes use the same orbit origin.
 
 Orientation policy:
@@ -89,6 +93,15 @@ Mouse behavior:
 - `Esc` switches to visible mouse mode.
 - A click recaptures the mouse.
 - Mouse motion is ignored while the mouse is visible.
+
+Camera effects:
+
+- Head bob follows real horizontal speed while grounded, with stronger amplitude during sprint and a `0.35` scale in third-person.
+- Sprint interpolates the camera FOV from `75` to `82` degrees.
+- Mouse motion produces a small damped roll, capped at `1` degree in first-person.
+- Jump and landing produce softly amortized positional and pitch impulses.
+- Effects are applied to `CameraEffects`, after `SpringArm3D` has placed `CameraAnchor`, so the spring-arm cannot overwrite them.
+- Crouch is explicitly out of scope.
 
 ## InputMap
 
@@ -166,6 +179,8 @@ FirstPersonCameraOffset Vector3(0, 0, -0.2)
 ThirdPersonForwardAlignmentThreshold 0.75
 ```
 
+The main exported camera-effect parameters are `CameraEffectsEnabled`, `HeadBobEnabled`, `HeadBobWalkAmplitude`, `HeadBobSprintAmplitude`, `HeadBobFrequency`, `ThirdPersonCameraEffectsScale`, `CameraSwayStrengthDegrees`, `CameraSwaySmoothSpeed`, `DefaultFov`, `SprintFov`, `FovTransitionSpeed`, `JumpCameraOffset`, `LandingCameraOffset`, `JumpCameraPitchDegrees`, `LandingCameraPitchDegrees`, `CameraImpulseResponseSpeed` and `CameraImpulseRecoverySpeed`.
+
 ## AnimationTree contract
 
 The `AnimationTree` root is an `AnimationNodeStateMachine` with three states:
@@ -228,6 +243,7 @@ on floor                        → Locomotion
 - Ground/air acceleration.
 - Gravity and jump.
 - Smooth visual orientation according to the FPS/TPS policy.
+- Cosmetic camera effects after spring-arm placement.
 - Blend-space parameter updates.
 - Explicit AnimationTree state travel with duplicate travel calls avoided.
 
@@ -243,25 +259,17 @@ on floor                        → Locomotion
 
 ## Verification strategy
 
-This prototype has no external test framework. Verification is performed by compiling the project, loading the scene headlessly, and manually playing the test world. The manual checklist covers:
+This prototype has no external test framework. Verification is performed by compiling the project and manually playing the test world. The manual checklist covers:
 
 - `Character.tscn` instantiates with the expected node tree.
 - Required InputMap actions exist with WASD defaults.
 - `SetViewMode(FirstPerson)` sets the spring arm to zero and `ThirdPerson` restores the configured distance.
 - Camera-relative input, FPS body rotation, TPS forward rotation and TPS strafe behavior feel correct.
+- FPS/TPS head bob, sprint FOV, mouse sway and jump/landing impulses feel subtle and responsive.
 - Acceleration approaches the target speed without snapping and sprint changes the target speed.
 - Jump only starts from the floor and gravity produces a falling state.
 - AnimationTree starts on `Locomotion` with the blend-space at `Idle` and travels through `Jump`/`Fall` correctly.
 - `dotnet build quest-world.sln` succeeds after each code task.
-- Godot headless scene validation succeeds with:
-
-```bash
-godot \
-  --headless \
-  --path . \
-  --editor \
-  --quit
-```
 
 ## Definition of Done
 

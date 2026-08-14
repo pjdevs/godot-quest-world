@@ -26,6 +26,16 @@ Action names are exported on `Character.cs` and default to the project actions i
 - First-person: the `SpringArm3D` pivot is offset slightly forward along its local `-Z` so the imported head does not intersect the view; the visual body follows camera yaw.
 - Third-person: forward movement aligned with camera forward turns the visual body toward movement; lateral, backward and diagonal movement keeps the body camera-facing and uses backward/strafe blend directions.
 
+## Camera effects
+
+The camera hierarchy is `SpringArm3D → CameraAnchor → CameraEffects → Camera3D`. The spring-arm owns distance and collision placement; `CameraEffects` owns cosmetic offsets so Godot does not overwrite them.
+
+- Head bob follows real horizontal speed, with stronger amplitude during sprint and reduced amplitude in third-person.
+- Sprint smoothly increases FOV from `75` to `82` degrees.
+- Mouse sway adds a small damped roll, capped at `1` degree.
+- Jump and landing add softly amortized positional/pitch impulses.
+- Crouch is intentionally not implemented.
+
 ## AnimationTree
 
 The state machine starts in `Locomotion` at zero blend (`Idle`). It travels through `Jump` and `Fall` based on physical state. The imported UAL animation names are `Idle`, `Jog_Fwd`, `Jog_Bwd`, `Jog_Left`, `Jog_Right`, `Sprint`, `Jump_Start` and `Jump`.
@@ -35,8 +45,4 @@ The state machine starts in `Locomotion` at zero blend (`Idle`). It travels thro
 Validated with:
 
 - `dotnet build quest-world.sln` — success, 0 warnings, 0 errors.
-- `godot --headless --path . --scene res://quest_world/character/Character.tscn --quit-after 2 --log-file .godot/character-runtime.log` — success.
-- `godot --headless --path . --scene res://quest_world/levels/test_world.tscn --quit-after 2 --log-file .godot/test-world-runtime.log` — success.
-- For environment-specific CLI details, see `docs/memory/godot-cli-headless-workflow.md` and `docs/memory/godot-animation-import-findings.md`.
-
-The local Godot environment still reports a non-fatal root certificate-store warning during headless startup.
+- Final camera feel is validated manually by playing the test world in FPS and TPS.
