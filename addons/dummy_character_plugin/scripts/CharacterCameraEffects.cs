@@ -164,7 +164,7 @@ public partial class CharacterCameraEffects : Node3D
         _headBobOffset = _headBobOffset.Lerp(targetHeadBob, smoothing);
         float swayLimit = Mathf.DegToRad(Mathf.Max(SwayStrengthDegrees, 0.0f)) * effectScale;
         float targetSway = Mathf.Clamp(
-            -_pendingLookX * _character.MouseSensitivity,
+            -_pendingLookX * _character.CameraRig.MouseSensitivity,
             -swayLimit,
             swayLimit);
         float swayWeight = 1.0f - Mathf.Exp(-Mathf.Max(SwaySmoothSpeed, 0.0f) * frameDelta);
