@@ -73,3 +73,44 @@ Validated with:
 
 - `dotnet build quest-world.sln` — success, 0 warnings, 0 errors.
 - Final camera feel is validated manually by playing the test world in FPS and TPS.
+
+## Audit status (2026-08-14)
+
+The checked-in scenes load successfully in Godot 4.7.1 Mono and the C# solution builds with 0 warnings and 0 errors. Headless startup checks pass for `Character.tscn` and `test_world.tscn`. This validates compilation, scene loading and the current AnimationTree contract, but it does not replace gameplay-transition tests.
+
+The audit found no critical loading or data-safety issue. The following behavioral and reuse issues remain open:
+
+- A character instantiated directly on the test-world floor triggers the landing camera impulse on the first physics contact and activates `LandOneShot` on the following frame. Initial floor sampling must not be treated as a gameplay landing.
+- Landing intensity is constant. Measured contacts around `-1.80 m/s` and `-9.80 m/s` produced the same first camera offset and the same 19-frame one-shot duration. Landing needs minimum airborne/impact thresholds and an impact-derived intensity.
+- Turn-in-place has lower priority than it should: an active turn is canceled by movement input, but not immediately by takeoff, losing the floor, disabling the feature or switching view mode. While the override remains active it masks jump/fall animation selection.
+- Visual orientation mixes world-space target yaw with `Visual.Rotation.Y`, which is local. A character root instantiated at 90 degrees was measured with camera yaw at 90 degrees and visual global yaw near 180 degrees.
+- Physical sprint accepts every movement direction, while the blend space contains only a forward sprint point; lateral/backward sprint therefore has no matching run animation.
+- `Character.cs` and `CharacterLookPitchModifier.cs` depend on the exact UAL hierarchy. Turn and landing clips are required even when their features are disabled, and missing look-pitch bones can fail silently because only the bone-index array length is checked.
+- Every instance captures global mouse input and owns a current camera. The controller needs an explicit possessed/input-enabled boundary before NPCs, dialogue UI or multiple character instances are introduced.
+- Runtime view mode can be mutated directly through `CurrentViewMode` without applying the camera rig; consumers must currently call `SetViewMode()` for a consistent change.
+- There is no automated behavioral coverage for spawn contact, rotated instances, jump-during-turn, landing severity, view switching, missing rig data or directional blend output.
+
+Recommended decomposition keeps deterministic orchestration on the root rather than giving every child an independent physics loop:
+
+```text
+CharacterInputFrame
+        |
+        v
+Character.cs (motor + MoveAndSlide)
+        |
+        v
+CharacterFrameState / events
+        |--------------------|
+        v                    v
+CharacterAnimation      CharacterCameraRig
+                             |
+                             v
+                    CharacterCameraEffects
+```
+
+- Keep `Character.cs` as the `CharacterBody3D` facade, movement authority and ordered frame orchestrator.
+- Move AnimationTree paths, validation, locomotion blend, airborne priority, landing one-shot and turn timing into `CharacterAnimation`.
+- Move mouse look, view mode, spring-arm configuration and camera ownership into `CharacterCameraRig`.
+- Move bob, sway, FOV and jump/landing impulses into `CharacterCameraEffects`, updated from a post-move snapshot.
+- Keep `CharacterLookPitchModifier` separate, but bind it through typed/exported references and validate resolved bones explicitly.
+- Extract an input-source abstraction only when possession, AI, replay or tests require it.

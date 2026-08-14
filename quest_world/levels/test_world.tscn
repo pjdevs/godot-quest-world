@@ -79,5 +79,4 @@ material = SubResource("StandardMaterial3D_7j4uu")
 
 [node name="Character" parent="." unique_id=7684642 instance=ExtResource("1_character")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 10)
-CurrentViewMode = 1
 FirstPersonCameraOffset = Vector3(0, 0, -0.5)
