@@ -2,7 +2,7 @@
 
 [ext_resource type="PackedScene" uid="uid://c270m70jtgk68" path="res://addons/universal_animation_library/UAL1.glb" id="1_ywj1b"]
 
-[node name="UALCharacterModel" unique_id=1190744522 instance=ExtResource("1_ywj1b")]
+[node name="UALCharacter" unique_id=1190744522 instance=ExtResource("1_ywj1b")]
 
 [node name="GeneralSkeleton" parent="Armature" parent_id_path=PackedInt32Array(1629584808) index="0" unique_id=510009120]
 bones/1/position = Vector3(-0.001003323, 0.87248856, -0.086705655)

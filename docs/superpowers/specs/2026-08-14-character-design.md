@@ -14,7 +14,7 @@ Build a drop-in gameplay character template for Godot 4.7 C# that behaves like a
 - The controller contains no interaction, dialogue, quest, combat or gameplay-system dependencies.
 - No external runtime dependency is added.
 - The controller stays compact and disposable.
-- Project input defaults use ZQSD for AZERTY keyboards.
+- Project input defaults use WASD physical key codes.
 - No diagonal animation slots are required in the first version.
 
 ## Feature layout
@@ -46,12 +46,17 @@ Character : CharacterBody3D
 Responsibilities:
 
 - `Character` owns collision, velocity, gravity, jump, input and physical state.
-- `Visual` is the mannequin container and rotates toward the movement direction.
+- `Visual` is the mannequin container and is the only node whose yaw is changed for locomotion; the `Character` root keeps its physical frame.
 - `AnimationTree` drives all locomotion/jump/fall animation playback.
 - `CameraYaw` rotates horizontally from mouse input and remains independent of `Visual`.
 - `CameraPitch` rotates vertically and clamps between approximately `-70` and `+70` degrees.
 - `SpringArm3D` provides third-person camera collision handling.
 - The camera pivot is placed near eye height so both view modes use the same orbit origin.
+
+Orientation policy:
+
+- In `FirstPerson`, `Visual` follows `CameraYaw` continuously so the body turns with the camera. Movement is evaluated in body-local space and naturally selects forward, backward and strafe animations.
+- In `ThirdPerson`, forward movement that is sufficiently aligned with the camera forward direction turns `Visual` toward the movement direction. Backward, lateral and diagonal movement keeps `Visual` facing the camera and uses the corresponding backward/strafe blend-space directions. The alignment threshold is exported as `ThirdPersonForwardAlignmentThreshold` and defaults to `0.75`.
 
 The scene uses fixed internal node paths for the rig. Tunable gameplay and camera values are exported in C#; consumers do not need to wire node references after instancing the scene.
 
@@ -73,7 +78,7 @@ The selected mode is exported for Inspector configuration and applied during `_R
 public void SetViewMode(ViewMode mode)
 ```
 
-Third-person mode uses an exported `ThirdPersonDistance` through `SpringArm3D.spring_length`. First-person mode sets the spring length to zero and uses an exported `FirstPersonCameraOffset` for eye placement. The full mannequin remains visible in both modes. The camera never becomes a child of `Visual`.
+Third-person mode uses an exported `ThirdPersonDistance` through `SpringArm3D.spring_length` and defaults to `4.0`. First-person mode sets the spring length to zero and applies the exported `FirstPersonCameraOffset` to `SpringArm3D.position`; the default offset is `Vector3(0, 0, -0.2)`, placing the camera pivot slightly forward of the imported head to prevent head intersection. The camera child remains at zero local position because `SpringArm3D` owns its child placement. Third-person mode restores the spring-arm and camera positions to zero. The full mannequin remains visible in both modes. The camera never becomes a child of `Visual`.
 
 Mouse behavior:
 
@@ -90,15 +95,17 @@ Mouse behavior:
 The following project actions are added to `project.godot`:
 
 ```text
-move_forward    Z
+move_forward    W
 move_backward   S
-move_left       Q
+move_left       A
 move_right      D
 jump            Space
 sprint          Shift
 ```
 
-The action names are configurable in the project InputMap. The scene uses these action names by default and validates that they exist at startup so a bad project configuration produces an explicit error.
+The project InputMap remains the source of truth for key bindings. The six action names are exported string properties on `Character.cs`, defaulting to the names above, so a consumer can point the scene at differently named project actions. `Character` validates the configured action names at startup so a bad project configuration produces an explicit error.
+
+The exported action properties are `MoveForwardAction`, `MoveBackwardAction`, `MoveLeftAction`, `MoveRightAction`, `JumpAction` and `SprintAction`.
 
 ## Movement behavior
 
@@ -124,7 +131,7 @@ orientation and animation parameters
 
 Details:
 
-- `Input.GetVector("move_left", "move_right", "move_forward", "move_backward")` provides the 2D input.
+- `Input.GetVector(MoveLeftAction, MoveRightAction, MoveForwardAction, MoveBackwardAction)` provides the 2D input.
 - The input is transformed using `CameraYaw.GlobalBasis`.
 - Vertical direction is removed before normalization.
 - Holding `sprint` selects `RunSpeed`; otherwise `WalkSpeed` is used.
@@ -133,8 +140,8 @@ Details:
 - Air movement uses `AirAcceleration`.
 - Gravity comes from Godot's `GetGravity()` settings.
 - Jump sets `Velocity.Y` to `JumpVelocity` only when `IsOnFloor()` and `jump` was just pressed.
-- The character rotates smoothly toward the horizontal movement direction.
-- No coyote time, jump buffering, crouch, dash, combat, aim or strafe mode is implemented.
+- `Visual` rotates smoothly according to the FPS/TPS orientation policy above.
+- No coyote time, jump buffering, crouch, dash, combat, aim or dedicated strafe mode is implemented.
 
 The main exported movement parameters are:
 
@@ -144,7 +151,7 @@ RunSpeed        6.0
 Acceleration    15.0
 AirAcceleration 5.0
 JumpVelocity    5.0
-RotationSpeed   configurable smooth-turn speed
+RotationSpeed   10.0 smooth-turn speed
 ```
 
 The main exported camera parameters are:
@@ -154,8 +161,9 @@ ViewMode
 MouseSensitivity 0.002
 PitchMin         -70 degrees
 PitchMax         +70 degrees
-ThirdPersonDistance
-FirstPersonCameraOffset
+ThirdPersonDistance 4.0
+FirstPersonCameraOffset Vector3(0, 0, -0.2)
+ThirdPersonForwardAlignmentThreshold 0.75
 ```
 
 ## AnimationTree contract
@@ -171,23 +179,22 @@ Locomotion ─────► Jump
 
 Transitions use short crossfades of approximately `0.15` seconds. C# calls `Travel()` only when the requested state differs from the previously requested state.
 
-`Locomotion` is an `AnimationNodeBlendSpace2D` with cardinal direction slots. The first version does not require diagonal slots. The target asset contract is:
+The state machine starts in `Locomotion`. The runtime parameter paths are `parameters/playback` for the state-machine playback object and `parameters/Locomotion/blend_position` for the locomotion blend position. The zero blend position selects `Idle`.
+
+`Locomotion` is an `AnimationNodeBlendSpace2D` with cardinal direction slots. The first version does not require diagonal slots. The current UAL asset contract is:
 
 ```text
 Idle
-Walk_Fwd
-Walk_Back
-Walk_Left
-Walk_Right
-Run_Fwd
-Run_Back
-Run_Left
-Run_Right
+Jog_Fwd
+Jog_Bwd
+Jog_Left
+Jog_Right
+Sprint
 Jump_Start
-Fall_Loop
+Jump
 ```
 
-The animation names are configured on the AnimationTree nodes in `Character.tscn`, not embedded in the movement algorithm. This keeps the controller independent from a particular animation pack. A missing animation is reported as an asset/configuration error; the controller does not silently substitute another animation.
+`Jump_Start` is used by the `Jump` state and `Jump` by the `Fall` state. The animation names are configured on the AnimationTree nodes in `Character.tscn`, not embedded in the movement algorithm. This keeps the controller independent from a particular animation pack. Godot's GLB importer removes the `_Loop` suffix from these imported animation names. A missing animation is reported as an asset/configuration error; the controller does not silently substitute another animation. Additional diagonal UAL clips exist but are intentionally not wired in the first blend-space version.
 
 The blend position is derived from character-local horizontal velocity:
 
@@ -220,7 +227,7 @@ on floor                        → Locomotion
 - Camera-relative movement direction.
 - Ground/air acceleration.
 - Gravity and jump.
-- Smooth visual orientation.
+- Smooth visual orientation according to the FPS/TPS policy.
 - Blend-space parameter updates.
 - Explicit AnimationTree state travel with duplicate travel calls avoided.
 
@@ -236,18 +243,15 @@ on floor                        → Locomotion
 
 ## Verification strategy
 
-Implementation follows red-green-refactor cycles. Tests or verification harnesses are written and run before the production behavior they cover.
-
-The project has no external test framework requirement. A small Godot C# headless harness can validate scene and runtime behavior without adding a package dependency. Coverage includes:
+This prototype has no external test framework. Verification is performed by compiling the project, loading the scene headlessly, and manually playing the test world. The manual checklist covers:
 
 - `Character.tscn` instantiates with the expected node tree.
-- Required InputMap actions exist with ZQSD defaults.
+- Required InputMap actions exist with WASD defaults.
 - `SetViewMode(FirstPerson)` sets the spring arm to zero and `ThirdPerson` restores the configured distance.
-- Camera-relative input produces the expected horizontal direction.
-- Acceleration approaches the target speed without snapping.
-- Sprint changes the target speed.
+- Camera-relative input, FPS body rotation, TPS forward rotation and TPS strafe behavior feel correct.
+- Acceleration approaches the target speed without snapping and sprint changes the target speed.
 - Jump only starts from the floor and gravity produces a falling state.
-- AnimationTree travel follows Locomotion/Jump/Fall state rules.
+- AnimationTree starts on `Locomotion` with the blend-space at `Idle` and travels through `Jump`/`Fall` correctly.
 - `dotnet build quest-world.sln` succeeds after each code task.
 - Godot headless scene validation succeeds with:
 
@@ -262,14 +266,14 @@ godot \
 ## Definition of Done
 
 - `Character.tscn` can be dropped into a scene with a floor.
-- ZQSD moves the character relative to the camera.
+- WASD moves the character relative to the camera.
 - Mouse controls the camera in both view modes.
 - Third-person spring-arm collision prevents gross wall clipping.
 - First-person keeps the full body visible.
 - Walk/run, acceleration and deceleration work.
 - Jump, gravity and falling work.
 - Locomotion, jump and fall are controlled by `AnimationTree`.
-- The character rotates smoothly toward movement.
+- The character visual rotates smoothly according to the FPS/TPS orientation policy.
 - No root motion is consumed.
 - Main parameters are exposed in the Inspector.
 - No interaction, quest, dialogue or other out-of-scope gameplay code is added.
@@ -285,7 +289,7 @@ stairs custom
 root motion
 motion matching
 aiming
-strafe mode
+dedicated strafe mode
 crouch
 dash
 combat
@@ -298,6 +302,6 @@ diagonal animation slots
 ## Project corrections captured by this spec
 
 - The project convention is `Character`, not `DevCharacter`.
-- The default keyboard is ZQSD, not WASD.
-- The current UAL asset does not yet contain the full cardinal walk/run animation set. The target Character contract still assumes those cardinal animations will be supplied later; the controller must not be redesigned around the temporary asset limitation.
+- The default keyboard uses WASD physical key codes.
+- The UAL asset contains the locomotion, strafe, sprint and jump clips used by the current Character contract; the AnimationTree references the concrete UAL names listed above.
 - Diagonal animation slots are intentionally not required.
