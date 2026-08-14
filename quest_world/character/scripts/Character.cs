@@ -11,12 +11,12 @@ public partial class Character : CharacterBody3D
 	private const string LocomotionState = "Locomotion";
 	private const string JumpState = "Jump";
 	private const string FallState = "Fall";
-	private const string LandState = "Land";
 	private const string TurnLeftState = "TurnLeft";
 	private const string TurnRightState = "TurnRight";
 	private const string PlaybackPath = "parameters/StateMachine/playback";
 	private const string BlendPositionPath = "parameters/StateMachine/Locomotion/blend_position";
 	private const string AnimationTimeScalePath = "parameters/TimeScale/scale";
+	private const string LandingOneShotRequestPath = "parameters/LandOneShot/request";
 
 	private static readonly string[] RequiredAnimations =
 	{
@@ -59,17 +59,26 @@ public partial class Character : CharacterBody3D
 	public bool TurnInPlaceEnabled { get; set; } = true;
 
 	[Export]
-	public float TurnInPlaceThresholdDegrees { get; set; } = 45.0f;
+	public float TurnInPlaceThresholdDegrees { get; set; } = 20.0f;
 
 	[Export]
-	public float TurnInPlaceSpeedThreshold { get; set; } = 0.15f;
+	public float TurnInPlaceRetriggerThresholdDegrees { get; set; } = 25.0f;
+
+	[Export]
+	public float TurnInPlaceSpeedThreshold { get; set; } = 0.5f;
 
 	[ExportGroup("Animation")]
 	[Export]
 	public float AnimationPlaybackSpeed { get; set; } = 1.5f;
 
 	[Export]
-	public float LandingAnimationDuration { get; set; } = 0.25f;
+	public float TurnAnimationMaxPlaybackSpeed { get; set; } = 2.5f;
+
+	[Export]
+	public float TurnAnimationSpeedRampDegrees { get; set; } = 90.0f;
+
+	[Export]
+	public float LandingBlendOutDelay { get; set; } = 0.15f;
 
 	[ExportGroup("Camera Effects")]
 	[Export]
@@ -182,6 +191,8 @@ public partial class Character : CharacterBody3D
 	private float _turnYawAccumulator;
 	private string _animationOverrideState = string.Empty;
 	private float _animationOverrideRemaining;
+	private float _landingBlendOutRemaining;
+	private bool _landingBlendOutPending;
 	private bool _wasOnFloor;
 	private string _lastRequestedState = string.Empty;
 	private bool _configurationValid;
@@ -196,7 +207,7 @@ public partial class Character : CharacterBody3D
 		}
 
 		_animationTree.Active = true;
-		_animationTree.Set(AnimationTimeScalePath, Mathf.Max(AnimationPlaybackSpeed, 0.01f));
+		SetAnimationPlaybackSpeed(AnimationPlaybackSpeed);
 		_playback = (AnimationNodeStateMachinePlayback)_animationTree.Get(PlaybackPath);
 		if (_playback == null)
 		{
@@ -298,7 +309,7 @@ public partial class Character : CharacterBody3D
 		else if (!_wasOnFloor && onFloor)
 		{
 			TriggerCameraImpulse(-LandingCameraOffset, LandingCameraPitchDegrees);
-			BeginAnimationOverride(LandState);
+			BeginLandingAnimation();
 		}
 		_wasOnFloor = onFloor;
 
@@ -307,11 +318,13 @@ public partial class Character : CharacterBody3D
 			EndAnimationOverride();
 		}
 		TryStartTurnInPlace(inputVector, onFloor);
+		UpdateAnimationPlaybackSpeed();
 
 		UpdateVisualOrientation(moveDirection, frameDelta);
 		UpdateAnimationParameters();
 		UpdateCameraEffects(frameDelta, inputVector, sprinting);
 		AdvanceAnimationOverride(frameDelta);
+		AdvanceLandingAnimation(frameDelta);
 	}
 
 	public void SetViewMode(ViewMode mode)
@@ -551,9 +564,28 @@ public partial class Character : CharacterBody3D
 	private void TryStartTurnInPlace(Vector2 inputVector, bool onFloor)
 	{
 		float horizontalSpeed = new Vector2(Velocity.X, Velocity.Z).Length();
-		if (!TurnInPlaceEnabled || CurrentViewMode != ViewMode.FirstPerson || !onFloor || inputVector.LengthSquared() > 0.0001f || horizontalSpeed > Mathf.Max(TurnInPlaceSpeedThreshold, 0.0f) || _animationOverrideState != string.Empty)
+		if (!TurnInPlaceEnabled || CurrentViewMode != ViewMode.FirstPerson || !onFloor)
+		{
+			if (!onFloor || CurrentViewMode != ViewMode.FirstPerson)
+			{
+				_turnYawAccumulator = 0.0f;
+			}
+			return;
+		}
+
+		if (_animationOverrideState != string.Empty)
+		{
+			return;
+		}
+
+		if (inputVector.LengthSquared() > 0.0001f)
 		{
 			_turnYawAccumulator = 0.0f;
+			return;
+		}
+
+		if (horizontalSpeed > Mathf.Max(TurnInPlaceSpeedThreshold, 0.0f))
+		{
 			return;
 		}
 
@@ -563,21 +595,42 @@ public partial class Character : CharacterBody3D
 			return;
 		}
 
-		string turnState = _turnYawAccumulator > 0.0f ? TurnLeftState : TurnRightState;
+		float turnDirection = Mathf.Sign(_turnYawAccumulator);
+		string turnState = turnDirection > 0.0f ? TurnLeftState : TurnRightState;
 		_turnYawAccumulator = 0.0f;
 		BeginAnimationOverride(turnState);
 	}
 
 	private void BeginAnimationOverride(string state)
 	{
+		bool restartCurrentState = IsTurnInPlaceAnimationActive && _animationOverrideState == state;
 		_animationOverrideState = state;
-		float animationLength = GetAnimationLength(GetAnimationName(state));
-		if (state == LandState)
-		{
-			animationLength = Mathf.Min(animationLength, Mathf.Max(LandingAnimationDuration, 0.01f));
-		}
+		float playbackSpeed = Mathf.Max(AnimationPlaybackSpeed, 0.01f);
+		float animationLength = GetAnimationLength(GetAnimationName(state)) / playbackSpeed;
 		_animationOverrideRemaining = Mathf.Max(animationLength, 0.01f);
-		RequestAnimationState(state);
+		RequestAnimationState(state, restartCurrentState);
+	}
+
+	private void BeginLandingAnimation()
+	{
+		_animationTree.Set(LandingOneShotRequestPath, (int)AnimationNodeOneShot.OneShotRequest.Fire);
+		_landingBlendOutRemaining = Mathf.Max(LandingBlendOutDelay, 0.0f);
+		_landingBlendOutPending = true;
+	}
+
+	private void AdvanceLandingAnimation(float delta)
+	{
+		if (!_landingBlendOutPending)
+		{
+			return;
+		}
+
+		_landingBlendOutRemaining -= delta;
+		if (_landingBlendOutRemaining <= 0.0f)
+		{
+			_animationTree.Set(LandingOneShotRequestPath, (int)AnimationNodeOneShot.OneShotRequest.FadeOut);
+			_landingBlendOutPending = false;
+		}
 	}
 
 	private void AdvanceAnimationOverride(float delta)
@@ -587,7 +640,11 @@ public partial class Character : CharacterBody3D
 			return;
 		}
 
-		_animationOverrideRemaining -= delta;
+		float basePlaybackSpeed = Mathf.Max(AnimationPlaybackSpeed, 0.01f);
+		float playbackSpeed = IsTurnInPlaceAnimationActive
+			? GetTurnAnimationPlaybackSpeed()
+			: basePlaybackSpeed;
+		_animationOverrideRemaining -= delta * playbackSpeed / basePlaybackSpeed;
 		if (_animationOverrideRemaining <= 0.0f)
 		{
 			EndAnimationOverride();
@@ -597,6 +654,14 @@ public partial class Character : CharacterBody3D
 	private void EndAnimationOverride()
 	{
 		bool wasTurnAnimation = IsTurnInPlaceAnimationActive;
+		if (wasTurnAnimation && TryGetQueuedTurnState(out string queuedTurnState))
+		{
+			_turnYawAccumulator = 0.0f;
+			BeginAnimationOverride(queuedTurnState);
+			SetAnimationPlaybackSpeed(AnimationPlaybackSpeed);
+			return;
+		}
+
 		_animationOverrideState = string.Empty;
 		_animationOverrideRemaining = 0.0f;
 		if (wasTurnAnimation)
@@ -604,14 +669,62 @@ public partial class Character : CharacterBody3D
 			_turnYawAccumulator = 0.0f;
 		}
 
+		SetAnimationPlaybackSpeed(AnimationPlaybackSpeed);
 		RequestAnimationState(LocomotionState);
+	}
+
+	private void UpdateAnimationPlaybackSpeed()
+	{
+		float playbackSpeed = IsTurnInPlaceAnimationActive
+			? GetTurnAnimationPlaybackSpeed()
+			: AnimationPlaybackSpeed;
+		SetAnimationPlaybackSpeed(playbackSpeed);
+	}
+
+	private float GetTurnAnimationPlaybackSpeed()
+	{
+		float basePlaybackSpeed = Mathf.Max(AnimationPlaybackSpeed, 0.01f);
+		float maxPlaybackSpeed = Mathf.Max(TurnAnimationMaxPlaybackSpeed, basePlaybackSpeed);
+		float rampDegrees = Mathf.Max(TurnAnimationSpeedRampDegrees, 0.01f);
+		float pendingYawDegrees = Mathf.RadToDeg(Mathf.Abs(_turnYawAccumulator));
+		float rampWeight = Mathf.Clamp(pendingYawDegrees / rampDegrees, 0.0f, 1.0f);
+		return Mathf.Lerp(basePlaybackSpeed, maxPlaybackSpeed, rampWeight);
+	}
+
+	private void SetAnimationPlaybackSpeed(float playbackSpeed)
+	{
+		_animationTree.Set(AnimationTimeScalePath, Mathf.Max(playbackSpeed, 0.01f));
+	}
+
+	private bool TryGetQueuedTurnState(out string turnState)
+	{
+		turnState = string.Empty;
+		if (!TurnInPlaceEnabled || CurrentViewMode != ViewMode.FirstPerson || !IsOnFloor())
+		{
+			return false;
+		}
+
+		Vector2 inputVector = Input.GetVector(MoveLeftAction, MoveRightAction, MoveForwardAction, MoveBackwardAction);
+		float horizontalSpeed = new Vector2(Velocity.X, Velocity.Z).Length();
+		if (inputVector.LengthSquared() > 0.0001f || horizontalSpeed > Mathf.Max(TurnInPlaceSpeedThreshold, 0.0f))
+		{
+			return false;
+		}
+
+		float threshold = Mathf.DegToRad(Mathf.Max(TurnInPlaceRetriggerThresholdDegrees, 0.0f));
+		if (Mathf.Abs(_turnYawAccumulator) < threshold)
+		{
+			return false;
+		}
+
+		turnState = _turnYawAccumulator > 0.0f ? TurnLeftState : TurnRightState;
+		return true;
 	}
 
 	private string GetAnimationName(string state)
 	{
 		return state switch
 		{
-			LandState => "Jump_Land",
 			TurnLeftState => "Turn90_L",
 			TurnRightState => "Turn90_R",
 			_ => state
@@ -624,14 +737,21 @@ public partial class Character : CharacterBody3D
 		return animation == null ? 0.0f : (float)animation.Length;
 	}
 
-	private void RequestAnimationState(string state)
+	private void RequestAnimationState(string state, bool restart = false)
 	{
-		if (_lastRequestedState == state)
+		if (_lastRequestedState == state && !restart)
 		{
 			return;
 		}
 
-		_playback.Travel(state);
+		if (_lastRequestedState == state && restart)
+		{
+			_playback.Start(state, true);
+		}
+		else
+		{
+			_playback.Travel(state);
+		}
 		_lastRequestedState = state;
 	}
 }

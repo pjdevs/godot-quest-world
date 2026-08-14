@@ -72,15 +72,6 @@ xfade_time = 0.15
 [sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_xgwmf"]
 xfade_time = 0.15
 
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_land_from_fall"]
-xfade_time = 0.1
-
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_land_from_jump"]
-xfade_time = 0.1
-
-[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_land_to_locomotion"]
-xfade_time = 0.25
-
 [sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_turn_left"]
 xfade_time = 0.1
 
@@ -93,6 +84,10 @@ xfade_time = 0.1
 [sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_turn_right_to_locomotion"]
 xfade_time = 0.1
 
+[sub_resource type="AnimationNodeOneShot" id="AnimationNodeOneShot_landing"]
+fadein_time = 0.05
+fadeout_time = 0.25
+
 [sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_character"]
 scale = 1.0
 
@@ -101,22 +96,24 @@ states/Fall/node = SubResource("AnimationNodeAnimation_wye7m")
 states/Fall/position = Vector2(500, 0)
 states/Jump/node = SubResource("AnimationNodeAnimation_04ykt")
 states/Jump/position = Vector2(250, -100)
-states/Land/node = SubResource("AnimationNodeAnimation_land")
-states/Land/position = Vector2(500, 100)
 states/Locomotion/node = SubResource("AnimationNodeBlendSpace2D_e3fll")
 states/Locomotion/position = Vector2(0, 0)
 states/TurnLeft/node = SubResource("AnimationNodeAnimation_turn_left")
 states/TurnLeft/position = Vector2(-250, 0)
 states/TurnRight/node = SubResource("AnimationNodeAnimation_turn_right")
 states/TurnRight/position = Vector2(-250, 100)
-transitions = ["Start", "Locomotion", SubResource("AnimationNodeStateMachineTransition_wu3k4"), "Locomotion", "Jump", SubResource("AnimationNodeStateMachineTransition_xok31"), "Jump", "Fall", SubResource("AnimationNodeStateMachineTransition_cv4cp"), "Fall", "Locomotion", SubResource("AnimationNodeStateMachineTransition_xgwmf"), "Fall", "Land", SubResource("AnimationNodeStateMachineTransition_land_from_fall"), "Jump", "Land", SubResource("AnimationNodeStateMachineTransition_land_from_jump"), "Land", "Locomotion", SubResource("AnimationNodeStateMachineTransition_land_to_locomotion"), "Locomotion", "TurnLeft", SubResource("AnimationNodeStateMachineTransition_turn_left"), "Locomotion", "TurnRight", SubResource("AnimationNodeStateMachineTransition_turn_right"), "TurnLeft", "Locomotion", SubResource("AnimationNodeStateMachineTransition_turn_left_to_locomotion"), "TurnRight", "Locomotion", SubResource("AnimationNodeStateMachineTransition_turn_right_to_locomotion")]
+transitions = ["Start", "Locomotion", SubResource("AnimationNodeStateMachineTransition_wu3k4"), "Locomotion", "Jump", SubResource("AnimationNodeStateMachineTransition_xok31"), "Jump", "Fall", SubResource("AnimationNodeStateMachineTransition_cv4cp"), "Fall", "Locomotion", SubResource("AnimationNodeStateMachineTransition_xgwmf"), "Locomotion", "TurnLeft", SubResource("AnimationNodeStateMachineTransition_turn_left"), "Locomotion", "TurnRight", SubResource("AnimationNodeStateMachineTransition_turn_right"), "TurnLeft", "Locomotion", SubResource("AnimationNodeStateMachineTransition_turn_left_to_locomotion"), "TurnRight", "Locomotion", SubResource("AnimationNodeStateMachineTransition_turn_right_to_locomotion")]
 
 [sub_resource type="AnimationNodeBlendTree" id="AnimationNodeBlendTree_character"]
 nodes/StateMachine/node = SubResource("AnimationNodeStateMachine_gl8e6")
 nodes/StateMachine/position = Vector2(0, 0)
+nodes/LandOneShot/node = SubResource("AnimationNodeOneShot_landing")
+nodes/LandOneShot/position = Vector2(300, 0)
+nodes/LandAnimation/node = SubResource("AnimationNodeAnimation_land")
+nodes/LandAnimation/position = Vector2(0, 200)
 nodes/TimeScale/node = SubResource("AnimationNodeTimeScale_character")
-nodes/TimeScale/position = Vector2(300, 0)
-node_connections = [&"output", 0, &"TimeScale", &"TimeScale", 0, &"StateMachine"]
+nodes/TimeScale/position = Vector2(550, 0)
+node_connections = [&"output", 0, &"TimeScale", &"TimeScale", 0, &"LandOneShot", &"LandOneShot", 0, &"StateMachine", &"LandOneShot", 1, &"LandAnimation"]
 
 [node name="Character" type="CharacterBody3D" unique_id=121661981]
 script = ExtResource("1_8gjjr")
