@@ -1,19 +1,29 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene format=3 uid="uid://bh7me5hps2qp6"]
 
 [ext_resource type="PackedScene" path="res://addons/dummy_character_plugin/Character.tscn" id="1_base"]
-[ext_resource type="Script" path="res://quest_world/character/Character.cs" id="2_project_character"]
-[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" id="3_interactor"]
-[ext_resource type="Script" path="res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" id="4_presenter"]
+[ext_resource type="Script" uid="uid://bxsevotpa0f2d" path="res://quest_world/character/Character.cs" id="2_project_character"]
+[ext_resource type="Script" uid="uid://yahimljmakge" path="res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" id="3_interactor"]
+[ext_resource type="Script" uid="uid://drgb3r1muwfvx" path="res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" id="4_presenter"]
 
-[node name="Character" instance=ExtResource("1_base")]
+[node name="Character" unique_id=493885237 instance=ExtResource("1_base")]
 script = ExtResource("2_project_character")
+InteractionActionName = &"interact"
+FirstPersonCameraOffset = Vector3(0, 0, -0.6)
 
-[node name="InteractionInteractor" type="Node" parent="."]
+[node name="UALCharacter" parent="Visual" parent_id_path=PackedInt32Array(1801593725) index="0" unique_id=1190744522]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
+
+[node name="AnimationTree" parent="." index="2" unique_id=825379154]
+root_node = NodePath("../Visual/UALCharacter")
+parameters/LandOneShot/active = false
+parameters/LandOneShot/internal_active = false
+parameters/LandOneShot/request = 0
+
+[node name="CameraYaw" parent="." index="4" unique_id=902288204]
+ThirdPersonDistance = 2.5
+
+[node name="InteractionInteractor" type="Node" parent="." index="6" unique_id=1688919232]
 script = ExtResource("3_interactor")
-view_origin_path = NodePath("CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")
-interaction_action_name = &"interact"
 
-[node name="InteractionPresenter" type="CanvasLayer" parent="."]
+[node name="InteractionPresenter" type="CanvasLayer" parent="." index="7" unique_id=1331596618]
 script = ExtResource("4_presenter")
-interactor_path = NodePath("InteractionInteractor")
-camera_path = NodePath("CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")
