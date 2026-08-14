@@ -33,10 +33,10 @@ public partial class CharacterCameraRig : Node3D
         _configurationValid = ResolveNodes();
     }
 
-	public float ApplyLook(CharacterInputFrame inputFrame)
-	{
-		Vector2 lookDelta = inputFrame.LookDelta;
-		if (!_configurationValid || lookDelta == Vector2.Zero)
+    public float ApplyLook(CharacterInputFrame inputFrame)
+    {
+        Vector2 lookDelta = inputFrame.LookDelta;
+        if (!_configurationValid || lookDelta == Vector2.Zero)
         {
             return 0.0f;
         }

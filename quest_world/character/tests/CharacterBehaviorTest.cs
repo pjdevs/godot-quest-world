@@ -101,6 +101,30 @@ public sealed class CharacterBehaviorTest
     }
 
     [TestCase]
+    public async Task SimulationUsesExplicitViewYawWithoutCameraRig()
+    {
+        Character character = InstantiateCharacter(Vector3.Zero);
+        ISceneRunner runner = BuildWorld(character);
+        await WaitForNextPhysicsFrame(runner, character);
+
+        CharacterCameraRig cameraRig = character.GetNode<CharacterCameraRig>("CameraYaw");
+        cameraRig.Rotation = new Vector3(0.0f, Mathf.Pi / 2.0f, 0.0f);
+        cameraRig.SetActive(false);
+
+        character.Simulate(
+            new CharacterSimulationInput(
+                new Vector2(0.0f, -1.0f),
+                0.0f,
+                0.0f,
+                false,
+                false),
+            1.0 / 60.0);
+
+        AssertThat(character.LatestFrame.MoveDirection.X).IsEqualApprox(0.0f, 0.001f);
+        AssertThat(character.LatestFrame.MoveDirection.Z).IsEqualApprox(-1.0f, 0.001f);
+    }
+
+    [TestCase]
     public async Task PossessionTransfersInputAuthorityAndActiveCamera()
     {
         Character firstCharacter = InstantiateCharacter(new Vector3(-2.0f, 0.0f, 0.0f));

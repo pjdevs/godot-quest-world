@@ -7,7 +7,7 @@ public readonly struct CharacterFrameState
 {
     public CharacterFrameState(
         ulong frameNumber,
-        CharacterInputFrame input,
+        CharacterSimulationInput input,
         Vector3 moveDirection,
         Vector3 velocity,
         bool wasGrounded,
@@ -33,7 +33,7 @@ public readonly struct CharacterFrameState
 
     public ulong FrameNumber { get; }
 
-    public CharacterInputFrame Input { get; }
+    public CharacterSimulationInput Input { get; }
 
     public Vector3 MoveDirection { get; }
 

@@ -12,10 +12,13 @@ The root is an ordered motor/orchestrator surrounded by focused components:
 CharacterPlayerController
         |
         v
-CharacterInputFrame (immutable, one physics sample)
+CharacterInputFrame (raw local input, one physics sample)
         |
         v
-Character.cs (motor + MoveAndSlide)
+CharacterSimulationInput (camera-independent command)
+        |
+        v
+Character.cs / Simulate (motor + MoveAndSlide)
         |
         v
 CharacterFrameState (immutable post-move snapshot)
@@ -29,16 +32,17 @@ CharacterLookPitchModifier remains a post-animation skeleton modifier.
 
 The components are:
 
-- `Character.cs`: movement authority, floor transitions, local-space visual facing and deterministic orchestration.
+- `Character.cs`: deterministic movement authority, floor transitions and orchestration. `Simulate` consumes only `CharacterSimulationInput`; the local physics callback adapts camera input and applies presentation separately.
 - `CharacterPlayerController.cs`: global input sampling and explicit `Possess`/`Unpossess` authority.
-- `CharacterInputFrame.cs`: move, look, jump and sprint sampled once per physics tick.
-- `CharacterFrameState.cs`: shared movement, grounded, jump, landing, sprint and impact result.
+- `CharacterInputFrame.cs`: raw local move, look delta, jump and sprint sampled once per physics tick.
+- `CharacterSimulationInput.cs`: absolute character-local view yaw/pitch plus movement actions consumed by the camera-independent motor.
+- `CharacterFrameState.cs`: shared movement, grounded, jump, landing, sprint and impact result produced by `Simulate`.
 - `CharacterAnimationController.cs`: AnimationTree validation, blend space, airborne priority, turn-in-place and landing one-shot.
 - `CharacterCameraRig.cs`: yaw/pitch, clamps, FPS/TPS placement and active-camera ownership.
 - `CharacterCameraEffects.cs`: render-frame bob, sway, FOV and impact-scaled impulses from the latest physics snapshot.
 - `CharacterLookPitchModifier.cs`: additive upper-body look pitch after animation.
 
-The current version is a clean, focused refactor: `Character.cs` remains the compact orchestration facade, while configuration and behavior live on the component that owns them. Presentation systems do not resample global input or independently infer floor transitions.
+The current version is a clean, focused refactor: `Character.cs` remains the compact orchestration facade, while `Simulate` is an explicit camera-independent motor boundary. Presentation systems do not resample global input or independently infer floor transitions; local-only look deltas are passed directly to camera presentation.
 
 ## Possession and controls
 
@@ -90,7 +94,8 @@ Bone lookup supports common aliases, lists every missing requested bone explicit
 - a stronger impact produces a stronger landing effect;
 - a rotated character instance keeps visual and camera yaw aligned;
 - possession transfers input authority and the active camera;
-- airborne state cancels an active turn-in-place override.
+- airborne state cancels an active turn-in-place override;
+- direct simulation follows its explicit view yaw without reading the local camera rig.
 
 Run them with:
 
@@ -106,5 +111,5 @@ GdUnit4Net is referenced through NuGet; no GdUnit source tree is vendored in `ad
 Validated on 2026-08-14 with Godot 4.7.1 Mono:
 
 - `dotnet build quest-world.sln`: 0 warnings, 0 errors.
-- Five focused GdUnit4Net C# tests pass.
+- Six focused GdUnit4Net C# tests pass.
 - `test_world.tscn` runs headless for 120 frames without scene, C# or node-path errors.

@@ -67,28 +67,28 @@ public partial class CharacterAnimationController : Node
     private string _lastRequestedState = string.Empty;
     private bool _initialized;
 
-	public bool Initialize(Character character, Node3D visual)
-	{
-		_character = character;
-		_visual = visual;
-		_animationPlayer = character.GetNodeOrNull<AnimationPlayer>("Visual/UALCharacter/AnimationPlayer")!;
-		_animationTree = character.GetNodeOrNull<AnimationTree>("AnimationTree")!;
-		if (_animationPlayer == null)
-		{
-			GD.PushError($"{Name}: expected UAL AnimationPlayer at 'Visual/UALCharacter/AnimationPlayer'.");
-			return false;
-		}
+    public bool Initialize(Character character, Node3D visual)
+    {
+        _character = character;
+        _visual = visual;
+        _animationPlayer = character.GetNodeOrNull<AnimationPlayer>("Visual/UALCharacter/AnimationPlayer")!;
+        _animationTree = character.GetNodeOrNull<AnimationTree>("AnimationTree")!;
+        if (_animationPlayer == null)
+        {
+            GD.PushError($"{Name}: expected UAL AnimationPlayer at 'Visual/UALCharacter/AnimationPlayer'.");
+            return false;
+        }
 
-		if (_animationTree == null)
-		{
-			GD.PushError($"{Name}: expected AnimationTree at 'AnimationTree'.");
-			return false;
-		}
+        if (_animationTree == null)
+        {
+            GD.PushError($"{Name}: expected AnimationTree at 'AnimationTree'.");
+            return false;
+        }
 
-		if (!ValidateAnimations())
-		{
-			return false;
-		}
+        if (!ValidateAnimations())
+        {
+            return false;
+        }
 
         _animationTree.Active = true;
         SetAnimationPlaybackSpeed(PlaybackSpeed);
@@ -115,14 +115,14 @@ public partial class CharacterAnimationController : Node
             return;
         }
 
-		_frame = frame;
-		if (IsTurnInPlaceActive
-			&& (!TurnInPlaceEnabled || viewMode != Character.ViewMode.FirstPerson))
-		{
-			CancelTurnInPlace();
-		}
+        _frame = frame;
+        if (IsTurnInPlaceActive
+            && (!TurnInPlaceEnabled || viewMode != Character.ViewMode.FirstPerson))
+        {
+            CancelTurnInPlace();
+        }
 
-		if (viewMode == Character.ViewMode.FirstPerson)
+        if (viewMode == Character.ViewMode.FirstPerson)
         {
             _turnYawAccumulator += yawDelta;
         }

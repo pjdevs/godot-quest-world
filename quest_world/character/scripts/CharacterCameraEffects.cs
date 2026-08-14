@@ -82,12 +82,12 @@ public partial class CharacterCameraEffects : Node3D
         _initialized = true;
     }
 
-    public void PushFrame(CharacterFrameState frame)
+    public void PushFrame(CharacterFrameState frame, Vector2 lookDelta)
     {
         _frame = frame;
         if (frame.FrameNumber != _lastLookFrame)
         {
-            _pendingLookX += frame.Input.LookDelta.X;
+            _pendingLookX += lookDelta.X;
             _lastLookFrame = frame.FrameNumber;
         }
 

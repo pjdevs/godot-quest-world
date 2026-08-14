@@ -127,13 +127,34 @@ public partial class Character : CharacterBody3D
 			return;
 		}
 
-		float frameDelta = (float)delta;
 		CharacterInputFrame input = _pendingInput;
 		_pendingInput = CharacterInputFrame.Empty;
 		float yawDelta = _cameraRig.ApplyLook(input);
+		CharacterSimulationInput simulationInput = new(
+			input.Move,
+			_cameraRig.Rotation.Y,
+			_cameraRig.CameraPitch.Rotation.X,
+			input.JumpPressed,
+			input.SprintHeld
+		);
+		Simulate(simulationInput, delta);
+		ApplyLocalPresentation(simulationInput, input.LookDelta, yawDelta, (float)delta);
+	}
+
+	/// <summary>
+	/// Advances the authoritative character motor without reading local camera state or applying presentation.
+	/// </summary>
+	public void Simulate(CharacterSimulationInput input, double delta)
+	{
+		if (!_configurationValid)
+		{
+			return;
+		}
+
+		float frameDelta = (float)delta;
 		bool groundedBeforeMove = IsOnFloor();
 		bool wasGrounded = _hasFloorSample && _wasGrounded;
-		Vector3 moveDirection = GetCameraRelativeDirection(input.Move);
+		Vector3 moveDirection = GetViewRelativeDirection(input.Move, input.ViewYaw);
 		bool sprintRequested = groundedBeforeMove
 			&& input.SprintHeld
 			&& -input.Move.Y >= Mathf.Clamp(SprintForwardInputThreshold, 0.0f, 1.0f);
@@ -184,7 +205,6 @@ public partial class Character : CharacterBody3D
 		_wasGrounded = isGrounded;
 		_hasFloorSample = true;
 
-		UpdateVisualOrientation(moveDirection, frameDelta);
 		_frameNumber++;
 		_latestFrame = new CharacterFrameState(
 			_frameNumber,
@@ -198,8 +218,6 @@ public partial class Character : CharacterBody3D
 			sprinting,
 			impactSpeed,
 			landingStrength);
-		_animationController.ApplyFrame(_latestFrame, _currentViewMode, yawDelta, frameDelta);
-		_cameraEffects.PushFrame(_latestFrame);
 	}
 
 	public void SubmitInputFrame(CharacterInputFrame inputFrame)
@@ -285,28 +303,42 @@ public partial class Character : CharacterBody3D
 		return false;
 	}
 
-	private Vector3 GetCameraRelativeDirection(Vector2 input)
+	private void ApplyLocalPresentation(
+		CharacterSimulationInput input,
+		Vector2 lookDelta,
+		float yawDelta,
+		float delta)
 	{
-		Vector3 forward = -_cameraRig.GlobalBasis.Z;
+		UpdateVisualOrientation(input.ViewYaw, _latestFrame.MoveDirection, delta);
+		_animationController.ApplyFrame(_latestFrame, _currentViewMode, yawDelta, delta);
+		_cameraEffects.PushFrame(_latestFrame, lookDelta);
+	}
+
+	private Vector3 GetViewRelativeDirection(Vector2 input, float viewYaw)
+	{
+		Basis viewBasis = new(Vector3.Up, viewYaw);
+		Basis viewGlobalBasis = GlobalBasis * viewBasis;
+		Vector3 forward = -viewGlobalBasis.Z;
 		forward.Y = 0.0f;
 		forward = forward.Normalized();
-		Vector3 right = _cameraRig.GlobalBasis.X;
+		Vector3 right = viewGlobalBasis.X;
 		right.Y = 0.0f;
 		right = right.Normalized();
 		Vector3 direction = right * input.X + forward * -input.Y;
 		return direction.LengthSquared() > 1.0f ? direction.Normalized() : direction;
 	}
 
-	private void UpdateVisualOrientation(Vector3 moveDirection, float delta)
+	private void UpdateVisualOrientation(float viewYaw, Vector3 moveDirection, float delta)
 	{
 		float targetLocalYaw = _visual.Rotation.Y;
 		if (_currentViewMode == ViewMode.FirstPerson)
 		{
-			targetLocalYaw = _cameraRig.Rotation.Y;
+			targetLocalYaw = viewYaw;
 		}
 		else if (moveDirection.LengthSquared() > 0.0001f)
 		{
-			Vector3 cameraForward = -_cameraRig.GlobalBasis.Z;
+			Basis viewBasis = new(Vector3.Up, viewYaw);
+			Vector3 cameraForward = -(GlobalBasis * viewBasis).Z;
 			cameraForward.Y = 0.0f;
 			cameraForward = cameraForward.Normalized();
 			float forwardAlignment = moveDirection.Dot(cameraForward);
