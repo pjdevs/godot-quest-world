@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://cs4drhmc1bql5"]
 
 [ext_resource type="PackedScene" path="res://quest_world/character/Character.tscn" id="1_character"]
+[ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://quest_world/character/scripts/CharacterPlayerController.cs" id="2_player_controller"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_edcox"]
 ground_color = Color(0.160784, 0.815686, 0.905882, 1)
@@ -79,4 +80,8 @@ material = SubResource("StandardMaterial3D_7j4uu")
 
 [node name="Character" parent="." unique_id=7684642 instance=ExtResource("1_character")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 10)
-FirstPersonCameraOffset = Vector3(0, 0, -0.5)
+FirstPersonCameraOffset = Vector3(0, 0, -0.6)
+
+[node name="PlayerController" type="Node" parent="." unique_id=1335039517]
+script = ExtResource("2_player_controller")
+InitialPawnPath = NodePath("../Character")

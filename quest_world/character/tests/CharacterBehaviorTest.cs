@@ -1,0 +1,274 @@
+namespace QuestWorld.Tests;
+
+using System;
+using System.Threading.Tasks;
+using GdUnit4;
+using Godot;
+using static GdUnit4.Assertions;
+
+[TestSuite]
+[RequireGodotRuntime]
+public sealed class CharacterBehaviorTest
+{
+    private const string CharacterScenePath = "res://quest_world/character/Character.tscn";
+    private const string CameraEffectsPath = "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects";
+    private const string CameraPath = $"{CameraEffectsPath}/Camera3D";
+
+    [TestCase]
+    public async Task InitialFloorContactDoesNotTriggerLanding()
+    {
+        Character character = InstantiateCharacter(Vector3.Zero);
+        ISceneRunner runner = BuildWorld(character);
+        bool landingObserved = false;
+        bool initialContactEstablished = false;
+
+        for (int sample = 0; sample < 30 && !initialContactEstablished; sample++)
+        {
+            await WaitForNextPhysicsFrame(runner, character);
+            landingObserved |= character.LatestFrame.Landed;
+            initialContactEstablished = character.LatestFrame.IsGrounded;
+        }
+
+        AssertThat(initialContactEstablished).IsTrue();
+        AssertThat(landingObserved).IsFalse();
+        await runner.SimulateFrames(1);
+        Node3D cameraEffects = character.GetNode<Node3D>(CameraEffectsPath);
+        AssertThat(cameraEffects.Position.Y).IsEqualApprox(0.0f, 0.0001f);
+    }
+
+    [TestCase]
+    public async Task LandingStrengthIncreasesWithImpact()
+    {
+        Character lowCharacter = InstantiateCharacter(new Vector3(-2.0f, 1.0f, 0.0f));
+        Character highCharacter = InstantiateCharacter(new Vector3(2.0f, 5.0f, 0.0f));
+        ISceneRunner runner = BuildWorld(lowCharacter, highCharacter);
+        float lowOffset = 0.0f;
+        float highOffset = 0.0f;
+        bool lowLanded = false;
+        bool highLanded = false;
+        int lowFramesAfterLanding = -1;
+        int highFramesAfterLanding = -1;
+        ulong lowLandingFrame = 0;
+        ulong highLandingFrame = 0;
+
+        for (int frame = 0; frame < 240; frame++)
+        {
+            await runner.SimulateFrames(1);
+            CaptureLandingPeak(
+                lowCharacter,
+                ref lowLanded,
+                ref lowFramesAfterLanding,
+                ref lowLandingFrame,
+                ref lowOffset);
+            CaptureLandingPeak(
+                highCharacter,
+                ref highLanded,
+                ref highFramesAfterLanding,
+                ref highLandingFrame,
+                ref highOffset);
+            if (lowFramesAfterLanding >= 12 && highFramesAfterLanding >= 12)
+            {
+                break;
+            }
+        }
+
+        AssertThat(lowLanded).IsTrue();
+        AssertThat(highLanded).IsTrue();
+        AssertThat(highOffset).IsGreater(lowOffset + 0.002f);
+    }
+
+    [TestCase]
+    public async Task RotatedInstanceKeepsVisualAlignedWithCamera()
+    {
+        Character character = InstantiateCharacter(Vector3.Zero);
+        character.Rotation = new Vector3(0.0f, Mathf.Pi / 2.0f, 0.0f);
+        character.RotationSpeed = 1000.0f;
+        ISceneRunner runner = BuildWorld(character);
+        await WaitForNextPhysicsFrame(runner, character);
+
+        character.CurrentViewMode = Character.ViewMode.FirstPerson;
+        SpringArm3D springArm = character.GetNode<SpringArm3D>("CameraYaw/CameraPitch/SpringArm3D");
+        AssertThat(springArm.SpringLength).IsEqualApprox(0.0f, 0.0001f);
+        await WaitForNextPhysicsFrame(runner, character);
+
+        Node3D visual = character.GetNode<Node3D>("Visual");
+        Node3D cameraYaw = character.GetNode<Node3D>("CameraYaw");
+        float yawError = Math.Abs(Mathf.Wrap(
+            visual.GlobalRotation.Y - cameraYaw.GlobalRotation.Y,
+            -Mathf.Pi,
+            Mathf.Pi));
+        AssertThat(yawError).IsLess(0.001f);
+    }
+
+    [TestCase]
+    public async Task PossessionTransfersInputAuthorityAndActiveCamera()
+    {
+        Character firstCharacter = InstantiateCharacter(new Vector3(-2.0f, 0.0f, 0.0f));
+        Character secondCharacter = InstantiateCharacter(new Vector3(2.0f, 0.0f, 0.0f));
+        CharacterPlayerController player = new();
+        CharacterPlayerController replacementPlayer = new();
+        ISceneRunner runner = BuildWorldWithPlayers(
+            new[] { player, replacementPlayer },
+            firstCharacter,
+            secondCharacter);
+        await WaitForNextPhysicsFrame(runner, firstCharacter);
+
+        player.Possess(firstCharacter);
+        AssertThat(firstCharacter.IsPossessed).IsTrue();
+        AssertThat(secondCharacter.IsPossessed).IsFalse();
+        AssertThat(firstCharacter.GetNode<Camera3D>(CameraPath).Current).IsTrue();
+
+        player.Possess(secondCharacter);
+        AssertThat(firstCharacter.IsPossessed).IsFalse();
+        AssertThat(secondCharacter.IsPossessed).IsTrue();
+        AssertThat(firstCharacter.GetNode<Camera3D>(CameraPath).Current).IsFalse();
+        AssertThat(secondCharacter.GetNode<Camera3D>(CameraPath).Current).IsTrue();
+
+        replacementPlayer.Possess(secondCharacter);
+        AssertThat(player.ControlledCharacter == null).IsTrue();
+        AssertThat(secondCharacter.PossessingController == replacementPlayer).IsTrue();
+        AssertThat(secondCharacter.IsPossessed).IsTrue();
+        AssertThat(secondCharacter.GetNode<Camera3D>(CameraPath).Current).IsTrue();
+    }
+
+    [TestCase]
+    public async Task AirborneStateCancelsTurnInPlaceOverride()
+    {
+        Character character = InstantiateCharacter(Vector3.Zero);
+        character.CurrentViewMode = Character.ViewMode.FirstPerson;
+        ISceneRunner runner = BuildWorld(character);
+        for (int sample = 0; sample < 30 && !character.LatestFrame.IsGrounded; sample++)
+        {
+            await WaitForNextPhysicsFrame(runner, character);
+        }
+
+        character.SubmitInputFrame(new CharacterInputFrame(
+            Vector2.Zero,
+            new Vector2(-250.0f, 0.0f),
+            false,
+            false));
+        for (int frame = 0; frame < 10 && !character.IsTurnInPlaceActive; frame++)
+        {
+            await runner.SimulateFrames(1);
+        }
+        AssertThat(character.IsTurnInPlaceActive).IsTrue();
+
+        CharacterAnimationController animationController =
+            character.GetNode<CharacterAnimationController>("AnimationController");
+        animationController.TurnInPlaceEnabled = false;
+        await WaitForNextPhysicsFrame(runner, character);
+        AssertThat(character.IsTurnInPlaceActive).IsFalse();
+
+        animationController.TurnInPlaceEnabled = true;
+        character.SubmitInputFrame(new CharacterInputFrame(
+            Vector2.Zero,
+            new Vector2(-250.0f, 0.0f),
+            false,
+            false));
+        for (int frame = 0; frame < 10 && !character.IsTurnInPlaceActive; frame++)
+        {
+            await runner.SimulateFrames(1);
+        }
+        AssertThat(character.IsTurnInPlaceActive).IsTrue();
+
+        character.SubmitInputFrame(new CharacterInputFrame(Vector2.Zero, Vector2.Zero, true, false));
+        await WaitForNextPhysicsFrame(runner, character);
+        AssertThat(character.LatestFrame.IsGrounded).IsFalse();
+        AssertThat(character.IsTurnInPlaceActive).IsFalse();
+    }
+
+    private static ISceneRunner BuildWorld(params Character[] characters)
+    {
+        Node3D world = new();
+        world.AddChild(CreateFloor());
+        foreach (Character character in characters)
+        {
+            world.AddChild(character);
+        }
+
+        return ISceneRunner.Load(world);
+    }
+
+    private static ISceneRunner BuildWorldWithPlayers(
+        CharacterPlayerController[] players,
+        params Character[] characters)
+    {
+        Node3D world = new();
+        world.AddChild(CreateFloor());
+        foreach (Character character in characters)
+        {
+            world.AddChild(character);
+        }
+
+        foreach (CharacterPlayerController player in players)
+        {
+            world.AddChild(player);
+        }
+
+        return ISceneRunner.Load(world);
+    }
+
+    private static StaticBody3D CreateFloor()
+    {
+        BoxShape3D shape = new() { Size = new Vector3(20.0f, 1.0f, 20.0f) };
+        CollisionShape3D collision = new()
+        {
+            Shape = shape,
+            Position = new Vector3(0.0f, -0.5f, 0.0f)
+        };
+        StaticBody3D floor = new();
+        floor.AddChild(collision);
+        return floor;
+    }
+
+    private static Character InstantiateCharacter(Vector3 position)
+    {
+        PackedScene scene = GD.Load<PackedScene>(CharacterScenePath);
+        Character character = scene.Instantiate<Character>();
+        character.Position = position;
+        return character;
+    }
+
+    private static void CaptureLandingPeak(
+        Character character,
+        ref bool landed,
+        ref int framesAfterLanding,
+        ref ulong landingFrame,
+        ref float peakOffset)
+    {
+        if (character.LatestFrame.Landed && character.LatestFrame.FrameNumber != landingFrame)
+        {
+            landed = true;
+            framesAfterLanding = 0;
+            landingFrame = character.LatestFrame.FrameNumber;
+        }
+
+        if (framesAfterLanding < 0 || framesAfterLanding >= 12)
+        {
+            return;
+        }
+
+        Node3D cameraEffects = character.GetNode<Node3D>(CameraEffectsPath);
+        peakOffset = Math.Max(peakOffset, Math.Abs(cameraEffects.Position.Y));
+        framesAfterLanding++;
+    }
+
+    private static async Task WaitForNextPhysicsFrame(
+        ISceneRunner runner,
+        Character character,
+        int maximumRenderFrames = 30)
+    {
+        ulong initialFrame = character.LatestFrame.FrameNumber;
+        for (int renderFrame = 0;
+             renderFrame < maximumRenderFrames && character.LatestFrame.FrameNumber == initialFrame;
+             renderFrame++)
+        {
+            await runner.SimulateFrames(1);
+        }
+
+        if (character.LatestFrame.FrameNumber == initialFrame)
+        {
+            throw new TimeoutException("Character physics did not advance within the render-frame budget.");
+        }
+    }
+}

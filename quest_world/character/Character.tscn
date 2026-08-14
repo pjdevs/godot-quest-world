@@ -2,6 +2,9 @@
 
 [ext_resource type="Script" path="res://quest_world/character/scripts/Character.cs" id="1_8gjjr"]
 [ext_resource type="PackedScene" path="res://quest_world/character/ual_character.tscn" id="2_pbax8"]
+[ext_resource type="Script" path="res://quest_world/character/scripts/CharacterCameraRig.cs" id="3_camera_rig"]
+[ext_resource type="Script" path="res://quest_world/character/scripts/CharacterCameraEffects.cs" id="4_camera_effects"]
+[ext_resource type="Script" path="res://quest_world/character/scripts/CharacterAnimationController.cs" id="5_animation_controller"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_woadn"]
 radius = 0.4
@@ -134,8 +137,12 @@ active = true
 parameters/StateMachine/Locomotion/blend_position = Vector2(0, 0)
 parameters/TimeScale/scale = 1.5
 
+[node name="AnimationController" type="Node" parent="."]
+script = ExtResource("5_animation_controller")
+
 [node name="CameraYaw" type="Node3D" parent="." unique_id=902288204]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+script = ExtResource("3_camera_rig")
 
 [node name="CameraPitch" type="Node3D" parent="CameraYaw" unique_id=1989956000]
 
@@ -146,6 +153,7 @@ margin = 0.1
 [node name="CameraAnchor" type="Node3D" parent="CameraYaw/CameraPitch/SpringArm3D"]
 
 [node name="CameraEffects" type="Node3D" parent="CameraYaw/CameraPitch/SpringArm3D/CameraAnchor"]
+script = ExtResource("4_camera_effects")
 
 [node name="Camera3D" type="Camera3D" parent="CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects" unique_id=1024725433]
-current = true
+current = false
