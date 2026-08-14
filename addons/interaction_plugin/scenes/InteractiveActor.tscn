@@ -1,0 +1,48 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://addons/interaction_plugin/examples/InteractiveActor.cs" id="1_actor"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="2_interactive"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/state/InteractionStateful.cs" id="3_stateful"]
+[ext_resource type="PackedScene" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="4_prompt"]
+[ext_resource type="PackedScene" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="5_indicator"]
+
+[sub_resource type="SphereShape3D" id="SphereShape_interaction"]
+radius = 2.5
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_state"]
+properties/0/path = NodePath("..:replicated_state")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+
+[node name="InteractiveActor" type="Node3D"]
+script = ExtResource("1_actor")
+
+[node name="InteractionArea" type="Area3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractionArea"]
+shape = SubResource("SphereShape_interaction")
+
+[node name="IndicationArea" type="Area3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="IndicationArea"]
+shape = SubResource("SphereShape_interaction")
+
+[node name="InteractionAnchor" type="Marker3D" parent="."]
+position = Vector3(0, 1.1, 0)
+
+[node name="Interactive" type="Node" parent="."]
+script = ExtResource("2_interactive")
+interaction_area_path = NodePath("../InteractionArea")
+indication_area_path = NodePath("../IndicationArea")
+interaction_anchor_path = NodePath("../InteractionAnchor")
+stateful_path = NodePath("../Stateful")
+display_name = "Activate"
+description = "Hold the interaction to activate this object."
+prompt_scene = ExtResource("4_prompt")
+indication_scene = ExtResource("5_indicator")
+
+[node name="Stateful" type="Node" parent="."]
+script = ExtResource("3_stateful")
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="Stateful"]
+replication_config = SubResource("SceneReplicationConfig_state")
