@@ -252,9 +252,9 @@ The project has no external test framework requirement. A small Godot C# headles
 - Godot headless scene validation succeeds with:
 
 ```bash
-/Users/pjmorel/Documents/Godot_mono.app/Contents/MacOS/Godot \
+godot \
   --headless \
-  --path /Users/pjmorel/Projects/quest-world \
+  --path . \
   --editor \
   --quit
 ```

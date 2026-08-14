@@ -20,7 +20,7 @@ Vertical, one folder per feature with subfolder `scripts` etc.
 
 ### Tools
 
-- Godot CLI : `/Users/pjmorel/Documents/Godot_mono.app/Contents/MacOS/Godot`
+- Godot CLI available in PATH : `godot`
 - `dotnet`
 
 ### Mandatory
