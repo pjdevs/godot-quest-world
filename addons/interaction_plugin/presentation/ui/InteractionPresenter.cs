@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
@@ -8,9 +9,6 @@ public partial class InteractionPresenter : CanvasLayer
 {
     [ExportGroup("Projection")]
     [Export]
-    public Vector2 IndicationScreenOffset { get; set; } = new(0.0f, -32.0f);
-
-    [Export]
     public NodePath InteractorPath { get; set; } = new();
 
     [Export]
@@ -19,7 +17,7 @@ public partial class InteractionPresenter : CanvasLayer
     private InteractionInteractor? _interactor = null!;
     private Camera3D? _camera = null!;
     private Control? _prompt = null!;
-    private Control? _indication = null!;
+    private readonly Dictionary<InteractiveComponent, Control> _indications = new();
 
     public override void _Ready()
     {
@@ -41,8 +39,12 @@ public partial class InteractionPresenter : CanvasLayer
 
     public override void _Process(double delta)
     {
-        UpdateProjection(_prompt, Vector2.Zero);
-        UpdateProjection(_indication, IndicationScreenOffset);
+        RefreshIndications();
+        UpdateProjection(_prompt);
+        foreach (KeyValuePair<InteractiveComponent, Control> indication in _indications)
+        {
+            UpdateProjection(indication.Value, indication.Key);
+        }
     }
 
     private void OnFocusedInteractiveChanged(Node interactive) => Refresh();
@@ -61,7 +63,6 @@ public partial class InteractionPresenter : CanvasLayer
         if (focused == null)
         {
             FreeWidget(ref _prompt);
-            FreeWidget(ref _indication);
             return;
         }
 
@@ -75,10 +76,72 @@ public partial class InteractionPresenter : CanvasLayer
             ReplaceWidget(ref _prompt, focused.PromptScene, presentation);
         }
 
-        PackedScene? indicationScene = presentation.IsAllowed
-            ? focused.IndicationScene
-            : focused.BlockedIndicationScene;
-        ReplaceWidget(ref _indication, indicationScene, presentation);
+        RefreshIndications();
+    }
+
+    private void RefreshIndications()
+    {
+        if (_interactor == null)
+        {
+            return;
+        }
+
+        HashSet<InteractiveComponent> indicated = new(_interactor.IndicatedInteractives);
+        List<InteractiveComponent> removed = new();
+        foreach (InteractiveComponent interactive in _indications.Keys)
+        {
+            if (!indicated.Contains(interactive) || !IsInstanceValid(interactive))
+            {
+                removed.Add(interactive);
+            }
+        }
+
+        foreach (InteractiveComponent interactive in removed)
+        {
+            Control? widget = _indications[interactive];
+            FreeWidget(ref widget);
+            _indications.Remove(interactive);
+        }
+
+        foreach (InteractiveComponent interactive in indicated)
+        {
+            if (interactive == _interactor.FocusedInteractive)
+            {
+                RemoveIndication(interactive);
+                continue;
+            }
+
+            InteractionPresentation presentation = interactive.GetPresentation(_interactor, false);
+            PackedScene? scene = presentation.IsAllowed
+                ? interactive.IndicationScene
+                : interactive.BlockedIndicationScene;
+
+            if (!_indications.TryGetValue(interactive, out Control? widget))
+            {
+                widget = null!;
+            }
+
+            ReplaceWidget(ref widget, scene, presentation);
+            if (widget == null)
+            {
+                _indications.Remove(interactive);
+            }
+            else
+            {
+                _indications[interactive] = widget;
+            }
+        }
+    }
+
+    private void RemoveIndication(InteractiveComponent interactive)
+    {
+        if (!_indications.TryGetValue(interactive, out Control? widget))
+        {
+            return;
+        }
+
+        FreeWidget(ref widget);
+        _indications.Remove(interactive);
     }
 
     private void ReplaceWidget(
@@ -113,19 +176,28 @@ public partial class InteractionPresenter : CanvasLayer
         (current as IInteractionWidget)?.Bind(presentation);
     }
 
-    private void UpdateProjection(Control? control, Vector2 screenOffset)
+    private void UpdateProjection(Control? control)
     {
-        if (control == null || _interactor?.FocusedInteractive == null || _camera == null)
+        if (_interactor?.FocusedInteractive == null)
         {
             return;
         }
 
-        Vector3 worldPosition = _interactor.FocusedInteractive.GetInteractionPosition();
+        UpdateProjection(control, _interactor.FocusedInteractive);
+    }
+
+    private void UpdateProjection(Control? control, InteractiveComponent interactive)
+    {
+        if (control == null || _camera == null)
+        {
+            return;
+        }
+
+        Vector3 worldPosition = interactive.GetInteractionPosition();
         control.Visible = !_camera.IsPositionBehind(worldPosition);
         if (control.Visible)
         {
-            control.Position =
-                _camera.UnprojectPosition(worldPosition) - control.Size / 2.0f + screenOffset;
+            control.Position = _camera.UnprojectPosition(worldPosition) - control.Size / 2.0f;
         }
     }
 
