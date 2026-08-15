@@ -24,7 +24,14 @@ csharp_wrap_arguments_style = chop_if_long
 csharp_wrap_parameters_style = chop_if_long
 
 # Roslyn / analyzers
-dotnet_diagnostic.IDE0055.severity = warning
+dotnet_diagnostic.IDE0055.severity = none
+dotnet_diagnostic.CS8655.severity = none
 
 # CSharpier
 csharpier_print_width = 100
+
+# CS8655: The switch expression does not handle some null inputs.
+dotnet_diagnostic.CS8655.severity = none
+
+# CS8655: The switch expression does not handle some null inputs.
+dotnet_diagnostic.CS8655.severity = none

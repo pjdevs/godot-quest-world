@@ -145,7 +145,6 @@ public sealed partial class InteractionBehaviorTest
         {
             InteractionAllowed => "allowed",
             InteractionBlocked blocked => blocked.Reason,
-            _ => throw new UnreachableException(),
         };
 
     private static TestWorld BuildWorld()

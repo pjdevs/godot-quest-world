@@ -36,14 +36,12 @@ public readonly record struct InteractionPresentation(
     {
         InteractionAllowed => true,
         InteractionBlocked => false,
-        _ => throw new UnreachableException(),
     };
 
     public string BlockReason => Status switch
     {
         InteractionAllowed => string.Empty,
         InteractionBlocked blocked => blocked.Reason,
-        _ => throw new UnreachableException(),
     };
 }
 
