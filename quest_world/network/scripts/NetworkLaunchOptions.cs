@@ -7,7 +7,7 @@ public enum NetworkLaunchMode
     Offline,
     Server,
     Host,
-    Client
+    Client,
 }
 
 public sealed class NetworkLaunchOptions
@@ -16,11 +16,7 @@ public sealed class NetworkLaunchOptions
     public const int DefaultPort = 7000;
     public const int DefaultMaxPlayers = 8;
 
-    private NetworkLaunchOptions(
-        NetworkLaunchMode mode,
-        string address,
-        int port,
-        int maxPlayers)
+    private NetworkLaunchOptions(NetworkLaunchMode mode, string address, int port, int maxPlayers)
     {
         Mode = mode;
         Address = address;
@@ -41,7 +37,8 @@ public sealed class NetworkLaunchOptions
     public static bool TryParse(
         IReadOnlyList<string> arguments,
         out NetworkLaunchOptions options,
-        out string error)
+        out string error
+    )
     {
         NetworkLaunchMode? requestedMode = null;
         string address = DefaultAddress;
@@ -87,7 +84,15 @@ public sealed class NetworkLaunchOptions
                     }
                     break;
                 default:
-                    if (TryReadValue(argument, "--connect", arguments, ref index, out string addressValue))
+                    if (
+                        TryReadValue(
+                            argument,
+                            "--connect",
+                            arguments,
+                            ref index,
+                            out string? addressValue
+                        )
+                    )
                     {
                         if (string.IsNullOrWhiteSpace(addressValue))
                         {
@@ -98,23 +103,52 @@ public sealed class NetworkLaunchOptions
 
                         address = addressValue;
                     }
-                    else if (TryReadValue(argument, "--port", arguments, ref index, out string portValue))
+                    else if (
+                        TryReadValue(
+                            argument,
+                            "--port",
+                            arguments,
+                            ref index,
+                            out string? portValue
+                        )
+                    )
                     {
-                        if (!int.TryParse(portValue, NumberStyles.None, CultureInfo.InvariantCulture, out port)
-                            || port is < 1 or > 65535)
+                        if (
+                            !int.TryParse(
+                                portValue,
+                                NumberStyles.None,
+                                CultureInfo.InvariantCulture,
+                                out port
+                            ) || port is < 1 or > 65535
+                        )
                         {
                             options = null!;
                             error = $"The --port value '{portValue}' must be between 1 and 65535.";
                             return false;
                         }
                     }
-                    else if (TryReadValue(argument, "--max-players", arguments, ref index, out string maxPlayersValue))
+                    else if (
+                        TryReadValue(
+                            argument,
+                            "--max-players",
+                            arguments,
+                            ref index,
+                            out string? maxPlayersValue
+                        )
+                    )
                     {
-                        if (!int.TryParse(maxPlayersValue, NumberStyles.None, CultureInfo.InvariantCulture, out maxPlayers)
-                            || maxPlayers is < 1 or > 64)
+                        if (
+                            !int.TryParse(
+                                maxPlayersValue,
+                                NumberStyles.None,
+                                CultureInfo.InvariantCulture,
+                                out maxPlayers
+                            ) || maxPlayers is < 1 or > 64
+                        )
                         {
                             options = null!;
-                            error = $"The --max-players value '{maxPlayersValue}' must be between 1 and 64.";
+                            error =
+                                $"The --max-players value '{maxPlayersValue}' must be between 1 and 64.";
                             return false;
                         }
                     }
@@ -126,7 +160,8 @@ public sealed class NetworkLaunchOptions
             requestedMode ?? NetworkLaunchMode.Offline,
             address,
             port,
-            maxPlayers);
+            maxPlayers
+        );
         error = string.Empty;
         return true;
     }
@@ -134,11 +169,13 @@ public sealed class NetworkLaunchOptions
     private static bool TrySetMode(
         NetworkLaunchMode mode,
         ref NetworkLaunchMode? requestedMode,
-        out string error)
+        out string error
+    )
     {
         if (requestedMode.HasValue && requestedMode.Value != mode)
         {
-            error = $"Only one network launch mode can be selected; found both '{requestedMode}' and '{mode}'.";
+            error =
+                $"Only one network launch mode can be selected; found both '{requestedMode}' and '{mode}'.";
             return false;
         }
 
@@ -152,7 +189,8 @@ public sealed class NetworkLaunchOptions
         string option,
         IReadOnlyList<string> arguments,
         ref int index,
-        out string value)
+        out string? value
+    )
     {
         string prefix = option + "=";
         if (argument.StartsWith(prefix, StringComparison.Ordinal))

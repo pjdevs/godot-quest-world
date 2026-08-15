@@ -15,7 +15,8 @@ public readonly struct CharacterSimulationInput
         float viewYaw,
         float viewPitch,
         bool jumpPressed,
-        bool sprintHeld)
+        bool sprintHeld
+    )
     {
         Move = move;
         ViewYaw = viewYaw;

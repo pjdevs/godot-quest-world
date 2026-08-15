@@ -30,13 +30,19 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
         _stateful ??= GetNodeOrNull<InteractionStateful>("Stateful");
         if (_interactive == null || _stateful == null)
         {
-            GD.PushError($"{GetPath()}: InteractiveActor example requires Interactive and Stateful children.");
+            GD.PushError(
+                $"{GetPath()}: InteractiveActor example requires Interactive and Stateful children."
+            );
             SetProcess(false);
             return;
         }
 
-        _interactive.PromptScene ??= GD.Load<PackedScene>("res://addons/interaction_plugin/scenes/InteractionPrompt.tscn");
-        _interactive.IndicationScene ??= GD.Load<PackedScene>("res://addons/interaction_plugin/scenes/InteractionIndicator.tscn");
+        _interactive.PromptScene ??= GD.Load<PackedScene>(
+            "res://addons/interaction_plugin/scenes/InteractionPrompt.tscn"
+        );
+        _interactive.IndicationScene ??= GD.Load<PackedScene>(
+            "res://addons/interaction_plugin/scenes/InteractionIndicator.tscn"
+        );
     }
 
     public override void _Process(double delta)
@@ -64,7 +70,7 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
     {
         return _stateful.State == InteractionState.Activated
             ? new InteractionBlocked("This is already activated.")
-            : InteractionAllowed.Instance;
+            : new InteractionAllowed();
     }
 
     public void OnStartInteractionInput(in InteractionContext context)
@@ -80,11 +86,13 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
         _releaseRequested = true;
     }
 
-    public void OnInteractionStateChangedAuthority(InteractionState oldState, InteractionState newState)
-    {
-    }
+    public void OnInteractionStateChangedAuthority(
+        InteractionState oldState,
+        InteractionState newState
+    ) { }
 
-    public void OnInteractionStateChangedPresentation(InteractionState oldState, InteractionState newState)
-    {
-    }
+    public void OnInteractionStateChangedPresentation(
+        InteractionState oldState,
+        InteractionState newState
+    ) { }
 }

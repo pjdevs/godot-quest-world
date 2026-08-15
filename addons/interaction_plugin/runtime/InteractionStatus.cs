@@ -1,22 +1,13 @@
+using System.Diagnostics;
 using Godot;
 
 namespace QuestWorld.Interaction;
 
-public sealed record InteractionAllowed
-{
-    public static InteractionAllowed Instance { get; } = new();
+public sealed record InteractionAllowed();
 
-    private InteractionAllowed()
-    {
-    }
-}
+public sealed record InteractionBlocked(string Reason = "Interaction unavailable.");
 
-public sealed record InteractionBlocked(string Reason)
-{
-    public string Reason { get; } = string.IsNullOrWhiteSpace(Reason) ? "Interaction unavailable." : Reason;
-}
-
-public union InteractionStatus(InteractionAllowed, InteractionBlocked);
+public readonly union InteractionStatus(InteractionAllowed, InteractionBlocked);
 
 public enum InteractionState
 {
@@ -29,7 +20,8 @@ public enum InteractionState
 public readonly record struct InteractionContext(
     InteractionInteractor Interactor,
     InteractiveComponent Interactive,
-    Node InteractionOwner);
+    Node? InteractionOwner
+);
 
 public readonly record struct InteractionPresentation(
     InteractiveComponent Interactive,
@@ -37,18 +29,21 @@ public readonly record struct InteractionPresentation(
     string Description,
     StringName ActionName,
     InteractionStatus Status,
-    bool IsFocused)
+    bool IsFocused
+)
 {
     public bool IsAllowed => Status switch
     {
         InteractionAllowed => true,
         InteractionBlocked => false,
+        _ => throw new UnreachableException(),
     };
 
     public string BlockReason => Status switch
     {
         InteractionAllowed => string.Empty,
         InteractionBlocked blocked => blocked.Reason,
+        _ => throw new UnreachableException(),
     };
 }
 

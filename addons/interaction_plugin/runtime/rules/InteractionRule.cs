@@ -19,7 +19,7 @@ public partial class AlwaysBlockedInteractionRule : InteractionRule
 public partial class InteractorGroupInteractionRule : InteractionRule
 {
     [Export]
-    public StringName RequiredGroup { get; set; }
+    public StringName? RequiredGroup { get; set; }
 
     [Export]
     public string MissingGroupReason { get; set; } = "You cannot use this yet.";
@@ -28,7 +28,7 @@ public partial class InteractorGroupInteractionRule : InteractionRule
     {
         if (string.IsNullOrEmpty(RequiredGroup) || context.Interactor.IsInGroup(RequiredGroup))
         {
-            return InteractionAllowed.Instance;
+            return new InteractionAllowed();
         }
 
         return new InteractionBlocked(MissingGroupReason);

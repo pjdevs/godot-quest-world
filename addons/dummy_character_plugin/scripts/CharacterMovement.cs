@@ -18,7 +18,8 @@ public readonly struct CharacterMovementSettings
         float minimumLandingAirTime,
         float minimumLandingImpactSpeed,
         float fullLandingImpactSpeed,
-        float minimumLandingStrength)
+        float minimumLandingStrength
+    )
     {
         WalkSpeed = walkSpeed;
         RunSpeed = runSpeed;
@@ -75,13 +76,15 @@ public class CharacterMovement
     public CharacterFrameState Simulate(
         CharacterSimulationInput input,
         double delta,
-        CharacterMovementSettings settings)
+        CharacterMovementSettings settings
+    )
     {
         float frameDelta = (float)delta;
         bool groundedBeforeMove = _body.IsOnFloor();
         bool wasGrounded = _hasFloorSample && _wasGrounded;
         Vector3 moveDirection = GetViewRelativeDirection(input.Move, input.ViewYaw);
-        bool sprintRequested = groundedBeforeMove
+        bool sprintRequested =
+            groundedBeforeMove
             && input.SprintHeld
             && -input.Move.Y >= Mathf.Clamp(settings.SprintForwardInputThreshold, 0.0f, 1.0f);
         float targetSpeed = sprintRequested ? settings.RunSpeed : settings.WalkSpeed;
@@ -121,14 +124,13 @@ public class CharacterMovement
             sampledAirTime += frameDelta;
         }
 
-        bool landed = _hasFloorSample
+        bool landed =
+            _hasFloorSample
             && !_wasGrounded
             && isGrounded
             && sampledAirTime >= Mathf.Max(settings.MinimumLandingAirTime, 0.0f)
             && impactSpeed >= Mathf.Max(settings.MinimumLandingImpactSpeed, 0.0f);
-        float landingStrength = landed
-            ? CalculateLandingStrength(impactSpeed, settings)
-            : 0.0f;
+        float landingStrength = landed ? CalculateLandingStrength(impactSpeed, settings) : 0.0f;
         _airborneDuration = isGrounded ? 0.0f : sampledAirTime;
         _wasGrounded = isGrounded;
         _hasFloorSample = true;
@@ -145,7 +147,8 @@ public class CharacterMovement
             landed,
             sprinting,
             impactSpeed,
-            landingStrength);
+            landingStrength
+        );
         return LatestFrame;
     }
 
@@ -170,10 +173,12 @@ public class CharacterMovement
         float normalizedImpact = Mathf.Clamp(
             (impactSpeed - minimumImpact) / (fullImpact - minimumImpact),
             0.0f,
-            1.0f);
+            1.0f
+        );
         return Mathf.Lerp(
             Mathf.Clamp(settings.MinimumLandingStrength, 0.0f, 1.0f),
             1.0f,
-            normalizedImpact);
+            normalizedImpact
+        );
     }
 }

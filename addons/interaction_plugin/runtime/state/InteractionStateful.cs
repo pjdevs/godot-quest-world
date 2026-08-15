@@ -34,7 +34,9 @@ public partial class InteractionStateful : Node
         _interactive = FindAncestorOrSibling<InteractiveComponent>();
         if (_interactive == null)
         {
-            GD.PushError($"{GetPath()}: InteractionStateful requires an InteractiveComponent on the same owner.");
+            GD.PushError(
+                $"{GetPath()}: InteractionStateful requires an InteractiveComponent on the same owner."
+            );
         }
     }
 
@@ -102,12 +104,15 @@ public partial class InteractionStateful : Node
             throw new ArgumentOutOfRangeException(
                 nameof(savedState),
                 savedState.Version,
-                $"Unsupported interaction save version {savedState.Version}; expected {CurrentSaveVersion}.");
+                $"Unsupported interaction save version {savedState.Version}; expected {CurrentSaveVersion}."
+            );
         }
 
         if (!SetState(savedState.State))
         {
-            throw new InvalidOperationException($"{GetPath()}: state restoration requires authority.");
+            throw new InvalidOperationException(
+                $"{GetPath()}: state restoration requires authority."
+            );
         }
     }
 
@@ -133,12 +138,18 @@ public partial class InteractionStateful : Node
         Node owner = _interactive?.InteractionOwner!;
         if (IsAuthority())
         {
-            (owner as IInteractionStateHandler)?.OnInteractionStateChangedAuthority(oldState, state);
+            (owner as IInteractionStateHandler)?.OnInteractionStateChangedAuthority(
+                oldState,
+                state
+            );
         }
 
         if (!OS.HasFeature("dedicated_server"))
         {
-            (owner as IInteractionStateHandler)?.OnInteractionStateChangedPresentation(oldState, state);
+            (owner as IInteractionStateHandler)?.OnInteractionStateChangedPresentation(
+                oldState,
+                state
+            );
         }
 
         _interactive?.NotifyStatusChanged();
@@ -154,12 +165,17 @@ public partial class InteractionStateful : Node
             return;
         }
 
-        InteractionContext context = new(releasedInteractor, _interactive, _interactive.InteractionOwner);
+        InteractionContext context = new(
+            releasedInteractor,
+            _interactive,
+            _interactive.InteractionOwner
+        );
         (_interactive.InteractionOwner as IInteractionHandler)?.OnEndInteractionInput(context);
         _interactive.NotifyStatusChanged();
     }
 
-    private T FindAncestorOrSibling<T>() where T : class
+    private T FindAncestorOrSibling<T>()
+        where T : class
     {
         Node owner = GetParent();
         if (owner == null)

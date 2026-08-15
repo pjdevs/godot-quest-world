@@ -10,7 +10,11 @@ public partial class InteractionInteractor : Node
     public delegate void FocusedInteractiveChangedEventHandler(Node interactive);
 
     [Signal]
-    public delegate void InteractionStatusChangedEventHandler(Node interactive, bool isAllowed, string reason);
+    public delegate void InteractionStatusChangedEventHandler(
+        Node interactive,
+        bool isAllowed,
+        string reason
+    );
 
     [Signal]
     public delegate void InteractionRequestedEventHandler(Node interactive);
@@ -51,9 +55,11 @@ public partial class InteractionInteractor : Node
 
     public InteractiveComponent FocusedInteractive => _focusedInteractive;
 
-    public IReadOnlyCollection<InteractiveComponent> IndicatedInteractives => _indicatedInteractives;
+    public IReadOnlyCollection<InteractiveComponent> IndicatedInteractives =>
+        _indicatedInteractives;
 
-    public IReadOnlyCollection<InteractiveComponent> InteractiveCandidates => _interactiveCandidates;
+    public IReadOnlyCollection<InteractiveComponent> InteractiveCandidates =>
+        _interactiveCandidates;
 
     public Node3D ViewOrigin => _viewOrigin;
 
@@ -65,7 +71,9 @@ public partial class InteractionInteractor : Node
         _configurationValid = _viewOrigin != null;
         if (!_configurationValid)
         {
-            GD.PushError($"{GetPath()}: InteractionInteractor requires a ViewOrigin (configured path: '{ViewOriginPath}').");
+            GD.PushError(
+                $"{GetPath()}: InteractionInteractor requires a ViewOrigin (configured path: '{ViewOriginPath}')."
+            );
             SetProcess(false);
             return;
         }
@@ -220,7 +228,9 @@ public partial class InteractionInteractor : Node
         }
 
         float alignment = (-_viewOrigin.GlobalBasis.Z).Dot(offset.Normalized());
-        float minimumAlignment = Mathf.Cos(Mathf.DegToRad(Mathf.Clamp(MaxInteractionAngleDegrees, 0.0f, 180.0f)));
+        float minimumAlignment = Mathf.Cos(
+            Mathf.DegToRad(Mathf.Clamp(MaxInteractionAngleDegrees, 0.0f, 180.0f))
+        );
         return alignment >= minimumAlignment;
     }
 
@@ -234,7 +244,8 @@ public partial class InteractionInteractor : Node
                 string.Empty,
                 InteractionActionName,
                 new InteractionBlocked("No interaction target."),
-                false);
+                false
+            );
         }
 
         return _focusedInteractive.GetPresentation(this, true);
@@ -285,11 +296,16 @@ public partial class InteractionInteractor : Node
         return interactive.Stateful?.ReleaseInteractionInput(this) ?? false;
     }
 
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    [Rpc(
+        MultiplayerApi.RpcMode.AnyPeer,
+        CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
+    )]
     public void ServerTryStartInteraction(NodePath targetPath)
     {
         int senderPeerId = GetRemoteSenderOrOwner();
-        InteractiveComponent target = GetTree().Root.GetNodeOrNull<InteractiveComponent>(targetPath);
+        InteractiveComponent target = GetTree()
+            .Root.GetNodeOrNull<InteractiveComponent>(targetPath);
         if (target == null)
         {
             RejectInteraction(senderPeerId, targetPath, "The interaction target no longer exists.");
@@ -302,7 +318,11 @@ public partial class InteractionInteractor : Node
         }
     }
 
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    [Rpc(
+        MultiplayerApi.RpcMode.AnyPeer,
+        CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
+    )]
     public void ServerTryEndInteraction()
     {
         int senderPeerId = GetRemoteSenderOrOwner();
@@ -315,7 +335,11 @@ public partial class InteractionInteractor : Node
         EndInteractionInputAuthoritatively(senderPeerId);
     }
 
-    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    [Rpc(
+        MultiplayerApi.RpcMode.Authority,
+        CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
+    )]
     public void ClientInteractionRejected(NodePath targetPath, string reason)
     {
         Node target = GetTree().Root.GetNodeOrNull(targetPath);
@@ -325,7 +349,8 @@ public partial class InteractionInteractor : Node
     private bool TryStartInteractionAuthoritatively(
         InteractiveComponent target,
         int senderPeerId,
-        out string reason)
+        out string reason
+    )
     {
         reason = string.Empty;
         if (!ValidateSender(senderPeerId, out reason))
@@ -380,12 +405,16 @@ public partial class InteractionInteractor : Node
             return;
         }
 
-        InteractionPresentation presentation = interactive.GetPresentation(this, interactive == _focusedInteractive);
+        InteractionPresentation presentation = interactive.GetPresentation(
+            this,
+            interactive == _focusedInteractive
+        );
         EmitSignal(
             SignalName.InteractionStatusChanged,
             interactive,
             presentation.IsAllowed,
-            presentation.BlockReason);
+            presentation.BlockReason
+        );
     }
 
     private bool ValidateSender(int senderPeerId, out string reason)
@@ -456,7 +485,8 @@ public partial class InteractionInteractor : Node
         }
     }
 
-    private static T FindFirstNode<T>(Node root) where T : Node
+    private static T FindFirstNode<T>(Node root)
+        where T : Node
     {
         if (root == null)
         {

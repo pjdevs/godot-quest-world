@@ -13,8 +13,10 @@ public static class NetworkPlayerIdentity
     public static bool TryGetPeerId(string playerName, out int peerId)
     {
         peerId = 0;
-        if (!playerName.StartsWith(PlayerNamePrefix, StringComparison.Ordinal)
-            || playerName.Length == PlayerNamePrefix.Length)
+        if (
+            !playerName.StartsWith(PlayerNamePrefix, StringComparison.Ordinal)
+            || playerName.Length == PlayerNamePrefix.Length
+        )
         {
             return false;
         }

@@ -13,5 +13,8 @@ public interface IInteractionStateHandler
 {
     void OnInteractionStateChangedAuthority(InteractionState oldState, InteractionState newState);
 
-    void OnInteractionStateChangedPresentation(InteractionState oldState, InteractionState newState);
+    void OnInteractionStateChangedPresentation(
+        InteractionState oldState,
+        InteractionState newState
+    );
 }

@@ -25,8 +25,9 @@ Vertical, one folder per feature with subfolder `scripts` etc.
 
 ### Mandatory
 
-- After each code task run `dotnet format quest-world.csproj`, `dotnet build` and `$env:GODOT_BIN = (Get-Command godot).Source; dotnet test`
+- After each code task run `csharpier format .`, `dotnet build` and `$env:GODOT_BIN = (Get-Command godot).Source; dotnet test`
 - After each task maintain a doc per feature in `docs/feature/<thedoc>.md`
 - After each workflow pitfall or hard user correction on the implementation (not tweaking a feature or corrections),
   document it in `docs/memory/<desc_of_things>.md`
 - Before each task, check if docs or memory can be useful
+- Read [this](./docs/feature/code-style.md) for coding style

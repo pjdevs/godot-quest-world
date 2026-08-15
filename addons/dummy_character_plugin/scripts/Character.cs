@@ -7,7 +7,7 @@ public partial class Character : CharacterBody3D
     public enum ViewMode
     {
         ThirdPerson,
-        FirstPerson
+        FirstPerson,
     }
 
     [ExportGroup("View")]
@@ -90,8 +90,8 @@ public partial class Character : CharacterBody3D
 
     public bool IsLocalNetworkAuthority => IsMultiplayerAuthority();
 
-    public Node3D CameraPitchNode => _cameraRig?.CameraPitch
-        ?? GetNodeOrNull<Node3D>("CameraYaw/CameraPitch")!;
+    public Node3D CameraPitchNode =>
+        _cameraRig?.CameraPitch ?? GetNodeOrNull<Node3D>("CameraYaw/CameraPitch")!;
 
     public CharacterCameraRig CameraRig => _cameraRig;
 
@@ -201,7 +201,10 @@ public partial class Character : CharacterBody3D
         _animationController?.CancelIncompatibleState();
     }
 
-    internal void SubmitInputFrame(CharacterPlayerController controller, CharacterInputFrame inputFrame)
+    internal void SubmitInputFrame(
+        CharacterPlayerController controller,
+        CharacterInputFrame inputFrame
+    )
     {
         if (_possessingController == controller)
         {
@@ -232,13 +235,17 @@ public partial class Character : CharacterBody3D
         _visual = GetNodeOrNull<Node3D>("Visual")!;
         _cameraRig = GetNodeOrNull<CharacterCameraRig>("CameraYaw")!;
         _cameraEffects = GetNodeOrNull<CharacterCameraEffects>(
-            "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects")!;
+            "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects"
+        )!;
         _animationController = GetNodeOrNull<CharacterAnimationController>("AnimationController")!;
 
         bool valid = true;
         valid &= RequireNode(_visual, "Visual");
         valid &= RequireNode(_cameraRig, "CameraYaw");
-        valid &= RequireNode(_cameraEffects, "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects");
+        valid &= RequireNode(
+            _cameraEffects,
+            "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects"
+        );
         valid &= RequireNode(_animationController, "AnimationController");
         return valid;
     }
@@ -258,7 +265,8 @@ public partial class Character : CharacterBody3D
         CharacterSimulationInput input,
         Vector2 lookDelta,
         float yawDelta,
-        float delta)
+        float delta
+    )
     {
         UpdateVisualOrientation(input.ViewYaw, _latestFrame.MoveDirection, delta);
         _animationController.ApplyFrame(_latestFrame, _currentViewMode, yawDelta, delta);
@@ -271,12 +279,17 @@ public partial class Character : CharacterBody3D
         Vector3 horizontalVelocity = new(replicatedVelocity.X, 0.0f, replicatedVelocity.Z);
         float runSpeed = Mathf.Max(RunSpeed, 0.001f);
         Vector3 localVelocity = GlobalBasis.Inverse() * horizontalVelocity;
-        Vector2 moveInput = new Vector2(localVelocity.X / runSpeed, -localVelocity.Z / runSpeed).LimitLength(1.0f);
-        Vector3 moveDirection = horizontalVelocity.LengthSquared() > 0.0001f
-            ? horizontalVelocity.Normalized()
-            : Vector3.Zero;
+        Vector2 moveInput = new Vector2(
+            localVelocity.X / runSpeed,
+            -localVelocity.Z / runSpeed
+        ).LimitLength(1.0f);
+        Vector3 moveDirection =
+            horizontalVelocity.LengthSquared() > 0.0001f
+                ? horizontalVelocity.Normalized()
+                : Vector3.Zero;
         bool wasGrounded = _networkPresentationHasGroundSample && _networkPresentationWasGrounded;
-        bool landed = _networkPresentationHasGroundSample
+        bool landed =
+            _networkPresentationHasGroundSample
             && !_networkPresentationWasGrounded
             && NetworkIsGrounded;
 
@@ -285,7 +298,8 @@ public partial class Character : CharacterBody3D
             _cameraRig.Rotation.Y,
             _cameraRig.CameraPitch.Rotation.X,
             false,
-            false);
+            false
+        );
         _networkPresentationFrameNumber++;
         _latestFrame = new CharacterFrameState(
             _networkPresentationFrameNumber,
@@ -298,7 +312,8 @@ public partial class Character : CharacterBody3D
             landed,
             NetworkIsGrounded && horizontalVelocity.Length() >= runSpeed * 0.9f,
             Mathf.Max(-replicatedVelocity.Y, 0.0f),
-            0.0f);
+            0.0f
+        );
 
         _animationController.ApplyFrame(_latestFrame, _currentViewMode, 0.0f, delta);
         _networkPresentationWasGrounded = NetworkIsGrounded;
@@ -348,6 +363,7 @@ public partial class Character : CharacterBody3D
             MinimumLandingAirTime,
             MinimumLandingImpactSpeed,
             FullLandingImpactSpeed,
-            MinimumLandingStrength);
+            MinimumLandingStrength
+        );
     }
 }

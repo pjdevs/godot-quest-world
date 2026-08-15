@@ -23,7 +23,7 @@ public partial class CharacterAnimationController : Node
         "Jog_Right",
         "Sprint",
         "Jump_Start",
-        "Jump"
+        "Jump",
     };
 
     [ExportGroup("Playback")]
@@ -73,11 +73,15 @@ public partial class CharacterAnimationController : Node
     {
         _character = character;
         _visual = visual;
-        _animationPlayer = character.GetNodeOrNull<AnimationPlayer>("Visual/UALCharacter/AnimationPlayer")!;
+        _animationPlayer = character.GetNodeOrNull<AnimationPlayer>(
+            "Visual/UALCharacter/AnimationPlayer"
+        )!;
         _animationTree = character.GetNodeOrNull<AnimationTree>("AnimationTree")!;
         if (_animationPlayer == null)
         {
-            GD.PushError($"{Name}: expected UAL AnimationPlayer at 'Visual/UALCharacter/AnimationPlayer'.");
+            GD.PushError(
+                $"{Name}: expected UAL AnimationPlayer at 'Visual/UALCharacter/AnimationPlayer'."
+            );
             return false;
         }
 
@@ -110,7 +114,8 @@ public partial class CharacterAnimationController : Node
         CharacterFrameState frame,
         Character.ViewMode viewMode,
         float yawDelta,
-        float delta)
+        float delta
+    )
     {
         if (!_initialized)
         {
@@ -118,8 +123,10 @@ public partial class CharacterAnimationController : Node
         }
 
         _frame = frame;
-        if (IsTurnInPlaceActive
-            && (!TurnInPlaceEnabled || viewMode != Character.ViewMode.FirstPerson))
+        if (
+            IsTurnInPlaceActive
+            && (!TurnInPlaceEnabled || viewMode != Character.ViewMode.FirstPerson)
+        )
         {
             CancelTurnInPlace();
         }
@@ -203,7 +210,9 @@ public partial class CharacterAnimationController : Node
             return true;
         }
 
-        GD.PushError($"{Name}: UAL AnimationPlayer is missing required animation '{animationName}'.");
+        GD.PushError(
+            $"{Name}: UAL AnimationPlayer is missing required animation '{animationName}'."
+        );
         return false;
     }
 
@@ -230,8 +239,10 @@ public partial class CharacterAnimationController : Node
         }
 
         float horizontalSpeed = new Vector2(_frame.Velocity.X, _frame.Velocity.Z).Length();
-        if (_frame.Input.Move.LengthSquared() > 0.0001f
-            || horizontalSpeed > Mathf.Max(TurnSpeedThreshold, 0.0f))
+        if (
+            _frame.Input.Move.LengthSquared() > 0.0001f
+            || horizontalSpeed > Mathf.Max(TurnSpeedThreshold, 0.0f)
+        )
         {
             _turnYawAccumulator = 0.0f;
             return;
@@ -290,8 +301,10 @@ public partial class CharacterAnimationController : Node
         }
 
         float horizontalSpeed = new Vector2(_frame.Velocity.X, _frame.Velocity.Z).Length();
-        if (_frame.Input.Move.LengthSquared() > 0.0001f
-            || horizontalSpeed > Mathf.Max(TurnSpeedThreshold, 0.0f))
+        if (
+            _frame.Input.Move.LengthSquared() > 0.0001f
+            || horizontalSpeed > Mathf.Max(TurnSpeedThreshold, 0.0f)
+        )
         {
             return false;
         }
@@ -316,7 +329,10 @@ public partial class CharacterAnimationController : Node
 
     private void BeginLanding()
     {
-        _animationTree.Set(LandingOneShotRequestPath, (int)AnimationNodeOneShot.OneShotRequest.Fire);
+        _animationTree.Set(
+            LandingOneShotRequestPath,
+            (int)AnimationNodeOneShot.OneShotRequest.Fire
+        );
         _landingBlendOutRemaining = Mathf.Max(LandingBlendOutDelay, 0.0f);
         _landingBlendOutPending = true;
     }
@@ -331,7 +347,10 @@ public partial class CharacterAnimationController : Node
         _landingBlendOutRemaining -= delta;
         if (_landingBlendOutRemaining <= 0.0f)
         {
-            _animationTree.Set(LandingOneShotRequestPath, (int)AnimationNodeOneShot.OneShotRequest.FadeOut);
+            _animationTree.Set(
+                LandingOneShotRequestPath,
+                (int)AnimationNodeOneShot.OneShotRequest.FadeOut
+            );
             _landingBlendOutPending = false;
         }
     }
@@ -347,7 +366,11 @@ public partial class CharacterAnimationController : Node
         float maxSpeed = Mathf.Max(TurnMaxPlaybackSpeed, baseSpeed);
         float rampDegrees = Mathf.Max(TurnSpeedRampDegrees, 0.01f);
         float pendingYawDegrees = Mathf.RadToDeg(Mathf.Abs(_turnYawAccumulator));
-        return Mathf.Lerp(baseSpeed, maxSpeed, Mathf.Clamp(pendingYawDegrees / rampDegrees, 0.0f, 1.0f));
+        return Mathf.Lerp(
+            baseSpeed,
+            maxSpeed,
+            Mathf.Clamp(pendingYawDegrees / rampDegrees, 0.0f, 1.0f)
+        );
     }
 
     private void SetAnimationPlaybackSpeed(float speed)
@@ -370,7 +393,7 @@ public partial class CharacterAnimationController : Node
         {
             TurnLeftState => "Turn90_L",
             TurnRightState => "Turn90_R",
-            _ => state
+            _ => state,
         };
     }
 

@@ -6,9 +6,7 @@ namespace System.Runtime.CompilerServices;
 /// Minimal runtime surface required by the C# preview union feature when the
 /// host runtime predates the SDK that introduced the union primitives.
 /// </summary>
-public interface IUnion
-{
-}
+public interface IUnion { }
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false)]
 public sealed class UnionAttribute : Attribute

@@ -101,7 +101,8 @@ public partial class CharacterCameraEffects : Node3D
         {
             TriggerImpulse(
                 -LandingOffset * frame.LandingStrength,
-                LandingPitchDegrees * frame.LandingStrength);
+                LandingPitchDegrees * frame.LandingStrength
+            );
         }
     }
 
@@ -136,21 +137,26 @@ public partial class CharacterCameraEffects : Node3D
             return;
         }
 
-        float effectScale = _character.CurrentViewMode == Character.ViewMode.FirstPerson
-            ? 1.0f
-            : ThirdPersonScale;
+        float effectScale =
+            _character.CurrentViewMode == Character.ViewMode.FirstPerson ? 1.0f : ThirdPersonScale;
         float horizontalSpeed = new Vector2(_frame.Velocity.X, _frame.Velocity.Z).Length();
-        float speedReference = Mathf.Max(_frame.IsSprinting ? _character.RunSpeed : _character.WalkSpeed, 0.001f);
+        float speedReference = Mathf.Max(
+            _frame.IsSprinting ? _character.RunSpeed : _character.WalkSpeed,
+            0.001f
+        );
         float speedFactor = Mathf.Clamp(horizontalSpeed / speedReference, 0.0f, 1.0f);
         float smoothing = 1.0f - Mathf.Exp(-12.0f * frameDelta);
 
         Vector3 targetHeadBob = Vector3.Zero;
-        if (HeadBobEnabled
+        if (
+            HeadBobEnabled
             && _frame.IsGrounded
             && _frame.Input.Move.LengthSquared() > 0.0001f
-            && horizontalSpeed > 0.1f)
+            && horizontalSpeed > 0.1f
+        )
         {
-            float amplitude = (_frame.IsSprinting ? HeadBobSprintAmplitude : HeadBobWalkAmplitude)
+            float amplitude =
+                (_frame.IsSprinting ? HeadBobSprintAmplitude : HeadBobWalkAmplitude)
                 * effectScale
                 * speedFactor;
             float frequency = HeadBobFrequency * (_frame.IsSprinting ? 1.15f : 1.0f);
@@ -158,7 +164,8 @@ public partial class CharacterCameraEffects : Node3D
             targetHeadBob = new Vector3(
                 Mathf.Sin(_headBobTime * 0.5f) * amplitude * 0.5f,
                 Mathf.Sin(_headBobTime) * amplitude,
-                0.0f);
+                0.0f
+            );
         }
 
         _headBobOffset = _headBobOffset.Lerp(targetHeadBob, smoothing);
@@ -166,15 +173,18 @@ public partial class CharacterCameraEffects : Node3D
         float targetSway = Mathf.Clamp(
             -_pendingLookX * _character.CameraRig.MouseSensitivity,
             -swayLimit,
-            swayLimit);
+            swayLimit
+        );
         float swayWeight = 1.0f - Mathf.Exp(-Mathf.Max(SwaySmoothSpeed, 0.0f) * frameDelta);
         _swayRoll = Mathf.Lerp(_swayRoll, targetSway, swayWeight);
         _pendingLookX = 0.0f;
 
-        float responseWeight = 1.0f - Mathf.Exp(-Mathf.Max(ImpulseResponseSpeed, 0.0f) * frameDelta);
+        float responseWeight =
+            1.0f - Mathf.Exp(-Mathf.Max(ImpulseResponseSpeed, 0.0f) * frameDelta);
         _impulseOffset = _impulseOffset.Lerp(_impulseTargetOffset, responseWeight);
         _impulsePitch = Mathf.Lerp(_impulsePitch, _impulseTargetPitch, responseWeight);
-        float recoveryWeight = 1.0f - Mathf.Exp(-Mathf.Max(ImpulseRecoverySpeed, 0.0f) * frameDelta);
+        float recoveryWeight =
+            1.0f - Mathf.Exp(-Mathf.Max(ImpulseRecoverySpeed, 0.0f) * frameDelta);
         _impulseTargetOffset = _impulseTargetOffset.Lerp(Vector3.Zero, recoveryWeight);
         _impulseTargetPitch = Mathf.Lerp(_impulseTargetPitch, 0.0f, recoveryWeight);
 

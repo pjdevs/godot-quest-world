@@ -3,6 +3,4 @@ using Godot;
 namespace QuestWorld.Interaction;
 
 [Tool]
-public partial class InteractionPlugin : EditorPlugin
-{
-}
+public partial class InteractionPlugin : EditorPlugin { }

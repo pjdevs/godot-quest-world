@@ -14,10 +14,10 @@ public partial class InteractionPresenter : CanvasLayer
     [Export]
     public NodePath CameraPath { get; set; } = new();
 
-    private InteractionInteractor _interactor = null!;
-    private Camera3D _camera = null!;
-    private Control _prompt = null!;
-    private Control _indication = null!;
+    private InteractionInteractor? _interactor = null!;
+    private Camera3D? _camera = null!;
+    private Control? _prompt = null!;
+    private Control? _indication = null!;
 
     public override void _Ready()
     {
@@ -25,7 +25,9 @@ public partial class InteractionPresenter : CanvasLayer
         _camera = ResolveNode<Camera3D>(CameraPath);
         if (_interactor == null || _camera == null)
         {
-            GD.PushError($"{GetPath()}: InteractionPresenter requires an Interactor and a Camera3D (interactor path: '{InteractorPath}', camera path: '{CameraPath}').");
+            GD.PushError(
+                $"{GetPath()}: InteractionPresenter requires an Interactor and a Camera3D (interactor path: '{InteractorPath}', camera path: '{CameraPath}')."
+            );
             SetProcess(false);
             return;
         }
@@ -43,11 +45,17 @@ public partial class InteractionPresenter : CanvasLayer
 
     private void OnFocusedInteractiveChanged(Node interactive) => Refresh();
 
-    private void OnInteractionStatusChanged(Node interactive, bool isAllowed, string reason) => Refresh();
+    private void OnInteractionStatusChanged(Node interactive, bool isAllowed, string reason) =>
+        Refresh();
 
     private void Refresh()
     {
-        InteractiveComponent focused = _interactor?.FocusedInteractive!;
+        if (_interactor == null)
+        {
+            return;
+        }
+
+        InteractiveComponent focused = _interactor.FocusedInteractive!;
         if (focused == null)
         {
             FreeWidget(ref _prompt);
@@ -65,13 +73,17 @@ public partial class InteractionPresenter : CanvasLayer
             ReplaceWidget(ref _prompt, focused.PromptScene, presentation);
         }
 
-        PackedScene indicationScene = presentation.IsAllowed
+        PackedScene? indicationScene = presentation.IsAllowed
             ? focused.IndicationScene
             : focused.BlockedIndicationScene;
         ReplaceWidget(ref _indication, indicationScene, presentation);
     }
 
-    private void ReplaceWidget(ref Control current, PackedScene scene, in InteractionPresentation presentation)
+    private void ReplaceWidget(
+        ref Control? current,
+        PackedScene? scene,
+        in InteractionPresentation presentation
+    )
     {
         if (scene == null)
         {
@@ -99,9 +111,9 @@ public partial class InteractionPresenter : CanvasLayer
         (current as IInteractionWidget)?.Bind(presentation);
     }
 
-    private void UpdateProjection(Control control, Vector2 screenOffset)
+    private void UpdateProjection(Control? control, Vector2 screenOffset)
     {
-        if (control == null || _interactor?.FocusedInteractive == null)
+        if (control == null || _interactor?.FocusedInteractive == null || _camera == null)
         {
             return;
         }
@@ -110,11 +122,13 @@ public partial class InteractionPresenter : CanvasLayer
         control.Visible = !_camera.IsPositionBehind(worldPosition);
         if (control.Visible)
         {
-            control.Position = _camera.UnprojectPosition(worldPosition) - control.Size / 2.0f + screenOffset;
+            control.Position =
+                _camera.UnprojectPosition(worldPosition) - control.Size / 2.0f + screenOffset;
         }
     }
 
-    private T ResolveNode<T>(NodePath path) where T : Node
+    private T ResolveNode<T>(NodePath path)
+        where T : Node
     {
         if (path != null && !path.IsEmpty)
         {
@@ -131,11 +145,12 @@ public partial class InteractionPresenter : CanvasLayer
             }
         }
 
-        T sibling = GetParent()?.GetNodeOrNull<T>(typeof(T) == typeof(Camera3D) ? "Camera" : "Interactor")!;
+        T sibling = GetParent()
+            ?.GetNodeOrNull<T>(typeof(T) == typeof(Camera3D) ? "Camera" : "Interactor")!;
         return sibling ?? FindFirstNode<T>(GetParent())!;
     }
 
-    private static void FreeWidget(ref Control widget)
+    private static void FreeWidget(ref Control? widget)
     {
         if (widget != null)
         {
@@ -144,7 +159,8 @@ public partial class InteractionPresenter : CanvasLayer
         }
     }
 
-    private static T FindFirstNode<T>(Node root) where T : Node
+    private static T FindFirstNode<T>(Node root)
+        where T : Node
     {
         if (root == null)
         {

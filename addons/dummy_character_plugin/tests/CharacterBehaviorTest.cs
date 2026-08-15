@@ -4,16 +4,17 @@ using System;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
-using Character = QuestWorld.Character.Character;
 using QuestWorld.Character;
 using static GdUnit4.Assertions;
+using Character = QuestWorld.Character.Character;
 
 [TestSuite]
 [RequireGodotRuntime]
 public sealed class CharacterBehaviorTest
 {
     private const string CharacterScenePath = "res://addons/dummy_character_plugin/Character.tscn";
-    private const string CameraEffectsPath = "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects";
+    private const string CameraEffectsPath =
+        "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects";
     private const string CameraPath = $"{CameraEffectsPath}/Camera3D";
 
     [TestCase]
@@ -61,13 +62,15 @@ public sealed class CharacterBehaviorTest
                 ref lowLanded,
                 ref lowFramesAfterLanding,
                 ref lowLandingFrame,
-                ref lowOffset);
+                ref lowOffset
+            );
             CaptureLandingPeak(
                 highCharacter,
                 ref highLanded,
                 ref highFramesAfterLanding,
                 ref highLandingFrame,
-                ref highOffset);
+                ref highOffset
+            );
             if (lowFramesAfterLanding >= 12 && highFramesAfterLanding >= 12)
             {
                 break;
@@ -95,10 +98,9 @@ public sealed class CharacterBehaviorTest
 
         Node3D visual = character.GetNode<Node3D>("Visual");
         Node3D cameraYaw = character.GetNode<Node3D>("CameraYaw");
-        float yawError = Math.Abs(Mathf.Wrap(
-            visual.GlobalRotation.Y - cameraYaw.GlobalRotation.Y,
-            -Mathf.Pi,
-            Mathf.Pi));
+        float yawError = Math.Abs(
+            Mathf.Wrap(visual.GlobalRotation.Y - cameraYaw.GlobalRotation.Y, -Mathf.Pi, Mathf.Pi)
+        );
         AssertThat(yawError).IsLess(0.001f);
     }
 
@@ -114,13 +116,9 @@ public sealed class CharacterBehaviorTest
         cameraRig.SetActive(false);
 
         character.Simulate(
-            new CharacterSimulationInput(
-                new Vector2(0.0f, -1.0f),
-                0.0f,
-                0.0f,
-                false,
-                false),
-            1.0 / 60.0);
+            new CharacterSimulationInput(new Vector2(0.0f, -1.0f), 0.0f, 0.0f, false, false),
+            1.0 / 60.0
+        );
 
         AssertThat(character.LatestFrame.MoveDirection.X).IsEqualApprox(0.0f, 0.001f);
         AssertThat(character.LatestFrame.MoveDirection.Z).IsEqualApprox(-1.0f, 0.001f);
@@ -136,7 +134,8 @@ public sealed class CharacterBehaviorTest
         ISceneRunner runner = BuildWorldWithPlayers(
             new[] { player, replacementPlayer },
             firstCharacter,
-            secondCharacter);
+            secondCharacter
+        );
         await WaitForNextPhysicsFrame(runner, firstCharacter);
 
         player.Possess(firstCharacter);
@@ -168,11 +167,9 @@ public sealed class CharacterBehaviorTest
             await WaitForNextPhysicsFrame(runner, character);
         }
 
-        character.SubmitInputFrame(new CharacterInputFrame(
-            Vector2.Zero,
-            new Vector2(-250.0f, 0.0f),
-            false,
-            false));
+        character.SubmitInputFrame(
+            new CharacterInputFrame(Vector2.Zero, new Vector2(-250.0f, 0.0f), false, false)
+        );
         for (int frame = 0; frame < 10 && !character.IsTurnInPlaceActive; frame++)
         {
             await runner.SimulateFrames(1);
@@ -186,18 +183,18 @@ public sealed class CharacterBehaviorTest
         AssertThat(character.IsTurnInPlaceActive).IsFalse();
 
         animationController.TurnInPlaceEnabled = true;
-        character.SubmitInputFrame(new CharacterInputFrame(
-            Vector2.Zero,
-            new Vector2(-250.0f, 0.0f),
-            false,
-            false));
+        character.SubmitInputFrame(
+            new CharacterInputFrame(Vector2.Zero, new Vector2(-250.0f, 0.0f), false, false)
+        );
         for (int frame = 0; frame < 10 && !character.IsTurnInPlaceActive; frame++)
         {
             await runner.SimulateFrames(1);
         }
         AssertThat(character.IsTurnInPlaceActive).IsTrue();
 
-        character.SubmitInputFrame(new CharacterInputFrame(Vector2.Zero, Vector2.Zero, true, false));
+        character.SubmitInputFrame(
+            new CharacterInputFrame(Vector2.Zero, Vector2.Zero, true, false)
+        );
         await WaitForNextPhysicsFrame(runner, character);
         AssertThat(character.LatestFrame.IsGrounded).IsFalse();
         AssertThat(character.IsTurnInPlaceActive).IsFalse();
@@ -217,7 +214,8 @@ public sealed class CharacterBehaviorTest
 
     private static ISceneRunner BuildWorldWithPlayers(
         CharacterPlayerController[] players,
-        params Character[] characters)
+        params Character[] characters
+    )
     {
         Node3D world = new();
         world.AddChild(CreateFloor());
@@ -240,7 +238,7 @@ public sealed class CharacterBehaviorTest
         CollisionShape3D collision = new()
         {
             Shape = shape,
-            Position = new Vector3(0.0f, -0.5f, 0.0f)
+            Position = new Vector3(0.0f, -0.5f, 0.0f),
         };
         StaticBody3D floor = new();
         floor.AddChild(collision);
@@ -260,7 +258,8 @@ public sealed class CharacterBehaviorTest
         ref bool landed,
         ref int framesAfterLanding,
         ref ulong landingFrame,
-        ref float peakOffset)
+        ref float peakOffset
+    )
     {
         if (character.LatestFrame.Landed && character.LatestFrame.FrameNumber != landingFrame)
         {
@@ -282,19 +281,24 @@ public sealed class CharacterBehaviorTest
     private static async Task WaitForNextPhysicsFrame(
         ISceneRunner runner,
         Character character,
-        int maximumRenderFrames = 30)
+        int maximumRenderFrames = 30
+    )
     {
         ulong initialFrame = character.LatestFrame.FrameNumber;
-        for (int renderFrame = 0;
-             renderFrame < maximumRenderFrames && character.LatestFrame.FrameNumber == initialFrame;
-             renderFrame++)
+        for (
+            int renderFrame = 0;
+            renderFrame < maximumRenderFrames && character.LatestFrame.FrameNumber == initialFrame;
+            renderFrame++
+        )
         {
             await runner.SimulateFrames(1);
         }
 
         if (character.LatestFrame.FrameNumber == initialFrame)
         {
-            throw new TimeoutException("Character physics did not advance within the render-frame budget.");
+            throw new TimeoutException(
+                "Character physics did not advance within the render-frame budget."
+            );
         }
     }
 }

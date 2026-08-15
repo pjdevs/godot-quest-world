@@ -48,7 +48,9 @@ public partial class CharacterPlayerController : Node
             Character initialPawn = GetNodeOrNull<Character>(InitialPawnPath)!;
             if (initialPawn == null)
             {
-                GD.PushError($"{Name}: initial pawn path '{InitialPawnPath}' does not resolve to a Character.");
+                GD.PushError(
+                    $"{Name}: initial pawn path '{InitialPawnPath}' does not resolve to a Character."
+                );
             }
             else
             {
@@ -64,11 +66,7 @@ public partial class CharacterPlayerController : Node
             return;
         }
 
-        if (
-            inputEvent is InputEventKey keyEvent
-            && keyEvent.Pressed
-            && !keyEvent.Echo
-        )
+        if (inputEvent is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
             if (keyEvent.Keycode == Key.V)
             {
@@ -85,15 +83,20 @@ public partial class CharacterPlayerController : Node
             return;
         }
 
-        if (inputEvent is InputEventMouseButton mouseButton
+        if (
+            inputEvent is InputEventMouseButton mouseButton
             && mouseButton.Pressed
-            && mouseButton.ButtonIndex == MouseButton.Left)
+            && mouseButton.ButtonIndex == MouseButton.Left
+        )
         {
             Input.MouseMode = Input.MouseModeEnum.Captured;
             return;
         }
 
-        if (Input.MouseMode == Input.MouseModeEnum.Captured && inputEvent is InputEventMouseMotion motion)
+        if (
+            Input.MouseMode == Input.MouseModeEnum.Captured
+            && inputEvent is InputEventMouseMotion motion
+        )
         {
             _lookAccumulator += motion.Relative;
         }
@@ -111,21 +114,25 @@ public partial class CharacterPlayerController : Node
             MoveLeftAction,
             MoveRightAction,
             MoveForwardAction,
-            MoveBackwardAction);
+            MoveBackwardAction
+        );
         CharacterInputFrame frame = new(
             move,
             _lookAccumulator,
             Input.IsActionJustPressed(JumpAction),
-            Input.IsActionPressed(SprintAction));
+            Input.IsActionPressed(SprintAction)
+        );
         _lookAccumulator = Vector2.Zero;
         _controlledCharacter.SubmitInputFrame(this, frame);
     }
 
     public void Possess(Character character)
     {
-        if (!IsInstanceValid(character)
+        if (
+            !IsInstanceValid(character)
             || character == _controlledCharacter
-            || !character.IsLocalNetworkAuthority)
+            || !character.IsLocalNetworkAuthority
+        )
         {
             return;
         }
@@ -174,7 +181,7 @@ public partial class CharacterPlayerController : Node
             MoveLeftAction,
             MoveRightAction,
             JumpAction,
-            SprintAction
+            SprintAction,
         };
 
         bool valid = true;

@@ -18,7 +18,9 @@ public partial class Character : QuestWorld.Character.Character
         _interactionInteractor = GetNodeOrNull<InteractionInteractor>("InteractionInteractor")!;
         if (_interactionInteractor == null)
         {
-            GD.PushError($"{GetPath()}: project Character requires an InteractionInteractor child.");
+            GD.PushError(
+                $"{GetPath()}: project Character requires an InteractionInteractor child."
+            );
             return;
         }
 
@@ -68,9 +70,11 @@ public partial class Character : QuestWorld.Character.Character
 
     public override void _ExitTree()
     {
-        if (_interactionInteractor != null
+        if (
+            _interactionInteractor != null
             && GodotObject.IsInstanceValid(_interactionInteractor)
-            && _interactionInteractor.IsInsideTree())
+            && _interactionInteractor.IsInsideTree()
+        )
         {
             _interactionInteractor.TryEndInteractionInput();
         }

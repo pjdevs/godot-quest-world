@@ -20,7 +20,9 @@ public partial class InteractionIndicatorWidget : PanelContainer, IInteractionWi
     {
         if (_label != null)
         {
-            _label.Text = presentation.IsAllowed ? presentation.DisplayName : presentation.BlockReason;
+            _label.Text = presentation.IsAllowed
+                ? presentation.DisplayName
+                : presentation.BlockReason;
         }
     }
 }

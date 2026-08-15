@@ -2,6 +2,7 @@ namespace QuestWorld.Tests;
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
@@ -15,7 +16,7 @@ public sealed partial class InteractionBehaviorTest
     [TestCase]
     public void StatusUsesExhaustiveAllowedAndBlockedCases()
     {
-        InteractionStatus allowed = InteractionAllowed.Instance;
+        InteractionStatus allowed = new InteractionAllowed();
         InteractionStatus blocked = new InteractionBlocked("Needs a key");
 
         AssertThat(Describe(allowed)).IsEqual("allowed");
@@ -32,8 +33,8 @@ public sealed partial class InteractionBehaviorTest
             InteractionRules = new Godot.Collections.Array<InteractionRule>
             {
                 new AlwaysBlockedInteractionRule { Reason = "First reason" },
-                new AlwaysBlockedInteractionRule { Reason = "Second reason" }
-            }
+                new AlwaysBlockedInteractionRule { Reason = "Second reason" },
+            },
         };
         owner.AddChild(new Area3D { Name = "InteractionArea" });
         owner.AddChild(interactive);
@@ -49,7 +50,8 @@ public sealed partial class InteractionBehaviorTest
 
         InteractionStatus status = interactive.EvaluateStatus(interactor);
 
-        AssertThat(status is InteractionBlocked blocked && blocked.Reason == "First reason").IsTrue();
+        AssertThat(status is InteractionBlocked blocked && blocked.Reason == "First reason")
+            .IsTrue();
         AssertThat(owner.CustomStatusEvaluationCount).IsEqual(0);
     }
 
@@ -72,7 +74,10 @@ public sealed partial class InteractionBehaviorTest
     public async Task LongPhaseReservesObjectAndOnlyActiveInteractorCanEndIt()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionInteractor secondInteractor = new() { ViewOriginPath = new NodePath("ViewOrigin") };
+        InteractionInteractor secondInteractor = new()
+        {
+            ViewOriginPath = new NodePath("ViewOrigin"),
+        };
         secondInteractor.AddChild(new Node3D { Name = "ViewOrigin" });
         testWorld.World.AddChild(secondInteractor);
         await testWorld.Runner.SimulateFrames(1);
@@ -135,16 +140,22 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(testWorld.Stateful.ActiveInteractor == null).IsTrue();
     }
 
-    private static string Describe(InteractionStatus status) => status switch
-    {
-        InteractionAllowed => "allowed",
-        InteractionBlocked blocked => blocked.Reason,
-    };
+    private static string Describe(InteractionStatus status) =>
+        status switch
+        {
+            InteractionAllowed => "allowed",
+            InteractionBlocked blocked => blocked.Reason,
+            _ => throw new UnreachableException(),
+        };
 
     private static TestWorld BuildWorld()
     {
         Node3D world = new();
-        TestInteractionOwner owner = new() { Name = "InteractiveOwner", Position = new Vector3(0, 0, -2) };
+        TestInteractionOwner owner = new()
+        {
+            Name = "InteractiveOwner",
+            Position = new Vector3(0, 0, -2),
+        };
         Area3D area = new() { Name = "InteractionArea" };
         area.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = 3.0f } });
         InteractionStateful stateful = new() { Name = "Stateful" };
@@ -152,13 +163,17 @@ public sealed partial class InteractionBehaviorTest
         {
             Name = "Interactive",
             InteractionAreaPath = new NodePath("../InteractionArea"),
-            StatefulPath = new NodePath("../Stateful")
+            StatefulPath = new NodePath("../Stateful"),
         };
         owner.AddChild(area);
         owner.AddChild(stateful);
         owner.AddChild(interactive);
 
-        InteractionInteractor interactor = new() { Name = "Interactor", ViewOriginPath = new NodePath("ViewOrigin") };
+        InteractionInteractor interactor = new()
+        {
+            Name = "Interactor",
+            ViewOriginPath = new NodePath("ViewOrigin"),
+        };
         Node3D view = new() { Name = "ViewOrigin" };
         interactor.AddChild(view);
         world.AddChild(owner);
@@ -173,9 +188,13 @@ public sealed partial class InteractionBehaviorTest
         TestInteractionOwner Owner,
         InteractionStateful Stateful,
         InteractiveComponent Interactive,
-        InteractionInteractor Interactor);
+        InteractionInteractor Interactor
+    );
 
-    private sealed partial class TestInteractionOwner : Node3D, IInteractionHandler, IInteractionStateHandler
+    private sealed partial class TestInteractionOwner
+        : Node3D,
+            IInteractionHandler,
+            IInteractionStateHandler
     {
         public int CustomStatusEvaluationCount { get; private set; }
         public int StartCount { get; private set; }
@@ -185,22 +204,26 @@ public sealed partial class InteractionBehaviorTest
         public InteractionStatus EvaluateCustomInteractionStatus(in InteractionContext context)
         {
             CustomStatusEvaluationCount++;
-            return InteractionAllowed.Instance;
+            return new InteractionAllowed();
         }
 
         public void OnStartInteractionInput(in InteractionContext context)
         {
             StartCount++;
-            context.Interactive.Stateful.StartInteractionPhase(context.Interactor);
+            context.Interactive.Stateful?.StartInteractionPhase(context.Interactor);
         }
 
         public void OnEndInteractionInput(in InteractionContext context) => EndCount++;
 
-        public void OnInteractionStateChangedAuthority(InteractionState oldState, InteractionState newState)
-        {
-        }
+        public void OnInteractionStateChangedAuthority(
+            InteractionState oldState,
+            InteractionState newState
+        ) { }
 
-        public void OnInteractionStateChangedPresentation(InteractionState oldState, InteractionState newState)
+        public void OnInteractionStateChangedPresentation(
+            InteractionState oldState,
+            InteractionState newState
+        )
         {
             PresentationStateChanges++;
         }

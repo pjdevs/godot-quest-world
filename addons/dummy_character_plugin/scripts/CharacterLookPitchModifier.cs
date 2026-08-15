@@ -1,5 +1,5 @@
-using Godot;
 using System.Collections.Generic;
+using Godot;
 
 namespace QuestWorld.Character;
 
@@ -44,7 +44,7 @@ public partial class CharacterLookPitchModifier : SkeletonModifier3D
         new[] { "spine_02", "Spine_02", "spine2", "Spine2", "chest" },
         new[] { "spine_03", "Spine_03", "spine3", "Spine3", "upperchest", "upper_chest" },
         new[] { "neck_01", "Neck_01", "neck1", "Neck1", "neck" },
-        new[] { "head", "Head" }
+        new[] { "head", "Head" },
     };
 
     private static readonly float[] BoneWeights = { 0.10f, 0.20f, 0.25f, 0.20f, 0.25f };
@@ -76,7 +76,9 @@ public partial class CharacterLookPitchModifier : SkeletonModifier3D
         {
             if (!_reportedMissingSetup)
             {
-                GD.PushWarning($"{Name}: look-pitch modifier could not resolve its skeleton, camera pitch, or bones.");
+                GD.PushWarning(
+                    $"{Name}: look-pitch modifier could not resolve its skeleton, camera pitch, or bones."
+                );
                 _reportedMissingSetup = true;
             }
 
@@ -100,7 +102,8 @@ public partial class CharacterLookPitchModifier : SkeletonModifier3D
             frameDelta = 1.0f / 60.0f;
         }
 
-        float smoothingWeight = 1.0f - (float)Mathf.Exp(-Mathf.Max(SmoothingSpeed, 0.0f) * frameDelta);
+        float smoothingWeight =
+            1.0f - (float)Mathf.Exp(-Mathf.Max(SmoothingSpeed, 0.0f) * frameDelta);
         _smoothedPitch = Mathf.Lerp(_smoothedPitch, targetPitch, smoothingWeight);
 
         Vector3 rotationAxis = Vector3.Right;
@@ -161,7 +164,9 @@ public partial class CharacterLookPitchModifier : SkeletonModifier3D
 
         if (missingBones.Count > 0)
         {
-            GD.PushWarning($"{Name}: look-pitch modifier could not resolve bones: {string.Join(", ", missingBones)}.");
+            GD.PushWarning(
+                $"{Name}: look-pitch modifier could not resolve bones: {string.Join(", ", missingBones)}."
+            );
         }
 
         _initialized = true;
@@ -202,7 +207,13 @@ public partial class CharacterLookPitchModifier : SkeletonModifier3D
 
         for (int i = 0; i < skeleton.GetBoneCount(); i++)
         {
-            if (string.Equals(skeleton.GetBoneName(i), boneName, System.StringComparison.OrdinalIgnoreCase))
+            if (
+                string.Equals(
+                    skeleton.GetBoneName(i),
+                    boneName,
+                    System.StringComparison.OrdinalIgnoreCase
+                )
+            )
             {
                 return i;
             }

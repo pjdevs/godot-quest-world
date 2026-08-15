@@ -50,7 +50,8 @@ public partial class CharacterCameraRig : Node3D
         pitch.X = Mathf.Clamp(
             pitch.X,
             Mathf.DegToRad(PitchMinDegrees),
-            Mathf.DegToRad(PitchMaxDegrees));
+            Mathf.DegToRad(PitchMaxDegrees)
+        );
         _cameraPitch.Rotation = pitch;
         return yawDelta;
     }
@@ -88,12 +89,17 @@ public partial class CharacterCameraRig : Node3D
     {
         _cameraPitch = GetNodeOrNull<Node3D>("CameraPitch")!;
         _springArm = GetNodeOrNull<SpringArm3D>("CameraPitch/SpringArm3D")!;
-        _camera = GetNodeOrNull<Camera3D>("CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")!;
+        _camera = GetNodeOrNull<Camera3D>(
+            "CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D"
+        )!;
 
         bool valid = true;
         valid &= RequireNode(_cameraPitch, "CameraPitch");
         valid &= RequireNode(_springArm, "CameraPitch/SpringArm3D");
-        valid &= RequireNode(_camera, "CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D");
+        valid &= RequireNode(
+            _camera,
+            "CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D"
+        );
         return valid;
     }
 

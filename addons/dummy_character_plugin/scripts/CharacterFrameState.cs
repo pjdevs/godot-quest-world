@@ -18,7 +18,8 @@ public readonly struct CharacterFrameState
         bool landed,
         bool isSprinting,
         float impactSpeed,
-        float landingStrength)
+        float landingStrength
+    )
     {
         FrameNumber = frameNumber;
         Input = input;
