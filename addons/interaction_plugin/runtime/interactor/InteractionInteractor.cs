@@ -28,10 +28,10 @@ public partial class InteractionInteractor : Node
     public NodePath ViewOriginPath { get; set; } = new();
 
     [Export]
-    public float MaxInteractionDistance { get; set; } = 3.0f;
+    public float MaxInteractionDistance { get; set; } = 10.0f;
 
     [Export(PropertyHint.Range, "0,180,1")]
-    public float MaxInteractionAngleDegrees { get; set; } = 60.0f;
+    public float MaxInteractionAngleDegrees { get; set; } = 30.0f;
 
     [Export]
     public float DistanceScoreCoefficient { get; set; } = 0.5f;
@@ -49,6 +49,7 @@ public partial class InteractionInteractor : Node
     private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
     private readonly HashSet<InteractiveComponent> _interactiveCandidates = new();
     private Node3D _viewOrigin = null!;
+    private Node3D _interactionOrigin = null!;
     private InteractiveComponent _focusedInteractive = null!;
     private InteractiveComponent _activeInteractive = null!;
     private InteractiveComponent _autoInteractionTarget = null!;
@@ -64,12 +65,15 @@ public partial class InteractionInteractor : Node
 
     public Node3D ViewOrigin => _viewOrigin;
 
+    public Node3D InteractionOrigin => _interactionOrigin;
+
     public bool IsConfigurationValid => _configurationValid;
 
     public override void _Ready()
     {
         _viewOrigin = ResolveViewOrigin();
-        _configurationValid = _viewOrigin != null;
+        _interactionOrigin = GetParent() as Node3D ?? _viewOrigin;
+        _configurationValid = _viewOrigin != null && _interactionOrigin != null;
         if (!_configurationValid)
         {
             GD.PushError(
@@ -198,14 +202,19 @@ public partial class InteractionInteractor : Node
 
     public float CalculateInteractionScore(InteractiveComponent interactive)
     {
-        Vector3 offset = interactive.GetInteractionPosition() - _viewOrigin.GlobalPosition;
-        float distance = offset.Length();
+        Vector3 viewOffset = interactive.GetInteractionPosition() - _viewOrigin.GlobalPosition;
+        float distance = interactive
+            .GetInteractionPosition()
+            .DistanceTo(_interactionOrigin.GlobalPosition);
         if (distance <= Mathf.Epsilon)
         {
             return 1.0f;
         }
 
-        float alignment = Mathf.Max(0.0f, (-_viewOrigin.GlobalBasis.Z).Dot(offset.Normalized()));
+        float alignment = Mathf.Max(
+            0.0f,
+            (-_viewOrigin.GlobalBasis.Z).Dot(viewOffset.Normalized())
+        );
         return alignment / (1.0f + distance * Mathf.Max(DistanceScoreCoefficient, 0.0f));
     }
 
@@ -216,8 +225,10 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
-        Vector3 offset = interactive.GetInteractionPosition() - _viewOrigin.GlobalPosition;
-        float distance = offset.Length();
+        Vector3 viewOffset = interactive.GetInteractionPosition() - _viewOrigin.GlobalPosition;
+        float distance = interactive
+            .GetInteractionPosition()
+            .DistanceTo(_interactionOrigin.GlobalPosition);
         if (distance > Mathf.Max(MaxInteractionDistance, 0.0f))
         {
             return false;
@@ -228,7 +239,7 @@ public partial class InteractionInteractor : Node
             return true;
         }
 
-        float alignment = (-_viewOrigin.GlobalBasis.Z).Dot(offset.Normalized());
+        float alignment = (-_viewOrigin.GlobalBasis.Z).Dot(viewOffset.Normalized());
         float minimumAlignment = Mathf.Cos(
             Mathf.DegToRad(Mathf.Clamp(MaxInteractionAngleDegrees, 0.0f, 180.0f))
         );

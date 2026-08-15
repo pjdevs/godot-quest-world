@@ -20,7 +20,7 @@ L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interacti
 
 ## Integration
 
-1. Pour le Character du projet, `quest_world/character/Character.tscn` dérive de `addons/dummy_character_plugin/Character.tscn` et ajoute `InteractionInteractor` (origine = caméra) ainsi que `InteractionPresenter`. Le script global `quest_world/character/Character.cs` échantillonne l'action `interact` (`E` par défaut) et appelle les deux points d'entrée de l'interactor.
+1. Pour le Character du projet, `quest_world/character/Character.tscn` dérive de `addons/dummy_character_plugin/Character.tscn` et ajoute `InteractionInteractor` (distance calculée depuis le player propriétaire, direction calculée depuis la caméra) ainsi que `InteractionPresenter`. Le script global `quest_world/character/Character.cs` échantillonne l'action `interact` (`E` par défaut) et appelle les deux points d'entrée de l'interactor.
 2. Pour un personnage custom, ajouter `InteractionInteractor` au personnage local et assigner `ViewOriginPath` vers un `Marker3D` ou une caméra, puis appeler `TryStartInteractionInput()` / `TryEndInteractionInput()` depuis son contrôleur d'input.
 3. Ajouter `InteractionArea`, `InteractiveComponent` et `InteractionStateful` au même propriétaire Node3D ; les chemins explicites peuvent être configurés dans l'inspecteur.
 4. Implémenter `IInteractionHandler` sur le propriétaire. Pour une phase longue, appeler `Stateful.StartInteractionPhase(context.Interactor)` synchroniquement dans `OnStartInteractionInput`, puis `EndInteractionPhase(nextState)` quand l'opération métier se termine.
