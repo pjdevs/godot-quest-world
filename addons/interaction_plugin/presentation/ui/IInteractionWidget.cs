@@ -1,4 +1,4 @@
-namespace QuestWorld.Interaction;
+namespace QuestWorld.Interaction.Presentation.UI;
 
 public interface IInteractionWidget
 {

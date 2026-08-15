@@ -1,6 +1,8 @@
 using Godot;
+using QuestWorld.Interaction.Runtime.Interactive;
+using QuestWorld.Interaction.Runtime.Interactor;
 
-namespace QuestWorld.Interaction;
+namespace QuestWorld.Interaction.Presentation.UI;
 
 public partial class InteractionPresenter : CanvasLayer
 {

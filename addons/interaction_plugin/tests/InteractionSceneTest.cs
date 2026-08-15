@@ -4,6 +4,9 @@ using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
 using QuestWorld.Interaction;
+using QuestWorld.Interaction.Presentation.UI;
+using QuestWorld.Interaction.Runtime.Interactive;
+using QuestWorld.Interaction.Runtime.State;
 using static GdUnit4.Assertions;
 
 [TestSuite]

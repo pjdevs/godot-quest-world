@@ -1,7 +1,10 @@
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.Interaction.Runtime.Interactor;
+using QuestWorld.Interaction.Runtime.Rules;
+using QuestWorld.Interaction.Runtime.State;
 
-namespace QuestWorld.Interaction;
+namespace QuestWorld.Interaction.Runtime.Interactive;
 
 public partial class InteractiveComponent : Node
 {
@@ -317,6 +320,6 @@ public partial class InteractiveComponent : Node
 
     private void PurgeInvalidInteractors()
     {
-        _presentInteractors.RemoveWhere(interactor => !GodotObject.IsInstanceValid(interactor));
+        _presentInteractors.RemoveWhere(interactor => !IsInstanceValid(interactor));
     }
 }

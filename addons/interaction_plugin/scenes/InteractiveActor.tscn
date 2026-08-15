@@ -1,48 +1,70 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene format=3 uid="uid://ccfh2n8mfm2gn"]
 
-[ext_resource type="Script" path="res://addons/interaction_plugin/examples/InteractiveActor.cs" id="1_actor"]
-[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="2_interactive"]
-[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/state/InteractionStateful.cs" id="3_stateful"]
+[ext_resource type="Script" uid="uid://ba8d3yiijhau5" path="res://addons/interaction_plugin/examples/InteractiveActor.cs" id="1_actor"]
+[ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="2_interactive"]
+[ext_resource type="Script" uid="uid://cjrwlmeffknuq" path="res://addons/interaction_plugin/runtime/state/InteractionStateful.cs" id="3_stateful"]
 [ext_resource type="PackedScene" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="4_prompt"]
 [ext_resource type="PackedScene" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="5_indicator"]
+[ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_ll77h"]
+[ext_resource type="Script" uid="uid://c2ca7cnp0rpau" path="res://addons/interaction_plugin/examples/rules/InteractorGroupInteractionRule.cs" id="6_ueomp"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_a6s0s"]
+albedo_color = Color(0.7764706, 0.5019608, 0.5176471, 1)
 
 [sub_resource type="SphereShape3D" id="SphereShape_interaction"]
-radius = 2.5
+radius = 2.0
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_p8fn5"]
+radius = 10.0
+
+[sub_resource type="Resource" id="Resource_ll77h"]
+script = ExtResource("6_ueomp")
+RequiredGroup = &"Player"
+MissingGroupReason = "Only the player can use this."
+metadata/_custom_type_script = "uid://c2ca7cnp0rpau"
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_state"]
 properties/0/path = NodePath("..:replicated_state")
 properties/0/spawn = true
 properties/0/replication_mode = 1
 
-[node name="InteractiveActor" type="Node3D"]
+[node name="InteractiveActor" type="Node3D" unique_id=1742260159]
 script = ExtResource("1_actor")
 
-[node name="InteractionArea" type="Area3D" parent="."]
+[node name="Model" type="MeshInstance3D" parent="." unique_id=1861063650]
+mesh = SubResource("BoxMesh_vq8ek")
+surface_material_override/0 = SubResource("StandardMaterial3D_a6s0s")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractionArea"]
+[node name="InteractionArea" type="Area3D" parent="." unique_id=546578910]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractionArea" unique_id=391565705]
 shape = SubResource("SphereShape_interaction")
+debug_color = Color(0.9807802, 0, 0.3496692, 0.41960785)
 
-[node name="IndicationArea" type="Area3D" parent="."]
+[node name="IndicationArea" type="Area3D" parent="." unique_id=881001018]
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="IndicationArea"]
-shape = SubResource("SphereShape_interaction")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="IndicationArea" unique_id=1113992481]
+shape = SubResource("SphereShape3D_p8fn5")
+debug_color = Color(0, 0.56349266, 0.8623485, 0.41960785)
 
-[node name="InteractionAnchor" type="Marker3D" parent="."]
-position = Vector3(0, 1.1, 0)
+[node name="InteractionAnchor" type="Marker3D" parent="." unique_id=818464048]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
 
-[node name="Interactive" type="Node" parent="."]
+[node name="Interactive" type="Node" parent="." unique_id=1343342868]
 script = ExtResource("2_interactive")
-interaction_area_path = NodePath("../InteractionArea")
-indication_area_path = NodePath("../IndicationArea")
-interaction_anchor_path = NodePath("../InteractionAnchor")
-stateful_path = NodePath("../Stateful")
-display_name = "Activate"
-description = "Hold the interaction to activate this object."
-prompt_scene = ExtResource("4_prompt")
-indication_scene = ExtResource("5_indicator")
+InteractionAreaPath = NodePath("../InteractionArea")
+IndicationAreaPath = NodePath("../IndicationArea")
+InteractionAnchorPath = NodePath("../InteractionAnchor")
+StatefulPath = NodePath("../Stateful")
+Description = "Make a super interaction"
+PromptScene = ExtResource("4_prompt")
+IndicationScene = ExtResource("5_indicator")
+InteractionRules = Array[ExtResource("5_ll77h")]([SubResource("Resource_ll77h")])
 
-[node name="Stateful" type="Node" parent="."]
+[node name="Stateful" type="Node" parent="." unique_id=239787997]
 script = ExtResource("3_stateful")
 
-[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="Stateful"]
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="Stateful" unique_id=1934071616]
 replication_config = SubResource("SceneReplicationConfig_state")

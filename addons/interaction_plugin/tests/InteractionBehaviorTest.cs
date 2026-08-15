@@ -1,12 +1,15 @@
 namespace QuestWorld.Tests;
 
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
 using QuestWorld.Interaction;
+using QuestWorld.Interaction.Examples.Rules;
+using QuestWorld.Interaction.Runtime.Interactive;
+using QuestWorld.Interaction.Runtime.Interactor;
+using QuestWorld.Interaction.Runtime.Rules;
+using QuestWorld.Interaction.Runtime.State;
 using static GdUnit4.Assertions;
 
 [TestSuite]

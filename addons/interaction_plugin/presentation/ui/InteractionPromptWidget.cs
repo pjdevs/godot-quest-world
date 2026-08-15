@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.Interaction;
+namespace QuestWorld.Interaction.Presentation.UI;
 
 public partial class InteractionPromptWidget : PanelContainer, IInteractionWidget
 {

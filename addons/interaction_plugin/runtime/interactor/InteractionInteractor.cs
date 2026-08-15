@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.Interaction.Runtime.Interactive;
 
-namespace QuestWorld.Interaction;
+namespace QuestWorld.Interaction.Runtime.Interactor;
 
 public partial class InteractionInteractor : Node
 {
@@ -467,7 +468,7 @@ public partial class InteractionInteractor : Node
     private bool IsLocalAuthority() => !IsInsideTree() || IsMultiplayerAuthority();
 
     private bool IsUsable(InteractiveComponent interactive) =>
-        interactive != null && GodotObject.IsInstanceValid(interactive);
+        interactive != null && IsInstanceValid(interactive);
 
     private int GetRemoteSenderOrOwner()
     {

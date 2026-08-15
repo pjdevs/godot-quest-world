@@ -1,5 +1,6 @@
-using System.Diagnostics;
 using Godot;
+using QuestWorld.Interaction.Runtime.Interactive;
+using QuestWorld.Interaction.Runtime.Interactor;
 
 namespace QuestWorld.Interaction;
 

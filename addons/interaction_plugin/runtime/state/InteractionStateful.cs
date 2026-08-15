@@ -1,7 +1,9 @@
 using System;
 using Godot;
+using QuestWorld.Interaction.Runtime.Interactive;
+using QuestWorld.Interaction.Runtime.Interactor;
 
-namespace QuestWorld.Interaction;
+namespace QuestWorld.Interaction.Runtime.State;
 
 public partial class InteractionStateful : Node
 {
