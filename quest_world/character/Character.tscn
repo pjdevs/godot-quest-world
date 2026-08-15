@@ -19,10 +19,10 @@ parameters/LandOneShot/internal_active = false
 parameters/LandOneShot/request = 0
 
 [node name="CameraYaw" parent="." index="4" unique_id=902288204]
-FirstPersonCameraOffset = Vector3(0, 0, -0.6)
 ThirdPersonDistance = 2.5
+FirstPersonCameraOffset = Vector3(0, 0, -0.6)
 
-[node name="InteractionInteractor" type="Node" parent="." index="6" unique_id=1688919232]
+[node name="InteractionInteractor" type="Node" parent="." index="6" unique_id=1688919232 groups=["Player"]]
 script = ExtResource("3_interactor")
 
 [node name="InteractionPresenter" type="CanvasLayer" parent="." index="7" unique_id=1331596618]

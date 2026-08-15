@@ -3,8 +3,8 @@
 [ext_resource type="Script" uid="uid://ba8d3yiijhau5" path="res://addons/interaction_plugin/examples/InteractiveActor.cs" id="1_actor"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="2_interactive"]
 [ext_resource type="Script" uid="uid://cjrwlmeffknuq" path="res://addons/interaction_plugin/runtime/state/InteractionStateful.cs" id="3_stateful"]
-[ext_resource type="PackedScene" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="4_prompt"]
-[ext_resource type="PackedScene" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="5_indicator"]
+[ext_resource type="PackedScene" uid="uid://m4nr18qimc1s" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="4_prompt"]
+[ext_resource type="PackedScene" uid="uid://mknaynw5h20v" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="5_indicator"]
 [ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_ll77h"]
 [ext_resource type="Script" uid="uid://c2ca7cnp0rpau" path="res://addons/interaction_plugin/examples/rules/InteractorGroupInteractionRule.cs" id="6_ueomp"]
 
@@ -50,7 +50,6 @@ shape = SubResource("SphereShape3D_p8fn5")
 debug_color = Color(0, 0.56349266, 0.8623485, 0.41960785)
 
 [node name="InteractionAnchor" type="Marker3D" parent="." unique_id=818464048]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
 
 [node name="Interactive" type="Node" parent="." unique_id=1343342868]
 script = ExtResource("2_interactive")
@@ -58,7 +57,8 @@ InteractionAreaPath = NodePath("../InteractionArea")
 IndicationAreaPath = NodePath("../IndicationArea")
 InteractionAnchorPath = NodePath("../InteractionAnchor")
 StatefulPath = NodePath("../Stateful")
-Description = "Make a super interaction"
+DisplayName = "Super Interactive"
+Description = "Interact"
 PromptScene = ExtResource("4_prompt")
 IndicationScene = ExtResource("5_indicator")
 InteractionRules = Array[ExtResource("5_ll77h")]([SubResource("Resource_ll77h")])

@@ -1,6 +1,10 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://m4nr18qimc1s"]
 
-[ext_resource type="Script" path="res://addons/interaction_plugin/presentation/ui/InteractionPromptWidget.cs" id="1_prompt"]
+[ext_resource type="Script" uid="uid://divw6smasctp7" path="res://addons/interaction_plugin/presentation/ui/InteractionPromptWidget.cs" id="1_prompt"]
 
-[node name="InteractionPrompt" type="PanelContainer"]
+[node name="InteractionPrompt" type="PanelContainer" unique_id=1048885657]
 script = ExtResource("1_prompt")
+
+[node name="Label" type="Label" parent="." unique_id=718202040]
+layout_mode = 2
+text = "Sample object name"

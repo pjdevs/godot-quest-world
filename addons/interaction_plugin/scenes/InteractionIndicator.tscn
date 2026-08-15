@@ -1,6 +1,10 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://mknaynw5h20v"]
 
-[ext_resource type="Script" path="res://addons/interaction_plugin/presentation/ui/InteractionIndicatorWidget.cs" id="1_indicator"]
+[ext_resource type="Script" uid="uid://b1swvsewk4irt" path="res://addons/interaction_plugin/presentation/ui/InteractionIndicatorWidget.cs" id="1_indicator"]
 
-[node name="InteractionIndicator" type="PanelContainer"]
+[node name="InteractionIndicator" type="PanelContainer" unique_id=727738238]
 script = ExtResource("1_indicator")
+
+[node name="Label" type="Label" parent="." unique_id=2114184778]
+layout_mode = 2
+text = "Sample interaction text"

@@ -219,6 +219,7 @@ public partial class InteractiveComponent : Node
             static (interactor, component) => interactor.AddInteractive(component),
             this
         );
+        GD.Print($"InteractiveComponent: OnInteractionAreaBodyEntered: {body.Name}");
     }
 
     private void OnInteractionAreaBodyExited(Node3D body)
@@ -228,6 +229,7 @@ public partial class InteractiveComponent : Node
             static (interactor, component) => interactor.RemoveInteractive(component),
             this
         );
+        GD.Print($"InteractiveComponent: OnInteractionAreaBodyExited: {body.Name}");
     }
 
     private void OnIndicationAreaBodyEntered(Node3D body)
@@ -237,6 +239,7 @@ public partial class InteractiveComponent : Node
             static (interactor, component) => interactor.AddInteractiveIndication(component),
             this
         );
+        GD.Print($"InteractiveComponent: OnIndicationAreaBodyEntered: {body.Name}");
     }
 
     private void OnIndicationAreaBodyExited(Node3D body)
@@ -246,6 +249,7 @@ public partial class InteractiveComponent : Node
             static (interactor, component) => interactor.RemoveInteractiveIndication(component),
             this
         );
+        GD.Print($"InteractiveComponent: OnIndicationAreaBodyExited: {body.Name}");
     }
 
     private bool ValidateConfiguration()
