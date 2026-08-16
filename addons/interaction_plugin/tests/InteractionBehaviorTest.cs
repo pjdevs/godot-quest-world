@@ -98,7 +98,19 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(testWorld.Stateful.ActiveInteractor == null).IsTrue();
         AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activated);
         AssertThat(testWorld.Owner.StartCount).IsEqual(1);
-        AssertThat(testWorld.Owner.EndCount).IsEqual(1);
+        AssertThat(testWorld.Owner.EndCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task ActivatedStateCannotBeInteractedAgainWhenCustomStatusAllowsIt()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Stateful.SetState(InteractionState.Activated);
+
+        InteractionStatus status = testWorld.Interactive.EvaluateStatus(testWorld.Interactor);
+
+        AssertThat(status is InteractionBlocked).IsTrue();
     }
 
     [TestCase]
@@ -128,6 +140,20 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public async Task SnapshotRestoreReappliesCallbacksWhenStateIsUnchanged()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+        InteractionSavedState saved = testWorld.Stateful.SaveState();
+
+        testWorld.Stateful.LoadState(saved);
+
+        AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Idle);
+        AssertThat(testWorld.Owner.AuthorityStateChanges).IsEqual(1);
+        AssertThat(testWorld.Owner.PresentationStateChanges).IsEqual(1);
+    }
+
+    [TestCase]
     public async Task OfflineInputUsesAuthoritativeStartAndEndPath()
     {
         TestWorld testWorld = BuildWorld();
@@ -143,6 +169,62 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(testWorld.Stateful.ActiveInteractor == null).IsTrue();
     }
 
+    [TestCase]
+    public async Task BlockedStatusStopsRequestBeforeAuthoritativeDispatch()
+    {
+        TestWorld testWorld = BuildWorld();
+        testWorld.Interactive.InteractionRules.Add(
+            new AlwaysBlockedInteractionRule { Reason = "Locked" }
+        );
+        bool requestEmitted = false;
+        testWorld.Interactor.InteractionRequested += _ => requestEmitted = true;
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+
+        AssertThat(testWorld.Interactor.TryStartInteractionInput()).IsFalse();
+        AssertThat(requestEmitted).IsFalse();
+        AssertThat(testWorld.Owner.StartCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task ServerReleasesRemoteOwnerInteractionWhenCandidateLeavesRange()
+    {
+        TestWorld testWorld = BuildWorld(ownerPeerId: 2);
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        AssertThat(testWorld.Interactor.TryStartInteractionInput()).IsTrue();
+
+        testWorld.Interactor.RemoveInteractive(testWorld.Interactive);
+
+        AssertThat(testWorld.Stateful.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Owner.EndCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public async Task ServerReleasesInteractionWhenRemoteInteractorExitsTree()
+    {
+        TestWorld testWorld = BuildWorld(ownerPeerId: 2);
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        AssertThat(testWorld.Interactor.TryStartInteractionInput()).IsTrue();
+
+        testWorld.Interactor.QueueFree();
+        await testWorld.Runner.SimulateFrames(1);
+
+        AssertThat(testWorld.Stateful.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Owner.EndCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public async Task InteractorNetworkAuthorityRemainsOnServerForRemoteOwner()
+    {
+        TestWorld testWorld = BuildWorld(ownerPeerId: 2);
+        await testWorld.Runner.SimulateFrames(1);
+
+        AssertThat(testWorld.Interactor.GetMultiplayerAuthority())
+            .IsEqual(testWorld.Interactor.ServerPeerId);
+    }
+
     private static string Describe(InteractionStatus status) =>
         status switch
         {
@@ -150,7 +232,7 @@ public sealed partial class InteractionBehaviorTest
             InteractionBlocked blocked => blocked.Reason,
         };
 
-    private static TestWorld BuildWorld()
+    private static TestWorld BuildWorld(int ownerPeerId = 1)
     {
         Node3D world = new();
         TestInteractionOwner owner = new()
@@ -175,6 +257,7 @@ public sealed partial class InteractionBehaviorTest
         {
             Name = "Interactor",
             ViewOriginPath = new NodePath("ViewOrigin"),
+            OwnerPeerId = ownerPeerId,
         };
         Node3D view = new() { Name = "ViewOrigin" };
         interactor.AddChild(view);
@@ -201,6 +284,7 @@ public sealed partial class InteractionBehaviorTest
         public int CustomStatusEvaluationCount { get; private set; }
         public int StartCount { get; private set; }
         public int EndCount { get; private set; }
+        public int AuthorityStateChanges { get; private set; }
         public int PresentationStateChanges { get; private set; }
 
         public InteractionStatus EvaluateCustomInteractionStatus(in InteractionContext context)
@@ -220,7 +304,10 @@ public sealed partial class InteractionBehaviorTest
         public void OnInteractionStateChangedAuthority(
             InteractionState oldState,
             InteractionState newState
-        ) { }
+        )
+        {
+            AuthorityStateChanges++;
+        }
 
         public void OnInteractionStateChangedPresentation(
             InteractionState oldState,

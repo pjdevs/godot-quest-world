@@ -110,12 +110,11 @@ public partial class InteractiveComponent : Node
             return new InteractionBlocked("Someone else is using this.");
         }
 
-        if (
-            _stateful != null
-            && _stateful.State is InteractionState.Activating or InteractionState.Deactivating
-        )
+        if (_stateful != null && _stateful.State != InteractionState.Idle)
         {
-            return new InteractionBlocked("This is busy.");
+            return _stateful.State == InteractionState.Activated
+                ? new InteractionBlocked("This is already activated.")
+                : new InteractionBlocked("This is busy.");
         }
 
         InteractionContext context = new(interactor, this, _interactionOwner!);
@@ -210,6 +209,20 @@ public partial class InteractiveComponent : Node
         }
 
         return _interactionOwner is Node3D owner3D ? owner3D.GlobalPosition : Vector3.Zero;
+    }
+
+    public override void _ExitTree()
+    {
+        PurgeInvalidInteractors();
+        foreach (
+            InteractionInteractor interactor in new List<InteractionInteractor>(_presentInteractors)
+        )
+        {
+            interactor.RemoveInteractive(this);
+            interactor.RemoveInteractiveIndication(this);
+        }
+
+        _presentInteractors.Clear();
     }
 
     private void OnInteractionAreaBodyEntered(Node3D body)

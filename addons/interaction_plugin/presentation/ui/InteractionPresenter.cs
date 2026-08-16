@@ -39,6 +39,12 @@ public partial class InteractionPresenter : CanvasLayer
 
     public override void _Process(double delta)
     {
+        if (_interactor == null || !_interactor.IsLocallyControlled)
+        {
+            ClearPresentation();
+            return;
+        }
+
         RefreshIndications();
         UpdateProjection(_prompt);
         foreach (KeyValuePair<InteractiveComponent, Control> indication in _indications)
@@ -54,8 +60,9 @@ public partial class InteractionPresenter : CanvasLayer
 
     private void Refresh()
     {
-        if (_interactor == null)
+        if (_interactor == null || !_interactor.IsLocallyControlled)
         {
+            ClearPresentation();
             return;
         }
 
@@ -81,8 +88,9 @@ public partial class InteractionPresenter : CanvasLayer
 
     private void RefreshIndications()
     {
-        if (_interactor == null)
+        if (_interactor == null || !_interactor.IsLocallyControlled)
         {
+            ClearPresentation();
             return;
         }
 
@@ -142,6 +150,18 @@ public partial class InteractionPresenter : CanvasLayer
 
         FreeWidget(ref widget);
         _indications.Remove(interactive);
+    }
+
+    private void ClearPresentation()
+    {
+        FreeWidget(ref _prompt);
+        foreach (Control indication in _indications.Values)
+        {
+            Control? widget = indication;
+            FreeWidget(ref widget);
+        }
+
+        _indications.Clear();
     }
 
     private void ReplaceWidget(

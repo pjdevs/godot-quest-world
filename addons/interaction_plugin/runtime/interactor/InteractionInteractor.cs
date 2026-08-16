@@ -52,7 +52,6 @@ public partial class InteractionInteractor : Node
     private Node3D _interactionOrigin = null!;
     private InteractiveComponent _focusedInteractive = null!;
     private InteractiveComponent _activeInteractive = null!;
-    private InteractiveComponent _autoInteractionTarget = null!;
     private bool _configurationValid;
 
     public InteractiveComponent FocusedInteractive => _focusedInteractive;
@@ -68,6 +67,9 @@ public partial class InteractionInteractor : Node
     public Node3D InteractionOrigin => _interactionOrigin;
 
     public bool IsConfigurationValid => _configurationValid;
+
+    public bool IsLocallyControlled =>
+        !IsInsideTree() || OwnerPeerId == (int)Multiplayer.GetUniqueId();
 
     public override void _Ready()
     {
@@ -90,13 +92,13 @@ public partial class InteractionInteractor : Node
 
         if (IsInsideTree())
         {
-            SetMultiplayerAuthority(OwnerPeerId);
+            SetMultiplayerAuthority(ServerPeerId);
         }
     }
 
     public override void _Process(double delta)
     {
-        if (!_configurationValid || !IsLocalAuthority())
+        if (!_configurationValid || !IsLocallyControlled)
         {
             return;
         }
@@ -117,7 +119,10 @@ public partial class InteractionInteractor : Node
 
         _indicatedInteractives.Add(interactive);
         interactive.RegisterInteractor(this);
-        EmitStatusFor(interactive);
+        if (IsLocallyControlled)
+        {
+            EmitStatusFor(interactive);
+        }
     }
 
     public void RemoveInteractiveIndication(InteractiveComponent interactive)
@@ -138,7 +143,10 @@ public partial class InteractionInteractor : Node
 
         _interactiveCandidates.Add(interactive);
         interactive.RegisterInteractor(this);
-        RecalculateFocus();
+        if (IsLocallyControlled)
+        {
+            RecalculateFocus();
+        }
     }
 
     public void RemoveInteractive(InteractiveComponent interactive)
@@ -149,7 +157,7 @@ public partial class InteractionInteractor : Node
         }
 
         _interactiveCandidates.Remove(interactive);
-        if (_activeInteractive == interactive && IsLocalAuthority())
+        if (_activeInteractive == interactive && IsServerAuthority())
         {
             interactive.ReleaseInteractionInput(this);
             _activeInteractive = null!;
@@ -160,7 +168,14 @@ public partial class InteractionInteractor : Node
             interactive.UnregisterInteractor(this);
         }
 
-        RecalculateFocus();
+        if (IsLocallyControlled)
+        {
+            RecalculateFocus();
+        }
+        else if (_focusedInteractive == interactive)
+        {
+            _focusedInteractive = null!;
+        }
     }
 
     public bool RecalculateFocus()
@@ -272,6 +287,13 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
+        InteractionStatus localStatus = target.EvaluateStatus(this);
+        if (localStatus is InteractionBlocked blocked)
+        {
+            EmitSignal(SignalName.InteractionRejected, target, blocked.Reason);
+            return false;
+        }
+
         EmitSignal(SignalName.InteractionRequested, target);
         if (!Multiplayer.IsServer())
         {
@@ -295,6 +317,11 @@ public partial class InteractionInteractor : Node
 
     public void NotifyInteractiveStatusChanged(InteractiveComponent interactive)
     {
+        if (!IsLocallyControlled)
+        {
+            return;
+        }
+
         if (interactive == _focusedInteractive)
         {
             EmitStatusFor(interactive);
@@ -306,6 +333,29 @@ public partial class InteractionInteractor : Node
     public bool ReleaseInteractionInput(InteractiveComponent interactive)
     {
         return interactive.Stateful?.ReleaseInteractionInput(this) ?? false;
+    }
+
+    public override void _ExitTree()
+    {
+        if (_activeInteractive != null && IsUsable(_activeInteractive) && IsServerAuthority())
+        {
+            _activeInteractive.ReleaseInteractionInput(this);
+            _activeInteractive = null!;
+        }
+
+        HashSet<InteractiveComponent> registered = new(_interactiveCandidates);
+        registered.UnionWith(_indicatedInteractives);
+        foreach (InteractiveComponent interactive in registered)
+        {
+            if (IsUsable(interactive))
+            {
+                interactive.UnregisterInteractor(this);
+            }
+        }
+
+        _interactiveCandidates.Clear();
+        _indicatedInteractives.Clear();
+        _focusedInteractive = null!;
     }
 
     [Rpc(
@@ -476,7 +526,7 @@ public partial class InteractionInteractor : Node
             ?? FindFirstNode<Camera3D>(GetParent())!;
     }
 
-    private bool IsLocalAuthority() => !IsInsideTree() || IsMultiplayerAuthority();
+    private bool IsServerAuthority() => !IsInsideTree() || Multiplayer.IsServer();
 
     private bool IsUsable(InteractiveComponent interactive) =>
         interactive != null && IsInstanceValid(interactive);

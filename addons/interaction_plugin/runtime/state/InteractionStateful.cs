@@ -82,7 +82,7 @@ public partial class InteractionStateful : Node
             return false;
         }
 
-        ReleaseActiveInteractor();
+        ReleaseActiveInteractor(notifyInputEnded: false);
         return ApplyState(nextState);
     }
 
@@ -93,7 +93,7 @@ public partial class InteractionStateful : Node
             return false;
         }
 
-        ReleaseActiveInteractor();
+        ReleaseActiveInteractor(notifyInputEnded: true);
         return true;
     }
 
@@ -110,25 +110,27 @@ public partial class InteractionStateful : Node
             );
         }
 
-        if (!SetState(savedState.State))
+        if (IsInsideTree() && !Multiplayer.IsServer())
         {
             throw new InvalidOperationException(
                 $"{GetPath()}: state restoration requires authority."
             );
         }
+
+        ApplyState(savedState.State, forceCallbacks: true);
     }
 
     public override void _ExitTree()
     {
         if (ActiveInteractor != null && (!IsInsideTree() || Multiplayer.IsServer()))
         {
-            ReleaseActiveInteractor();
+            ReleaseActiveInteractor(notifyInputEnded: false);
         }
     }
 
-    private bool ApplyState(InteractionState state)
+    private bool ApplyState(InteractionState state, bool forceCallbacks = false)
     {
-        if (_state == state)
+        if (_state == state && !forceCallbacks)
         {
             return false;
         }
@@ -158,7 +160,7 @@ public partial class InteractionStateful : Node
         return true;
     }
 
-    private void ReleaseActiveInteractor()
+    private void ReleaseActiveInteractor(bool notifyInputEnded)
     {
         InteractionInteractor releasedInteractor = _activeInteractor;
         _activeInteractor = null!;
@@ -167,12 +169,16 @@ public partial class InteractionStateful : Node
             return;
         }
 
-        InteractionContext context = new(
-            releasedInteractor,
-            _interactive,
-            _interactive.InteractionOwner
-        );
-        (_interactive.InteractionOwner as IInteractionHandler)?.OnEndInteractionInput(context);
+        if (notifyInputEnded)
+        {
+            InteractionContext context = new(
+                releasedInteractor,
+                _interactive,
+                _interactive.InteractionOwner
+            );
+            (_interactive.InteractionOwner as IInteractionHandler)?.OnEndInteractionInput(context);
+        }
+
         _interactive.NotifyStatusChanged();
     }
 

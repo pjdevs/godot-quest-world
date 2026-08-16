@@ -10,12 +10,12 @@ La spec complète reste dans [`docs/superpowers/specs/2026-08-14-interaction-add
 
 L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interaction_plugin) et ne crée ni autoload ni action Input Map.
 
-- `InteractionInteractor` maintient les candidats d’indication/de portée, calcule le score regard-distance, émet les signaux de focus/statut/requête/refus et expose `TryStartInteractionInput()` / `TryEndInteractionInput()`.
+- `InteractionInteractor` maintient les candidats d’indication/de portée, calcule le score regard-distance, émet les signaux de focus/statut/requête/refus et expose `TryStartInteractionInput()` / `TryEndInteractionInput()`. Le nœud reste sous autorité réseau serveur ; `OwnerPeerId` identifie uniquement le client qui calcule le focus, présente l’UI et envoie les intentions.
 - `InteractiveComponent` compose un `Area3D`, une ancre `Marker3D`, des métadonnées de présentation, des scènes de widgets et une liste ordonnée de `InteractionRule`.
-- `InteractionStateful` expose `Idle`, `Activating`, `Activated`, `Deactivating`, réserve l’interacteur actif, applique les callbacks d’autorité/présentation et expose `SaveState()` / `LoadState()`.
-- Les RPC fiables résident dans l’interacteur. Le serveur vérifie l’identité du peer, le chemin reçu, l’appartenance aux candidats serveur, distance/angle, état, règles et hook custom avant d’appeler le handler.
+- `InteractionStateful` expose `Idle`, `Activating`, `Activated`, `Deactivating`, réserve l’interacteur actif, applique les callbacks d’autorité/présentation et expose `SaveState()` / `LoadState()`. Seul `Idle` est interactif. La fin d’une phase libère la réservation sans simuler un relâchement d’input ; le callback de fin d’input reste réservé au relâchement, à la sortie de zone ou à la disparition de l’interacteur.
+- Les RPC fiables résident dans l’interacteur. Le client prévalide le statut avant d’émettre une intention. Le serveur vérifie ensuite l’identité du peer, le chemin reçu, l’appartenance aux candidats serveur, distance/angle, état, règles et hook custom avant d’appeler le handler. Les refus serveur vers client partent d’un nœud dont l’autorité réseau reste au serveur.
 - `InteractionRule` fournit `AlwaysBlockedInteractionRule` et `InteractorGroupInteractionRule`. Le pipeline s’arrête à la première raison bloquante avant le hook custom.
-- `InteractionPresenter`, `InteractionPromptWidget` et `InteractionIndicatorWidget` constituent la présentation facultative screen-space. Le prompt reste unique et centré sur l’ancre de la cible focusée ; un widget d’indication est présenté pour chaque interactable présent dans sa `IndicationArea`, sauf la cible focusée, et applique un offset écran configurable pour apparaître au-dessus. Un widget projet peut implémenter `IInteractionWidget`.
+- `InteractionPresenter`, `InteractionPromptWidget` et `InteractionIndicatorWidget` constituent la présentation facultative screen-space. Le prompt reste unique et centré sur l’ancre de la cible focusée ; un widget d’indication est présenté pour chaque interactable présent dans sa `IndicationArea`, sauf la cible focusée. Un widget projet peut implémenter `IInteractionWidget`.
 - `scenes/InteractiveActor.tscn` et `examples/InteractionDemo.tscn` fournissent un objet à activation longue avec réservation, transition vers `Activated`, synchroniseur d’état et widgets de démonstration.
 
 ## Integration
@@ -32,7 +32,7 @@ L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interacti
 
 ## Persistence boundary
 
-`InteractionSavedState` contient uniquement une version (`1`) et un `InteractionState`. `LoadState` réutilise le chemin commun de changement d’état et rejette explicitement une version inconnue. Aucun fichier, service global ou backend n’est créé ; le projet hôte collecte et stocke les snapshots.
+`InteractionSavedState` contient uniquement une version (`1`) et un `InteractionState`. `LoadState` réutilise le chemin commun de changement d’état, rejoue les callbacks même lorsque la valeur restaurée est identique à la valeur courante, et rejette explicitement une version inconnue. Aucun fichier, service global ou backend n’est créé ; le projet hôte collecte et stocke les snapshots.
 
 ## Validation
 
@@ -44,7 +44,7 @@ dotnet test
 godot --headless --path . --scene res://addons/interaction_plugin/examples/InteractionDemo.tscn --quit-after 2 --log-file .godot/interaction-demo.log
 ```
 
-Les tests couvrent les deux cas du statut union, l’ordre des règles, le focus, la réservation concurrente, le chemin offline, le snapshot/version, la scène composable et le binding widget.
+Les tests couvrent les deux cas du statut union, l’ordre des règles, le focus, la réservation concurrente, la prévalidation, la séparation fin de phase/fin d’input, le nettoyage serveur d’un interacteur distant, l’autorité réseau serveur, le chemin offline, le snapshot/version y compris la restauration d’un état identique, la scène composable, le binding widget et la multiplicité/exclusivité des indications.
 
 ## Assumptions and deferred work
 

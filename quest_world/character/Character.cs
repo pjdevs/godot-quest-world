@@ -27,7 +27,7 @@ public partial class Character : QuestWorld.Character.Character
         _interactionInteractor.OwnerPeerId = OwnerPeerId;
         if (IsInsideTree())
         {
-            _interactionInteractor.SetMultiplayerAuthority(OwnerPeerId);
+            _interactionInteractor.SetMultiplayerAuthority(_interactionInteractor.ServerPeerId);
         }
     }
 
