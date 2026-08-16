@@ -2,15 +2,19 @@
 
 ## Commands
 
-Use the Godot Mono CLI available in `PATH`:
+On macOS, always invoke the Godot Mono executable by its full path. The `godot`
+command in `PATH` is a symlink and can hang, including for direct headless scene
+runs (not only for `dotnet test`).
+
+Use these commands on macOS:
 
 ```powershell
-godot --version
+/Applications/Godot_mono.app/Contents/MacOS/Godot --version
 dotnet --version
 dotnet build quest-world.sln
-godot --headless --path . --scene res://quest_world/character/Character.tscn --quit-after 2 --log-file .godot/character-runtime.log
-godot --headless --path . --scene res://quest_world/levels/test_world.tscn --quit-after 2 --log-file .godot/test-world-runtime.log
-godot --headless --path . --editor --quit --log-file .godot/headless.log
+/Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . --scene res://quest_world/character/Character.tscn --quit-after 2 --log-file .godot/character-runtime.log
+/Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . --scene res://quest_world/levels/test_world.tscn --quit-after 2 --log-file .godot/test-world-runtime.log
+/Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . --editor --quit --log-file .godot/headless.log
 ```
 
 ## Environment findings

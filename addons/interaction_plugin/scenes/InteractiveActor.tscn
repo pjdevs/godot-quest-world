@@ -26,9 +26,9 @@ MissingGroupReason = "Only the player can use this."
 metadata/_custom_type_script = "uid://c2ca7cnp0rpau"
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_state"]
-properties/0/path = NodePath("..:replicated_state")
+properties/0/path = NodePath(".:ReplicatedState")
 properties/0/spawn = true
-properties/0/replication_mode = 1
+properties/0/replication_mode = 2
 
 [node name="InteractiveActor" type="Node3D" unique_id=1742260159]
 script = ExtResource("1_actor")
