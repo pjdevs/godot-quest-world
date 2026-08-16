@@ -4,12 +4,12 @@ namespace QuestWorld.Interaction.Presentation.UI;
 
 public partial class InteractionIndicatorWidget : PanelContainer, IInteractionWidget
 {
-    private Label _label = null!;
+    private Label? _label;
 
     public override void _Ready()
     {
-        _label = GetNodeOrNull<Label>("Label")!;
-        if (_label == null)
+        _label = GetNodeOrNull<Label>("Label");
+        if (_label is null)
         {
             _label = new Label { Name = "Label" };
             AddChild(_label);
@@ -18,7 +18,7 @@ public partial class InteractionIndicatorWidget : PanelContainer, IInteractionWi
 
     public void Bind(in InteractionPresentation presentation)
     {
-        if (_label != null)
+        if (_label is not null)
         {
             _label.Text = presentation.IsAllowed
                 ? presentation.DisplayName

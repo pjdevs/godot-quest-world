@@ -21,7 +21,7 @@ public enum InteractionState
 public readonly record struct InteractionContext(
     InteractionInteractor Interactor,
     InteractiveComponent Interactive,
-    Node? InteractionOwner
+    Node InteractionOwner
 );
 
 public readonly record struct InteractionPresentation(

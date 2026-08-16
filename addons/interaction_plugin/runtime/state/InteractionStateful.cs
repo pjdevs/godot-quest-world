@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 
 namespace QuestWorld.Interaction.Runtime.State;
 
+[Tool]
+[GlobalClass]
 public partial class InteractionStateful : Node
 {
     public const int CurrentSaveVersion = 1;
@@ -22,29 +25,64 @@ public partial class InteractionStateful : Node
         set => ApplyState(value);
     }
 
+    [Export]
+    public InteractiveComponent? Interactive
+    {
+        get => _interactive;
+        set
+        {
+            if (_interactive == value)
+            {
+                return;
+            }
+
+            _interactive = value;
+            UpdateConfigurationWarnings();
+        }
+    }
+
     private InteractionState _state;
-    private InteractiveComponent _interactive = null!;
-    private InteractionInteractor _activeInteractor = null!;
+    private InteractiveComponent? _interactive;
+    private InteractionInteractor? _activeInteractor;
 
     public InteractionState State => _state;
 
-    public InteractionInteractor ActiveInteractor => _activeInteractor;
+    internal InteractionInteractor? ActiveInteractor => _activeInteractor;
+
+#if TOOLS
+    public override string[] _GetConfigurationWarnings()
+    {
+        List<string> warnings = [];
+        if (Interactive is null)
+        {
+            warnings.Add("Interactive must be assigned.");
+        }
+
+        return [.. warnings];
+    }
+#endif
 
     public override void _Ready()
     {
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            return;
+        }
+#endif
+
         _state = InitialState;
-        _interactive = FindAncestorOrSibling<InteractiveComponent>();
-        if (_interactive == null)
+        if (Interactive is null)
         {
             GD.PushError(
-                $"{GetPath()}: InteractionStateful requires an InteractiveComponent on the same owner."
+                $"{GetPath()}: InteractionStateful requires an explicitly assigned InteractiveComponent."
             );
         }
     }
 
     public bool SetState(InteractionState state)
     {
-        if (IsInsideTree() && !Multiplayer.IsServer())
+        if (!Multiplayer.IsServer())
         {
             GD.PushWarning($"{GetPath()}: only the server may change InteractionStateful.State.");
             return false;
@@ -55,12 +93,12 @@ public partial class InteractionStateful : Node
 
     public bool StartInteractionPhase(InteractionInteractor interactor)
     {
-        if (interactor == null || ActiveInteractor != null || State != InteractionState.Idle)
+        if (interactor is null || ActiveInteractor is not null || State != InteractionState.Idle)
         {
             return false;
         }
 
-        if (IsInsideTree() && !Multiplayer.IsServer())
+        if (!Multiplayer.IsServer())
         {
             return false;
         }
@@ -72,12 +110,12 @@ public partial class InteractionStateful : Node
 
     public bool EndInteractionPhase(InteractionState nextState)
     {
-        if (ActiveInteractor == null)
+        if (ActiveInteractor is null)
         {
             return false;
         }
 
-        if (IsInsideTree() && !Multiplayer.IsServer())
+        if (!Multiplayer.IsServer())
         {
             return false;
         }
@@ -110,7 +148,7 @@ public partial class InteractionStateful : Node
             );
         }
 
-        if (IsInsideTree() && !Multiplayer.IsServer())
+        if (!Multiplayer.IsServer())
         {
             throw new InvalidOperationException(
                 $"{GetPath()}: state restoration requires authority."
@@ -122,7 +160,14 @@ public partial class InteractionStateful : Node
 
     public override void _ExitTree()
     {
-        if (ActiveInteractor != null && (!IsInsideTree() || Multiplayer.IsServer()))
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            return;
+        }
+#endif
+
+        if (ActiveInteractor is not null && Multiplayer.IsServer())
         {
             ReleaseActiveInteractor(notifyInputEnded: false);
         }
@@ -130,6 +175,13 @@ public partial class InteractionStateful : Node
 
     private bool ApplyState(InteractionState state, bool forceCallbacks = false)
     {
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            return false;
+        }
+#endif
+
         if (_state == state && !forceCallbacks)
         {
             return false;
@@ -139,68 +191,42 @@ public partial class InteractionStateful : Node
         _state = state;
         EmitSignal(SignalName.InteractionStateChanged, (int)oldState, (int)state);
 
-        Node owner = _interactive?.InteractionOwner!;
-        if (IsAuthority())
+        if (Interactive?.InteractionOwner is IInteractionStateHandler handler)
         {
-            (owner as IInteractionStateHandler)?.OnInteractionStateChangedAuthority(
-                oldState,
-                state
-            );
+            if (Multiplayer.IsServer())
+            {
+                handler.OnInteractionStateChangedAuthority(oldState, state);
+            }
+
+            if (!OS.HasFeature("dedicated_server"))
+            {
+                handler.OnInteractionStateChangedPresentation(oldState, state);
+            }
         }
 
-        if (!OS.HasFeature("dedicated_server"))
-        {
-            (owner as IInteractionStateHandler)?.OnInteractionStateChangedPresentation(
-                oldState,
-                state
-            );
-        }
-
-        _interactive?.NotifyStatusChanged();
+        Interactive?.NotifyStatusChanged();
         return true;
     }
 
     private void ReleaseActiveInteractor(bool notifyInputEnded)
     {
-        InteractionInteractor releasedInteractor = _activeInteractor;
-        _activeInteractor = null!;
-        if (releasedInteractor == null || _interactive == null)
+        InteractionInteractor? releasedInteractor = _activeInteractor;
+        _activeInteractor = null;
+        if (releasedInteractor is null || Interactive is null)
         {
             return;
         }
 
-        if (notifyInputEnded)
+        if (notifyInputEnded && Interactive.InteractionOwner is IInteractionHandler handler)
         {
             InteractionContext context = new(
                 releasedInteractor,
-                _interactive,
-                _interactive.InteractionOwner
+                Interactive,
+                Interactive.InteractionOwner
             );
-            (_interactive.InteractionOwner as IInteractionHandler)?.OnEndInteractionInput(context);
+            handler.OnEndInteractionInput(context);
         }
 
-        _interactive.NotifyStatusChanged();
+        Interactive.NotifyStatusChanged();
     }
-
-    private T FindAncestorOrSibling<T>()
-        where T : class
-    {
-        Node owner = GetParent();
-        if (owner == null)
-        {
-            return null!;
-        }
-
-        foreach (Node child in owner.GetChildren())
-        {
-            if (child is T match)
-            {
-                return match;
-            }
-        }
-
-        return owner as T ?? null!;
-    }
-
-    private bool IsAuthority() => !IsInsideTree() || Multiplayer.IsServer();
 }

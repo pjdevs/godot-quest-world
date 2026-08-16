@@ -5,6 +5,8 @@ using QuestWorld.Interaction.Runtime.Interactive;
 
 namespace QuestWorld.Interaction.Runtime.Interactor;
 
+[Tool]
+[GlobalClass]
 public partial class InteractionInteractor : Node
 {
     [Signal]
@@ -23,9 +25,31 @@ public partial class InteractionInteractor : Node
     [Signal]
     public delegate void InteractionRejectedEventHandler(Node interactive, string reason);
 
+    [Signal]
+    public delegate void InteractiveIndicationAddedEventHandler(Node interactive);
+
+    [Signal]
+    public delegate void InteractiveIndicationRemovedEventHandler(Node interactive);
+
     [ExportGroup("Detection")]
     [Export]
-    public NodePath ViewOriginPath { get; set; } = new();
+    public Node3D? ViewOrigin
+    {
+        get => _viewOrigin;
+        set
+        {
+            if (_viewOrigin == value)
+            {
+                return;
+            }
+
+            _viewOrigin = value;
+            UpdateConfigurationWarnings();
+        }
+    }
+
+    [Export]
+    public Node3D? InteractionOrigin { get; set; }
 
     [Export]
     public float MaxInteractionDistance { get; set; } = 10.0f;
@@ -48,38 +72,49 @@ public partial class InteractionInteractor : Node
 
     private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
     private readonly HashSet<InteractiveComponent> _interactiveCandidates = new();
-    private Node3D _viewOrigin = null!;
-    private Node3D _interactionOrigin = null!;
-    private InteractiveComponent _focusedInteractive = null!;
-    private InteractiveComponent _activeInteractive = null!;
-    private bool _configurationValid;
+    private Node3D? _viewOrigin;
+    private Node3D? _resolvedInteractionOrigin;
+    private InteractiveComponent? _focusedInteractive;
+    private InteractiveComponent? _activeInteractive;
 
-    public InteractiveComponent FocusedInteractive => _focusedInteractive;
+    public InteractiveComponent? FocusedInteractive => _focusedInteractive;
 
-    public IReadOnlyCollection<InteractiveComponent> IndicatedInteractives =>
-        _indicatedInteractives;
+    public bool IsLocallyControlled => OwnerPeerId == (int)Multiplayer.GetUniqueId();
 
-    public IReadOnlyCollection<InteractiveComponent> InteractiveCandidates =>
-        _interactiveCandidates;
+#if TOOLS
+    public override string[] _GetConfigurationWarnings()
+    {
+        List<string> warnings = [];
+        if (ViewOrigin is null)
+        {
+            warnings.Add("ViewOrigin must be assigned.");
+        }
 
-    public Node3D ViewOrigin => _viewOrigin;
-
-    public Node3D InteractionOrigin => _interactionOrigin;
-
-    public bool IsConfigurationValid => _configurationValid;
-
-    public bool IsLocallyControlled =>
-        !IsInsideTree() || OwnerPeerId == (int)Multiplayer.GetUniqueId();
+        return [.. warnings];
+    }
+#endif
 
     public override void _Ready()
     {
-        _viewOrigin = ResolveViewOrigin();
-        _interactionOrigin = GetParent() as Node3D ?? _viewOrigin;
-        _configurationValid = _viewOrigin != null && _interactionOrigin != null;
-        if (!_configurationValid)
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            return;
+        }
+#endif
+
+        _resolvedInteractionOrigin = InteractionOrigin ?? GetParent() as Node3D;
+        if (ViewOrigin is null)
+        {
+            GD.PushError($"{GetPath()}: InteractionInteractor requires a ViewOrigin.");
+            SetProcess(false);
+            return;
+        }
+
+        if (_resolvedInteractionOrigin is null)
         {
             GD.PushError(
-                $"{GetPath()}: InteractionInteractor requires a ViewOrigin (configured path: '{ViewOriginPath}')."
+                $"{GetPath()}: InteractionInteractor requires an InteractionOrigin or a Node3D parent."
             );
             SetProcess(false);
             return;
@@ -90,58 +125,66 @@ public partial class InteractionInteractor : Node
             OwnerPeerId = (int)Multiplayer.GetUniqueId();
         }
 
-        if (IsInsideTree())
-        {
-            SetMultiplayerAuthority(ServerPeerId);
-        }
+        SetMultiplayerAuthority(ServerPeerId);
     }
 
     public override void _Process(double delta)
     {
-        if (!_configurationValid || !IsLocallyControlled)
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            return;
+        }
+#endif
+
+        if (!IsLocallyControlled)
         {
             return;
         }
 
         bool focusChanged = RecalculateFocus();
-        if (focusChanged && _focusedInteractive != null && _focusedInteractive.AutomaticInteraction)
+        if (focusChanged && _focusedInteractive?.AutomaticInteraction == true)
         {
             TryStartInteractionInput();
         }
     }
 
-    public void AddInteractiveIndication(InteractiveComponent interactive)
+    internal void AddInteractiveIndication(InteractiveComponent interactive)
     {
-        if (!IsUsable(interactive))
+        if (!IsUsable(interactive) || !_indicatedInteractives.Add(interactive))
         {
             return;
         }
 
-        _indicatedInteractives.Add(interactive);
         interactive.RegisterInteractor(this);
+        EmitSignal(SignalName.InteractiveIndicationAdded, interactive);
         if (IsLocallyControlled)
         {
             EmitStatusFor(interactive);
         }
     }
 
-    public void RemoveInteractiveIndication(InteractiveComponent interactive)
+    internal void RemoveInteractiveIndication(InteractiveComponent interactive)
     {
-        _indicatedInteractives.Remove(interactive);
-        if (!_interactiveCandidates.Contains(interactive))
-        {
-            interactive?.UnregisterInteractor(this);
-        }
-    }
-
-    public void AddInteractive(InteractiveComponent interactive)
-    {
-        if (!IsUsable(interactive))
+        if (!_indicatedInteractives.Remove(interactive))
         {
             return;
         }
 
-        _interactiveCandidates.Add(interactive);
+        EmitSignal(SignalName.InteractiveIndicationRemoved, interactive);
+        if (!_interactiveCandidates.Contains(interactive))
+        {
+            interactive.UnregisterInteractor(this);
+        }
+    }
+
+    internal void AddInteractive(InteractiveComponent interactive)
+    {
+        if (!IsUsable(interactive) || !_interactiveCandidates.Add(interactive))
+        {
+            return;
+        }
+
         interactive.RegisterInteractor(this);
         if (IsLocallyControlled)
         {
@@ -149,18 +192,17 @@ public partial class InteractionInteractor : Node
         }
     }
 
-    public void RemoveInteractive(InteractiveComponent interactive)
+    internal void RemoveInteractive(InteractiveComponent interactive)
     {
-        if (interactive == null)
+        if (!_interactiveCandidates.Remove(interactive))
         {
             return;
         }
 
-        _interactiveCandidates.Remove(interactive);
-        if (_activeInteractive == interactive && IsServerAuthority())
+        if (_activeInteractive == interactive && Multiplayer.IsServer())
         {
             interactive.ReleaseInteractionInput(this);
-            _activeInteractive = null!;
+            _activeInteractive = null;
         }
 
         if (!_indicatedInteractives.Contains(interactive))
@@ -174,19 +216,19 @@ public partial class InteractionInteractor : Node
         }
         else if (_focusedInteractive == interactive)
         {
-            _focusedInteractive = null!;
+            _focusedInteractive = null;
         }
     }
 
-    public bool RecalculateFocus()
+    internal bool RecalculateFocus()
     {
-        if (!_configurationValid)
+        if (ViewOrigin is null || _resolvedInteractionOrigin is null)
         {
             return false;
         }
 
         PurgeInvalidCandidates();
-        InteractiveComponent best = null!;
+        InteractiveComponent? best = null;
         float bestScore = float.MinValue;
         foreach (InteractiveComponent candidate in _interactiveCandidates)
         {
@@ -196,7 +238,7 @@ public partial class InteractionInteractor : Node
             }
 
             float score = CalculateInteractionScore(candidate);
-            if (best == null || score > bestScore)
+            if (best is null || score > bestScore)
             {
                 best = candidate;
                 bestScore = score;
@@ -205,45 +247,56 @@ public partial class InteractionInteractor : Node
 
         if (_focusedInteractive == best)
         {
-            EmitStatusFor(_focusedInteractive);
+            if (best is not null)
+            {
+                EmitStatusFor(best);
+            }
+
             return false;
         }
 
         _focusedInteractive = best;
-        EmitSignal(SignalName.FocusedInteractiveChanged, _focusedInteractive);
-        EmitStatusFor(_focusedInteractive);
+        Variant focusedInteractive = _focusedInteractive is null
+            ? new Variant()
+            : _focusedInteractive;
+        EmitSignal(SignalName.FocusedInteractiveChanged, focusedInteractive);
+        if (best is not null)
+        {
+            EmitStatusFor(best);
+        }
+
         return true;
     }
 
-    public float CalculateInteractionScore(InteractiveComponent interactive)
+    internal float CalculateInteractionScore(InteractiveComponent interactive)
     {
-        Vector3 viewOffset = interactive.GetInteractionPosition() - _viewOrigin.GlobalPosition;
-        float distance = interactive
-            .GetInteractionPosition()
-            .DistanceTo(_interactionOrigin.GlobalPosition);
+        if (ViewOrigin is null || _resolvedInteractionOrigin is null)
+        {
+            return float.MinValue;
+        }
+
+        Vector3 interactionPosition = interactive.GetInteractionPosition();
+        Vector3 viewOffset = interactionPosition - ViewOrigin.GlobalPosition;
+        float distance = interactionPosition.DistanceTo(_resolvedInteractionOrigin.GlobalPosition);
         if (distance <= Mathf.Epsilon)
         {
             return 1.0f;
         }
 
-        float alignment = Mathf.Max(
-            0.0f,
-            (-_viewOrigin.GlobalBasis.Z).Dot(viewOffset.Normalized())
-        );
+        float alignment = Mathf.Max(0.0f, (-ViewOrigin.GlobalBasis.Z).Dot(viewOffset.Normalized()));
         return alignment / (1.0f + distance * Mathf.Max(DistanceScoreCoefficient, 0.0f));
     }
 
-    public bool IsWithinInteractionRange(InteractiveComponent interactive)
+    internal bool IsWithinInteractionRange(InteractiveComponent interactive)
     {
-        if (interactive == null || _viewOrigin == null)
+        if (ViewOrigin is null || _resolvedInteractionOrigin is null)
         {
             return false;
         }
 
-        Vector3 viewOffset = interactive.GetInteractionPosition() - _viewOrigin.GlobalPosition;
-        float distance = interactive
-            .GetInteractionPosition()
-            .DistanceTo(_interactionOrigin.GlobalPosition);
+        Vector3 interactionPosition = interactive.GetInteractionPosition();
+        Vector3 viewOffset = interactionPosition - ViewOrigin.GlobalPosition;
+        float distance = interactionPosition.DistanceTo(_resolvedInteractionOrigin.GlobalPosition);
         if (distance > Mathf.Max(MaxInteractionDistance, 0.0f))
         {
             return false;
@@ -254,35 +307,23 @@ public partial class InteractionInteractor : Node
             return true;
         }
 
-        float alignment = (-_viewOrigin.GlobalBasis.Z).Dot(viewOffset.Normalized());
+        float alignment = (-ViewOrigin.GlobalBasis.Z).Dot(viewOffset.Normalized());
         float minimumAlignment = Mathf.Cos(
             Mathf.DegToRad(Mathf.Clamp(MaxInteractionAngleDegrees, 0.0f, 180.0f))
         );
         return alignment >= minimumAlignment;
     }
 
-    public InteractionPresentation GetInteractionPresentation()
+    public InteractionPresentation? GetInteractionPresentation()
     {
-        if (_focusedInteractive == null)
-        {
-            return new InteractionPresentation(
-                null!,
-                string.Empty,
-                string.Empty,
-                InteractionActionName,
-                new InteractionBlocked("No interaction target."),
-                false
-            );
-        }
-
-        return _focusedInteractive.GetPresentation(this, true);
+        return _focusedInteractive?.GetPresentation(this, true);
     }
 
     public bool TryStartInteractionInput()
     {
         RecalculateFocus();
-        InteractiveComponent target = _focusedInteractive;
-        if (target == null)
+        InteractiveComponent? target = _focusedInteractive;
+        if (target is null)
         {
             return false;
         }
@@ -315,7 +356,7 @@ public partial class InteractionInteractor : Node
         return EndInteractionInputAuthoritatively(OwnerPeerId);
     }
 
-    public void NotifyInteractiveStatusChanged(InteractiveComponent interactive)
+    internal void NotifyInteractiveStatusChanged(InteractiveComponent interactive)
     {
         if (!IsLocallyControlled)
         {
@@ -330,17 +371,28 @@ public partial class InteractionInteractor : Node
         RecalculateFocus();
     }
 
-    public bool ReleaseInteractionInput(InteractiveComponent interactive)
+    internal bool ReleaseInteractionInput(InteractiveComponent interactive)
     {
         return interactive.Stateful?.ReleaseInteractionInput(this) ?? false;
     }
 
     public override void _ExitTree()
     {
-        if (_activeInteractive != null && IsUsable(_activeInteractive) && IsServerAuthority())
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            return;
+        }
+#endif
+
+        if (
+            _activeInteractive is not null
+            && IsUsable(_activeInteractive)
+            && Multiplayer.IsServer()
+        )
         {
             _activeInteractive.ReleaseInteractionInput(this);
-            _activeInteractive = null!;
+            _activeInteractive = null;
         }
 
         HashSet<InteractiveComponent> registered = new(_interactiveCandidates);
@@ -355,7 +407,7 @@ public partial class InteractionInteractor : Node
 
         _interactiveCandidates.Clear();
         _indicatedInteractives.Clear();
-        _focusedInteractive = null!;
+        _focusedInteractive = null;
     }
 
     [Rpc(
@@ -366,9 +418,9 @@ public partial class InteractionInteractor : Node
     public void ServerTryStartInteraction(NodePath targetPath)
     {
         int senderPeerId = GetRemoteSenderOrOwner();
-        InteractiveComponent target = GetTree()
+        InteractiveComponent? target = GetTree()
             .Root.GetNodeOrNull<InteractiveComponent>(targetPath);
-        if (target == null)
+        if (target is null)
         {
             RejectInteraction(senderPeerId, targetPath, "The interaction target no longer exists.");
             return;
@@ -404,7 +456,7 @@ public partial class InteractionInteractor : Node
     )]
     public void ClientInteractionRejected(NodePath targetPath, string reason)
     {
-        Node target = GetTree().Root.GetNodeOrNull(targetPath);
+        Node? target = GetTree().Root.GetNodeOrNull(targetPath);
         EmitSignal(SignalName.InteractionRejected, target, reason);
     }
 
@@ -450,23 +502,18 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
-        if (_activeInteractive == null)
+        if (_activeInteractive is null)
         {
             return false;
         }
 
         bool released = _activeInteractive.ReleaseInteractionInput(this);
-        _activeInteractive = null!;
+        _activeInteractive = null;
         return released;
     }
 
     private void EmitStatusFor(InteractiveComponent interactive)
     {
-        if (interactive == null)
-        {
-            return;
-        }
-
         InteractionPresentation presentation = interactive.GetPresentation(
             this,
             interactive == _focusedInteractive
@@ -504,32 +551,8 @@ public partial class InteractionInteractor : Node
         }
     }
 
-    private Node3D ResolveViewOrigin()
-    {
-        if (ViewOriginPath != null && !ViewOriginPath.IsEmpty)
-        {
-            Node3D explicitOrigin = GetNodeOrNull<Node3D>(ViewOriginPath);
-            if (explicitOrigin != null)
-            {
-                return explicitOrigin;
-            }
-
-            Node3D parentOrigin = GetParent()?.GetNodeOrNull<Node3D>(ViewOriginPath)!;
-            if (parentOrigin != null)
-            {
-                return parentOrigin;
-            }
-        }
-
-        return GetNodeOrNull<Node3D>("ViewOrigin")
-            ?? GetParent()?.GetNodeOrNull<Node3D>("ViewOrigin")
-            ?? FindFirstNode<Camera3D>(GetParent())!;
-    }
-
-    private bool IsServerAuthority() => !IsInsideTree() || Multiplayer.IsServer();
-
-    private bool IsUsable(InteractiveComponent interactive) =>
-        interactive != null && IsInstanceValid(interactive);
+    private bool IsUsable(InteractiveComponent? interactive) =>
+        interactive is not null && IsInstanceValid(interactive);
 
     private int GetRemoteSenderOrOwner()
     {
@@ -541,34 +564,9 @@ public partial class InteractionInteractor : Node
     {
         _indicatedInteractives.RemoveWhere(interactive => !IsUsable(interactive));
         _interactiveCandidates.RemoveWhere(interactive => !IsUsable(interactive));
-        if (_focusedInteractive != null && !IsUsable(_focusedInteractive))
+        if (_focusedInteractive is not null && !IsUsable(_focusedInteractive))
         {
-            _focusedInteractive = null!;
+            _focusedInteractive = null;
         }
-    }
-
-    private static T FindFirstNode<T>(Node root)
-        where T : Node
-    {
-        if (root == null)
-        {
-            return null!;
-        }
-
-        if (root is T match)
-        {
-            return match;
-        }
-
-        foreach (Node child in root.GetChildren())
-        {
-            T nested = FindFirstNode<T>(child);
-            if (nested != null)
-            {
-                return nested;
-            }
-        }
-
-        return null!;
     }
 }

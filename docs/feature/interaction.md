@@ -4,14 +4,14 @@
 
 Addon Godot C# réutilisable pour les interactions offline et multiplayer high-level : sélection d’une cible, conditions data-driven, interaction instantanée ou longue, état autoritaire répliqué et présentation locale remplaçable.
 
-La spec complète reste dans [`docs/superpowers/specs/2026-08-14-interaction-addon-design.md`](../superpowers/specs/2026-08-14-interaction-addon-design.md). Le code runtime et ses contrats sont dans le namespace `QuestWorld.Interaction`.
+Les specs de cleanup sont dans [`Interaction Addon — Explicit Configuration & API Cleanup.md`](../Interaction%20Addon%20%E2%80%94%20Explicit%20Configuration%20%26%20API%20Cleanup.md) et [`Interaction Addon — Explicit References & Editor Validation.md`](../Interaction%20Addon%20%E2%80%94%20Explicit%20References%20%26%20Editor%20Validation.md). Le code runtime et ses contrats sont dans le namespace `QuestWorld.Interaction`.
 
 ## Delivered V1
 
 L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interaction_plugin) et ne crée ni autoload ni action Input Map.
 
-- `InteractionInteractor` maintient les candidats d’indication/de portée, calcule le score regard-distance, émet les signaux de focus/statut/requête/refus et expose `TryStartInteractionInput()` / `TryEndInteractionInput()`. Le nœud reste sous autorité réseau serveur ; `OwnerPeerId` identifie uniquement le client qui calcule le focus, présente l’UI et envoie les intentions.
-- `InteractiveComponent` compose un `Area3D`, une ancre `Marker3D`, des métadonnées de présentation, des scènes de widgets et une liste ordonnée de `InteractionRule`.
+- `InteractionInteractor` maintient les candidats d’indication/de portée dans un état privé, calcule le score regard-distance, émet les signaux de focus/statut/requête/refus et d’ajout/retrait d’indication, puis expose `TryStartInteractionInput()` / `TryEndInteractionInput()`. Le nœud reste sous autorité réseau serveur ; `OwnerPeerId` identifie uniquement le client qui calcule le focus, présente l’UI et envoie les intentions.
+- `InteractiveComponent` compose des références Inspector explicites vers `InteractionArea`, `IndicationArea?`, `InteractionAnchor?`, `Stateful?` et `InteractionOwner`. Ce dernier est un `Node` réel, converti localement vers `IInteractionHandler` ou `IInteractionStateHandler`; aucune interface n’est exportée directement.
 - `InteractionStateful` expose `Idle`, `Activating`, `Activated`, `Deactivating`, réserve l’interacteur actif, applique les callbacks d’autorité/présentation et expose `SaveState()` / `LoadState()`. Seul `Idle` est interactif. La fin d’une phase libère la réservation sans simuler un relâchement d’input ; le callback de fin d’input reste réservé au relâchement, à la sortie de zone ou à la disparition de l’interacteur.
 - Les RPC fiables résident dans l’interacteur. Le client prévalide le statut avant d’émettre une intention. Le serveur vérifie ensuite l’identité du peer, le chemin reçu, l’appartenance aux candidats serveur, distance/angle, état, règles et hook custom avant d’appeler le handler. Les refus serveur vers client partent d’un nœud dont l’autorité réseau reste au serveur.
 - `InteractionRule` fournit `AlwaysBlockedInteractionRule` et `InteractorGroupInteractionRule`. Le pipeline s’arrête à la première raison bloquante avant le hook custom.
@@ -21,10 +21,18 @@ L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interacti
 ## Integration
 
 1. Pour le Character du projet, `quest_world/character/Character.tscn` dérive de `addons/dummy_character_plugin/Character.tscn` et ajoute `InteractionInteractor` (distance calculée depuis le player propriétaire, direction calculée depuis la caméra) ainsi que `InteractionPresenter`. Le script global `quest_world/character/Character.cs` échantillonne l'action `interact` (`E` par défaut) et appelle les deux points d'entrée de l'interactor.
-2. Pour un personnage custom, ajouter `InteractionInteractor` au personnage local et assigner `ViewOriginPath` vers un `Marker3D` ou une caméra, puis appeler `TryStartInteractionInput()` / `TryEndInteractionInput()` depuis son contrôleur d'input.
-3. Ajouter `InteractionArea`, `InteractiveComponent` et `InteractionStateful` au même propriétaire Node3D ; les chemins explicites peuvent être configurés dans l'inspecteur.
+2. Pour un personnage custom, ajouter `InteractionInteractor` au personnage local et assigner `ViewOrigin` vers un `Marker3D` ou une caméra, puis appeler `TryStartInteractionInput()` / `TryEndInteractionInput()` depuis son contrôleur d'input. `InteractionOrigin` est facultatif et utilise explicitement le parent `Node3D` comme fallback documenté.
+3. Ajouter `InteractionArea`, `InteractiveComponent` et `InteractionStateful` au même propriétaire Node3D, puis assigner les exports typés `InteractionArea`, `Stateful` et `InteractionOwner` dans l'inspecteur. `IndicationArea` et `InteractionAnchor` restent facultatifs.
 4. Implémenter `IInteractionHandler` sur le propriétaire. Pour une phase longue, appeler `Stateful.StartInteractionPhase(context.Interactor)` synchroniquement dans `OnStartInteractionInput`, puis `EndInteractionPhase(nextState)` quand l'opération métier se termine.
-5. Ajouter `InteractionPresenter` seulement si une UI est souhaitée, avec `InteractorPath` et `CameraPath`. L'absence de scène de widget est valide.
+5. Ajouter `InteractionPresenter` seulement si une UI est souhaitée, avec `Interactor` et `Camera`. L'absence de scène de widget est valide.
+
+## Explicit configuration and validation
+
+Les composants principaux (`InteractiveComponent`, `InteractionInteractor`, `InteractionStateful` et `InteractionPresenter`) sont des classes globales Godot. Leurs dépendances obligatoires sont vérifiées par `_GetConfigurationWarnings()` (`InteractionArea`/handler, `ViewOrigin`, `Interactive`, `Interactor`/`Camera`) et ces warnings sont rafraîchis par les setters des exports qui les influencent. Les gardes runtime restent locales et aucun booléen `IsConfigurationValid` n’est maintenu.
+
+`InteractionInteractor.GetInteractionPresentation()` retourne `InteractionPresentation?`; l’absence de focus est donc représentée par l’absence de valeur. Le Presenter maintient sa propre liste d’indications à partir des signaux `InteractiveIndicationAdded` et `InteractiveIndicationRemoved`, sans lire les collections privées de détection.
+
+Les scripts de configuration (`InteractiveActor`, `InteractiveComponent`, `InteractionInteractor`, `InteractionStateful` et `InteractionPresenter`) sont des scripts `[Tool]`. Les warnings de configuration sont compilés sous `TOOLS`, et leurs callbacks de cycle de vie/runtime sortent immédiatement lorsqu’ils s’exécutent dans l’éditeur afin de ne pas lancer de logique de gameplay pendant l’édition. `InteractiveActor` signale séparément l’absence de ses références `Interactive` et `Stateful`.
 
 ## Base scene
 

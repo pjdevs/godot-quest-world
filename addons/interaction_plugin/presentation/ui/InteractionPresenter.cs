@@ -5,41 +5,129 @@ using QuestWorld.Interaction.Runtime.Interactor;
 
 namespace QuestWorld.Interaction.Presentation.UI;
 
+[Tool]
+[GlobalClass]
 public partial class InteractionPresenter : CanvasLayer
 {
     [ExportGroup("Projection")]
     [Export]
-    public NodePath InteractorPath { get; set; } = new();
+    public InteractionInteractor? Interactor
+    {
+        get => _interactor;
+        set
+        {
+            if (_interactor == value)
+            {
+                return;
+            }
+
+            _interactor = value;
+            UpdateConfigurationWarnings();
+        }
+    }
 
     [Export]
-    public NodePath CameraPath { get; set; } = new();
+    public Camera3D? Camera
+    {
+        get => _camera;
+        set
+        {
+            if (_camera == value)
+            {
+                return;
+            }
 
-    private InteractionInteractor? _interactor = null!;
-    private Camera3D? _camera = null!;
-    private Control? _prompt = null!;
+            _camera = value;
+            UpdateConfigurationWarnings();
+        }
+    }
+
+    private InteractionInteractor? _interactor;
+    private Camera3D? _camera;
+    private Control? _prompt;
     private readonly Dictionary<InteractiveComponent, Control> _indications = new();
+    private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
+
+#if TOOLS
+    public override string[] _GetConfigurationWarnings()
+    {
+        List<string> warnings = [];
+        if (Interactor is null)
+        {
+            warnings.Add("Interactor must be assigned.");
+        }
+
+        if (Camera is null)
+        {
+            warnings.Add("Camera must be assigned.");
+        }
+
+        return [.. warnings];
+    }
+#endif
 
     public override void _Ready()
     {
-        _interactor = ResolveNode<InteractionInteractor>(InteractorPath);
-        _camera = ResolveNode<Camera3D>(CameraPath);
-        if (_interactor == null || _camera == null)
+#if TOOLS
+        if (Engine.IsEditorHint())
         {
-            GD.PushError(
-                $"{GetPath()}: InteractionPresenter requires an Interactor and a Camera3D (interactor path: '{InteractorPath}', camera path: '{CameraPath}')."
-            );
+            return;
+        }
+#endif
+
+        if (Interactor is null)
+        {
+            GD.PushError($"{GetPath()}: InteractionPresenter requires an Interactor.");
+        }
+
+        if (Camera is null)
+        {
+            GD.PushError($"{GetPath()}: InteractionPresenter requires a Camera3D.");
+        }
+
+        if (Interactor is null || Camera is null)
+        {
             SetProcess(false);
             return;
         }
 
-        _interactor.FocusedInteractiveChanged += OnFocusedInteractiveChanged;
-        _interactor.InteractionStatusChanged += OnInteractionStatusChanged;
+        Interactor.FocusedInteractiveChanged += OnFocusedInteractiveChanged;
+        Interactor.InteractionStatusChanged += OnInteractionStatusChanged;
+        Interactor.InteractiveIndicationAdded += OnInteractiveIndicationAdded;
+        Interactor.InteractiveIndicationRemoved += OnInteractiveIndicationRemoved;
         Refresh();
+    }
+
+    public override void _ExitTree()
+    {
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            return;
+        }
+#endif
+
+        if (Interactor is null)
+        {
+            return;
+        }
+
+        Interactor.FocusedInteractiveChanged -= OnFocusedInteractiveChanged;
+        Interactor.InteractionStatusChanged -= OnInteractionStatusChanged;
+        Interactor.InteractiveIndicationAdded -= OnInteractiveIndicationAdded;
+        Interactor.InteractiveIndicationRemoved -= OnInteractiveIndicationRemoved;
     }
 
     public override void _Process(double delta)
     {
-        if (_interactor == null || !_interactor.IsLocallyControlled)
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            return;
+        }
+#endif
+
+        if (Interactor is null || !Interactor.IsLocallyControlled)
         {
             ClearPresentation();
             return;
@@ -58,29 +146,55 @@ public partial class InteractionPresenter : CanvasLayer
     private void OnInteractionStatusChanged(Node interactive, bool isAllowed, string reason) =>
         Refresh();
 
+    private void OnInteractiveIndicationAdded(Node interactive)
+    {
+        if (interactive is InteractiveComponent component)
+        {
+            _indicatedInteractives.Add(component);
+            RefreshIndications();
+        }
+    }
+
+    private void OnInteractiveIndicationRemoved(Node interactive)
+    {
+        if (interactive is InteractiveComponent component)
+        {
+            _indicatedInteractives.Remove(component);
+            RemoveIndication(component);
+        }
+    }
+
     private void Refresh()
     {
-        if (_interactor == null || !_interactor.IsLocallyControlled)
+        if (Interactor is null || !Interactor.IsLocallyControlled)
         {
             ClearPresentation();
             return;
         }
 
-        InteractiveComponent focused = _interactor.FocusedInteractive!;
-        if (focused == null)
+        InteractiveComponent? focused = Interactor.FocusedInteractive;
+        if (focused is null)
         {
             FreeWidget(ref _prompt);
+            RefreshIndications();
             return;
         }
 
-        InteractionPresentation presentation = _interactor.GetInteractionPresentation();
+        InteractionPresentation? presentation = Interactor.GetInteractionPresentation();
+        if (presentation is null)
+        {
+            FreeWidget(ref _prompt);
+            RefreshIndications();
+            return;
+        }
+
         if (focused.AutomaticInteraction)
         {
             FreeWidget(ref _prompt);
         }
         else
         {
-            ReplaceWidget(ref _prompt, focused.PromptScene, presentation);
+            ReplaceWidget(ref _prompt, focused.PromptScene, presentation.Value);
         }
 
         RefreshIndications();
@@ -88,49 +202,35 @@ public partial class InteractionPresenter : CanvasLayer
 
     private void RefreshIndications()
     {
-        if (_interactor == null || !_interactor.IsLocallyControlled)
+        if (Interactor is null || !Interactor.IsLocallyControlled)
         {
             ClearPresentation();
             return;
         }
 
-        HashSet<InteractiveComponent> indicated = new(_interactor.IndicatedInteractives);
         List<InteractiveComponent> removed = new();
-        foreach (InteractiveComponent interactive in _indications.Keys)
+        foreach (InteractiveComponent interactive in _indicatedInteractives)
         {
-            if (!indicated.Contains(interactive) || !IsInstanceValid(interactive))
+            if (!IsInstanceValid(interactive))
             {
                 removed.Add(interactive);
+                continue;
             }
-        }
 
-        foreach (InteractiveComponent interactive in removed)
-        {
-            Control? widget = _indications[interactive];
-            FreeWidget(ref widget);
-            _indications.Remove(interactive);
-        }
-
-        foreach (InteractiveComponent interactive in indicated)
-        {
-            if (interactive == _interactor.FocusedInteractive)
+            if (interactive == Interactor.FocusedInteractive)
             {
                 RemoveIndication(interactive);
                 continue;
             }
 
-            InteractionPresentation presentation = interactive.GetPresentation(_interactor, false);
+            InteractionPresentation presentation = interactive.GetPresentation(Interactor, false);
             PackedScene? scene = presentation.IsAllowed
                 ? interactive.IndicationScene
                 : interactive.BlockedIndicationScene;
 
-            if (!_indications.TryGetValue(interactive, out Control? widget))
-            {
-                widget = null!;
-            }
-
+            _indications.TryGetValue(interactive, out Control? widget);
             ReplaceWidget(ref widget, scene, presentation);
-            if (widget == null)
+            if (widget is null)
             {
                 _indications.Remove(interactive);
             }
@@ -138,6 +238,12 @@ public partial class InteractionPresenter : CanvasLayer
             {
                 _indications[interactive] = widget;
             }
+        }
+
+        foreach (InteractiveComponent interactive in removed)
+        {
+            _indicatedInteractives.Remove(interactive);
+            RemoveIndication(interactive);
         }
     }
 
@@ -162,6 +268,7 @@ public partial class InteractionPresenter : CanvasLayer
         }
 
         _indications.Clear();
+        _indicatedInteractives.Clear();
     }
 
     private void ReplaceWidget(
@@ -170,13 +277,13 @@ public partial class InteractionPresenter : CanvasLayer
         in InteractionPresentation presentation
     )
     {
-        if (scene == null)
+        if (scene is null)
         {
             FreeWidget(ref current);
             return;
         }
 
-        if (current != null && current.SceneFilePath == scene.ResourcePath)
+        if (current is not null && current.SceneFilePath == scene.ResourcePath)
         {
             (current as IInteractionWidget)?.Bind(presentation);
             return;
@@ -198,83 +305,37 @@ public partial class InteractionPresenter : CanvasLayer
 
     private void UpdateProjection(Control? control)
     {
-        if (_interactor?.FocusedInteractive == null)
+        if (Interactor?.FocusedInteractive is null)
         {
             return;
         }
 
-        UpdateProjection(control, _interactor.FocusedInteractive);
+        UpdateProjection(control, Interactor.FocusedInteractive);
     }
 
     private void UpdateProjection(Control? control, InteractiveComponent interactive)
     {
-        if (control == null || _camera == null)
+        if (control is null || Camera is null)
         {
             return;
         }
 
         Vector3 worldPosition = interactive.GetInteractionPosition();
-        control.Visible = !_camera.IsPositionBehind(worldPosition);
+        control.Visible = !Camera.IsPositionBehind(worldPosition);
         if (control.Visible)
         {
-            control.Position = _camera.UnprojectPosition(worldPosition) - control.Size / 2.0f;
+            control.Position = Camera.UnprojectPosition(worldPosition) - control.Size / 2.0f;
         }
-    }
-
-    private T ResolveNode<T>(NodePath path)
-        where T : Node
-    {
-        if (path != null && !path.IsEmpty)
-        {
-            T direct = GetNodeOrNull<T>(path);
-            if (direct != null)
-            {
-                return direct;
-            }
-
-            T fromParent = GetParent()?.GetNodeOrNull<T>(path)!;
-            if (fromParent != null)
-            {
-                return fromParent;
-            }
-        }
-
-        T sibling = GetParent()
-            ?.GetNodeOrNull<T>(typeof(T) == typeof(Camera3D) ? "Camera" : "Interactor")!;
-        return sibling ?? FindFirstNode<T>(GetParent())!;
     }
 
     private static void FreeWidget(ref Control? widget)
     {
-        if (widget != null)
+        if (widget is null)
         {
-            widget.QueueFree();
-            widget = null!;
-        }
-    }
-
-    private static T FindFirstNode<T>(Node root)
-        where T : Node
-    {
-        if (root == null)
-        {
-            return null!;
+            return;
         }
 
-        if (root is T match)
-        {
-            return match;
-        }
-
-        foreach (Node child in root.GetChildren())
-        {
-            T nested = FindFirstNode<T>(child);
-            if (nested != null)
-            {
-                return nested;
-            }
-        }
-
-        return null!;
+        widget.QueueFree();
+        widget = null;
     }
 }

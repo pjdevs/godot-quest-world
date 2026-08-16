@@ -30,20 +30,22 @@ public sealed partial class InteractionBehaviorTest
     public async Task RulesStopAtFirstBlockBeforeCustomHandler()
     {
         TestInteractionOwner owner = new();
+        Area3D area = new() { Name = "InteractionArea" };
         InteractiveComponent interactive = new()
         {
-            InteractionAreaPath = new NodePath("InteractionArea"),
+            InteractionArea = area,
+            InteractionOwner = owner,
             InteractionRules = new Godot.Collections.Array<InteractionRule>
             {
                 new AlwaysBlockedInteractionRule { Reason = "First reason" },
                 new AlwaysBlockedInteractionRule { Reason = "Second reason" },
             },
         };
-        owner.AddChild(new Area3D { Name = "InteractionArea" });
+        owner.AddChild(area);
         owner.AddChild(interactive);
         InteractionInteractor interactor = new();
         Node3D view = new() { Name = "ViewOrigin" };
-        interactor.ViewOriginPath = new NodePath("ViewOrigin");
+        interactor.ViewOrigin = view;
         interactor.AddChild(view);
         Node3D world = new();
         world.AddChild(owner);
@@ -70,18 +72,16 @@ public sealed partial class InteractionBehaviorTest
 
         AssertThat(testWorld.Interactor.FocusedInteractive == testWorld.Interactive).IsTrue();
         AssertThat(focusChanged).IsTrue();
-        AssertThat(testWorld.Interactor.GetInteractionPresentation().IsAllowed).IsTrue();
+        AssertThat(testWorld.Interactor.GetInteractionPresentation()?.IsAllowed == true).IsTrue();
     }
 
     [TestCase]
     public async Task LongPhaseReservesObjectAndOnlyActiveInteractorCanEndIt()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionInteractor secondInteractor = new()
-        {
-            ViewOriginPath = new NodePath("ViewOrigin"),
-        };
-        secondInteractor.AddChild(new Node3D { Name = "ViewOrigin" });
+        Node3D secondView = new() { Name = "ViewOrigin" };
+        InteractionInteractor secondInteractor = new() { ViewOrigin = secondView };
+        secondInteractor.AddChild(secondView);
         testWorld.World.AddChild(secondInteractor);
         await testWorld.Runner.SimulateFrames(1);
 
@@ -246,20 +246,22 @@ public sealed partial class InteractionBehaviorTest
         InteractiveComponent interactive = new()
         {
             Name = "Interactive",
-            InteractionAreaPath = new NodePath("../InteractionArea"),
-            StatefulPath = new NodePath("../Stateful"),
+            InteractionArea = area,
+            Stateful = stateful,
+            InteractionOwner = owner,
         };
+        stateful.Interactive = interactive;
         owner.AddChild(area);
         owner.AddChild(stateful);
         owner.AddChild(interactive);
 
+        Node3D view = new() { Name = "ViewOrigin" };
         InteractionInteractor interactor = new()
         {
             Name = "Interactor",
-            ViewOriginPath = new NodePath("ViewOrigin"),
+            ViewOrigin = view,
             OwnerPeerId = ownerPeerId,
         };
-        Node3D view = new() { Name = "ViewOrigin" };
         interactor.AddChild(view);
         world.AddChild(owner);
         world.AddChild(interactor);

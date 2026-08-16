@@ -6,6 +6,8 @@ using QuestWorld.Interaction.Runtime.State;
 
 namespace QuestWorld.Interaction.Runtime.Interactive;
 
+[Tool]
+[GlobalClass]
 public partial class InteractiveComponent : Node
 {
     [Signal]
@@ -13,16 +15,45 @@ public partial class InteractiveComponent : Node
 
     [ExportGroup("Interaction")]
     [Export]
-    public NodePath InteractionAreaPath { get; set; } = new();
+    public Area3D? InteractionArea
+    {
+        get => _interactionArea;
+        set
+        {
+            if (_interactionArea == value)
+            {
+                return;
+            }
+
+            _interactionArea = value;
+            UpdateConfigurationWarnings();
+        }
+    }
 
     [Export]
-    public NodePath IndicationAreaPath { get; set; } = new();
+    public Area3D? IndicationArea { get; set; }
 
     [Export]
-    public NodePath InteractionAnchorPath { get; set; } = new();
+    public Node3D? InteractionAnchor { get; set; }
 
     [Export]
-    public NodePath StatefulPath { get; set; } = new();
+    public InteractionStateful? Stateful { get; set; }
+
+    [Export]
+    public Node? InteractionOwner
+    {
+        get => _interactionOwner;
+        set
+        {
+            if (_interactionOwner == value)
+            {
+                return;
+            }
+
+            _interactionOwner = value;
+            UpdateConfigurationWarnings();
+        }
+    }
 
     [Export]
     public string DisplayName { get; set; } = "Interact";
@@ -49,78 +80,97 @@ public partial class InteractiveComponent : Node
     public Godot.Collections.Array<InteractionRule> InteractionRules { get; set; } = new();
 
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
-    private Area3D? _interactionArea = null!;
-    private Area3D? _indicationArea = null!;
-    private Node3D? _interactionAnchor = null!;
-    private InteractionStateful? _stateful = null!;
-    private Node? _interactionOwner = null!;
-    private bool _configurationValid;
+    private Area3D? _interactionArea;
+    private Node? _interactionOwner;
 
-    public Area3D? InteractionArea => _interactionArea;
+#if TOOLS
+    public override string[] _GetConfigurationWarnings()
+    {
+        List<string> warnings = [];
+        if (InteractionArea is null)
+        {
+            warnings.Add("InteractionArea must be assigned.");
+        }
 
-    public Area3D? IndicationArea => _indicationArea;
+        if (InteractionOwner is null)
+        {
+            warnings.Add("InteractionOwner must be assigned.");
+        }
+        else if (InteractionOwner is not IInteractionHandler)
+        {
+            warnings.Add("InteractionOwner must implement IInteractionHandler.");
+        }
 
-    public Node3D? InteractionAnchor => _interactionAnchor;
-
-    public InteractionStateful? Stateful => _stateful;
-
-    public Node? InteractionOwner => _interactionOwner;
-
-    public bool IsConfigurationValid => _configurationValid;
+        return [.. warnings];
+    }
+#endif
 
     public override void _Ready()
     {
-        _interactionArea = ResolveNode<Area3D>(InteractionAreaPath);
-        _indicationArea = ResolveNode<Area3D>(IndicationAreaPath);
-        _interactionAnchor = ResolveNode<Node3D>(InteractionAnchorPath);
-        _stateful = ResolveNode<InteractionStateful>(StatefulPath);
-        _interactionArea ??= GetParent()?.GetNodeOrNull<Area3D>("InteractionArea");
-        _indicationArea ??= GetParent()?.GetNodeOrNull<Area3D>("IndicationArea");
-        _interactionAnchor ??= GetParent()?.GetNodeOrNull<Node3D>("InteractionAnchor");
-        _stateful ??= GetParent()?.GetNodeOrNull<InteractionStateful>("Stateful");
-        _interactionOwner = FindInteractionOwner();
-        _configurationValid = ValidateConfiguration();
-        if (!_configurationValid)
+#if TOOLS
+        if (Engine.IsEditorHint())
         {
             return;
         }
+#endif
 
-        _interactionArea!.BodyEntered += OnInteractionAreaBodyEntered;
-        _interactionArea.BodyExited += OnInteractionAreaBodyExited;
-        if (_indicationArea != null)
+        if (InteractionArea is null)
         {
-            _indicationArea.BodyEntered += OnIndicationAreaBodyEntered;
-            _indicationArea.BodyExited += OnIndicationAreaBodyExited;
+            GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionArea.");
+        }
+
+        if (InteractionOwner is not IInteractionHandler)
+        {
+            GD.PushError(
+                $"{GetPath()}: InteractiveComponent owner must implement IInteractionHandler."
+            );
+        }
+
+        if (InteractionArea is not null)
+        {
+            InteractionArea.BodyEntered += OnInteractionAreaBodyEntered;
+            InteractionArea.BodyExited += OnInteractionAreaBodyExited;
+        }
+
+        if (IndicationArea is not null)
+        {
+            IndicationArea.BodyEntered += OnIndicationAreaBodyEntered;
+            IndicationArea.BodyExited += OnIndicationAreaBodyExited;
         }
     }
 
     public InteractionStatus EvaluateStatus(InteractionInteractor interactor)
     {
-        if (!_configurationValid || interactor == null)
+        if (interactor is null || InteractionArea is null)
         {
             return new InteractionBlocked("Interaction is not configured.");
         }
 
+        if (InteractionOwner is not IInteractionHandler handler)
+        {
+            return new InteractionBlocked("Interaction has no valid handler.");
+        }
+
         if (
-            _stateful != null
-            && _stateful.ActiveInteractor != null
-            && _stateful.ActiveInteractor != interactor
+            Stateful is not null
+            && Stateful.ActiveInteractor is not null
+            && Stateful.ActiveInteractor != interactor
         )
         {
             return new InteractionBlocked("Someone else is using this.");
         }
 
-        if (_stateful != null && _stateful.State != InteractionState.Idle)
+        if (Stateful is not null && Stateful.State != InteractionState.Idle)
         {
-            return _stateful.State == InteractionState.Activated
+            return Stateful.State == InteractionState.Activated
                 ? new InteractionBlocked("This is already activated.")
                 : new InteractionBlocked("This is busy.");
         }
 
-        InteractionContext context = new(interactor, this, _interactionOwner!);
+        InteractionContext context = new(interactor, this, InteractionOwner);
         foreach (InteractionRule rule in InteractionRules)
         {
-            if (rule == null)
+            if (rule is null)
             {
                 continue;
             }
@@ -130,11 +180,6 @@ public partial class InteractiveComponent : Node
             {
                 return status;
             }
-        }
-
-        if (_interactionOwner is not IInteractionHandler handler)
-        {
-            return new InteractionBlocked("Interaction has no handler.");
         }
 
         return handler.EvaluateCustomInteractionStatus(context);
@@ -156,29 +201,28 @@ public partial class InteractiveComponent : Node
     {
         if (
             EvaluateStatus(interactor) is not InteractionAllowed
-            || _interactionOwner is not IInteractionHandler handler
+            || InteractionOwner is not IInteractionHandler handler
         )
         {
             return false;
         }
 
-        InteractionContext context = new(interactor, this, _interactionOwner);
+        InteractionContext context = new(interactor, this, InteractionOwner);
         handler.OnStartInteractionInput(context);
         return true;
     }
 
     public bool EndInteraction(InteractionInteractor interactor, InteractionState nextState)
     {
-        return _stateful?.ActiveInteractor == interactor
-            && _stateful.EndInteractionPhase(nextState);
+        return Stateful?.ActiveInteractor == interactor && Stateful.EndInteractionPhase(nextState);
     }
 
     public bool ReleaseInteractionInput(InteractionInteractor interactor)
     {
-        return _stateful?.ReleaseInteractionInput(interactor) ?? false;
+        return Stateful?.ReleaseInteractionInput(interactor) ?? false;
     }
 
-    public void NotifyStatusChanged()
+    internal void NotifyStatusChanged()
     {
         EmitSignal(SignalName.InteractiveStatusChanged);
         PurgeInvalidInteractors();
@@ -190,10 +234,7 @@ public partial class InteractiveComponent : Node
 
     internal void RegisterInteractor(InteractionInteractor interactor)
     {
-        if (interactor != null)
-        {
-            _presentInteractors.Add(interactor);
-        }
+        _presentInteractors.Add(interactor);
     }
 
     internal void UnregisterInteractor(InteractionInteractor interactor)
@@ -203,16 +244,23 @@ public partial class InteractiveComponent : Node
 
     public Vector3 GetInteractionPosition()
     {
-        if (_interactionAnchor != null)
+        if (InteractionAnchor is not null)
         {
-            return _interactionAnchor.GlobalPosition;
+            return InteractionAnchor.GlobalPosition;
         }
 
-        return _interactionOwner is Node3D owner3D ? owner3D.GlobalPosition : Vector3.Zero;
+        return InteractionOwner is Node3D owner3D ? owner3D.GlobalPosition : Vector3.Zero;
     }
 
     public override void _ExitTree()
     {
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            return;
+        }
+#endif
+
         PurgeInvalidInteractors();
         foreach (
             InteractionInteractor interactor in new List<InteractionInteractor>(_presentInteractors)
@@ -232,7 +280,6 @@ public partial class InteractiveComponent : Node
             static (interactor, component) => interactor.AddInteractive(component),
             this
         );
-        GD.Print($"InteractiveComponent: OnInteractionAreaBodyEntered: {body.Name}");
     }
 
     private void OnInteractionAreaBodyExited(Node3D body)
@@ -242,7 +289,6 @@ public partial class InteractiveComponent : Node
             static (interactor, component) => interactor.RemoveInteractive(component),
             this
         );
-        GD.Print($"InteractiveComponent: OnInteractionAreaBodyExited: {body.Name}");
     }
 
     private void OnIndicationAreaBodyEntered(Node3D body)
@@ -252,7 +298,6 @@ public partial class InteractiveComponent : Node
             static (interactor, component) => interactor.AddInteractiveIndication(component),
             this
         );
-        GD.Print($"InteractiveComponent: OnIndicationAreaBodyEntered: {body.Name}");
     }
 
     private void OnIndicationAreaBodyExited(Node3D body)
@@ -262,60 +307,6 @@ public partial class InteractiveComponent : Node
             static (interactor, component) => interactor.RemoveInteractiveIndication(component),
             this
         );
-        GD.Print($"InteractiveComponent: OnIndicationAreaBodyExited: {body.Name}");
-    }
-
-    private bool ValidateConfiguration()
-    {
-        bool valid = true;
-        if (_interactionArea == null)
-        {
-            GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionArea.");
-            valid = false;
-        }
-
-        if (_interactionOwner is not IInteractionHandler)
-        {
-            GD.PushError(
-                $"{GetPath()}: InteractiveComponent owner must implement IInteractionHandler."
-            );
-            valid = false;
-        }
-
-        return valid;
-    }
-
-    private T ResolveNode<T>(NodePath path)
-        where T : Node
-    {
-        if (path == null || path.IsEmpty)
-        {
-            return null!;
-        }
-
-        T resolved = GetNodeOrNull<T>(path);
-        if (resolved != null)
-        {
-            return resolved;
-        }
-
-        return GetParent()?.GetNodeOrNull<T>(path)!;
-    }
-
-    private Node FindInteractionOwner()
-    {
-        Node current = GetParent();
-        while (current != null)
-        {
-            if (current is IInteractionHandler)
-            {
-                return current;
-            }
-
-            current = current.GetParent();
-        }
-
-        return null!;
     }
 
     private static void FindInteractors(

@@ -1,22 +1,48 @@
+using System.Collections.Generic;
 using Godot;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.State;
 
 namespace QuestWorld.Interaction.Examples.Interactive;
 
+[Tool]
 public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractionStateHandler
 {
     [Export]
-    public NodePath InteractivePath { get; set; } = new("Interactive");
+    public InteractiveComponent? Interactive
+    {
+        get => _interactive;
+        set
+        {
+            if (_interactive == value)
+            {
+                return;
+            }
+
+            _interactive = value;
+            UpdateConfigurationWarnings();
+        }
+    }
 
     [Export]
-    public NodePath StatefulPath { get; set; } = new("Stateful");
+    public InteractionStateful? Stateful
+    {
+        get => _stateful;
+        set
+        {
+            if (_stateful == value)
+            {
+                return;
+            }
+
+            _stateful = value;
+            UpdateConfigurationWarnings();
+        }
+    }
 
     [Export]
     public float ActivationDuration { get; set; } = 1.5f;
 
-    private InteractiveComponent _interactive = null!;
-    private InteractionStateful _stateful = null!;
     private float _activationElapsed;
     private bool _releaseRequested;
 
@@ -24,32 +50,56 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
 
     public int EndCount { get; private set; }
 
+    private InteractiveComponent? _interactive;
+    private InteractionStateful? _stateful;
+
     public override void _Ready()
     {
-        _interactive = GetNodeOrNull<InteractiveComponent>(InteractivePath)!;
-        _stateful = GetNodeOrNull<InteractionStateful>(StatefulPath)!;
-        _interactive ??= GetNodeOrNull<InteractiveComponent>("Interactive");
-        _stateful ??= GetNodeOrNull<InteractionStateful>("Stateful");
-        if (_interactive == null || _stateful == null)
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            return;
+        }
+#endif
+
+        if (Interactive is null || Stateful is null)
         {
             GD.PushError(
-                $"{GetPath()}: InteractiveActor example requires Interactive and Stateful children."
+                $"{GetPath()}: InteractiveActor example requires explicit Interactive and Stateful references."
             );
             SetProcess(false);
             return;
         }
-
-        _interactive.PromptScene ??= GD.Load<PackedScene>(
-            "res://addons/interaction_plugin/scenes/InteractionPrompt.tscn"
-        );
-        _interactive.IndicationScene ??= GD.Load<PackedScene>(
-            "res://addons/interaction_plugin/scenes/InteractionIndicator.tscn"
-        );
     }
+
+#if TOOLS
+    public override string[] _GetConfigurationWarnings()
+    {
+        List<string> warnings = [];
+        if (Interactive is null)
+        {
+            warnings.Add("Interactive must be assigned.");
+        }
+
+        if (Stateful is null)
+        {
+            warnings.Add("Stateful must be assigned.");
+        }
+
+        return [.. warnings];
+    }
+#endif
 
     public override void _Process(double delta)
     {
-        if (_stateful == null || _stateful.State != InteractionState.Activating)
+#if TOOLS
+        if (Engine.IsEditorHint())
+        {
+            return;
+        }
+#endif
+
+        if (Stateful is null || Stateful.State != InteractionState.Activating)
         {
             return;
         }
@@ -57,20 +107,25 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
         if (_releaseRequested)
         {
             _releaseRequested = false;
-            _stateful.SetState(InteractionState.Idle);
+            Stateful.SetState(InteractionState.Idle);
             return;
         }
 
         _activationElapsed += (float)delta;
         if (_activationElapsed >= Mathf.Max(ActivationDuration, 0.0f))
         {
-            _stateful.EndInteractionPhase(InteractionState.Activated);
+            Stateful.EndInteractionPhase(InteractionState.Activated);
         }
     }
 
     public InteractionStatus EvaluateCustomInteractionStatus(in InteractionContext context)
     {
-        return _stateful.State == InteractionState.Activated
+        if (Stateful is null)
+        {
+            return new InteractionBlocked("Interaction is not configured.");
+        }
+
+        return Stateful.State == InteractionState.Activated
             ? new InteractionBlocked("This is already activated.")
             : new InteractionAllowed();
     }
@@ -79,7 +134,7 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
     {
         StartCount++;
         _activationElapsed = 0.0f;
-        _stateful.StartInteractionPhase(context.Interactor);
+        Stateful?.StartInteractionPhase(context.Interactor);
     }
 
     public void OnEndInteractionInput(in InteractionContext context)

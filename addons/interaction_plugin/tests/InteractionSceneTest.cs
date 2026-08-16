@@ -29,8 +29,8 @@ public sealed partial class InteractionSceneTest
         InteractiveComponent interactive = actor.GetNode<InteractiveComponent>("Interactive");
         InteractionStateful stateful = actor.GetNode<InteractionStateful>("Stateful");
 
-        AssertThat(interactive.IsConfigurationValid).IsTrue();
         AssertThat(interactive.InteractionArea != null).IsTrue();
+        AssertThat(interactive.InteractionOwner is IInteractionHandler).IsTrue();
         AssertThat(stateful.State).IsEqual(InteractionState.Idle);
         MultiplayerSynchronizer synchronizer = actor.GetNode<MultiplayerSynchronizer>(
             "Stateful/MultiplayerSynchronizer"
@@ -48,7 +48,7 @@ public sealed partial class InteractionSceneTest
 
         widget.Bind(
             new InteractionPresentation(
-                null!,
+                new InteractiveComponent(),
                 "Door",
                 "Open it",
                 "use",
@@ -66,17 +66,13 @@ public sealed partial class InteractionSceneTest
     {
         Node3D world = new();
         Node3D character = new() { Name = "Character" };
-        InteractionInteractor interactor = new()
-        {
-            Name = "Interactor",
-            ViewOriginPath = new NodePath("../Camera"),
-        };
         Camera3D camera = new() { Name = "Camera" };
+        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = camera };
         InteractionPresenter presenter = new()
         {
             Name = "Presenter",
-            InteractorPath = new NodePath("../Interactor"),
-            CameraPath = new NodePath("../Camera"),
+            Interactor = interactor,
+            Camera = camera,
         };
         character.AddChild(interactor);
         character.AddChild(camera);
@@ -113,18 +109,18 @@ public sealed partial class InteractionSceneTest
     {
         Node3D world = new();
         Node3D character = new() { Name = "RemoteCharacter" };
+        Camera3D camera = new() { Name = "Camera" };
         InteractionInteractor interactor = new()
         {
             Name = "Interactor",
             OwnerPeerId = 2,
-            ViewOriginPath = new NodePath("../Camera"),
+            ViewOrigin = camera,
         };
-        Camera3D camera = new() { Name = "Camera" };
         InteractionPresenter presenter = new()
         {
             Name = "Presenter",
-            InteractorPath = new NodePath("../Interactor"),
-            CameraPath = new NodePath("../Camera"),
+            Interactor = interactor,
+            Camera = camera,
         };
         character.AddChild(interactor);
         character.AddChild(camera);
@@ -146,11 +142,13 @@ public sealed partial class InteractionSceneTest
     private static TestInteractionOwner CreateInteractiveOwner(string displayName, Vector3 position)
     {
         TestInteractionOwner owner = new() { Name = displayName, Position = position };
-        owner.AddChild(new Area3D { Name = "InteractionArea" });
+        Area3D area = new() { Name = "InteractionArea" };
+        owner.AddChild(area);
         InteractiveComponent interactive = new()
         {
             Name = "Interactive",
-            InteractionAreaPath = new NodePath("../InteractionArea"),
+            InteractionArea = area,
+            InteractionOwner = owner,
             DisplayName = displayName,
             PromptScene = GD.Load<PackedScene>(
                 "res://addons/interaction_plugin/scenes/InteractionPrompt.tscn"

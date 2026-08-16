@@ -22,8 +22,11 @@ parameters/LandOneShot/request = 0
 ThirdPersonDistance = 2.5
 FirstPersonCameraOffset = Vector3(0, 0, -0.6)
 
-[node name="InteractionInteractor" type="Node" parent="." index="6" unique_id=1688919232 groups=["Player"]]
+[node name="InteractionInteractor" type="Node" parent="." index="6" unique_id=1688919232 groups=["Player"] node_paths=PackedStringArray("ViewOrigin")]
 script = ExtResource("3_interactor")
+ViewOrigin = NodePath("../CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")
 
-[node name="InteractionPresenter" type="CanvasLayer" parent="." index="7" unique_id=1331596618]
+[node name="InteractionPresenter" type="CanvasLayer" parent="." index="7" unique_id=1331596618 node_paths=PackedStringArray("Interactor", "Camera")]
 script = ExtResource("4_presenter")
+Interactor = NodePath("../InteractionInteractor")
+Camera = NodePath("../CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")
