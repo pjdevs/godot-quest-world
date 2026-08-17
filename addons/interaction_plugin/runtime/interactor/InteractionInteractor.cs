@@ -344,7 +344,7 @@ public partial class InteractionInteractor : Node
 
     internal bool ReleaseInteractionInput(InteractiveComponent interactive)
     {
-        return interactive.Stateful?.ReleaseInteractionInput(this) ?? false;
+        return interactive.ReleaseInteractionInput(this);
     }
 
     public override void _ExitTree()

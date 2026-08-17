@@ -68,13 +68,34 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
-    public void StatefulRequiresAnExplicitInteractiveReference()
+    public void StatefulAllowsAnAbsentStateOwner()
     {
         InteractionStateful stateful = new();
 
         string[] warnings = InteractionValidator.Validate(stateful).ToArray();
 
-        AssertThat(warnings.Contains("Interactive must be assigned.")).IsTrue();
+        AssertThat(warnings.Length).IsEqual(0);
+    }
+
+    [TestCase]
+    public void StatefulRejectsAStateOwnerWithoutStateHandler()
+    {
+        InteractionStateful stateful = new() { StateOwner = new Node3D() };
+
+        string[] warnings = InteractionValidator.Validate(stateful).ToArray();
+
+        AssertThat(warnings.Contains("StateOwner must implement IInteractionStateHandler."))
+            .IsTrue();
+    }
+
+    [TestCase]
+    public void StatefulAcceptsAStateOwnerWithStateHandler()
+    {
+        InteractionStateful stateful = new() { StateOwner = new TestStateOwner() };
+
+        string[] warnings = InteractionValidator.Validate(stateful).ToArray();
+
+        AssertThat(warnings.Length).IsEqual(0);
     }
 
     [TestCase]
@@ -121,13 +142,13 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
-    public void StatefulDoesNotExposeItsActiveInteractorAsPublicApi()
+    public void StatefulDoesNotOwnInteractionLifecycleApi()
     {
-        AssertThat(
-                typeof(InteractionStateful).GetProperty("ActiveInteractor")?.GetMethod?.IsPublic
-                    == true
-            )
-            .IsFalse();
+        AssertThat(typeof(InteractionStateful).GetProperty("ActiveInteractor") == null).IsTrue();
+        AssertThat(typeof(InteractionStateful).GetMethod("StartInteractionPhase") == null).IsTrue();
+        AssertThat(typeof(InteractionStateful).GetMethod("EndInteractionPhase") == null).IsTrue();
+        AssertThat(typeof(InteractionStateful).GetMethod("ReleaseInteractionInput") == null)
+            .IsTrue();
     }
 
     private sealed partial class TestInteractionOwner : Node3D, IInteractionHandler
@@ -138,5 +159,18 @@ public sealed partial class InteractionConfigurationTest
         public void OnStartInteractionInput(in InteractionContext context) { }
 
         public void OnEndInteractionInput(in InteractionContext context) { }
+    }
+
+    private sealed partial class TestStateOwner : Node, IInteractionStateHandler
+    {
+        public void OnInteractionStateChangedAuthority(
+            InteractionState oldState,
+            InteractionState newState
+        ) { }
+
+        public void OnInteractionStateChangedPresentation(
+            InteractionState oldState,
+            InteractionState newState
+        ) { }
     }
 }

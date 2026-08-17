@@ -30,7 +30,6 @@ private bool ApplyState(InteractionState newState)
 
     EmitSignal(...);
     handler.OnInteractionStateChangedAuthority(...);
-    _interactive.NotifyStatusChanged();
 
     return true;
 }
@@ -159,8 +158,7 @@ ApplyState
  ├─ mutate _state
  ├─ EmitSignal
  ├─ handler authority callback
- ├─ handler presentation callback
- └─ Interactive.NotifyStatusChanged
+ └─ handler presentation callback
 ```
 
 Target:
@@ -174,9 +172,10 @@ ApplyState
 DispatchStateTransition
  ├─ EmitSignal
  ├─ authority callback
- ├─ presentation callback
- └─ notify Interactive
+ └─ presentation callback
 ```
+
+`InteractiveComponent` listens to `InteractionStateChanged` on its explicitly assigned Stateful and dispatches its own status notification. Stateful never references Interactive.
 
 Suggested API:
 
@@ -222,7 +221,7 @@ ReleaseInteractionInput
 StartInteraction
 ```
 
-Today, starting an interaction can cascade from `InteractiveComponent.StartInteraction()` into the handler, then into `InteractionStateful`, then back into `InteractiveComponent.NotifyStatusChanged()`.
+Starting an interaction may cascade from `InteractiveComponent.StartInteraction()` into the handler and then into `InteractiveComponent.StartInteractionPhase()`. The phase reserves the interactor before requesting the Stateful transition; the resulting Stateful signal is observed only after Interactive's local mutation is complete.
 
 That recursive object graph should become explicit.
 
@@ -361,9 +360,10 @@ private void DispatchStateTransition(
     if (!OS.HasFeature("dedicated_server"))
         DispatchPresentationStateChanged(transition);
 
-    _interactive?.NotifyStatusChanged();
 }
 ```
+
+Status invalidation is a separate Interactive-side signal listener and is not part of Stateful dispatch.
 
 Later this can be moved again into a dedicated dispatcher without changing state logic.
 
@@ -609,12 +609,12 @@ That will be extremely useful when comparing C# and Rust implementations later.
 
 Try to preserve the current external API initially.
 
-Keep:
+Keep, with ownership made explicit:
 
 ```csharp
-SetState(...)
-StartInteractionPhase(...)
-EndInteractionPhase(...)
+InteractionStateful.SetState(...)
+InteractiveComponent.StartInteractionPhase(...)
+InteractiveComponent.EndInteractionPhase(...)
 TryStartInteractionInput(...)
 ```
 
@@ -697,8 +697,8 @@ inside one synchronous mutation chain.
 
 I'd keep the first pass extremely targeted:
 
-1. `InteractionStateful.ApplyState()` → transition result + dispatch.
-2. `StartInteractionPhase`, `EndInteractionPhase`, `ReleaseInteractionInput` → mutation first, callbacks second.
+1. `InteractionStateful.ApplyState()` → transition result + dispatch, without an Interactive dependency.
+2. `InteractiveComponent.StartInteractionPhase`, `EndInteractionPhase`, `ReleaseInteractionInput` → mutation first, callbacks second.
 3. `InteractionInteractor.RecalculateFocus()` → focus result + dispatch.
 4. prevent automatic interaction from firing from inside focus mutation.
 5. audit all `EmitSignal`, handler calls and cross-component mutating calls.

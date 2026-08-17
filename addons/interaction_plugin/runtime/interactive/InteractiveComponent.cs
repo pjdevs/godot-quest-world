@@ -79,6 +79,9 @@ public partial class InteractiveComponent : Node
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
     private Area3D? _interactionArea;
     private Node? _interactionOwner;
+    private InteractionInteractor? _activeInteractor;
+
+    internal InteractionInteractor? ActiveInteractor => _activeInteractor;
 
     public override void _Ready()
     {
@@ -105,6 +108,11 @@ public partial class InteractiveComponent : Node
             IndicationArea.BodyEntered += OnIndicationAreaBodyEntered;
             IndicationArea.BodyExited += OnIndicationAreaBodyExited;
         }
+
+        if (Stateful is not null)
+        {
+            Stateful.InteractionStateChanged += OnStatefulInteractionStateChanged;
+        }
     }
 
     public InteractionStatus EvaluateStatus(InteractionInteractor interactor)
@@ -119,11 +127,7 @@ public partial class InteractiveComponent : Node
             return new InteractionBlocked("Interaction has no valid handler.");
         }
 
-        if (
-            Stateful is not null
-            && Stateful.ActiveInteractor is not null
-            && Stateful.ActiveInteractor != interactor
-        )
+        if (ActiveInteractor is not null && ActiveInteractor != interactor)
         {
             return new InteractionBlocked("Someone else is using this.");
         }
@@ -180,14 +184,62 @@ public partial class InteractiveComponent : Node
         return true;
     }
 
-    public bool EndInteraction(InteractionInteractor interactor, InteractionState nextState)
+    public bool StartInteractionPhase(InteractionInteractor interactor)
     {
-        return Stateful?.ActiveInteractor == interactor && Stateful.EndInteractionPhase(nextState);
+        if (
+            interactor is null
+            || ActiveInteractor is not null
+            || Stateful is null
+            || Stateful.State != InteractionState.Idle
+            || !Multiplayer.IsServer()
+        )
+        {
+            return false;
+        }
+
+        _activeInteractor = interactor;
+        if (Stateful.SetState(InteractionState.Activating))
+        {
+            return true;
+        }
+
+        _activeInteractor = null;
+        return false;
+    }
+
+    public bool EndInteractionPhase(InteractionState nextState)
+    {
+        if (ActiveInteractor is null || Stateful is null || !Multiplayer.IsServer())
+        {
+            return false;
+        }
+
+        _activeInteractor = null;
+        bool stateChanged = Stateful.SetState(nextState);
+        if (!stateChanged)
+        {
+            NotifyStatusChanged();
+        }
+
+        return stateChanged;
     }
 
     public bool ReleaseInteractionInput(InteractionInteractor interactor)
     {
-        return Stateful?.ReleaseInteractionInput(interactor) ?? false;
+        if (ActiveInteractor != interactor)
+        {
+            return false;
+        }
+
+        _activeInteractor = null;
+        if (InteractionOwner is IInteractionHandler handler)
+        {
+            InteractionContext context = new(interactor, this, InteractionOwner);
+            handler.OnEndInteractionInput(context);
+        }
+
+        NotifyStatusChanged();
+        return true;
     }
 
     internal void NotifyStatusChanged()
@@ -222,6 +274,12 @@ public partial class InteractiveComponent : Node
 
     public override void _ExitTree()
     {
+        if (Stateful is not null && IsInstanceValid(Stateful))
+        {
+            Stateful.InteractionStateChanged -= OnStatefulInteractionStateChanged;
+        }
+
+        _activeInteractor = null;
         PurgeInvalidInteractors();
         foreach (
             InteractionInteractor interactor in new List<InteractionInteractor>(_presentInteractors)
@@ -232,6 +290,11 @@ public partial class InteractiveComponent : Node
         }
 
         _presentInteractors.Clear();
+    }
+
+    private void OnStatefulInteractionStateChanged(int oldState, int newState)
+    {
+        NotifyStatusChanged();
     }
 
     private void OnInteractionAreaBodyEntered(Node3D body)

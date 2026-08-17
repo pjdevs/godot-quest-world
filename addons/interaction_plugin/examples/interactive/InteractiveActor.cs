@@ -79,7 +79,7 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
         _activationElapsed += (float)delta;
         if (_activationElapsed >= Mathf.Max(ActivationDuration, 0.0f))
         {
-            Stateful.EndInteractionPhase(InteractionState.Activated);
+            Interactive?.EndInteractionPhase(InteractionState.Activated);
         }
     }
 
@@ -99,7 +99,7 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
     {
         StartCount++;
         _activationElapsed = 0.0f;
-        Stateful?.StartInteractionPhase(context.Interactor);
+        Interactive?.StartInteractionPhase(context.Interactor);
     }
 
     public void OnEndInteractionInput(in InteractionContext context)

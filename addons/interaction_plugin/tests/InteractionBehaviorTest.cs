@@ -76,7 +76,7 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task LongPhaseReservesObjectAndOnlyActiveInteractorCanEndIt()
+    public async Task LongPhaseReservesObjectAndRejectsACompetitorRelease()
     {
         TestWorld testWorld = BuildWorld();
         Node3D secondView = new() { Name = "ViewOrigin" };
@@ -91,11 +91,12 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
         AssertThat(testWorld.Interactive.StartInteraction(secondInteractor)).IsFalse();
 
-        testWorld.Interactive.EndInteraction(secondInteractor, InteractionState.Idle);
+        AssertThat(testWorld.Interactive.ReleaseInteractionInput(secondInteractor)).IsFalse();
         AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
-        testWorld.Interactive.EndInteraction(testWorld.Interactor, InteractionState.Activated);
+        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
+        AssertThat(testWorld.Interactive.EndInteractionPhase(InteractionState.Activated)).IsTrue();
 
-        AssertThat(testWorld.Stateful.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
         AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activated);
         AssertThat(testWorld.Owner.StartCount).IsEqual(1);
         AssertThat(testWorld.Owner.EndCount).IsEqual(0);
@@ -154,6 +155,67 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public async Task StandaloneStatefulChangesSignalsReplicatesAndRestoresState()
+    {
+        TestInteractionOwner owner = new();
+        InteractionStateful stateful = new() { Name = "Stateful", StateOwner = owner };
+        owner.AddChild(stateful);
+        ISceneRunner runner = ISceneRunner.Load(owner);
+        await runner.SimulateFrames(1);
+        int signalCount = 0;
+        stateful.InteractionStateChanged += (_, _) => signalCount++;
+
+        AssertThat(stateful.SetState(InteractionState.Activated)).IsTrue();
+        InteractionSavedState saved = stateful.SaveState();
+        stateful.ReplicatedState = InteractionState.Idle;
+        stateful.LoadState(saved);
+
+        AssertThat(stateful.State).IsEqual(InteractionState.Activated);
+        AssertThat(signalCount).IsEqual(3);
+        AssertThat(owner.AuthorityStateChanges).IsEqual(3);
+        AssertThat(owner.PresentationStateChanges).IsEqual(3);
+    }
+
+    [TestCase]
+    public async Task InteractiveWithoutStatefulSupportsInstantInteractionOnly()
+    {
+        TestInteractionOwner owner = new();
+        Area3D area = new() { Name = "InteractionArea" };
+        InteractiveComponent interactive = new()
+        {
+            InteractionArea = area,
+            InteractionOwner = owner,
+        };
+        owner.AddChild(area);
+        owner.AddChild(interactive);
+        InteractionInteractor interactor = new();
+        Node3D world = new();
+        world.AddChild(owner);
+        world.AddChild(interactor);
+        ISceneRunner runner = ISceneRunner.Load(world);
+        await runner.SimulateFrames(1);
+
+        AssertThat(interactive.EvaluateStatus(interactor) is InteractionAllowed).IsTrue();
+        AssertThat(interactive.StartInteraction(interactor)).IsTrue();
+        AssertThat(interactive.StartInteractionPhase(interactor)).IsFalse();
+        AssertThat(owner.StartCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public async Task ExternalAndReplicatedStateChangesNotifyConfiguredInteractive()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+        int notificationCount = 0;
+        testWorld.Interactive.InteractiveStatusChanged += () => notificationCount++;
+
+        testWorld.Stateful.SetState(InteractionState.Activated);
+        testWorld.Stateful.ReplicatedState = InteractionState.Idle;
+
+        AssertThat(notificationCount).IsEqual(2);
+    }
+
+    [TestCase]
     public async Task OfflineInputUsesAuthoritativeStartAndEndPath()
     {
         TestWorld testWorld = BuildWorld();
@@ -166,7 +228,7 @@ public sealed partial class InteractionBehaviorTest
 
         AssertThat(testWorld.Interactor.TryEndInteractionInput()).IsTrue();
         AssertThat(testWorld.Owner.EndCount).IsEqual(1);
-        AssertThat(testWorld.Stateful.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
     }
 
     [TestCase]
@@ -196,7 +258,7 @@ public sealed partial class InteractionBehaviorTest
 
         testWorld.Interactor.RemoveInteractive(testWorld.Interactive);
 
-        AssertThat(testWorld.Stateful.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
         AssertThat(testWorld.Owner.EndCount).IsEqual(1);
     }
 
@@ -211,7 +273,7 @@ public sealed partial class InteractionBehaviorTest
         testWorld.Interactor.QueueFree();
         await testWorld.Runner.SimulateFrames(1);
 
-        AssertThat(testWorld.Stateful.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
         AssertThat(testWorld.Owner.EndCount).IsEqual(1);
     }
 
@@ -242,7 +304,7 @@ public sealed partial class InteractionBehaviorTest
         };
         Area3D area = new() { Name = "InteractionArea" };
         area.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = 3.0f } });
-        InteractionStateful stateful = new() { Name = "Stateful" };
+        InteractionStateful stateful = new() { Name = "Stateful", StateOwner = owner };
         InteractiveComponent interactive = new()
         {
             Name = "Interactive",
@@ -250,7 +312,6 @@ public sealed partial class InteractionBehaviorTest
             Stateful = stateful,
             InteractionOwner = owner,
         };
-        stateful.Interactive = interactive;
         owner.AddChild(area);
         owner.AddChild(stateful);
         owner.AddChild(interactive);
@@ -298,7 +359,7 @@ public sealed partial class InteractionBehaviorTest
         public void OnStartInteractionInput(in InteractionContext context)
         {
             StartCount++;
-            context.Interactive.Stateful?.StartInteractionPhase(context.Interactor);
+            context.Interactive.StartInteractionPhase(context.Interactor);
         }
 
         public void OnEndInteractionInput(in InteractionContext context) => EndCount++;

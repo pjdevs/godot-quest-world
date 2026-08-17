@@ -4,15 +4,15 @@
 
 Addon Godot C# réutilisable pour les interactions offline et multiplayer high-level : sélection d’une cible, conditions data-driven, interaction instantanée ou longue, état autoritaire répliqué et présentation locale remplaçable.
 
-Les specs de cleanup sont dans [`Interaction Addon — Explicit Configuration & API Cleanup.md`](../Interaction%20Addon%20%E2%80%94%20Explicit%20Configuration%20%26%20API%20Cleanup.md) et [`Interaction Addon — Explicit References & Editor Validation.md`](../Interaction%20Addon%20%E2%80%94%20Explicit%20References%20%26%20Editor%20Validation.md). Le code runtime et ses contrats sont dans le namespace `QuestWorld.Interaction`.
+Le code runtime et ses contrats sont dans le namespace `QuestWorld.Interaction`.
 
 ## Delivered V1
 
 L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interaction_plugin) et ne crée ni autoload ni action Input Map.
 
 - `InteractionInteractor` maintient les candidats d’indication/de portée dans un état privé, calcule le score regard-distance, émet les signaux de focus/statut/requête/refus et d’ajout/retrait d’indication, puis expose `TryStartInteractionInput()` / `TryEndInteractionInput()`. Le nœud reste sous autorité réseau serveur ; `OwnerPeerId` identifie uniquement le client qui calcule le focus, présente l’UI et envoie les intentions.
-- `InteractiveComponent` compose des références Inspector explicites vers `InteractionArea`, `IndicationArea?`, `InteractionAnchor?`, `Stateful?` et `InteractionOwner`. Ce dernier est un `Node` réel, converti localement vers `IInteractionHandler` ou `IInteractionStateHandler`; aucune interface n’est exportée directement.
-- `InteractionStateful` expose `Idle`, `Activating`, `Activated`, `Deactivating`, réserve l’interacteur actif, applique les callbacks d’autorité/présentation et expose `SaveState()` / `LoadState()`. Seul `Idle` est interactif. La fin d’une phase libère la réservation sans simuler un relâchement d’input ; le callback de fin d’input reste réservé au relâchement, à la sortie de zone ou à la disparition de l’interacteur.
+- `InteractiveComponent` compose des références Inspector explicites vers `InteractionArea`, `IndicationArea?`, `InteractionAnchor?`, `Stateful?` et `InteractionOwner`. Il possède la réservation de l’interacteur actif et le cycle des phases longues. `InteractionOwner` est un `Node` réel, converti localement vers `IInteractionHandler`; aucune interface n’est exportée directement.
+- `InteractionStateful` gère exclusivement l’état autoritaire/répliqué, la persistance et les notifications de changement. Son `StateOwner?`, indépendant de l’interactive, peut implémenter `IInteractionStateHandler` pour recevoir les callbacks d’autorité et de présentation. Il reste utilisable seul dans une scène.
 - Les RPC fiables résident dans l’interacteur. Le client prévalide le statut avant d’émettre une intention. Le serveur vérifie ensuite l’identité du peer, le chemin reçu, l’appartenance aux candidats serveur, distance/angle, état, règles et hook custom avant d’appeler le handler. Les refus serveur vers client partent d’un nœud dont l’autorité réseau reste au serveur.
 - `InteractionRule` fournit `AlwaysBlockedInteractionRule` et `InteractorGroupInteractionRule`. Le pipeline s’arrête à la première raison bloquante avant le hook custom.
 - `InteractionPresenter`, `InteractionPromptWidget` et `InteractionIndicatorWidget` constituent la présentation facultative screen-space. Le prompt reste unique et centré sur l’ancre de la cible focusée ; un widget d’indication est présenté pour chaque interactable présent dans sa `IndicationArea`, sauf la cible focusée. Un widget projet peut implémenter `IInteractionWidget`.
@@ -22,13 +22,13 @@ L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interacti
 
 1. Pour le Character du projet, `quest_world/character/Character.tscn` dérive de `addons/dummy_character_plugin/Character.tscn` et ajoute `InteractionInteractor` (distance calculée depuis le player propriétaire, direction calculée depuis la caméra) ainsi que `InteractionPresenter`. Le script global `quest_world/character/Character.cs` échantillonne l'action `interact` (`E` par défaut) et appelle les deux points d'entrée de l'interactor.
 2. Pour un personnage custom, ajouter `InteractionInteractor` au personnage local et assigner `ViewOrigin` vers un `Marker3D` ou une caméra, puis appeler `TryStartInteractionInput()` / `TryEndInteractionInput()` depuis son contrôleur d'input. `InteractionOrigin` est facultatif et utilise explicitement le parent `Node3D` comme fallback documenté.
-3. Ajouter `InteractionArea`, `InteractiveComponent` et `InteractionStateful` au même propriétaire Node3D, puis assigner les exports typés `InteractionArea`, `Stateful` et `InteractionOwner` dans l'inspecteur. `IndicationArea` et `InteractionAnchor` restent facultatifs.
-4. Implémenter `IInteractionHandler` sur le propriétaire. Pour une phase longue, appeler `Stateful.StartInteractionPhase(context.Interactor)` synchroniquement dans `OnStartInteractionInput`, puis `EndInteractionPhase(nextState)` quand l'opération métier se termine.
+3. Ajouter `InteractionArea` et `InteractiveComponent` au propriétaire Node3D, puis assigner `InteractionArea` et `InteractionOwner` dans l'inspecteur. Ajouter et assigner un `InteractionStateful` seulement si l'objet a besoin d'un état persistant/répliqué. `IndicationArea` et `InteractionAnchor` restent facultatifs.
+4. Implémenter `IInteractionHandler` sur le propriétaire. Pour une phase longue, appeler `Interactive.StartInteractionPhase(context.Interactor)` synchroniquement dans `OnStartInteractionInput`, puis `Interactive.EndInteractionPhase(nextState)` quand l'opération métier se termine. Pour les callbacks d'état, assigner explicitement `Stateful.StateOwner` vers un nœud qui implémente `IInteractionStateHandler`.
 5. Ajouter `InteractionPresenter` seulement si une UI est souhaitée, avec `Interactor` et `Camera`. L'absence de scène de widget est valide.
 
 ## Explicit configuration and validation
 
-Les composants principaux (`InteractiveComponent`, `InteractionInteractor`, `InteractionStateful` et `InteractionPresenter`) sont des classes globales Godot. Le plugin editor `InteractionEditorPlugin` enregistre `InteractionInspectorPlugin`, qui délègue toutes les validations à `InteractionValidator` (`InteractionArea`/handler, `ViewOrigin`, `Interactive`, `Interactor`/`Camera`). L’exemple `InteractiveActor` est également couvert. Les scripts runtime ne sont plus marqués `[Tool]` pour exposer ces warnings ; leurs gardes et erreurs runtime restent locales, et aucun booléen `IsConfigurationValid` n’est maintenu.
+Les composants principaux (`InteractiveComponent`, `InteractionInteractor`, `InteractionStateful` et `InteractionPresenter`) sont des classes globales Godot. Le plugin editor `InteractionEditorPlugin` enregistre `InteractionInspectorPlugin`, qui délègue toutes les validations à `InteractionValidator` (`InteractionArea`/handler, `ViewOrigin`, `StateOwner`, `Interactor`/`Camera`). Un `StateOwner` absent est valide ; s'il est assigné, il doit implémenter `IInteractionStateHandler`. L’exemple `InteractiveActor` impose séparément ses références `Interactive` et `Stateful`. Les scripts runtime ne sont plus marqués `[Tool]` pour exposer ces warnings ; leurs gardes et erreurs runtime restent locales, et aucun booléen `IsConfigurationValid` n’est maintenu.
 
 `InteractionInteractor.GetInteractionPresentation()` retourne `InteractionPresentation?`; l’absence de focus est donc représentée par l’absence de valeur. Le Presenter maintient sa propre liste d’indications à partir des signaux `InteractiveIndicationAdded` et `InteractiveIndicationRemoved`, sans lire les collections privées de détection.
 
@@ -36,7 +36,7 @@ Les warnings sont compilés sous `TOOLS` dans les scripts du plugin editor et af
 
 ## Base scene
 
-[`scenes/InteractiveActor.tscn`](../../addons/interaction_plugin/scenes/InteractiveActor.tscn) est le prefab de départ duplicable : zones d'interaction et d'indication, ancre, composant, état répliqué et widgets par défaut. Son script d'exemple réalise une activation longue avec réservation, annulation au relâchement et passage à `Activated`; il suffit de remplacer/étendre le handler pour un objet métier.
+[`scenes/InteractiveActor.tscn`](../../addons/interaction_plugin/scenes/InteractiveActor.tscn) est le prefab de départ duplicable : zones d'interaction et d'indication, ancre, composant, état répliqué et widgets par défaut. Son `InteractiveComponent` possède la réservation, son `InteractionStateful` référence explicitement l'acteur comme `StateOwner`, et le signal d'état invalide automatiquement le statut interactif. Son script d'exemple réalise une activation longue avec annulation au relâchement et passage à `Activated`.
 
 ## Persistence boundary
 
@@ -52,12 +52,12 @@ dotnet test
 godot --headless --path . --scene res://addons/interaction_plugin/examples/InteractionDemo.tscn --quit-after 2 --log-file .godot/interaction-demo.log
 ```
 
-Les tests couvrent les deux cas du statut union, l’ordre des règles, le focus, la réservation concurrente, la prévalidation, la séparation fin de phase/fin d’input, le nettoyage serveur d’un interacteur distant, l’autorité réseau serveur, le chemin offline, le snapshot/version y compris la restauration d’un état identique, la scène composable, le binding widget et la multiplicité/exclusivité des indications.
+Les tests couvrent les deux cas du statut union, l’ordre des règles, le focus, la réservation concurrente, la prévalidation, la séparation fin de phase/fin d’input, le nettoyage serveur d’un interacteur distant, l’autorité réseau serveur, le chemin offline, le Stateful autonome, le snapshot/version y compris la restauration d’un état identique, l’invalidation par signal, la scène composable, le binding widget et la multiplicité/exclusivité des indications.
 
 ## Assumptions and deferred work
 
 - Le transport reste `SceneMultiplayer`; les personnages/interactables dynamiques doivent conserver des chemins identiques via le système de spawn du projet.
-- La synchronisation est portée par `MultiplayerSynchronizer` sur `ReplicatedState`; l’identité/progression de l’interacteur actif restent server-only en V1.
+- La synchronisation est portée par `MultiplayerSynchronizer` sur `ReplicatedState`; la réservation `InteractiveComponent.ActiveInteractor` reste transitoire et server-only en V1.
 - Godot 4.7.1 Mono charge les assemblies avec .NET 10. Le projet cible donc `net10.0`, conserve `LangVersion=preview` et fournit un shim minimal `IUnion`/`UnionAttribute` pour utiliser le contrat union C# preview sans référence runtime .NET 11. Voir [`godot-dotnet-runtime-target.md`](../memory/godot-dotnet-runtime-target.md).
 - La persistance réelle, les intégrations Quest/Dialog/Inventory, les combinateurs de règles, l'occlusion, les widgets 3D cliquables et les transports hors `SceneMultiplayer` restent hors V1.
 - Le Character projet utilise la touche `E` via l'action projet `interact`; un jeu hôte peut remplacer cette action dans `Character.InteractionActionName`.

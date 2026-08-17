@@ -31,6 +31,7 @@ public sealed partial class InteractionSceneTest
 
         AssertThat(interactive.InteractionArea != null).IsTrue();
         AssertThat(interactive.InteractionOwner is IInteractionHandler).IsTrue();
+        AssertThat(stateful.StateOwner is IInteractionStateHandler).IsTrue();
         AssertThat(stateful.State).IsEqual(InteractionState.Idle);
         MultiplayerSynchronizer synchronizer = actor.GetNode<MultiplayerSynchronizer>(
             "Stateful/MultiplayerSynchronizer"

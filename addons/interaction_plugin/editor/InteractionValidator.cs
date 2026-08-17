@@ -49,8 +49,13 @@ public static class InteractionValidator
 
                 break;
             case InspectableType.InteractionStateful:
-                if (GetObject(obj, "Interactive") is null)
-                    yield return "Interactive must be assigned.";
+                GodotObject? stateOwner = GetObject(obj, "StateOwner");
+                if (
+                    stateOwner is not null
+                    && stateOwner is not IInteractionStateHandler
+                    && !HasAttachedScript(stateOwner)
+                )
+                    yield return "StateOwner must implement IInteractionStateHandler.";
 
                 break;
             case InspectableType.InteractionPresenter:
