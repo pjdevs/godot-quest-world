@@ -28,11 +28,11 @@ L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interacti
 
 ## Explicit configuration and validation
 
-Les composants principaux (`InteractiveComponent`, `InteractionInteractor`, `InteractionStateful` et `InteractionPresenter`) sont des classes globales Godot. Leurs dépendances obligatoires sont vérifiées par `_GetConfigurationWarnings()` (`InteractionArea`/handler, `ViewOrigin`, `Interactive`, `Interactor`/`Camera`) et ces warnings sont rafraîchis par les setters des exports qui les influencent. Les gardes runtime restent locales et aucun booléen `IsConfigurationValid` n’est maintenu.
+Les composants principaux (`InteractiveComponent`, `InteractionInteractor`, `InteractionStateful` et `InteractionPresenter`) sont des classes globales Godot. Le plugin editor `InteractionEditorPlugin` enregistre `InteractionInspectorPlugin`, qui délègue toutes les validations à `InteractionValidator` (`InteractionArea`/handler, `ViewOrigin`, `Interactive`, `Interactor`/`Camera`). L’exemple `InteractiveActor` est également couvert. Les scripts runtime ne sont plus marqués `[Tool]` pour exposer ces warnings ; leurs gardes et erreurs runtime restent locales, et aucun booléen `IsConfigurationValid` n’est maintenu.
 
 `InteractionInteractor.GetInteractionPresentation()` retourne `InteractionPresentation?`; l’absence de focus est donc représentée par l’absence de valeur. Le Presenter maintient sa propre liste d’indications à partir des signaux `InteractiveIndicationAdded` et `InteractiveIndicationRemoved`, sans lire les collections privées de détection.
 
-Les scripts de configuration (`InteractiveActor`, `InteractiveComponent`, `InteractionInteractor`, `InteractionStateful` et `InteractionPresenter`) sont des scripts `[Tool]`. Les warnings de configuration sont compilés sous `TOOLS`, et leurs callbacks de cycle de vie/runtime sortent immédiatement lorsqu’ils s’exécutent dans l’éditeur afin de ne pas lancer de logique de gameplay pendant l’édition. `InteractiveActor` signale séparément l’absence de ses références `Interactive` et `Stateful`.
+Les warnings sont compilés sous `TOOLS` dans les scripts du plugin editor et affichés directement dans l’Inspector. `plugin.cfg` charge `editor/InteractionEditorPlugin.cs`, qui couvre les cinq types validés. `InteractiveActor` signale séparément l’absence de ses références `Interactive` et `Stateful`.
 
 ## Base scene
 

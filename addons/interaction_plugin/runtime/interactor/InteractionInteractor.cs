@@ -5,7 +5,6 @@ using QuestWorld.Interaction.Runtime.Interactive;
 
 namespace QuestWorld.Interaction.Runtime.Interactor;
 
-[Tool]
 [GlobalClass]
 public partial class InteractionInteractor : Node
 {
@@ -44,7 +43,6 @@ public partial class InteractionInteractor : Node
             }
 
             _viewOrigin = value;
-            UpdateConfigurationWarnings();
         }
     }
 
@@ -81,28 +79,8 @@ public partial class InteractionInteractor : Node
 
     public bool IsLocallyControlled => OwnerPeerId == (int)Multiplayer.GetUniqueId();
 
-#if TOOLS
-    public override string[] _GetConfigurationWarnings()
-    {
-        List<string> warnings = [];
-        if (ViewOrigin is null)
-        {
-            warnings.Add("ViewOrigin must be assigned.");
-        }
-
-        return [.. warnings];
-    }
-#endif
-
     public override void _Ready()
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         _resolvedInteractionOrigin = InteractionOrigin ?? GetParent() as Node3D;
         if (ViewOrigin is null)
         {
@@ -130,13 +108,6 @@ public partial class InteractionInteractor : Node
 
     public override void _Process(double delta)
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         if (!IsLocallyControlled)
         {
             return;
@@ -378,13 +349,6 @@ public partial class InteractionInteractor : Node
 
     public override void _ExitTree()
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         if (
             _activeInteractive is not null
             && IsUsable(_activeInteractive)

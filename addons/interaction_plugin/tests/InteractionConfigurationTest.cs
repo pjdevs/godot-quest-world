@@ -3,7 +3,9 @@ namespace QuestWorld.Tests;
 using System.Linq;
 using GdUnit4;
 using Godot;
+using InteractionPlugin.Editor;
 using QuestWorld.Interaction;
+using QuestWorld.Interaction.Examples.Interactive;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
@@ -19,7 +21,7 @@ public sealed partial class InteractionConfigurationTest
     {
         InteractiveComponent interactive = new();
 
-        string[] warnings = interactive._GetConfigurationWarnings();
+        string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
         AssertThat(warnings.Contains("InteractionArea must be assigned.")).IsTrue();
         AssertThat(warnings.Contains("InteractionOwner must be assigned.")).IsTrue();
@@ -34,7 +36,7 @@ public sealed partial class InteractionConfigurationTest
             InteractionOwner = new Node3D(),
         };
 
-        string[] warnings = interactive._GetConfigurationWarnings();
+        string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
         AssertThat(warnings.Contains("InteractionOwner must implement IInteractionHandler."))
             .IsTrue();
@@ -49,7 +51,7 @@ public sealed partial class InteractionConfigurationTest
             InteractionOwner = new TestInteractionOwner(),
         };
 
-        string[] warnings = interactive._GetConfigurationWarnings();
+        string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
         AssertThat(warnings.Length).IsEqual(0);
     }
@@ -59,7 +61,7 @@ public sealed partial class InteractionConfigurationTest
     {
         InteractionInteractor interactor = new();
 
-        string[] warnings = interactor._GetConfigurationWarnings();
+        string[] warnings = InteractionValidator.Validate(interactor).ToArray();
 
         AssertThat(warnings.Contains("ViewOrigin must be assigned.")).IsTrue();
         AssertThat(warnings.Any(warning => warning.Contains("InteractionOrigin"))).IsFalse();
@@ -70,7 +72,7 @@ public sealed partial class InteractionConfigurationTest
     {
         InteractionStateful stateful = new();
 
-        string[] warnings = stateful._GetConfigurationWarnings();
+        string[] warnings = InteractionValidator.Validate(stateful).ToArray();
 
         AssertThat(warnings.Contains("Interactive must be assigned.")).IsTrue();
     }
@@ -80,10 +82,21 @@ public sealed partial class InteractionConfigurationTest
     {
         InteractionPresenter presenter = new();
 
-        string[] warnings = presenter._GetConfigurationWarnings();
+        string[] warnings = InteractionValidator.Validate(presenter).ToArray();
 
         AssertThat(warnings.Contains("Interactor must be assigned.")).IsTrue();
         AssertThat(warnings.Contains("Camera must be assigned.")).IsTrue();
+    }
+
+    [TestCase]
+    public void InteractiveActorRequiresExplicitInteractiveAndStatefulReferences()
+    {
+        InteractiveActor actor = new();
+
+        string[] warnings = InteractionValidator.Validate(actor).ToArray();
+
+        AssertThat(warnings.Contains("Interactive must be assigned.")).IsTrue();
+        AssertThat(warnings.Contains("Stateful must be assigned.")).IsTrue();
     }
 
     [TestCase]

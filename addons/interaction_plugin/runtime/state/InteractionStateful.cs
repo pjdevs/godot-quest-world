@@ -1,12 +1,10 @@
 using System;
-using System.Collections.Generic;
 using Godot;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 
 namespace QuestWorld.Interaction.Runtime.State;
 
-[Tool]
 [GlobalClass]
 public partial class InteractionStateful : Node
 {
@@ -37,7 +35,6 @@ public partial class InteractionStateful : Node
             }
 
             _interactive = value;
-            UpdateConfigurationWarnings();
         }
     }
 
@@ -49,28 +46,8 @@ public partial class InteractionStateful : Node
 
     internal InteractionInteractor? ActiveInteractor => _activeInteractor;
 
-#if TOOLS
-    public override string[] _GetConfigurationWarnings()
-    {
-        List<string> warnings = [];
-        if (Interactive is null)
-        {
-            warnings.Add("Interactive must be assigned.");
-        }
-
-        return [.. warnings];
-    }
-#endif
-
     public override void _Ready()
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         _state = InitialState;
         if (Interactive is null)
         {
@@ -160,13 +137,6 @@ public partial class InteractionStateful : Node
 
     public override void _ExitTree()
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         if (ActiveInteractor is not null && Multiplayer.IsServer())
         {
             ReleaseActiveInteractor(notifyInputEnded: false);
@@ -175,13 +145,6 @@ public partial class InteractionStateful : Node
 
     private bool ApplyState(InteractionState state, bool forceCallbacks = false)
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return false;
-        }
-#endif
-
         if (_state == state && !forceCallbacks)
         {
             return false;

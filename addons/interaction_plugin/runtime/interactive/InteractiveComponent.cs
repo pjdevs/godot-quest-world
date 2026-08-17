@@ -6,7 +6,6 @@ using QuestWorld.Interaction.Runtime.State;
 
 namespace QuestWorld.Interaction.Runtime.Interactive;
 
-[Tool]
 [GlobalClass]
 public partial class InteractiveComponent : Node
 {
@@ -26,7 +25,6 @@ public partial class InteractiveComponent : Node
             }
 
             _interactionArea = value;
-            UpdateConfigurationWarnings();
         }
     }
 
@@ -51,7 +49,6 @@ public partial class InteractiveComponent : Node
             }
 
             _interactionOwner = value;
-            UpdateConfigurationWarnings();
         }
     }
 
@@ -83,37 +80,8 @@ public partial class InteractiveComponent : Node
     private Area3D? _interactionArea;
     private Node? _interactionOwner;
 
-#if TOOLS
-    public override string[] _GetConfigurationWarnings()
-    {
-        List<string> warnings = [];
-        if (InteractionArea is null)
-        {
-            warnings.Add("InteractionArea must be assigned.");
-        }
-
-        if (InteractionOwner is null)
-        {
-            warnings.Add("InteractionOwner must be assigned.");
-        }
-        else if (InteractionOwner is not IInteractionHandler)
-        {
-            warnings.Add("InteractionOwner must implement IInteractionHandler.");
-        }
-
-        return [.. warnings];
-    }
-#endif
-
     public override void _Ready()
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         if (InteractionArea is null)
         {
             GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionArea.");
@@ -254,13 +222,6 @@ public partial class InteractiveComponent : Node
 
     public override void _ExitTree()
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         PurgeInvalidInteractors();
         foreach (
             InteractionInteractor interactor in new List<InteractionInteractor>(_presentInteractors)

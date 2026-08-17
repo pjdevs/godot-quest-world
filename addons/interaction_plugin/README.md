@@ -10,6 +10,8 @@ The addon is namespaced under `QuestWorld.Interaction` and has no Character depe
 
 The addon does not resolve configuration from node names, parents, siblings or recursive tree searches. Required references produce editor configuration warnings and are guarded again at runtime. `NodePath` is reserved for network RPC identities; no focus target is represented by an artificial presentation.
 
+When the addon is enabled, `editor/InteractionEditorPlugin.cs` registers an Inspector plugin. `InteractionValidator` centralizes the configuration warnings for `InteractiveComponent`, `InteractionInteractor`, `InteractionStateful`, `InteractionPresenter` and the example `InteractiveActor`; the runtime scripts do not need `[Tool]` for validation.
+
 The runtime has no Quest, Inventory, Dialog, Character or Network Foundation dependency. Save/load is deliberately only a versioned `InteractionSavedState` boundary; the host owns storage.
 
 `scenes/InteractiveActor.tscn` is the small duplicable starting point with detection areas, an interaction anchor, default widgets and a long activation example handler. Replace or extend its owner script for the concrete object behavior.

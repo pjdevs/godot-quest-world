@@ -1,11 +1,10 @@
-using System.Collections.Generic;
 using Godot;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.State;
 
 namespace QuestWorld.Interaction.Examples.Interactive;
 
-[Tool]
+[GlobalClass]
 public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractionStateHandler
 {
     [Export]
@@ -20,7 +19,6 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
             }
 
             _interactive = value;
-            UpdateConfigurationWarnings();
         }
     }
 
@@ -36,7 +34,6 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
             }
 
             _stateful = value;
-            UpdateConfigurationWarnings();
         }
     }
 
@@ -55,13 +52,6 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
 
     public override void _Ready()
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         if (Interactive is null || Stateful is null)
         {
             GD.PushError(
@@ -72,33 +62,8 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
         }
     }
 
-#if TOOLS
-    public override string[] _GetConfigurationWarnings()
-    {
-        List<string> warnings = [];
-        if (Interactive is null)
-        {
-            warnings.Add("Interactive must be assigned.");
-        }
-
-        if (Stateful is null)
-        {
-            warnings.Add("Stateful must be assigned.");
-        }
-
-        return [.. warnings];
-    }
-#endif
-
     public override void _Process(double delta)
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         if (Stateful is null || Stateful.State != InteractionState.Activating)
         {
             return;

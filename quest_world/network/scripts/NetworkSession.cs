@@ -113,9 +113,7 @@ public partial class NetworkSession : Node
                 _sessionState = StartServer() ? SessionState.Active : SessionState.Failed;
                 break;
             case NetworkLaunchMode.Client:
-                _sessionState = StartClient()
-                    ? SessionState.Connecting
-                    : SessionState.Failed;
+                _sessionState = StartClient() ? SessionState.Connecting : SessionState.Failed;
                 break;
         }
 

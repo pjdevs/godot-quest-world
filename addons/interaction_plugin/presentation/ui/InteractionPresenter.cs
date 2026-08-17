@@ -5,7 +5,6 @@ using QuestWorld.Interaction.Runtime.Interactor;
 
 namespace QuestWorld.Interaction.Presentation.UI;
 
-[Tool]
 [GlobalClass]
 public partial class InteractionPresenter : CanvasLayer
 {
@@ -22,7 +21,6 @@ public partial class InteractionPresenter : CanvasLayer
             }
 
             _interactor = value;
-            UpdateConfigurationWarnings();
         }
     }
 
@@ -38,7 +36,6 @@ public partial class InteractionPresenter : CanvasLayer
             }
 
             _camera = value;
-            UpdateConfigurationWarnings();
         }
     }
 
@@ -48,33 +45,8 @@ public partial class InteractionPresenter : CanvasLayer
     private readonly Dictionary<InteractiveComponent, Control> _indications = new();
     private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
 
-#if TOOLS
-    public override string[] _GetConfigurationWarnings()
-    {
-        List<string> warnings = [];
-        if (Interactor is null)
-        {
-            warnings.Add("Interactor must be assigned.");
-        }
-
-        if (Camera is null)
-        {
-            warnings.Add("Camera must be assigned.");
-        }
-
-        return [.. warnings];
-    }
-#endif
-
     public override void _Ready()
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         if (Interactor is null)
         {
             GD.PushError($"{GetPath()}: InteractionPresenter requires an Interactor.");
@@ -100,13 +72,6 @@ public partial class InteractionPresenter : CanvasLayer
 
     public override void _ExitTree()
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         if (Interactor is null)
         {
             return;
@@ -120,13 +85,6 @@ public partial class InteractionPresenter : CanvasLayer
 
     public override void _Process(double delta)
     {
-#if TOOLS
-        if (Engine.IsEditorHint())
-        {
-            return;
-        }
-#endif
-
         if (Interactor is null || !Interactor.IsLocallyControlled)
         {
             ClearPresentation();
