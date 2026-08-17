@@ -24,6 +24,10 @@ window/stretch/aspect="expand"
 
 project/assembly_name="quest-world"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/interaction_plugin/plugin.cfg")
+
 [global_group]
 
 Player=""
