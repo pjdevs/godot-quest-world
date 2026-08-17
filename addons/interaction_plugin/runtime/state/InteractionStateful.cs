@@ -60,18 +60,6 @@ public partial class InteractionStateful : Node
         _state = InitialState;
     }
 
-    /// <summary>Godot callback that hides the replication transport property from the inspector.</summary>
-    public override void _ValidateProperty(Godot.Collections.Dictionary property)
-    {
-        if (property["name"].AsString() != nameof(ReplicatedState))
-        {
-            return;
-        }
-
-        PropertyUsageFlags usage = property["usage"].As<PropertyUsageFlags>();
-        property["usage"] = (int)(usage & ~PropertyUsageFlags.Editor);
-    }
-
     /// <summary>Applies an authoritative state change and dispatches the appropriate signals.</summary>
     /// <remarks>Call from server gameplay code; clients receive the result through replication.</remarks>
     /// <param name="state">New authoritative state.</param>

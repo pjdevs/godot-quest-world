@@ -1,0 +1,58 @@
+[gd_scene format=3 uid="uid://b8e873ujmp8or"]
+
+[ext_resource type="Script" uid="uid://cjrwlmeffknuq" path="res://addons/interaction_plugin/runtime/state/InteractionStateful.cs" id="1_k2b6f"]
+[ext_resource type="Script" uid="uid://dlwlpwo643xqr" path="res://quest_world/interactibles/lever_wall/LeverWall.cs" id="1_rr51t"]
+
+[sub_resource type="Animation" id="Animation_wmbty"]
+length = 0.001
+tracks/0/type = "position_3d"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("..")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0)
+
+[sub_resource type="Animation" id="Animation_rr51t"]
+resource_name = "lever_wall_up"
+tracks/0/type = "position_3d"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("..")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0, 1, 1, 0, 10, 0)
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_wmbty"]
+_data = {
+&"RESET": SubResource("Animation_wmbty"),
+&"lever_wall_up": SubResource("Animation_rr51t")
+}
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_rr51t"]
+properties/0/path = NodePath("../../InteractionStateful:ReplicatedState")
+properties/0/spawn = true
+properties/0/replication_mode = 2
+
+[node name="LeverWall" type="Node3D" unique_id=956452046 node_paths=PackedStringArray("Stateful", "AnimationPlayer")]
+script = ExtResource("1_rr51t")
+Stateful = NodePath("InteractionStateful")
+AnimationPlayer = NodePath("AnimationPlayer")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=511834669]
+root_node = NodePath("../Animated/LeverWallMesh")
+libraries/ = SubResource("AnimationLibrary_wmbty")
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=546715256]
+root_path = NodePath("../Animated/LeverWallMesh")
+replication_config = SubResource("SceneReplicationConfig_rr51t")
+
+[node name="InteractionStateful" type="Node" parent="." unique_id=1602224621]
+script = ExtResource("1_k2b6f")
+metadata/_custom_type_script = "uid://cjrwlmeffknuq"
+
+[node name="Animated" type="Node3D" parent="." unique_id=1433067633]
+
+[node name="LeverWallMesh" type="CSGBox3D" parent="Animated" unique_id=1292781680]
+use_collision = true
+size = Vector3(30, 10, 1)
