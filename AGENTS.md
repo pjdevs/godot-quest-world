@@ -30,4 +30,4 @@ Vertical, one folder per feature with subfolder `scripts` etc.
 - After each workflow pitfall or hard user correction on the implementation (not tweaking a feature or corrections),
   document it in `docs/memory/<desc_of_things>.md`
 - Before each task, check if docs or memory can be useful
-- Read [this](./docs/feature/code-style.md) for coding style
+- Read [this](./docs/code-style.md) for coding style
