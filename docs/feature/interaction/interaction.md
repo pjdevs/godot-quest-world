@@ -61,7 +61,7 @@ Les tests couvrent les deux cas du statut union, l’ordre des rules, l’accès
 ## Assumptions and deferred work
 
 - Le transport reste `SceneMultiplayer`; les personnages/interactables dynamiques doivent conserver des chemins identiques via le système de spawn du projet.
-- La synchronisation est portée par `MultiplayerSynchronizer` sur `ReplicatedState`; la réservation `InteractiveComponent.ActiveInteractor` reste transitoire et server-only en V1.
+- La synchronisation est portée par `MultiplayerSynchronizer` sur la propriété technique privée `ReplicatedState`. Elle reste enregistrée auprès de Godot pour le chemin `.:ReplicatedState`, mais elle est masquée dans l’inspecteur ; le gameplay passe exclusivement par `SetState`. La réservation `InteractiveComponent.ActiveInteractor` reste transitoire et server-only en V1.
 - Godot 4.7.1 Mono charge les assemblies avec .NET 10. Le projet cible donc `net10.0`, conserve `LangVersion=preview` et fournit un shim minimal `IUnion`/`UnionAttribute` pour utiliser le contrat union C# preview sans référence runtime .NET 11. Voir [`godot-dotnet-runtime-target.md`](../memory/godot-dotnet-runtime-target.md).
 - La persistance réelle, les intégrations Quest/Dialog/Inventory, les combinateurs de règles, l'occlusion, les widgets 3D cliquables et les transports hors `SceneMultiplayer` restent hors V1.
 - Le Character projet utilise la touche `E` via l'action projet `interact`; un jeu hôte peut remplacer cette action dans `Character.InteractionActionName`.

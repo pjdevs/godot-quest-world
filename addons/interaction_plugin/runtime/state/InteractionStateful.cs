@@ -42,12 +42,8 @@ public partial class InteractionStateful : Node
     [Export]
     public InteractionState InitialState { get; set; } = InteractionState.Idle;
 
-    /// <summary>
-    /// Gets or sets the replicated property used by <see cref="MultiplayerSynchronizer"/>.
-    /// </summary>
-    /// <remarks>Project gameplay should call <see cref="SetState"/> instead of assigning this property.</remarks>
     [Export]
-    public InteractionState ReplicatedState
+    private InteractionState ReplicatedState
     {
         get => _state;
         set => ApplyState(value);
@@ -62,6 +58,18 @@ public partial class InteractionStateful : Node
     public override void _Ready()
     {
         _state = InitialState;
+    }
+
+    /// <summary>Godot callback that hides the replication transport property from the inspector.</summary>
+    public override void _ValidateProperty(Godot.Collections.Dictionary property)
+    {
+        if (property["name"].AsString() != nameof(ReplicatedState))
+        {
+            return;
+        }
+
+        PropertyUsageFlags usage = property["usage"].As<PropertyUsageFlags>();
+        property["usage"] = (int)(usage & ~PropertyUsageFlags.Editor);
     }
 
     /// <summary>Applies an authoritative state change and dispatches the appropriate signals.</summary>

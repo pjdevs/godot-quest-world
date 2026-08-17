@@ -17,6 +17,36 @@ using static GdUnit4.Assertions;
 public sealed partial class InteractionBehaviorTest
 {
     [TestCase]
+    public void ReplicatedStateIsAvailableToGodotButHiddenFromTheEditor()
+    {
+        InteractionStateful stateful = new();
+        try
+        {
+            bool propertyFound = false;
+            bool propertyIsVisibleInEditor = false;
+            foreach (Godot.Collections.Dictionary property in stateful.GetPropertyList())
+            {
+                if (property["name"].AsString() != "ReplicatedState")
+                {
+                    continue;
+                }
+
+                propertyFound = true;
+                PropertyUsageFlags usage = property["usage"].As<PropertyUsageFlags>();
+                propertyIsVisibleInEditor = usage.HasFlag(PropertyUsageFlags.Editor);
+                break;
+            }
+
+            AssertThat(propertyFound).IsTrue();
+            AssertThat(propertyIsVisibleInEditor).IsFalse();
+        }
+        finally
+        {
+            stateful.Free();
+        }
+    }
+
+    [TestCase]
     public void StatusUsesExhaustiveAllowedAndBlockedCases()
     {
         InteractionStatus allowed = new InteractionAllowed();
@@ -215,7 +245,7 @@ public sealed partial class InteractionBehaviorTest
 
         AssertThat(stateful.SetState(InteractionState.Activated)).IsTrue();
         InteractionSavedState saved = stateful.SaveState();
-        stateful.ReplicatedState = InteractionState.Idle;
+        stateful.Set("ReplicatedState", (int)InteractionState.Idle);
         stateful.LoadState(saved);
 
         AssertThat(stateful.State).IsEqual(InteractionState.Activated);
@@ -260,7 +290,7 @@ public sealed partial class InteractionBehaviorTest
         testWorld.Interactive.InteractiveStatusChanged += () => notificationCount++;
 
         testWorld.Stateful.SetState(InteractionState.Activated);
-        testWorld.Stateful.ReplicatedState = InteractionState.Idle;
+        testWorld.Stateful.Set("ReplicatedState", (int)InteractionState.Idle);
 
         AssertThat(notificationCount).IsEqual(2);
     }

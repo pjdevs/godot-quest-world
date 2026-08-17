@@ -10,6 +10,11 @@
   `get_state: Property ... not found` to repeat on every synchronization tick.
 - Exported C# property names keep their PascalCase spelling in a replication
   `NodePath`, for example `.:ReplicatedState`.
+- A replication-only C# property should not become a second gameplay mutation
+  API. It can remain a private `[Export]` property so Godot registers it, then
+  remove `PropertyUsageFlags.Editor` in `_ValidateProperty` to keep it out of
+  the inspector. Gameplay should mutate the authoritative state through its
+  public domain method instead.
 - A scene test must verify that each configured path resolves from `root_path`;
   checking only that `ReplicationConfig` is non-null does not validate the
   configuration.
