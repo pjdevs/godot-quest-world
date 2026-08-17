@@ -2,7 +2,6 @@
 
 using System.Collections.Generic;
 using Godot;
-using QuestWorld.Interaction;
 using QuestWorld.Interaction.Examples.Interactive;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Interactive;
@@ -36,26 +35,11 @@ public static class InteractionValidator
                 GodotObject? interactionOwner = GetObject(obj, "InteractionOwner");
                 if (interactionOwner is null)
                     yield return "InteractionOwner must be assigned.";
-                else if (
-                    interactionOwner is not IInteractionHandler
-                    && !HasAttachedScript(interactionOwner)
-                )
-                    yield return "InteractionOwner must implement IInteractionHandler.";
 
                 break;
             case InspectableType.InteractionInteractor:
                 if (GetObject(obj, "ViewOrigin") is null)
                     yield return "ViewOrigin must be assigned.";
-
-                break;
-            case InspectableType.InteractionStateful:
-                GodotObject? stateOwner = GetObject(obj, "StateOwner");
-                if (
-                    stateOwner is not null
-                    && stateOwner is not IInteractionStateHandler
-                    && !HasAttachedScript(stateOwner)
-                )
-                    yield return "StateOwner must implement IInteractionStateHandler.";
 
                 break;
             case InspectableType.InteractionPresenter:
@@ -126,8 +110,6 @@ public static class InteractionValidator
 
     private static GodotObject? GetObject(GodotObject obj, StringName propertyName) =>
         obj.Get(propertyName).AsGodotObject();
-
-    private static bool HasAttachedScript(GodotObject obj) => GetAttachedScript(obj) is not null;
 
     private static Script? GetAttachedScript(GodotObject obj) =>
         obj.GetScript().AsGodotObject() as Script;

@@ -30,8 +30,7 @@ public sealed partial class InteractionSceneTest
         InteractionStateful stateful = actor.GetNode<InteractionStateful>("Stateful");
 
         AssertThat(interactive.InteractionArea != null).IsTrue();
-        AssertThat(interactive.InteractionOwner is IInteractionHandler).IsTrue();
-        AssertThat(stateful.StateOwner is IInteractionStateHandler).IsTrue();
+        AssertThat(interactive.InteractionOwner == actor).IsTrue();
         AssertThat(stateful.State).IsEqual(InteractionState.Idle);
         MultiplayerSynchronizer synchronizer = actor.GetNode<MultiplayerSynchronizer>(
             "Stateful/MultiplayerSynchronizer"
@@ -162,13 +161,5 @@ public sealed partial class InteractionSceneTest
         return owner;
     }
 
-    private sealed partial class TestInteractionOwner : Node3D, IInteractionHandler
-    {
-        public InteractionStatus EvaluateCustomInteractionStatus(in InteractionContext context) =>
-            new InteractionAllowed();
-
-        public void OnStartInteractionInput(in InteractionContext context) { }
-
-        public void OnEndInteractionInput(in InteractionContext context) { }
-    }
+    private sealed partial class TestInteractionOwner : Node3D { }
 }

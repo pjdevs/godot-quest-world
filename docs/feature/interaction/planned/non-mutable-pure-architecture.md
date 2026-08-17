@@ -29,7 +29,7 @@ private bool ApplyState(InteractionState newState)
     _state = newState;
 
     EmitSignal(...);
-    handler.OnInteractionStateChangedAuthority(...);
+    EmitSignal(SignalName.InteractionStateChangedAuthority, ...);
 
     return true;
 }
@@ -136,8 +136,6 @@ Don't over-engineer this immediately. Prefer typed result structs when one opera
 Responsible for side effects:
 
 * Godot signals;
-* `IInteractionHandler`;
-* `IInteractionStateHandler`;
 * inter-component notifications;
 * presentation;
 * RPC;
@@ -147,7 +145,7 @@ Responsible for side effects:
 
 ## 3. `InteractionStateful` first
 
-This is the best first target because it currently combines state mutation with external callbacks.
+This is the best first target because it currently combines state mutation with external signal dispatch.
 
 Current conceptual flow:
 
@@ -156,9 +154,9 @@ SetState
  ↓
 ApplyState
  ├─ mutate _state
- ├─ EmitSignal
- ├─ handler authority callback
- └─ handler presentation callback
+ ├─ universal signal
+ ├─ authority signal
+ └─ presentation signal
 ```
 
 Target:
@@ -170,9 +168,9 @@ ApplyState
  └─ mutate state + return transition
  ↓
 DispatchStateTransition
- ├─ EmitSignal
- ├─ authority callback
- └─ presentation callback
+ ├─ universal signal
+ ├─ authority signal
+ └─ presentation signal
 ```
 
 `InteractiveComponent` listens to `InteractionStateChanged` on its explicitly assigned Stateful and dispatches its own status notification. Stateful never references Interactive.
@@ -221,14 +219,14 @@ ReleaseInteractionInput
 StartInteraction
 ```
 
-Starting an interaction may cascade from `InteractiveComponent.StartInteraction()` into the handler and then into `InteractiveComponent.StartInteractionPhase()`. The phase reserves the interactor before requesting the Stateful transition; the resulting Stateful signal is observed only after Interactive's local mutation is complete.
+Starting an interaction may cascade from `InteractiveComponent.StartInteraction()` into an `InteractionInputStarted` subscriber and then into `InteractiveComponent.StartInteractionPhase()`. The phase reserves the interactor before requesting the Stateful transition; the resulting Stateful signal is observed only after Interactive's local mutation is complete.
 
 That recursive object graph should become explicit.
 
 Instead of:
 
 ```csharp
-handler.OnStartInteractionInput(context);
+EmitSignal(SignalName.InteractionInputStarted, interactor);
 ```
 
 inside the mutation path, prefer:
@@ -251,10 +249,10 @@ public readonly record struct InteractionStartResult(
 );
 ```
 
-The dispatch can then call:
+The dispatch can then emit:
 
 ```csharp
-handler.OnStartInteractionInput(result.Context);
+EmitSignal(SignalName.InteractionInputStarted, result.Context.Interactor);
 ```
 
 without the `InteractiveComponent` itself being held in a mutable operation.
@@ -273,19 +271,7 @@ IsWithinInteractionRange(...)
 
 should remain query-like and ideally have no state mutation or callbacks.
 
-`EvaluateStatus()` currently asks rules and eventually calls the owner's custom handler.
-
-That's acceptable **only if it is semantically a query**.
-
-Make the contract explicit:
-
-```csharp
-InteractionStatus EvaluateCustomInteractionStatus(
-    in InteractionContext context
-);
-```
-
-must be:
+`EvaluateStatus()` asks the ordered gameplay rules after its internal invariants. Every `InteractionRule.Evaluate()` must be:
 
 * side-effect free;
 * non-mutating;
@@ -344,7 +330,7 @@ This makes the whole framework substantially easier to reason about and test.
 
 ## 7. Separate state transition from presentation notification
 
-Currently `InteractionStateful.ApplyState()` directly invokes both authority and presentation callbacks.
+Currently `InteractionStateful.ApplyState()` directly emits the universal, authority and presentation signals.
 
 Keep the distinction, but move it to dispatch:
 
@@ -553,8 +539,6 @@ Establish this as an explicit project invariant:
 That includes:
 
 ```text
-IInteractionHandler
-IInteractionStateHandler
 InteractionRule
 Godot signals
 RPC
@@ -589,8 +573,8 @@ Then separately test dispatch:
 ```text
 transition
 → correct signal emitted
-→ authority callback called once
-→ presentation callback called once
+→ authority signal emitted once
+→ presentation signal emitted once
 → status invalidated
 ```
 
@@ -715,8 +699,8 @@ After the refactor, this grep-style rule should roughly hold:
 core mutation methods:
     no EmitSignal
     no Rpc/RpcId
-    no IInteractionHandler callback
-    no IInteractionStateHandler callback
+    no interaction input signal dispatch
+    no scoped state signal dispatch
     no presentation call
 ```
 

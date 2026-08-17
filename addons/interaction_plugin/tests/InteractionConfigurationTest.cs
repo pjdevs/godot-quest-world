@@ -17,7 +17,7 @@ using static GdUnit4.Assertions;
 public sealed partial class InteractionConfigurationTest
 {
     [TestCase]
-    public void InteractiveComponentRequiresExplicitAreaAndHandler()
+    public void InteractiveComponentRequiresExplicitAreaAndOwner()
     {
         InteractiveComponent interactive = new();
 
@@ -28,7 +28,7 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
-    public void InteractiveComponentRejectsAnOwnerWithoutInteractionHandler()
+    public void InteractiveComponentAcceptsAnyAssignedOwner()
     {
         InteractiveComponent interactive = new()
         {
@@ -38,8 +38,7 @@ public sealed partial class InteractionConfigurationTest
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
-        AssertThat(warnings.Contains("InteractionOwner must implement IInteractionHandler."))
-            .IsTrue();
+        AssertThat(warnings.Length).IsEqual(0);
     }
 
     [TestCase]
@@ -48,7 +47,7 @@ public sealed partial class InteractionConfigurationTest
         InteractiveComponent interactive = new()
         {
             InteractionArea = new Area3D(),
-            InteractionOwner = new TestInteractionOwner(),
+            InteractionOwner = new Node3D(),
         };
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
@@ -68,30 +67,9 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
-    public void StatefulAllowsAnAbsentStateOwner()
+    public void StatefulRequiresNoOwnerConfiguration()
     {
         InteractionStateful stateful = new();
-
-        string[] warnings = InteractionValidator.Validate(stateful).ToArray();
-
-        AssertThat(warnings.Length).IsEqual(0);
-    }
-
-    [TestCase]
-    public void StatefulRejectsAStateOwnerWithoutStateHandler()
-    {
-        InteractionStateful stateful = new() { StateOwner = new Node3D() };
-
-        string[] warnings = InteractionValidator.Validate(stateful).ToArray();
-
-        AssertThat(warnings.Contains("StateOwner must implement IInteractionStateHandler."))
-            .IsTrue();
-    }
-
-    [TestCase]
-    public void StatefulAcceptsAStateOwnerWithStateHandler()
-    {
-        InteractionStateful stateful = new() { StateOwner = new TestStateOwner() };
 
         string[] warnings = InteractionValidator.Validate(stateful).ToArray();
 
@@ -149,28 +127,5 @@ public sealed partial class InteractionConfigurationTest
         AssertThat(typeof(InteractionStateful).GetMethod("EndInteractionPhase") == null).IsTrue();
         AssertThat(typeof(InteractionStateful).GetMethod("ReleaseInteractionInput") == null)
             .IsTrue();
-    }
-
-    private sealed partial class TestInteractionOwner : Node3D, IInteractionHandler
-    {
-        public InteractionStatus EvaluateCustomInteractionStatus(in InteractionContext context) =>
-            new InteractionAllowed();
-
-        public void OnStartInteractionInput(in InteractionContext context) { }
-
-        public void OnEndInteractionInput(in InteractionContext context) { }
-    }
-
-    private sealed partial class TestStateOwner : Node, IInteractionStateHandler
-    {
-        public void OnInteractionStateChangedAuthority(
-            InteractionState oldState,
-            InteractionState newState
-        ) { }
-
-        public void OnInteractionStateChangedPresentation(
-            InteractionState oldState,
-            InteractionState newState
-        ) { }
     }
 }

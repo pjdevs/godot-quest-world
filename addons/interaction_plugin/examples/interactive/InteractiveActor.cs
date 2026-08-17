@@ -1,11 +1,12 @@
 using Godot;
 using QuestWorld.Interaction.Runtime.Interactive;
+using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Interaction.Runtime.State;
 
 namespace QuestWorld.Interaction.Examples.Interactive;
 
 [GlobalClass]
-public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractionStateHandler
+public partial class InteractiveActor : Node3D
 {
     [Export]
     public InteractiveComponent? Interactive
@@ -60,6 +61,9 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
             SetProcess(false);
             return;
         }
+
+        Interactive.InteractionInputStarted += OnInteractionInputStarted;
+        Interactive.InteractionInputEnded += OnInteractionInputEnded;
     }
 
     public override void _Process(double delta)
@@ -83,38 +87,25 @@ public partial class InteractiveActor : Node3D, IInteractionHandler, IInteractio
         }
     }
 
-    public InteractionStatus EvaluateCustomInteractionStatus(in InteractionContext context)
+    public override void _ExitTree()
     {
-        if (Stateful is null)
+        if (Interactive is not null && IsInstanceValid(Interactive))
         {
-            return new InteractionBlocked("Interaction is not configured.");
+            Interactive.InteractionInputStarted -= OnInteractionInputStarted;
+            Interactive.InteractionInputEnded -= OnInteractionInputEnded;
         }
-
-        return Stateful.State == InteractionState.Activated
-            ? new InteractionBlocked("This is already activated.")
-            : new InteractionAllowed();
     }
 
-    public void OnStartInteractionInput(in InteractionContext context)
+    private void OnInteractionInputStarted(InteractionInteractor interactor)
     {
         StartCount++;
         _activationElapsed = 0.0f;
-        Interactive?.StartInteractionPhase(context.Interactor);
+        Interactive?.StartInteractionPhase(interactor);
     }
 
-    public void OnEndInteractionInput(in InteractionContext context)
+    private void OnInteractionInputEnded(InteractionInteractor interactor)
     {
         EndCount++;
         _releaseRequested = true;
     }
-
-    public void OnInteractionStateChangedAuthority(
-        InteractionState oldState,
-        InteractionState newState
-    ) { }
-
-    public void OnInteractionStateChangedPresentation(
-        InteractionState oldState,
-        InteractionState newState
-    ) { }
 }

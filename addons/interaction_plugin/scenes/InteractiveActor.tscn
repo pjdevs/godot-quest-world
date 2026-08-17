@@ -66,9 +66,8 @@ PromptScene = ExtResource("4_prompt")
 IndicationScene = ExtResource("5_indicator")
 InteractionRules = Array[ExtResource("5_ll77h")]([SubResource("Resource_ll77h")])
 
-[node name="Stateful" type="Node" parent="." unique_id=239787997 node_paths=PackedStringArray("StateOwner")]
+[node name="Stateful" type="Node" parent="." unique_id=239787997]
 script = ExtResource("3_stateful")
-StateOwner = NodePath("..")
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="Stateful" unique_id=1934071616]
 replication_config = SubResource("SceneReplicationConfig_state")

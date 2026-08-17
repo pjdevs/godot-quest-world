@@ -11,6 +11,15 @@ public partial class InteractionStateful : Node
     [Signal]
     public delegate void InteractionStateChangedEventHandler(int oldState, int newState);
 
+    [Signal]
+    public delegate void InteractionStateChangedAuthorityEventHandler(int oldState, int newState);
+
+    [Signal]
+    public delegate void InteractionStateChangedPresentationEventHandler(
+        int oldState,
+        int newState
+    );
+
     [Export]
     public InteractionState InitialState { get; set; } = InteractionState.Idle;
 
@@ -20,9 +29,6 @@ public partial class InteractionStateful : Node
         get => _state;
         set => ApplyState(value);
     }
-
-    [Export]
-    public Node? StateOwner { get; set; }
 
     private InteractionState _state;
 
@@ -64,12 +70,12 @@ public partial class InteractionStateful : Node
             );
         }
 
-        ApplyState(savedState.State, forceCallbacks: true);
+        ApplyState(savedState.State, forceSignals: true);
     }
 
-    private bool ApplyState(InteractionState state, bool forceCallbacks = false)
+    private bool ApplyState(InteractionState state, bool forceSignals = false)
     {
-        if (_state == state && !forceCallbacks)
+        if (_state == state && !forceSignals)
         {
             return false;
         }
@@ -78,17 +84,14 @@ public partial class InteractionStateful : Node
         _state = state;
         EmitSignal(SignalName.InteractionStateChanged, (int)oldState, (int)state);
 
-        if (StateOwner is IInteractionStateHandler handler)
+        if (Multiplayer.IsServer())
         {
-            if (Multiplayer.IsServer())
-            {
-                handler.OnInteractionStateChangedAuthority(oldState, state);
-            }
+            EmitSignal(SignalName.InteractionStateChangedAuthority, (int)oldState, (int)state);
+        }
 
-            if (!OS.HasFeature("dedicated_server"))
-            {
-                handler.OnInteractionStateChangedPresentation(oldState, state);
-            }
+        if (!OS.HasFeature("dedicated_server"))
+        {
+            EmitSignal(SignalName.InteractionStateChangedPresentation, (int)oldState, (int)state);
         }
 
         return true;

@@ -10,6 +10,12 @@ namespace QuestWorld.Interaction.Runtime.Interactive;
 public partial class InteractiveComponent : Node
 {
     [Signal]
+    public delegate void InteractionInputStartedEventHandler(InteractionInteractor interactor);
+
+    [Signal]
+    public delegate void InteractionInputEndedEventHandler(InteractionInteractor interactor);
+
+    [Signal]
     public delegate void InteractiveStatusChangedEventHandler();
 
     [ExportGroup("Interaction")]
@@ -59,6 +65,12 @@ public partial class InteractiveComponent : Node
     public string Description { get; set; } = string.Empty;
 
     [Export]
+    public string BusyReason { get; set; } = "This is busy.";
+
+    [Export]
+    public string ActivatedReason { get; set; } = "This is already activated.";
+
+    [Export]
     public StringName InteractionActionName { get; set; } = "interact";
 
     [Export]
@@ -90,11 +102,9 @@ public partial class InteractiveComponent : Node
             GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionArea.");
         }
 
-        if (InteractionOwner is not IInteractionHandler)
+        if (InteractionOwner is null)
         {
-            GD.PushError(
-                $"{GetPath()}: InteractiveComponent owner must implement IInteractionHandler."
-            );
+            GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionOwner.");
         }
 
         if (InteractionArea is not null)
@@ -122,9 +132,9 @@ public partial class InteractiveComponent : Node
             return new InteractionBlocked("Interaction is not configured.");
         }
 
-        if (InteractionOwner is not IInteractionHandler handler)
+        if (InteractionOwner is null)
         {
-            return new InteractionBlocked("Interaction has no valid handler.");
+            return new InteractionBlocked("Interaction is not configured.");
         }
 
         if (ActiveInteractor is not null && ActiveInteractor != interactor)
@@ -135,8 +145,8 @@ public partial class InteractiveComponent : Node
         if (Stateful is not null && Stateful.State != InteractionState.Idle)
         {
             return Stateful.State == InteractionState.Activated
-                ? new InteractionBlocked("This is already activated.")
-                : new InteractionBlocked("This is busy.");
+                ? new InteractionBlocked(ActivatedReason)
+                : new InteractionBlocked(BusyReason);
         }
 
         InteractionContext context = new(interactor, this, InteractionOwner);
@@ -154,7 +164,7 @@ public partial class InteractiveComponent : Node
             }
         }
 
-        return handler.EvaluateCustomInteractionStatus(context);
+        return new InteractionAllowed();
     }
 
     public InteractionPresentation GetPresentation(InteractionInteractor interactor, bool isFocused)
@@ -171,16 +181,12 @@ public partial class InteractiveComponent : Node
 
     public bool StartInteraction(InteractionInteractor interactor)
     {
-        if (
-            EvaluateStatus(interactor) is not InteractionAllowed
-            || InteractionOwner is not IInteractionHandler handler
-        )
+        if (EvaluateStatus(interactor) is not InteractionAllowed)
         {
             return false;
         }
 
-        InteractionContext context = new(interactor, this, InteractionOwner);
-        handler.OnStartInteractionInput(context);
+        EmitSignal(SignalName.InteractionInputStarted, interactor);
         return true;
     }
 
@@ -232,12 +238,7 @@ public partial class InteractiveComponent : Node
         }
 
         _activeInteractor = null;
-        if (InteractionOwner is IInteractionHandler handler)
-        {
-            InteractionContext context = new(interactor, this, InteractionOwner);
-            handler.OnEndInteractionInput(context);
-        }
-
+        EmitSignal(SignalName.InteractionInputEnded, interactor);
         NotifyStatusChanged();
         return true;
     }

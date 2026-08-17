@@ -27,7 +27,7 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task RulesStopAtFirstBlockBeforeCustomHandler()
+    public async Task RulesStopAtFirstBlock()
     {
         TestInteractionOwner owner = new();
         Area3D area = new() { Name = "InteractionArea" };
@@ -57,7 +57,41 @@ public sealed partial class InteractionBehaviorTest
 
         AssertThat(status is InteractionBlocked blocked && blocked.Reason == "First reason")
             .IsTrue();
-        AssertThat(owner.CustomStatusEvaluationCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task CustomRuleCanEvaluateOwnerGameplayState()
+    {
+        TestInteractionOwner owner = new() { GameplayBlocked = true };
+        Area3D area = new() { Name = "InteractionArea" };
+        InteractiveComponent interactive = new()
+        {
+            InteractionArea = area,
+            InteractionOwner = owner,
+            InteractionRules = new Godot.Collections.Array<InteractionRule>
+            {
+                new OwnerGameplayRule(),
+            },
+        };
+        owner.AddChild(area);
+        owner.AddChild(interactive);
+        InteractionInteractor interactor = new();
+        Node3D world = new();
+        world.AddChild(owner);
+        world.AddChild(interactor);
+        ISceneRunner runner = ISceneRunner.Load(world);
+        await runner.SimulateFrames(1);
+
+        InteractionStatus blockedStatus = interactive.EvaluateStatus(interactor);
+        owner.GameplayBlocked = false;
+        InteractionStatus allowedStatus = interactive.EvaluateStatus(interactor);
+
+        AssertThat(
+                blockedStatus is InteractionBlocked blocked
+                    && blocked.Reason == "Gameplay condition is blocked."
+            )
+            .IsTrue();
+        AssertThat(allowedStatus is InteractionAllowed).IsTrue();
     }
 
     [TestCase]
@@ -103,15 +137,27 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task ActivatedStateCannotBeInteractedAgainWhenCustomStatusAllowsIt()
+    public async Task StatefulBlockReasonsAreConfigurable()
     {
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactive.BusyReason = "Talking...";
+        testWorld.Interactive.ActivatedReason = "Already used.";
+        testWorld.Stateful.SetState(InteractionState.Activating);
+
+        InteractionStatus busyStatus = testWorld.Interactive.EvaluateStatus(testWorld.Interactor);
         testWorld.Stateful.SetState(InteractionState.Activated);
 
-        InteractionStatus status = testWorld.Interactive.EvaluateStatus(testWorld.Interactor);
+        InteractionStatus activatedStatus = testWorld.Interactive.EvaluateStatus(
+            testWorld.Interactor
+        );
 
-        AssertThat(status is InteractionBlocked).IsTrue();
+        AssertThat(busyStatus is InteractionBlocked busy && busy.Reason == "Talking...").IsTrue();
+        AssertThat(
+                activatedStatus is InteractionBlocked activated
+                    && activated.Reason == "Already used."
+            )
+            .IsTrue();
     }
 
     [TestCase]
@@ -141,7 +187,7 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task SnapshotRestoreReappliesCallbacksWhenStateIsUnchanged()
+    public async Task SnapshotRestoreReappliesSignalsWhenStateIsUnchanged()
     {
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
@@ -158,12 +204,14 @@ public sealed partial class InteractionBehaviorTest
     public async Task StandaloneStatefulChangesSignalsReplicatesAndRestoresState()
     {
         TestInteractionOwner owner = new();
-        InteractionStateful stateful = new() { Name = "Stateful", StateOwner = owner };
+        InteractionStateful stateful = new() { Name = "Stateful" };
         owner.AddChild(stateful);
         ISceneRunner runner = ISceneRunner.Load(owner);
         await runner.SimulateFrames(1);
         int signalCount = 0;
         stateful.InteractionStateChanged += (_, _) => signalCount++;
+        stateful.InteractionStateChangedAuthority += owner.OnInteractionStateChangedAuthority;
+        stateful.InteractionStateChangedPresentation += owner.OnInteractionStateChangedPresentation;
 
         AssertThat(stateful.SetState(InteractionState.Activated)).IsTrue();
         InteractionSavedState saved = stateful.SaveState();
@@ -188,6 +236,8 @@ public sealed partial class InteractionBehaviorTest
         };
         owner.AddChild(area);
         owner.AddChild(interactive);
+        interactive.InteractionInputStarted += owner.OnInteractionInputStarted;
+        owner.Interactive = interactive;
         InteractionInteractor interactor = new();
         Node3D world = new();
         world.AddChild(owner);
@@ -304,7 +354,7 @@ public sealed partial class InteractionBehaviorTest
         };
         Area3D area = new() { Name = "InteractionArea" };
         area.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = 3.0f } });
-        InteractionStateful stateful = new() { Name = "Stateful", StateOwner = owner };
+        InteractionStateful stateful = new() { Name = "Stateful" };
         InteractiveComponent interactive = new()
         {
             Name = "Interactive",
@@ -315,6 +365,11 @@ public sealed partial class InteractionBehaviorTest
         owner.AddChild(area);
         owner.AddChild(stateful);
         owner.AddChild(interactive);
+        interactive.InteractionInputStarted += owner.OnInteractionInputStarted;
+        interactive.InteractionInputEnded += owner.OnInteractionInputEnded;
+        stateful.InteractionStateChangedAuthority += owner.OnInteractionStateChangedAuthority;
+        stateful.InteractionStateChangedPresentation += owner.OnInteractionStateChangedPresentation;
+        owner.Interactive = interactive;
 
         Node3D view = new() { Name = "ViewOrigin" };
         InteractionInteractor interactor = new()
@@ -339,45 +394,43 @@ public sealed partial class InteractionBehaviorTest
         InteractionInteractor Interactor
     );
 
-    private sealed partial class TestInteractionOwner
-        : Node3D,
-            IInteractionHandler,
-            IInteractionStateHandler
+    private sealed partial class TestInteractionOwner : Node3D
     {
-        public int CustomStatusEvaluationCount { get; private set; }
+        public InteractiveComponent? Interactive { get; set; }
+
+        public bool GameplayBlocked { get; set; }
+
         public int StartCount { get; private set; }
         public int EndCount { get; private set; }
         public int AuthorityStateChanges { get; private set; }
         public int PresentationStateChanges { get; private set; }
 
-        public InteractionStatus EvaluateCustomInteractionStatus(in InteractionContext context)
-        {
-            CustomStatusEvaluationCount++;
-            return new InteractionAllowed();
-        }
-
-        public void OnStartInteractionInput(in InteractionContext context)
+        public void OnInteractionInputStarted(InteractionInteractor interactor)
         {
             StartCount++;
-            context.Interactive.StartInteractionPhase(context.Interactor);
+            Interactive?.StartInteractionPhase(interactor);
         }
 
-        public void OnEndInteractionInput(in InteractionContext context) => EndCount++;
+        public void OnInteractionInputEnded(InteractionInteractor interactor) => EndCount++;
 
-        public void OnInteractionStateChangedAuthority(
-            InteractionState oldState,
-            InteractionState newState
-        )
+        public void OnInteractionStateChangedAuthority(int oldState, int newState)
         {
             AuthorityStateChanges++;
         }
 
-        public void OnInteractionStateChangedPresentation(
-            InteractionState oldState,
-            InteractionState newState
-        )
+        public void OnInteractionStateChangedPresentation(int oldState, int newState)
         {
             PresentationStateChanges++;
+        }
+    }
+
+    private sealed partial class OwnerGameplayRule : InteractionRule
+    {
+        public override InteractionStatus Evaluate(in InteractionContext context)
+        {
+            return context.InteractionOwner is TestInteractionOwner { GameplayBlocked: true }
+                ? new InteractionBlocked("Gameplay condition is blocked.")
+                : new InteractionAllowed();
         }
     }
 }
