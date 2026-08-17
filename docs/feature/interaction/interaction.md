@@ -34,6 +34,10 @@ Les composants principaux (`InteractiveComponent`, `InteractionInteractor`, `Int
 
 Les warnings sont compilés sous `TOOLS` dans les scripts du plugin editor et affichés directement dans l’Inspector. `plugin.cfg` charge `editor/InteractionEditorPlugin.cs`, qui couvre les cinq types validés. L’Inspector identifie les scripts par leur classe globale ou leur chemin et lit leurs propriétés exportées via l’API Godot, afin de fonctionner avec les placeholders editor sans rendre les composants runtime `[Tool]`. `InteractiveActor` signale séparément l’absence de ses références `Interactive` et `Stateful`.
 
+## XML API documentation
+
+Les types et membres publics du runtime, des rules fournies et de la présentation possèdent des commentaires XML courts destinés à l’intégration. Ils précisent notamment les appels réservés au serveur, les RPC appelés par Godot plutôt que par le gameplay, les signaux locaux de présentation et les différences entre client, listen host et dedicated server. Les implémentations de `InteractionRule` documentent aussi leur contrainte de pureté et leur double évaluation client/serveur.
+
 ## Base scene
 
 [`scenes/InteractiveActor.tscn`](../../addons/interaction_plugin/scenes/InteractiveActor.tscn) est le prefab de départ duplicable : zones d'interaction et d'indication, ancre, composant, état répliqué et widgets par défaut. Son `InteractiveComponent` possède la réservation et écoute le signal d’état universel pour invalider automatiquement le statut interactif. Son script d'exemple s'abonne aux signaux d'input et réalise une activation longue avec annulation au relâchement et passage à `Activated`.

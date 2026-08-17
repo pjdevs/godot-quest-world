@@ -5,9 +5,17 @@ using QuestWorld.Interaction.Runtime.Interactor;
 
 namespace QuestWorld.Interaction.Presentation.UI;
 
+/// <summary>
+/// Creates and projects prompt and indication widgets for one locally controlled interactor.
+/// </summary>
+/// <remarks>
+/// This node is presentation-only. It clears itself for remote characters and never runs gameplay
+/// decisions or authoritative state changes.
+/// </remarks>
 [GlobalClass]
 public partial class InteractionPresenter : CanvasLayer
 {
+    /// <summary>Gets or sets the interactor whose local focus and indication signals are presented.</summary>
     [ExportGroup("Projection")]
     [Export]
     public InteractionInteractor? Interactor
@@ -24,6 +32,7 @@ public partial class InteractionPresenter : CanvasLayer
         }
     }
 
+    /// <summary>Gets or sets the local camera used to project world anchors onto the screen.</summary>
     [Export]
     public Camera3D? Camera
     {
@@ -45,6 +54,7 @@ public partial class InteractionPresenter : CanvasLayer
     private readonly Dictionary<InteractiveComponent, Control> _indications = new();
     private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
 
+    /// <summary>Godot callback that validates references, connects interactor signals, and refreshes UI.</summary>
     public override void _Ready()
     {
         if (Interactor is null)
@@ -70,6 +80,7 @@ public partial class InteractionPresenter : CanvasLayer
         Refresh();
     }
 
+    /// <summary>Godot callback that disconnects all interactor presentation signals.</summary>
     public override void _ExitTree()
     {
         if (Interactor is null)
@@ -83,6 +94,7 @@ public partial class InteractionPresenter : CanvasLayer
         Interactor.InteractiveIndicationRemoved -= OnInteractiveIndicationRemoved;
     }
 
+    /// <summary>Godot callback that updates local widget selection and screen projection each frame.</summary>
     public override void _Process(double delta)
     {
         if (Interactor is null || !Interactor.IsLocallyControlled)

@@ -5,12 +5,25 @@ using QuestWorld.Interaction.Runtime.Interactive;
 
 namespace QuestWorld.Interaction.Runtime.Interactor;
 
+/// <summary>
+/// Detects interaction targets, selects local focus, and routes input intentions to the server.
+/// </summary>
+/// <remarks>
+/// Add one instance to each interacting character. Focus and presentation run only for
+/// <see cref="OwnerPeerId"/>, while authoritative validation and gameplay dispatch run on the server.
+/// </remarks>
 [GlobalClass]
 public partial class InteractionInteractor : Node
 {
+    /// <summary>Emitted locally when the best target changes.</summary>
+    /// <param name="interactive">New focused interactive, or null when focus is cleared.</param>
     [Signal]
     public delegate void FocusedInteractiveChangedEventHandler(Node interactive);
 
+    /// <summary>Emitted locally when a visible target's allowed status or blocked reason changes.</summary>
+    /// <param name="interactive">Interactive whose presentation status changed.</param>
+    /// <param name="isAllowed">Whether interaction is currently allowed.</param>
+    /// <param name="reason">Blocked reason, or an empty string when allowed.</param>
     [Signal]
     public delegate void InteractionStatusChangedEventHandler(
         Node interactive,
@@ -18,18 +31,28 @@ public partial class InteractionInteractor : Node
         string reason
     );
 
+    /// <summary>Emitted locally after prevalidation and before any client RPC or host dispatch.</summary>
+    /// <param name="interactive">Target requested by the owning player.</param>
     [Signal]
     public delegate void InteractionRequestedEventHandler(Node interactive);
 
+    /// <summary>Emitted locally for a prevalidation failure or a rejection returned by the server.</summary>
+    /// <param name="interactive">Rejected target, or null when no target can be resolved.</param>
+    /// <param name="reason">User-facing rejection reason.</param>
     [Signal]
     public delegate void InteractionRejectedEventHandler(Node interactive, string reason);
 
+    /// <summary>Emitted when an interactive enters the optional indication area.</summary>
+    /// <param name="interactive">Interactive available for indication presentation.</param>
     [Signal]
     public delegate void InteractiveIndicationAddedEventHandler(Node interactive);
 
+    /// <summary>Emitted when an interactive leaves the optional indication area.</summary>
+    /// <param name="interactive">Interactive removed from indication presentation.</param>
     [Signal]
     public delegate void InteractiveIndicationRemovedEventHandler(Node interactive);
 
+    /// <summary>Gets or sets the required view transform used for angle and alignment scoring.</summary>
     [ExportGroup("Detection")]
     [Export]
     public Node3D? ViewOrigin
@@ -46,25 +69,34 @@ public partial class InteractionInteractor : Node
         }
     }
 
+    /// <summary>
+    /// Gets or sets the optional physical origin used for distance checks. Defaults to the Node3D parent.
+    /// </summary>
     [Export]
     public Node3D? InteractionOrigin { get; set; }
 
+    /// <summary>Gets or sets the maximum authoritative interaction distance in world units.</summary>
     [Export]
     public float MaxInteractionDistance { get; set; } = 10.0f;
 
+    /// <summary>Gets or sets the maximum view angle accepted for focus and server validation.</summary>
     [Export(PropertyHint.Range, "0,180,1")]
     public float MaxInteractionAngleDegrees { get; set; } = 30.0f;
 
+    /// <summary>Gets or sets how strongly distance reduces the focus score relative to alignment.</summary>
     [Export]
     public float DistanceScoreCoefficient { get; set; } = 0.5f;
 
+    /// <summary>Gets or sets the project input action associated with this interactor.</summary>
     [ExportGroup("Input")]
     [Export]
     public StringName InteractionActionName { get; set; } = "interact";
 
+    /// <summary>Gets or sets the server peer that receives reliable interaction RPCs.</summary>
     [Export]
     public int ServerPeerId { get; set; } = 1;
 
+    /// <summary>Gets or sets the peer allowed to control this interactor.</summary>
     [Export]
     public int OwnerPeerId { get; set; } = 1;
 
@@ -75,10 +107,13 @@ public partial class InteractionInteractor : Node
     private InteractiveComponent? _focusedInteractive;
     private InteractiveComponent? _activeInteractive;
 
+    /// <summary>Gets the target currently selected by the owning peer.</summary>
     public InteractiveComponent? FocusedInteractive => _focusedInteractive;
 
+    /// <summary>Gets whether this peer owns focus calculation, input requests, and presentation.</summary>
     public bool IsLocallyControlled => OwnerPeerId == (int)Multiplayer.GetUniqueId();
 
+    /// <summary>Godot callback that resolves origins and keeps node authority on the server.</summary>
     public override void _Ready()
     {
         _resolvedInteractionOrigin = InteractionOrigin ?? GetParent() as Node3D;
@@ -106,6 +141,7 @@ public partial class InteractionInteractor : Node
         SetMultiplayerAuthority(ServerPeerId);
     }
 
+    /// <summary>Godot callback that recalculates focus for the owning peer each frame.</summary>
     public override void _Process(double delta)
     {
         if (!IsLocallyControlled)
@@ -285,11 +321,19 @@ public partial class InteractionInteractor : Node
         return alignment >= minimumAlignment;
     }
 
+    /// <summary>Builds a fresh prompt snapshot for the current focused target.</summary>
+    /// <returns>The focused presentation, or null when no target is focused.</returns>
     public InteractionPresentation? GetInteractionPresentation()
     {
         return _focusedInteractive?.GetPresentation(this, true);
     }
 
+    /// <summary>Prevalidates the focused target and requests authoritative interaction start.</summary>
+    /// <remarks>
+    /// Call from the local player's input code. On a client, true means the reliable request was sent;
+    /// final acceptance is reported by gameplay state or <see cref="InteractionRejected"/>.
+    /// </remarks>
+    /// <returns>Whether a locally valid request was dispatched or accepted by the host.</returns>
     public bool TryStartInteractionInput()
     {
         RecalculateFocus();
@@ -316,6 +360,11 @@ public partial class InteractionInteractor : Node
         return TryStartInteractionAuthoritatively(target, OwnerPeerId, out _);
     }
 
+    /// <summary>Requests authoritative release of the currently active interaction input.</summary>
+    /// <remarks>
+    /// Call from the local player's input-release code. On a client, true means the request was sent.
+    /// </remarks>
+    /// <returns>Whether a request was sent or the host released an active interaction.</returns>
     public bool TryEndInteractionInput()
     {
         if (!Multiplayer.IsServer())
@@ -347,6 +396,7 @@ public partial class InteractionInteractor : Node
         return interactive.ReleaseInteractionInput(this);
     }
 
+    /// <summary>Godot callback that releases server reservations and unregisters detected targets.</summary>
     public override void _ExitTree()
     {
         if (
@@ -374,6 +424,9 @@ public partial class InteractionInteractor : Node
         _focusedInteractive = null;
     }
 
+    /// <summary>Reliable client-to-server RPC that validates and starts one target.</summary>
+    /// <remarks>Called by Godot RPC dispatch; input code should call <see cref="TryStartInteractionInput"/>.</remarks>
+    /// <param name="targetPath">Scene-tree path of the client-selected interactive.</param>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,
         CallLocal = false,
@@ -396,6 +449,8 @@ public partial class InteractionInteractor : Node
         }
     }
 
+    /// <summary>Reliable client-to-server RPC that releases the caller's active interaction.</summary>
+    /// <remarks>Called by Godot RPC dispatch; input code should call <see cref="TryEndInteractionInput"/>.</remarks>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,
         CallLocal = false,
@@ -413,6 +468,10 @@ public partial class InteractionInteractor : Node
         EndInteractionInputAuthoritatively(senderPeerId);
     }
 
+    /// <summary>Reliable server-to-owner RPC that reports an authoritative rejection.</summary>
+    /// <remarks>Called by Godot RPC dispatch on the owning client or directly on an offline host.</remarks>
+    /// <param name="targetPath">Rejected target path, which may be empty.</param>
+    /// <param name="reason">User-facing rejection reason.</param>
     [Rpc(
         MultiplayerApi.RpcMode.Authority,
         CallLocal = false,

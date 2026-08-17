@@ -6,18 +6,38 @@ using QuestWorld.Interaction.Runtime.State;
 
 namespace QuestWorld.Interaction.Runtime.Interactive;
 
+/// <summary>
+/// Defines an interactable target, evaluates its rules, and owns any active interaction phase.
+/// </summary>
+/// <remarks>
+/// Add this node beside its gameplay owner and assign explicit scene references in the Inspector.
+/// Authoritative start, end, and phase mutations run on the server or offline host.
+/// </remarks>
 [GlobalClass]
 public partial class InteractiveComponent : Node
 {
+    /// <summary>
+    /// Emitted on the authoritative instance after start validation succeeds. Gameplay subscribers
+    /// start the concrete action here and may synchronously call <see cref="StartInteractionPhase"/>.
+    /// </summary>
+    /// <param name="interactor">Interactor that requested the interaction.</param>
     [Signal]
     public delegate void InteractionInputStartedEventHandler(InteractionInteractor interactor);
 
+    /// <summary>
+    /// Emitted on the authoritative instance when the active interactor releases input or is removed.
+    /// </summary>
+    /// <param name="interactor">Interactor whose active input was released.</param>
     [Signal]
     public delegate void InteractionInputEndedEventHandler(InteractionInteractor interactor);
 
+    /// <summary>
+    /// Emitted on any peer whose visible interaction status may have changed.
+    /// </summary>
     [Signal]
     public delegate void InteractiveStatusChangedEventHandler();
 
+    /// <summary>Gets or sets the required area that registers interactors in interaction range.</summary>
     [ExportGroup("Interaction")]
     [Export]
     public Area3D? InteractionArea
@@ -34,15 +54,19 @@ public partial class InteractiveComponent : Node
         }
     }
 
+    /// <summary>Gets or sets the optional wider area used to show interaction indications.</summary>
     [Export]
     public Area3D? IndicationArea { get; set; }
 
+    /// <summary>Gets or sets the optional world-space point used for range, focus, and projection.</summary>
     [Export]
     public Node3D? InteractionAnchor { get; set; }
 
+    /// <summary>Gets or sets the optional replicated and persistent state component.</summary>
     [Export]
     public InteractionStateful? Stateful { get; set; }
 
+    /// <summary>Gets or sets the gameplay node exposed to rules through <see cref="InteractionContext"/>.</summary>
     [Export]
     public Node? InteractionOwner
     {
@@ -58,33 +82,45 @@ public partial class InteractiveComponent : Node
         }
     }
 
+    /// <summary>Gets or sets the player-facing name used by presentation widgets.</summary>
     [Export]
     public string DisplayName { get; set; } = "Interact";
 
+    /// <summary>Gets or sets optional descriptive text included in presentation snapshots.</summary>
     [Export(PropertyHint.MultilineText)]
     public string Description { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets the reason shown while the stateful interaction is in a transient state.</summary>
     [Export]
     public string BusyReason { get; set; } = "This is busy.";
 
+    /// <summary>Gets or sets the reason shown after the stateful interaction has been activated.</summary>
     [Export]
     public string ActivatedReason { get; set; } = "This is already activated.";
 
+    /// <summary>Gets or sets the input action displayed by the prompt.</summary>
     [Export]
     public StringName InteractionActionName { get; set; } = "interact";
 
+    /// <summary>Gets or sets whether local focus immediately requests interaction without player input.</summary>
     [Export]
     public bool AutomaticInteraction { get; set; }
 
+    /// <summary>Gets or sets the optional prompt scene shown for the focused target.</summary>
     [Export]
     public PackedScene? PromptScene { get; set; }
 
+    /// <summary>Gets or sets the optional indication scene shown when this target is allowed.</summary>
     [Export]
     public PackedScene? IndicationScene { get; set; }
 
+    /// <summary>Gets or sets the optional indication scene shown when this target is blocked.</summary>
     [Export]
     public PackedScene? BlockedIndicationScene { get; set; }
 
+    /// <summary>
+    /// Gets or sets the ordered gameplay conditions. Evaluation stops at the first blocked result.
+    /// </summary>
     [Export]
     public Godot.Collections.Array<InteractionRule> InteractionRules { get; set; } = new();
 
@@ -95,6 +131,7 @@ public partial class InteractiveComponent : Node
 
     internal InteractionInteractor? ActiveInteractor => _activeInteractor;
 
+    /// <summary>Godot callback that validates configuration and connects area and state signals.</summary>
     public override void _Ready()
     {
         if (InteractionArea is null)
@@ -125,6 +162,15 @@ public partial class InteractiveComponent : Node
         }
     }
 
+    /// <summary>
+    /// Evaluates configuration, reservation, state, and gameplay rules for one interactor.
+    /// </summary>
+    /// <remarks>
+    /// Called repeatedly during local client presentation and again on the server before dispatch.
+    /// The evaluation and every rule must be side-effect free.
+    /// </remarks>
+    /// <param name="interactor">Interactor for which availability is evaluated.</param>
+    /// <returns>The first blocked status, or an allowed status when every check succeeds.</returns>
     public InteractionStatus EvaluateStatus(InteractionInteractor interactor)
     {
         if (interactor is null || InteractionArea is null)
@@ -167,6 +213,10 @@ public partial class InteractiveComponent : Node
         return new InteractionAllowed();
     }
 
+    /// <summary>Builds the local presentation snapshot for a prompt or indication widget.</summary>
+    /// <param name="interactor">Interactor viewing this target.</param>
+    /// <param name="isFocused">Whether this target currently owns focus.</param>
+    /// <returns>A fresh snapshot including the current evaluated status.</returns>
     public InteractionPresentation GetPresentation(InteractionInteractor interactor, bool isFocused)
     {
         return new InteractionPresentation(
@@ -179,6 +229,12 @@ public partial class InteractiveComponent : Node
         );
     }
 
+    /// <summary>
+    /// Revalidates and emits <see cref="InteractionInputStarted"/> for an authoritative request.
+    /// </summary>
+    /// <remarks>Called by <see cref="InteractionInteractor"/> on the server or offline host.</remarks>
+    /// <param name="interactor">Interactor starting the gameplay action.</param>
+    /// <returns><see langword="true"/> when validation succeeded and the signal was emitted.</returns>
     public bool StartInteraction(InteractionInteractor interactor)
     {
         if (EvaluateStatus(interactor) is not InteractionAllowed)
@@ -190,6 +246,13 @@ public partial class InteractiveComponent : Node
         return true;
     }
 
+    /// <summary>Reserves this stateful interaction and moves it to <see cref="InteractionState.Activating"/>.</summary>
+    /// <remarks>
+    /// Call synchronously from an authoritative <see cref="InteractionInputStarted"/> subscriber for
+    /// long-running interactions. Returns false on clients or stateless targets.
+    /// </remarks>
+    /// <param name="interactor">Interactor to reserve until the phase ends or input is released.</param>
+    /// <returns><see langword="true"/> when the server started and reserved the phase.</returns>
     public bool StartInteractionPhase(InteractionInteractor interactor)
     {
         if (
@@ -213,6 +276,10 @@ public partial class InteractiveComponent : Node
         return false;
     }
 
+    /// <summary>Completes the active phase, releases its interactor, and applies the next state.</summary>
+    /// <remarks>Call from authoritative gameplay code on the server or offline host.</remarks>
+    /// <param name="nextState">State to apply after the phase completes.</param>
+    /// <returns><see langword="true"/> when the state changed successfully.</returns>
     public bool EndInteractionPhase(InteractionState nextState)
     {
         if (ActiveInteractor is null || Stateful is null || !Multiplayer.IsServer())
@@ -230,6 +297,13 @@ public partial class InteractiveComponent : Node
         return stateChanged;
     }
 
+    /// <summary>Releases matching active input and emits <see cref="InteractionInputEnded"/>.</summary>
+    /// <remarks>
+    /// Called by the authoritative interactor when input ends, range is lost, or the interactor exits.
+    /// This is distinct from completing a phase with <see cref="EndInteractionPhase"/>.
+    /// </remarks>
+    /// <param name="interactor">Interactor expected to own the active phase.</param>
+    /// <returns><see langword="true"/> when matching active input was released.</returns>
     public bool ReleaseInteractionInput(InteractionInteractor interactor)
     {
         if (ActiveInteractor != interactor)
@@ -263,6 +337,8 @@ public partial class InteractiveComponent : Node
         _presentInteractors.Remove(interactor);
     }
 
+    /// <summary>Gets the world-space point used by focus scoring, range validation, and UI projection.</summary>
+    /// <returns>The anchor, owner position, or <see cref="Vector3.Zero"/> fallback.</returns>
     public Vector3 GetInteractionPosition()
     {
         if (InteractionAnchor is not null)
@@ -273,6 +349,7 @@ public partial class InteractiveComponent : Node
         return InteractionOwner is Node3D owner3D ? owner3D.GlobalPosition : Vector3.Zero;
     }
 
+    /// <summary>Godot callback that disconnects state and interactor registrations.</summary>
     public override void _ExitTree()
     {
         if (Stateful is not null && IsInstanceValid(Stateful))
