@@ -74,6 +74,7 @@ public partial class Character : CharacterBody3D
     private bool _configurationValid;
     private bool _isPossessed;
     private CharacterPlayerController _possessingController = null!;
+    private bool _lastKnownLocalNetworkAuthority = true;
     private ulong _networkPresentationFrameNumber;
     private bool _networkPresentationHasGroundSample;
     private bool _networkPresentationWasGrounded;
@@ -88,7 +89,19 @@ public partial class Character : CharacterBody3D
 
     public CharacterMovement Movement => _movement;
 
-    public bool IsLocalNetworkAuthority => IsMultiplayerAuthority();
+    public bool IsLocalNetworkAuthority
+    {
+        get
+        {
+            if (Multiplayer.MultiplayerPeer == null)
+            {
+                return _lastKnownLocalNetworkAuthority;
+            }
+
+            _lastKnownLocalNetworkAuthority = IsMultiplayerAuthority();
+            return _lastKnownLocalNetworkAuthority;
+        }
+    }
 
     public Node3D CameraPitchNode =>
         _cameraRig?.CameraPitch ?? GetNodeOrNull<Node3D>("CameraYaw/CameraPitch")!;
@@ -128,7 +141,7 @@ public partial class Character : CharacterBody3D
 
     public override void _PhysicsProcess(double delta)
     {
-        if (!_configurationValid || !IsMultiplayerAuthority())
+        if (!_configurationValid || !IsLocalNetworkAuthority)
         {
             return;
         }
@@ -149,7 +162,7 @@ public partial class Character : CharacterBody3D
 
     public override void _Process(double delta)
     {
-        if (!_configurationValid || IsMultiplayerAuthority())
+        if (!_configurationValid || IsLocalNetworkAuthority)
         {
             return;
         }

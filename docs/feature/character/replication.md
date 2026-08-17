@@ -200,3 +200,7 @@ godot --headless --path . --scene res://quest_world/levels/test_world.tscn -- --
 Sans mode explicite, la scène reste jouable en offline et le `NetworkSession` crée localement `Player_1`. Les peer IDs ENet clients étant aléatoires, ils sont ramenés à seize slots bornés uniquement pour le placement visuel de ce prototype.
 
 Ce spike ne constitue pas encore l’architecture finale : le client peut déplacer son Character et publier directement sa pose, il n’y a ni validation serveur, ni commandes RPC, ni prédiction/réconciliation, ni interpolation dédiée. Les collisions entre clients peuvent donc diverger et le mouvement reste facilement falsifiable. Les prochains points peuvent réutiliser le bootstrap, les chemins de scène, le cycle de spawn et les identités sans conserver ce modèle d’autorité.
+
+### Transition réseau vers offline
+
+L’absence de `MultiplayerPeer` est aussi le fonctionnement normal du mode offline ; elle ne doit donc pas désactiver le `Character`. Celui-ci mémorise la dernière autorité locale connue pendant le réseau : après une fermeture ou une déconnexion, le Character local continue à simuler tandis que les proxies distants restent non autoritaires. Les contrôles `_PhysicsProcess` et `_Process` passent par `IsLocalNetworkAuthority`, qui n’appelle jamais `IsMultiplayerAuthority()` sans peer.
