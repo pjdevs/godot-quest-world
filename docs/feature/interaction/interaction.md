@@ -32,7 +32,7 @@ Les composants principaux (`InteractiveComponent`, `InteractionInteractor`, `Int
 
 `InteractionInteractor.GetInteractionPresentation()` retourne `InteractionPresentation?`; l’absence de focus est donc représentée par l’absence de valeur. Le Presenter maintient sa propre liste d’indications à partir des signaux `InteractiveIndicationAdded` et `InteractiveIndicationRemoved`, sans lire les collections privées de détection.
 
-Les warnings sont compilés sous `TOOLS` dans les scripts du plugin editor et affichés directement dans l’Inspector. `plugin.cfg` charge `editor/InteractionEditorPlugin.cs`, qui couvre les cinq types validés. `InteractiveActor` signale séparément l’absence de ses références `Interactive` et `Stateful`.
+Les warnings sont compilés sous `TOOLS` dans les scripts du plugin editor et affichés directement dans l’Inspector. `plugin.cfg` charge `editor/InteractionEditorPlugin.cs`, qui couvre les cinq types validés. L’Inspector identifie les scripts par leur classe globale ou leur chemin et lit leurs propriétés exportées via l’API Godot, afin de fonctionner avec les placeholders editor sans rendre les composants runtime `[Tool]`. `InteractiveActor` signale séparément l’absence de ses références `Interactive` et `Stateful`.
 
 ## Base scene
 
