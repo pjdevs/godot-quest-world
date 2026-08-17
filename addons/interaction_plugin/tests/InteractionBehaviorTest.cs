@@ -57,6 +57,21 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public void OfflineInteractorKeepsLocalControlWithoutMultiplayerPeer()
+    {
+        InteractionInteractor interactor = new() { OwnerPeerId = 1 };
+
+        try
+        {
+            AssertThat(interactor.IsLocallyControlled).IsTrue();
+        }
+        finally
+        {
+            interactor.Free();
+        }
+    }
+
+    [TestCase]
     public async Task RulesStopAtFirstBlock()
     {
         TestInteractionOwner owner = new();

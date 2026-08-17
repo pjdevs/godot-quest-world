@@ -246,7 +246,7 @@ public partial class NetworkSession : Node
 
     private void OnServerDisconnected()
     {
-        GD.PushError("NetworkSession: server disconnected.");
+        GD.Print("NetworkSession: server disconnected; stopping session.");
         StopSession();
     }
 

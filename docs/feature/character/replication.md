@@ -204,3 +204,5 @@ Ce spike ne constitue pas encore l’architecture finale : le client peut dépla
 ### Transition réseau vers offline
 
 L’absence de `MultiplayerPeer` est aussi le fonctionnement normal du mode offline ; elle ne doit donc pas désactiver le `Character`. Celui-ci mémorise la dernière autorité locale connue pendant le réseau : après une fermeture ou une déconnexion, le Character local continue à simuler tandis que les proxies distants restent non autoritaires. Les contrôles `_PhysicsProcess` et `_Process` passent par `IsLocalNetworkAuthority`, qui n’appelle jamais `IsMultiplayerAuthority()` sans peer.
+
+`NetworkSession.OnServerDisconnected()` arrête alors proprement la session et journalise la transition sans la signaler comme une erreur ; le dernier Character et son interactor ne doivent pas émettre d'erreur Godot pendant les frames de fermeture restantes.

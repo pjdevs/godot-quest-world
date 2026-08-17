@@ -106,12 +106,27 @@ public partial class InteractionInteractor : Node
     private Node3D? _resolvedInteractionOrigin;
     private InteractiveComponent? _focusedInteractive;
     private InteractiveComponent? _activeInteractive;
+    private bool _hasKnownLocalControl;
+    private bool _lastKnownLocalControl;
 
     /// <summary>Gets the target currently selected by the owning peer.</summary>
     public InteractiveComponent? FocusedInteractive => _focusedInteractive;
 
     /// <summary>Gets whether this peer owns focus calculation, input requests, and presentation.</summary>
-    public bool IsLocallyControlled => OwnerPeerId == (int)Multiplayer.GetUniqueId();
+    public bool IsLocallyControlled
+    {
+        get
+        {
+            if (Multiplayer is null || Multiplayer.MultiplayerPeer is null)
+            {
+                return _hasKnownLocalControl ? _lastKnownLocalControl : OwnerPeerId == 1;
+            }
+
+            _lastKnownLocalControl = OwnerPeerId == (int)Multiplayer.GetUniqueId();
+            _hasKnownLocalControl = true;
+            return _lastKnownLocalControl;
+        }
+    }
 
     /// <summary>Godot callback that resolves origins and keeps node authority on the server.</summary>
     public override void _Ready()
@@ -135,7 +150,9 @@ public partial class InteractionInteractor : Node
 
         if (OwnerPeerId <= 0)
         {
-            OwnerPeerId = (int)Multiplayer.GetUniqueId();
+            OwnerPeerId = Multiplayer is null || Multiplayer.MultiplayerPeer is null
+                ? 1
+                : (int)Multiplayer.GetUniqueId();
         }
 
         SetMultiplayerAuthority(ServerPeerId);
@@ -564,7 +581,7 @@ public partial class InteractionInteractor : Node
     private void RejectInteraction(int senderPeerId, NodePath targetPath, string reason)
     {
         GD.PushWarning($"{GetPath()}: rejected interaction from peer {senderPeerId}: {reason}");
-        if (senderPeerId == (int)Multiplayer.GetUniqueId())
+        if (senderPeerId == OwnerPeerId && IsLocallyControlled)
         {
             ClientInteractionRejected(targetPath, reason);
         }
