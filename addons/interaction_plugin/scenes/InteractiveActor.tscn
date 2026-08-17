@@ -53,13 +53,12 @@ debug_color = Color(0, 0.56349266, 0.8623485, 0.41960785)
 
 [node name="InteractionAnchor" type="Marker3D" parent="." unique_id=818464048]
 
-[node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Stateful", "InteractionOwner")]
+[node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Stateful")]
 script = ExtResource("2_interactive")
 InteractionArea = NodePath("../InteractionArea")
 IndicationArea = NodePath("../IndicationArea")
 InteractionAnchor = NodePath("../InteractionAnchor")
 Stateful = NodePath("../Stateful")
-InteractionOwner = NodePath("..")
 DisplayName = "Super Interactive"
 Description = "Interact"
 PromptScene = ExtResource("4_prompt")

@@ -33,11 +33,9 @@ public enum InteractionState
 /// <summary>Read-only inputs supplied to every gameplay interaction rule.</summary>
 /// <param name="Interactor">Interactor requesting the status evaluation.</param>
 /// <param name="Interactive">Interactive component being evaluated.</param>
-/// <param name="InteractionOwner">Gameplay node configured as the interaction owner.</param>
 public readonly record struct InteractionContext(
     InteractionInteractor Interactor,
-    InteractiveComponent Interactive,
-    Node InteractionOwner
+    InteractiveComponent Interactive
 );
 
 /// <summary>Snapshot consumed by local prompt and indication presentation.</summary>

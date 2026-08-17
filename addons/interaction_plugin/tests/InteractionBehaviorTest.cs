@@ -74,12 +74,12 @@ public sealed partial class InteractionBehaviorTest
     [TestCase]
     public async Task RulesStopAtFirstBlock()
     {
-        TestInteractionOwner owner = new();
+        TestInteractiveActor owner = new();
         Area3D area = new() { Name = "InteractionArea" };
         InteractiveComponent interactive = new()
         {
             InteractionArea = area,
-            InteractionOwner = owner,
+            InteractionAnchor = owner,
             InteractionRules = new Godot.Collections.Array<InteractionRule>
             {
                 new AlwaysBlockedInteractionRule { Reason = "First reason" },
@@ -105,17 +105,17 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task CustomRuleCanEvaluateOwnerGameplayState()
+    public async Task CustomRuleCanEvaluateInteractiveParentGameplayState()
     {
-        TestInteractionOwner owner = new() { GameplayBlocked = true };
+        TestInteractiveActor owner = new() { GameplayBlocked = true };
         Area3D area = new() { Name = "InteractionArea" };
         InteractiveComponent interactive = new()
         {
             InteractionArea = area,
-            InteractionOwner = owner,
+            InteractionAnchor = owner,
             InteractionRules = new Godot.Collections.Array<InteractionRule>
             {
-                new OwnerGameplayRule(),
+                new InteractiveParentGameplayRule(),
             },
         };
         owner.AddChild(area);
@@ -248,7 +248,7 @@ public sealed partial class InteractionBehaviorTest
     [TestCase]
     public async Task StandaloneStatefulChangesSignalsReplicatesAndRestoresState()
     {
-        TestInteractionOwner owner = new();
+        TestInteractiveActor owner = new();
         InteractionStateful stateful = new() { Name = "Stateful" };
         owner.AddChild(stateful);
         ISceneRunner runner = ISceneRunner.Load(owner);
@@ -272,12 +272,12 @@ public sealed partial class InteractionBehaviorTest
     [TestCase]
     public async Task InteractiveWithoutStatefulSupportsInstantInteractionOnly()
     {
-        TestInteractionOwner owner = new();
+        TestInteractiveActor owner = new();
         Area3D area = new() { Name = "InteractionArea" };
         InteractiveComponent interactive = new()
         {
             InteractionArea = area,
-            InteractionOwner = owner,
+            InteractionAnchor = owner,
         };
         owner.AddChild(area);
         owner.AddChild(interactive);
@@ -392,9 +392,9 @@ public sealed partial class InteractionBehaviorTest
     private static TestWorld BuildWorld(int ownerPeerId = 1)
     {
         Node3D world = new();
-        TestInteractionOwner owner = new()
+        TestInteractiveActor owner = new()
         {
-            Name = "InteractiveOwner",
+            Name = "InteractiveActor",
             Position = new Vector3(0, 0, -2),
         };
         Area3D area = new() { Name = "InteractionArea" };
@@ -405,7 +405,7 @@ public sealed partial class InteractionBehaviorTest
             Name = "Interactive",
             InteractionArea = area,
             Stateful = stateful,
-            InteractionOwner = owner,
+            InteractionAnchor = owner,
         };
         owner.AddChild(area);
         owner.AddChild(stateful);
@@ -433,13 +433,13 @@ public sealed partial class InteractionBehaviorTest
     private sealed record TestWorld(
         Node3D World,
         ISceneRunner Runner,
-        TestInteractionOwner Owner,
+        TestInteractiveActor Owner,
         InteractionStateful Stateful,
         InteractiveComponent Interactive,
         InteractionInteractor Interactor
     );
 
-    private sealed partial class TestInteractionOwner : Node3D
+    private sealed partial class TestInteractiveActor : Node3D
     {
         public InteractiveComponent? Interactive { get; set; }
 
@@ -469,11 +469,11 @@ public sealed partial class InteractionBehaviorTest
         }
     }
 
-    private sealed partial class OwnerGameplayRule : InteractionRule
+    private sealed partial class InteractiveParentGameplayRule : InteractionRule
     {
         public override InteractionStatus Evaluate(in InteractionContext context)
         {
-            return context.InteractionOwner is TestInteractionOwner { GameplayBlocked: true }
+            return context.Interactive.GetParent() is TestInteractiveActor { GameplayBlocked: true }
                 ? new InteractionBlocked("Gameplay condition is blocked.")
                 : new InteractionAllowed();
         }

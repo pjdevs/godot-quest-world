@@ -30,7 +30,7 @@ public sealed partial class InteractionSceneTest
         InteractionStateful stateful = actor.GetNode<InteractionStateful>("Stateful");
 
         AssertThat(interactive.InteractionArea != null).IsTrue();
-        AssertThat(interactive.InteractionOwner == actor).IsTrue();
+        AssertThat(interactive.InteractionAnchor != null).IsTrue();
         AssertThat(stateful.State).IsEqual(InteractionState.Idle);
         MultiplayerSynchronizer synchronizer = actor.GetNode<MultiplayerSynchronizer>(
             "Stateful/MultiplayerSynchronizer"
@@ -78,8 +78,8 @@ public sealed partial class InteractionSceneTest
         character.AddChild(camera);
         character.AddChild(presenter);
         world.AddChild(character);
-        TestInteractionOwner firstOwner = CreateInteractiveOwner("First", new Vector3(0, 0, -2));
-        TestInteractionOwner secondOwner = CreateInteractiveOwner("Second", new Vector3(1, 0, -3));
+        TestInteractiveActor firstOwner = CreateInteractiveActor("First", new Vector3(0, 0, -2));
+        TestInteractiveActor secondOwner = CreateInteractiveActor("Second", new Vector3(1, 0, -3));
         world.AddChild(firstOwner);
         world.AddChild(secondOwner);
         ISceneRunner runner = ISceneRunner.Load(world);
@@ -126,7 +126,7 @@ public sealed partial class InteractionSceneTest
         character.AddChild(camera);
         character.AddChild(presenter);
         world.AddChild(character);
-        TestInteractionOwner owner = CreateInteractiveOwner("RemoteTarget", new Vector3(0, 0, -2));
+        TestInteractiveActor owner = CreateInteractiveActor("RemoteTarget", new Vector3(0, 0, -2));
         world.AddChild(owner);
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
@@ -139,16 +139,16 @@ public sealed partial class InteractionSceneTest
         AssertThat(presenter.GetChildCount()).IsEqual(0);
     }
 
-    private static TestInteractionOwner CreateInteractiveOwner(string displayName, Vector3 position)
+    private static TestInteractiveActor CreateInteractiveActor(string displayName, Vector3 position)
     {
-        TestInteractionOwner owner = new() { Name = displayName, Position = position };
+        TestInteractiveActor owner = new() { Name = displayName, Position = position };
         Area3D area = new() { Name = "InteractionArea" };
         owner.AddChild(area);
         InteractiveComponent interactive = new()
         {
             Name = "Interactive",
             InteractionArea = area,
-            InteractionOwner = owner,
+            InteractionAnchor = owner,
             DisplayName = displayName,
             PromptScene = GD.Load<PackedScene>(
                 "res://addons/interaction_plugin/scenes/InteractionPrompt.tscn"
@@ -161,5 +161,5 @@ public sealed partial class InteractionSceneTest
         return owner;
     }
 
-    private sealed partial class TestInteractionOwner : Node3D { }
+    private sealed partial class TestInteractiveActor : Node3D { }
 }

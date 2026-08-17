@@ -10,7 +10,7 @@ namespace QuestWorld.Interaction.Runtime.Interactive;
 /// Defines an interactable target, evaluates its rules, and owns any active interaction phase.
 /// </summary>
 /// <remarks>
-/// Add this node beside its gameplay owner and assign explicit scene references in the Inspector.
+/// Add this node beside its gameplay node and assign explicit scene references in the Inspector.
 /// Authoritative start, end, and phase mutations run on the server or offline host.
 /// </remarks>
 [GlobalClass]
@@ -58,29 +58,13 @@ public partial class InteractiveComponent : Node
     [Export]
     public Area3D? IndicationArea { get; set; }
 
-    /// <summary>Gets or sets the optional world-space point used for range, focus, and projection.</summary>
+    /// <summary>Gets or sets the required world-space point used for range, focus, and projection.</summary>
     [Export]
     public Node3D? InteractionAnchor { get; set; }
 
     /// <summary>Gets or sets the optional replicated and persistent state component.</summary>
     [Export]
     public InteractionStateful? Stateful { get; set; }
-
-    /// <summary>Gets or sets the gameplay node exposed to rules through <see cref="InteractionContext"/>.</summary>
-    [Export]
-    public Node? InteractionOwner
-    {
-        get => _interactionOwner;
-        set
-        {
-            if (_interactionOwner == value)
-            {
-                return;
-            }
-
-            _interactionOwner = value;
-        }
-    }
 
     /// <summary>Gets or sets the player-facing name used by presentation widgets.</summary>
     [Export]
@@ -126,7 +110,6 @@ public partial class InteractiveComponent : Node
 
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
     private Area3D? _interactionArea;
-    private Node? _interactionOwner;
     private InteractionInteractor? _activeInteractor;
 
     internal InteractionInteractor? ActiveInteractor => _activeInteractor;
@@ -139,9 +122,9 @@ public partial class InteractiveComponent : Node
             GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionArea.");
         }
 
-        if (InteractionOwner is null)
+        if (InteractionAnchor is null)
         {
-            GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionOwner.");
+            GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionAnchor.");
         }
 
         if (InteractionArea is not null)
@@ -173,12 +156,7 @@ public partial class InteractiveComponent : Node
     /// <returns>The first blocked status, or an allowed status when every check succeeds.</returns>
     public InteractionStatus EvaluateStatus(InteractionInteractor interactor)
     {
-        if (interactor is null || InteractionArea is null)
-        {
-            return new InteractionBlocked("Interaction is not configured.");
-        }
-
-        if (InteractionOwner is null)
+        if (interactor is null || InteractionArea is null || InteractionAnchor is null)
         {
             return new InteractionBlocked("Interaction is not configured.");
         }
@@ -195,7 +173,7 @@ public partial class InteractiveComponent : Node
                 : new InteractionBlocked(BusyReason);
         }
 
-        InteractionContext context = new(interactor, this, InteractionOwner);
+        InteractionContext context = new(interactor, this);
         foreach (InteractionRule rule in InteractionRules)
         {
             if (rule is null)
@@ -338,15 +316,10 @@ public partial class InteractiveComponent : Node
     }
 
     /// <summary>Gets the world-space point used by focus scoring, range validation, and UI projection.</summary>
-    /// <returns>The anchor, owner position, or <see cref="Vector3.Zero"/> fallback.</returns>
+    /// <returns>The configured anchor position, or <see cref="Vector3.Zero"/> before configuration.</returns>
     public Vector3 GetInteractionPosition()
     {
-        if (InteractionAnchor is not null)
-        {
-            return InteractionAnchor.GlobalPosition;
-        }
-
-        return InteractionOwner is Node3D owner3D ? owner3D.GlobalPosition : Vector3.Zero;
+        return InteractionAnchor?.GlobalPosition ?? Vector3.Zero;
     }
 
     /// <summary>Godot callback that disconnects state and interactor registrations.</summary>

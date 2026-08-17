@@ -32,9 +32,8 @@ public static class InteractionValidator
                 if (GetObject(obj, "InteractionArea") is null)
                     yield return "InteractionArea must be assigned.";
 
-                GodotObject? interactionOwner = GetObject(obj, "InteractionOwner");
-                if (interactionOwner is null)
-                    yield return "InteractionOwner must be assigned.";
+                if (GetObject(obj, "InteractionAnchor") is null)
+                    yield return "InteractionAnchor must be assigned.";
 
                 break;
             case InspectableType.InteractionInteractor:

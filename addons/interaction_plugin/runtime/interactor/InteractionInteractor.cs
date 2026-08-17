@@ -150,9 +150,10 @@ public partial class InteractionInteractor : Node
 
         if (OwnerPeerId <= 0)
         {
-            OwnerPeerId = Multiplayer is null || Multiplayer.MultiplayerPeer is null
-                ? 1
-                : (int)Multiplayer.GetUniqueId();
+            OwnerPeerId =
+                Multiplayer is null || Multiplayer.MultiplayerPeer is null
+                    ? 1
+                    : (int)Multiplayer.GetUniqueId();
         }
 
         SetMultiplayerAuthority(ServerPeerId);

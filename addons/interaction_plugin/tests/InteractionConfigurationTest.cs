@@ -17,23 +17,23 @@ using static GdUnit4.Assertions;
 public sealed partial class InteractionConfigurationTest
 {
     [TestCase]
-    public void InteractiveComponentRequiresExplicitAreaAndOwner()
+    public void InteractiveComponentRequiresExplicitAreaAndAnchor()
     {
         InteractiveComponent interactive = new();
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
         AssertThat(warnings.Contains("InteractionArea must be assigned.")).IsTrue();
-        AssertThat(warnings.Contains("InteractionOwner must be assigned.")).IsTrue();
+        AssertThat(warnings.Contains("InteractionAnchor must be assigned.")).IsTrue();
     }
 
     [TestCase]
-    public void InteractiveComponentAcceptsAnyAssignedOwner()
+    public void InteractiveComponentAcceptsAssignedAreaAndAnchor()
     {
         InteractiveComponent interactive = new()
         {
             InteractionArea = new Area3D(),
-            InteractionOwner = new Node3D(),
+            InteractionAnchor = new Node3D(),
         };
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
@@ -47,12 +47,18 @@ public sealed partial class InteractionConfigurationTest
         InteractiveComponent interactive = new()
         {
             InteractionArea = new Area3D(),
-            InteractionOwner = new Node3D(),
+            InteractionAnchor = new Node3D(),
         };
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
         AssertThat(warnings.Length).IsEqual(0);
+    }
+
+    [TestCase]
+    public void InteractiveComponentDoesNotExposeAnOwnerReference()
+    {
+        AssertThat(typeof(InteractiveComponent).GetProperty("InteractionOwner") == null).IsTrue();
     }
 
     [TestCase]
