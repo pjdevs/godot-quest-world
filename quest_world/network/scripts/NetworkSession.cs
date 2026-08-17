@@ -4,6 +4,15 @@ using QuestWorld.Character;
 
 public partial class NetworkSession : Node
 {
+    private enum SessionState
+    {
+        Stopped,
+        Connecting,
+        Active,
+        Stopping,
+        Failed,
+    }
+
     private const string DefaultPlayerScenePath = "res://quest_world/character/Character.tscn";
 
     [Export]
@@ -23,6 +32,10 @@ public partial class NetworkSession : Node
     private CharacterPlayerController _localPlayerController = null!;
     private NetworkLaunchOptions _launchOptions = null!;
     private bool _configurationValid;
+    private bool _multiplayerSignalsConnected;
+    private MultiplayerPeer? _peer;
+    private int _localPeerId;
+    private SessionState _sessionState;
 
     public NetworkLaunchOptions LaunchOptions => _launchOptions;
 
@@ -31,7 +44,7 @@ public partial class NetworkSession : Node
 
     public bool IsDedicatedServer => _launchOptions.Mode == NetworkLaunchMode.Server;
 
-    public int LocalPeerId => (int)Multiplayer.GetUniqueId();
+    public int LocalPeerId => _localPeerId;
 
     public override void _Ready()
     {
@@ -45,6 +58,7 @@ public partial class NetworkSession : Node
         if (!_configurationValid)
         {
             GD.PushError($"NetworkSession: {parseError}");
+            _sessionState = SessionState.Failed;
             GetTree().Quit(2);
             return;
         }
@@ -58,6 +72,7 @@ public partial class NetworkSession : Node
         {
             GD.PushError("NetworkSession: Players and PlayerSpawner nodes are required.");
             _configurationValid = false;
+            _sessionState = SessionState.Failed;
             return;
         }
 
@@ -68,28 +83,39 @@ public partial class NetworkSession : Node
 
         _playerSpawner.SpawnPath = _playerSpawner.GetPathTo(_players);
         _playerSpawner.AddSpawnableScene(PlayerScene.ResourcePath);
-        Multiplayer.PeerConnected += peerId => OnPeerConnected((int)peerId);
-        Multiplayer.PeerDisconnected += peerId => OnPeerDisconnected((int)peerId);
+        Multiplayer.PeerConnected += OnPeerConnected;
+        Multiplayer.PeerDisconnected += OnPeerDisconnected;
         Multiplayer.ConnectedToServer += OnConnectedToServer;
         Multiplayer.ConnectionFailed += OnConnectionFailed;
         Multiplayer.ServerDisconnected += OnServerDisconnected;
+        _multiplayerSignalsConnected = true;
 
         switch (_launchOptions.Mode)
         {
             case NetworkLaunchMode.Offline:
+                _localPeerId = 1;
+                _sessionState = SessionState.Active;
                 SpawnPlayer(1);
                 break;
             case NetworkLaunchMode.Host:
                 if (StartServer())
                 {
+                    _localPeerId = 1;
+                    _sessionState = SessionState.Active;
                     SpawnPlayer(1);
+                }
+                else
+                {
+                    _sessionState = SessionState.Failed;
                 }
                 break;
             case NetworkLaunchMode.Server:
-                StartServer();
+                _sessionState = StartServer() ? SessionState.Active : SessionState.Failed;
                 break;
             case NetworkLaunchMode.Client:
-                StartClient();
+                _sessionState = StartClient()
+                    ? SessionState.Connecting
+                    : SessionState.Failed;
                 break;
         }
 
@@ -100,13 +126,19 @@ public partial class NetworkSession : Node
 
     public override void _Process(double delta)
     {
-        if (!_configurationValid || _localPlayerController == null || IsDedicatedServer)
+        if (
+            !_configurationValid
+            || _sessionState != SessionState.Active
+            || _localPlayerController == null
+            || IsDedicatedServer
+            || _localPeerId <= 0
+        )
         {
             return;
         }
 
         Character localPlayer = _players.GetNodeOrNull<Character>(
-            NetworkPlayerIdentity.GetPlayerName(LocalPeerId)
+            NetworkPlayerIdentity.GetPlayerName(_localPeerId)
         )!;
         if (
             localPlayer != null
@@ -132,6 +164,7 @@ public partial class NetworkSession : Node
             return false;
         }
 
+        _peer = peer;
         Multiplayer.MultiplayerPeer = peer;
         GD.Print($"NetworkSession: server listening on UDP {_launchOptions.Port}");
         return true;
@@ -149,20 +182,21 @@ public partial class NetworkSession : Node
             return false;
         }
 
+        _peer = peer;
         Multiplayer.MultiplayerPeer = peer;
         GD.Print($"NetworkSession: connecting to {_launchOptions.Address}:{_launchOptions.Port}");
         return true;
     }
 
-    private void OnPeerConnected(int peerId)
+    private void OnPeerConnected(long peerId)
     {
         if (IsServer)
         {
-            SpawnPlayer(peerId);
+            SpawnPlayer((int)peerId);
         }
     }
 
-    private void OnPeerDisconnected(int peerId)
+    private void OnPeerDisconnected(long peerId)
     {
         if (!IsServer)
         {
@@ -170,7 +204,7 @@ public partial class NetworkSession : Node
         }
 
         Character player = _players.GetNodeOrNull<Character>(
-            NetworkPlayerIdentity.GetPlayerName(peerId)
+            NetworkPlayerIdentity.GetPlayerName((int)peerId)
         )!;
         if (player != null)
         {
@@ -196,16 +230,72 @@ public partial class NetworkSession : Node
 
     private void OnConnectedToServer()
     {
-        GD.Print($"NetworkSession: connected as peer {LocalPeerId}");
+        if (_sessionState != SessionState.Connecting || _peer == null)
+        {
+            return;
+        }
+
+        _localPeerId = (int)_peer.GetUniqueId();
+        _sessionState = SessionState.Active;
+        GD.Print($"NetworkSession: connected as peer {_localPeerId}");
     }
 
     private void OnConnectionFailed()
     {
         GD.PushError("NetworkSession: connection failed.");
+        StopSession();
     }
 
     private void OnServerDisconnected()
     {
         GD.PushError("NetworkSession: server disconnected.");
+        StopSession();
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationWMCloseRequest)
+        {
+            StopSession();
+            GetTree().Quit();
+        }
+    }
+
+    public override void _ExitTree()
+    {
+        StopSession();
+    }
+
+    private void StopSession()
+    {
+        if (_sessionState is SessionState.Stopping or SessionState.Stopped)
+        {
+            return;
+        }
+
+        _sessionState = SessionState.Stopping;
+        SetProcess(false);
+
+        if (_multiplayerSignalsConnected)
+        {
+            Multiplayer.PeerConnected -= OnPeerConnected;
+            Multiplayer.PeerDisconnected -= OnPeerDisconnected;
+            Multiplayer.ConnectedToServer -= OnConnectedToServer;
+            Multiplayer.ConnectionFailed -= OnConnectionFailed;
+            Multiplayer.ServerDisconnected -= OnServerDisconnected;
+            _multiplayerSignalsConnected = false;
+        }
+
+        MultiplayerPeer? peer = _peer ?? Multiplayer.MultiplayerPeer;
+        _localPeerId = 0;
+        _peer = null;
+
+        if (Multiplayer.MultiplayerPeer != null)
+        {
+            Multiplayer.MultiplayerPeer = null;
+        }
+
+        peer?.Close();
+        _sessionState = SessionState.Stopped;
     }
 }
