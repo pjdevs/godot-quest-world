@@ -1,31 +1,33 @@
 [gd_scene format=3 uid="uid://peffdrkl4o2n"]
 
-[ext_resource type="PackedScene" path="res://quest_world/levels/facility_blockout.tscn" id="1_r2hu2"]
+[ext_resource type="PackedScene" uid="uid://dy0n5drkrp4v0" path="res://quest_world/levels/facility_blockout.tscn" id="1_r2hu2"]
 [ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/NetworkSession.cs" id="4_wtwud"]
 [ext_resource type="PackedScene" uid="uid://bh7me5hps2qp6" path="res://quest_world/character/Character.tscn" id="5_jnsjd"]
 [ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="6_4k80j"]
 
-[sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_edcox"]
-ground_color = Color(0.160784, 0.815686, 0.905882, 1)
-
-[sub_resource type="Sky" id="Sky_2iust"]
-sky_material = SubResource("PhysicalSkyMaterial_edcox")
-
 [sub_resource type="Environment" id="Environment_20rw3"]
-background_mode = 2
-sky = SubResource("Sky_2iust")
+background_mode = 1
+background_color = Color(0.004, 0.006, 0.012, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.42, 0.48, 0.58, 1)
+ambient_light_energy = 0.32
+reflected_light_source = 2
 tonemap_mode = 1
 ssao_enabled = true
+ssao_radius = 1.2
+ssao_intensity = 1.35
+ssao_power = 1.35
+sdfgi_enabled = true
+sdfgi_use_occlusion = true
+sdfgi_read_sky_light = false
+sdfgi_bounce_feedback = 0.55
+sdfgi_cascades = 3
+sdfgi_energy = 1.15
 
 [node name="test_world" type="Node3D" unique_id=1604557493]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=291661268]
 environment = SubResource("Environment_20rw3")
-
-[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1877684847]
-transform = Transform3D(0.87959, -0.436605, 0.188936, 0, 0.397148, 0.917755, -0.475732, -0.807248, 0.349328, 0, 0, 0)
-light_energy = 2.0
-shadow_enabled = true
 
 [node name="Level" type="Node3D" parent="." unique_id=746620120]
 
