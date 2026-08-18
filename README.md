@@ -1,5 +1,11 @@
 # Quest World
 
+<p align="center">
+    <img src="docs/banner.svg" width="400" alt="Quest World logo">
+</p>
+
+## Project
+
 Demo project and repository for network replicated Core systems:
 
 - Interaction

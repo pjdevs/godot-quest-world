@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="268" viewBox="0 0 320 268" role="img" aria-label="Quest World">
+  <title>Quest World</title>
+  <defs>
+    <clipPath id="qw-outside" clip-rule="evenodd">
+      <path clip-rule="evenodd" d="M0 0 H320 V268 H0 Z M160 34 A76 76 0 1 0 160 186 A76 76 0 1 0 160 34 Z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#qw-outside)">
+    <ellipse cx="160" cy="110" rx="100" ry="34" fill="none" stroke="#8465CE" stroke-width="9" transform="rotate(-20 160 110)"/>
+  </g>
+  <circle cx="160" cy="110" r="68" fill="none" stroke="#478CBF" stroke-width="9"/>
+  <path fill="#8465CE" d="M144.55 62.44 L202.80 138.15 L165.56 127.12 L141.92 157.93 Z"/>
+  <text x="160" y="238" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="40" font-weight="500" letter-spacing="0.5" fill="#478CBF">Quest World</text>
+</svg>
