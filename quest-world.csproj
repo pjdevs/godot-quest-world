@@ -10,7 +10,6 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Godot.NET.Sdk" Version="4.7.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="gdUnit4.api" Version="5.1.0-rc5" />
     <PackageReference Include="gdUnit4.test.adapter" Version="3.1.1" />
