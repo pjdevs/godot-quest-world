@@ -5,7 +5,7 @@
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
 
-#include "example_class.h"
+#include "native_interaction_stateful.h"
 
 using namespace godot;
 
@@ -15,7 +15,7 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
 	{
 		return;
 	}
-	GDREGISTER_CLASS(ExampleClass);
+	GDREGISTER_CLASS(NativeInteractionStateful);
 }
 
 void uninitialize_gdextension_types(ModuleInitializationLevel p_level)
