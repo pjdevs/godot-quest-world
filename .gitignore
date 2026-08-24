@@ -1,7 +1,7 @@
 # Godot 4+ specific ignores
-.godot/
-/android/
-/gdunit4_testadapter_v5/
+**/.godot/
+**/android/
+**/gdunit4_testadapter_v5/
 
 # MacOS
 **/.DS_Store
@@ -10,3 +10,10 @@
 .vscode/
 !.vscode/launch.json
 !.vscode/tasks.json
+
+# GDExtension
+**/bin/
+**/gen/
+*.obj
+*.dblite
+**/__pycache__/

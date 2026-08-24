@@ -1,0 +1,8 @@
+[project]
+name = "quest-world"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [{ name = "pjdevs", email = "pj33720@gmail.com" }]
+requires-python = ">=3.14"
+dependencies = ["scons"]
