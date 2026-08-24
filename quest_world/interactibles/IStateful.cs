@@ -1,6 +1,6 @@
 using QuestWorld.Interaction.Runtime.State;
 
-public interface IStateful
+public interface IStatefulProvider
 {
     InteractionStateful? Stateful { get; }
 }

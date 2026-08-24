@@ -3,7 +3,7 @@ using QuestWorld.Interaction;
 using QuestWorld.Interaction.Runtime.State;
 using System;
 
-public partial class LeverWall : Node3D, IStateful
+public partial class LeverWall : Node3D, IStatefulProvider
 {
 	[Export]
 	public InteractionStateful? Stateful { get; set; } = null;

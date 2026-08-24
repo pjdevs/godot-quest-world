@@ -22,7 +22,7 @@ public partial class Button : Node3D
 			return;
 		}
 
-		if (TargetStateful is not IStateful)
+		if (TargetStateful is not IStatefulProvider)
 		{
 			GD.PushError("Target stateful component is not assigned to an IStateful instance.");
 			return;
@@ -38,6 +38,6 @@ public partial class Button : Node3D
 
 	private void OnInteractionInputStarted(InteractionInteractor interactor)
 	{
-		(TargetStateful as IStateful)?.Stateful?.SetState(TargetState);
+		(TargetStateful as IStatefulProvider)?.Stateful?.SetState(TargetState);
 	}
 }
