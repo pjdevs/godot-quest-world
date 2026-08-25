@@ -118,9 +118,18 @@ public sealed partial class InteractionConfigurationTest
     {
         InteractionInteractor interactor = new();
 
-        InteractionPresentation? presentation = interactor.GetInteractionPresentation();
+        InteractionTargetPresentation? presentation = interactor.GetInteractionPresentation();
 
         AssertThat(presentation == null).IsTrue();
+    }
+
+    [TestCase]
+    public void InteractiveDoesNotOwnTargetWideInputOrAvailabilityPresentation()
+    {
+        AssertThat(typeof(InteractiveComponent).GetProperty("InteractionActionName") == null)
+            .IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetProperty("PromptScene") == null).IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetProperty("ActionPromptScene") != null).IsTrue();
     }
 
     [TestCase]

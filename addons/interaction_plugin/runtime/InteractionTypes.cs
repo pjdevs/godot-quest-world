@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
@@ -52,23 +53,25 @@ public readonly record struct InteractionContext(
     InteractionAction Action
 );
 
-/// <summary>Snapshot consumed by local prompt and indication presentation.</summary>
-/// <param name="Interactive">Interactive component represented by the snapshot.</param>
-/// <param name="DisplayName">Name shown to the player.</param>
-/// <param name="Description">Optional descriptive text supplied by the interactive.</param>
-/// <param name="ActionName">Input action displayed by prompt widgets.</param>
-/// <param name="Availability">Current availability aggregated over the target actions.</param>
-/// <param name="IsFocused">Whether this interactive is the current focus target.</param>
-public readonly record struct InteractionPresentation(
-    InteractiveComponent Interactive,
-    string DisplayName,
+/// <summary>Snapshot of one action currently offered by a target.</summary>
+/// <remarks>
+/// One entry exists per presentable action. Availability is carried per action and is never
+/// summarized across the target: a prompt shows each action with its own allowed or blocked state.
+/// </remarks>
+/// <param name="ActionId">Stable gameplay and network identity of the action.</param>
+/// <param name="Label">Player-facing label of the action.</param>
+/// <param name="Description">Optional player-facing description of the action.</param>
+/// <param name="InputActionName">Project input action requesting this action.</param>
+/// <param name="Availability">Availability of this action, either allowed or blocked.</param>
+public readonly record struct InteractionActionPresentation(
+    StringName ActionId,
+    string Label,
     string Description,
-    StringName ActionName,
-    InteractionAvailability Availability,
-    bool IsFocused
+    StringName InputActionName,
+    InteractionAvailability Availability
 )
 {
-    /// <summary>Gets whether the current availability allows the interaction to start.</summary>
+    /// <summary>Gets whether this action can currently be requested.</summary>
     public bool IsAllowed =>
         Availability switch
         {
@@ -77,7 +80,7 @@ public readonly record struct InteractionPresentation(
             InteractionHidden => false,
         };
 
-    /// <summary>Gets the blocked reason, or an empty string when allowed or hidden.</summary>
+    /// <summary>Gets the blocked reason of this action, or an empty string when allowed.</summary>
     public string BlockReason =>
         Availability switch
         {
@@ -85,6 +88,51 @@ public readonly record struct InteractionPresentation(
             InteractionBlocked blocked => blocked.Reason,
             InteractionHidden => string.Empty,
         };
+}
+
+/// <summary>Snapshot consumed by local prompt and indication presentation.</summary>
+/// <remarks>
+/// Hidden actions are absent from <paramref name="Actions"/>; blocked ones stay present so a prompt
+/// can explain them. A target offering no presentable action is neither focused nor indicated.
+/// </remarks>
+/// <param name="Interactive">Interactive component represented by the snapshot.</param>
+/// <param name="DisplayName">Name of the target shown to the player.</param>
+/// <param name="Description">Optional descriptive text supplied by the interactive.</param>
+/// <param name="Actions">Presentable actions, in target declaration order.</param>
+/// <param name="IsFocused">Whether this interactive is the current focus target.</param>
+public readonly record struct InteractionTargetPresentation(
+    InteractiveComponent Interactive,
+    string DisplayName,
+    string Description,
+    IReadOnlyList<InteractionActionPresentation> Actions,
+    bool IsFocused
+)
+{
+    /// <summary>Gets whether at least one presented action can currently be requested.</summary>
+    /// <remarks>
+    /// Reserved for the target-level indication, which is a single visual for the whole object.
+    /// Prompts must read the availability of each action instead of this aggregate.
+    /// </remarks>
+    public bool HasAllowedAction
+    {
+        get
+        {
+            if (Actions is null)
+            {
+                return false;
+            }
+
+            foreach (InteractionActionPresentation action in Actions)
+            {
+                if (action.Availability is InteractionAllowed)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
 }
 
 /// <summary>Versioned state snapshot used by an external persistence system.</summary>

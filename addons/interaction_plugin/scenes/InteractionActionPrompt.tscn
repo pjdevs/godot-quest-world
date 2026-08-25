@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://dq3n5v8xkw2b7"]
+
+[ext_resource type="Script" uid="uid://b5tly7c61k01n" path="res://addons/interaction_plugin/presentation/ui/InteractionActionPromptWidget.cs" id="1_action_prompt"]
+
+[node name="InteractionActionPrompt" type="PanelContainer"]
+script = ExtResource("1_action_prompt")
+
+[node name="Label" type="Label" parent="."]
+layout_mode = 2
+text = "Sample action"

@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://bxsevotpa0f2d" path="res://quest_world/character/Character.cs" id="2_project_character"]
 [ext_resource type="Script" uid="uid://yahimljmakge" path="res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" id="3_interactor"]
 [ext_resource type="Script" uid="uid://drgb3r1muwfvx" path="res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" id="4_presenter"]
+[ext_resource type="PackedScene" uid="uid://m4nr18qimc1s" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="5_prompt_container"]
 
 [node name="Character" unique_id=493885237 instance=ExtResource("1_base")]
 script = ExtResource("2_project_character")
@@ -30,3 +31,4 @@ ViewOrigin = NodePath("../CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraE
 script = ExtResource("4_presenter")
 Interactor = NodePath("../InteractionInteractor")
 Camera = NodePath("../CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")
+PromptContainerScene = ExtResource("5_prompt_container")

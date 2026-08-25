@@ -1,5 +1,6 @@
 namespace QuestWorld.Tests;
 
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using GdUnit4;
@@ -18,6 +19,12 @@ public sealed partial class InteractionSceneTest
 {
     private const string ActorScenePath =
         "res://addons/interaction_plugin/scenes/InteractiveActor.tscn";
+    private const string PromptScenePath =
+        "res://addons/interaction_plugin/scenes/InteractionPrompt.tscn";
+    private const string ActionPromptScenePath =
+        "res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn";
+    private const string IndicatorScenePath =
+        "res://addons/interaction_plugin/scenes/InteractionIndicator.tscn";
 
     [TestCase]
     public async Task InteractiveActorSceneProvidesComposableRuntimeParts()
@@ -41,6 +48,7 @@ public sealed partial class InteractionSceneTest
         AssertThat(action.Definition?.InputActionName.ToString()).IsEqual("interact");
         AssertThat(action.Rules.Count).IsEqual(1);
         AssertThat(interactive.TargetRules.Count).IsEqual(1);
+        AssertThat(interactive.ActionPromptScene != null).IsTrue();
         MultiplayerSynchronizer synchronizer = actor.GetNode<MultiplayerSynchronizer>(
             "Stateful/MultiplayerSynchronizer"
         );
@@ -49,25 +57,104 @@ public sealed partial class InteractionSceneTest
     }
 
     [TestCase]
-    public async Task DefaultPromptWidgetAcceptsAllowedAndBlockedPresentation()
+    public async Task DefaultActionPromptWidgetShowsInputWhenAllowedAndReasonWhenBlocked()
     {
-        InteractionPromptWidget widget = new();
+        InteractionActionPromptWidget widget = new();
+        ISceneRunner runner = ISceneRunner.Load(widget);
+        await runner.SimulateFrames(1);
+        Label label = widget.GetNode<Label>("Label");
+
+        widget.Bind(
+            new InteractionActionPresentation(
+                "open",
+                "Open",
+                "Open it",
+                "use",
+                new InteractionAllowed()
+            )
+        );
+
+        AssertThat(label.Text).IsEqual("[use] Open");
+
+        widget.Bind(
+            new InteractionActionPresentation(
+                "open",
+                "Open",
+                "Open it",
+                "use",
+                new InteractionBlocked("Locked")
+            )
+        );
+
+        AssertThat(label.Text).IsEqual("Open: Locked");
+    }
+
+    [TestCase]
+    public async Task DefaultPromptContainerShowsTheTargetNameAndExposesItsActionSlot()
+    {
+        InteractionPromptWidget widget = GD.Load<PackedScene>(PromptScenePath)
+            .Instantiate<InteractionPromptWidget>();
         ISceneRunner runner = ISceneRunner.Load(widget);
         await runner.SimulateFrames(1);
 
         widget.Bind(
-            new InteractionPresentation(
+            new InteractionTargetPresentation(
                 new InteractiveComponent(),
                 "Door",
-                "Open it",
-                "use",
-                new InteractionBlocked("Locked"),
+                "A heavy door",
+                new List<InteractionActionPresentation>(),
                 true
             )
         );
 
-        Label label = widget.GetNode<Label>("Label");
-        AssertThat(label.Text).IsEqual("Door: Locked");
+        AssertThat(widget.GetNode<Label>("Content/Label").Text).IsEqual("Door");
+        AssertThat(widget.ActionsContainer == widget.GetNode<Control>("Content/Actions")).IsTrue();
+    }
+
+    [TestCase]
+    public async Task FocusedTargetStacksOneActionPromptPerPresentedAction()
+    {
+        Node3D world = new();
+        Node3D character = new() { Name = "Character" };
+        Camera3D camera = new() { Name = "Camera" };
+        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = camera };
+        InteractionPresenter presenter = new()
+        {
+            Name = "Presenter",
+            Interactor = interactor,
+            Camera = camera,
+            PromptContainerScene = GD.Load<PackedScene>(PromptScenePath),
+        };
+        character.AddChild(interactor);
+        character.AddChild(camera);
+        character.AddChild(presenter);
+        world.AddChild(character);
+        TestInteractiveActor owner = CreateInteractiveActor(
+            "Console",
+            new Vector3(0, 0, -2),
+            "open",
+            "close"
+        );
+        world.AddChild(owner);
+        ISceneRunner runner = ISceneRunner.Load(world);
+        await runner.SimulateFrames(1);
+        InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
+
+        interactor.AddInteractive(interactive);
+        await runner.SimulateFrames(1);
+
+        InteractionPromptWidget container = presenter
+            .GetChildren()
+            .OfType<InteractionPromptWidget>()
+            .Single();
+        AssertThat(container.GetNode<Label>("Content/Label").Text).IsEqual("Console");
+        InteractionActionPromptWidget[] actions = container
+            .ActionsContainer.GetChildren()
+            .OfType<InteractionActionPromptWidget>()
+            .ToArray();
+        AssertThat(actions.Length).IsEqual(2);
+        AssertThat(actions[0].GetNode<Label>("Label").Text).IsEqual("[interact] open");
+        AssertThat(actions[1].GetNode<Label>("Label").Text).IsEqual("[interact] close");
     }
 
     [TestCase]
@@ -82,6 +169,7 @@ public sealed partial class InteractionSceneTest
             Name = "Presenter",
             Interactor = interactor,
             Camera = camera,
+            PromptContainerScene = GD.Load<PackedScene>(PromptScenePath),
         };
         character.AddChild(interactor);
         character.AddChild(camera);
@@ -148,7 +236,11 @@ public sealed partial class InteractionSceneTest
         AssertThat(presenter.GetChildCount()).IsEqual(0);
     }
 
-    private static TestInteractiveActor CreateInteractiveActor(string displayName, Vector3 position)
+    private static TestInteractiveActor CreateInteractiveActor(
+        string displayName,
+        Vector3 position,
+        params string[] actionIds
+    )
     {
         TestInteractiveActor owner = new() { Name = displayName, Position = position };
         Area3D area = new() { Name = "InteractionArea" };
@@ -159,25 +251,25 @@ public sealed partial class InteractionSceneTest
             InteractionArea = area,
             InteractionAnchor = owner,
             DisplayName = displayName,
-            PromptScene = GD.Load<PackedScene>(
-                "res://addons/interaction_plugin/scenes/InteractionPrompt.tscn"
-            ),
-            IndicationScene = GD.Load<PackedScene>(
-                "res://addons/interaction_plugin/scenes/InteractionIndicator.tscn"
-            ),
+            ActionPromptScene = GD.Load<PackedScene>(ActionPromptScenePath),
+            IndicationScene = GD.Load<PackedScene>(IndicatorScenePath),
         };
-        InteractionAction action = new()
-        {
-            Name = "ActivateAction",
-            Definition = new InteractionActionDefinition
-            {
-                Id = new StringName("activate"),
-                Label = displayName,
-            },
-        };
-        interactive.Actions.Add(action);
         owner.AddChild(interactive);
-        interactive.AddChild(action);
+        foreach (string actionId in actionIds.Length == 0 ? new[] { "activate" } : actionIds)
+        {
+            InteractionAction action = new()
+            {
+                Name = $"{actionId}Action",
+                Definition = new InteractionActionDefinition
+                {
+                    Id = new StringName(actionId),
+                    Label = actionId,
+                },
+            };
+            interactive.Actions.Add(action);
+            interactive.AddChild(action);
+        }
+
         return owner;
     }
 

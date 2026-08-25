@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://c28xhmer8uduy" path="res://quest_world/interactibles/button/Button.cs" id="1_4q3fs"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="1_lq42h"]
-[ext_resource type="PackedScene" uid="uid://m4nr18qimc1s" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="2_2ck07"]
+[ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn" id="2_2ck07"]
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="3_action"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="4_actiondef"]
 
@@ -35,7 +35,7 @@ script = ExtResource("1_lq42h")
 InteractionArea = NodePath("../InteractionArea")
 InteractionAnchor = NodePath("../ButtonModel")
 DisplayName = "Activate"
-PromptScene = ExtResource("2_2ck07")
+ActionPromptScene = ExtResource("2_2ck07")
 Actions = [NodePath("ActivateAction")]
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
 

@@ -161,7 +161,7 @@ public sealed partial class InteractionBehaviorTest
         int focusSignalCount = 0;
         int statusSignalCount = 0;
         testWorld.Interactor.FocusedInteractiveChanged += _ => focusSignalCount++;
-        testWorld.Interactor.InteractionStatusChanged += (_, _, _) => statusSignalCount++;
+        testWorld.Interactor.InteractionStatusChanged += _ => statusSignalCount++;
 
         FocusChangeResult? result = testWorld.Interactor.RecalculateFocusCore();
 
@@ -184,7 +184,7 @@ public sealed partial class InteractionBehaviorTest
         int focusSignalCount = 0;
         int statusSignalCount = 0;
         testWorld.Interactor.FocusedInteractiveChanged += _ => focusSignalCount++;
-        testWorld.Interactor.InteractionStatusChanged += (_, _, _) => statusSignalCount++;
+        testWorld.Interactor.InteractionStatusChanged += _ => statusSignalCount++;
         FocusChangeResult? result = testWorld.Interactor.RecalculateFocusCore();
 
         testWorld.Interactor.DispatchFocusChange(result!.Value);
@@ -205,7 +205,7 @@ public sealed partial class InteractionBehaviorTest
         int focusSignalCount = 0;
         int statusSignalCount = 0;
         testWorld.Interactor.FocusedInteractiveChanged += _ => focusSignalCount++;
-        testWorld.Interactor.InteractionStatusChanged += (_, _, _) => statusSignalCount++;
+        testWorld.Interactor.InteractionStatusChanged += _ => statusSignalCount++;
 
         FocusChangeResult? unchangedResult = testWorld.Interactor.RecalculateFocusCore();
         testWorld.Interactor.DispatchFocusChange(unchangedResult!.Value);
@@ -362,7 +362,10 @@ public sealed partial class InteractionBehaviorTest
 
         AssertThat(testWorld.Interactor.FocusedInteractive == testWorld.Interactive).IsTrue();
         AssertThat(focusChanged).IsTrue();
-        AssertThat(testWorld.Interactor.GetInteractionPresentation()?.IsAllowed == true).IsTrue();
+        InteractionTargetPresentation? presentation =
+            testWorld.Interactor.GetInteractionPresentation();
+        AssertThat(presentation?.Actions.Count).IsEqual(1);
+        AssertThat(presentation?.Actions[0].IsAllowed).IsTrue();
     }
 
     [TestCase]
@@ -679,6 +682,8 @@ public sealed partial class InteractionBehaviorTest
                 .IsEqual("Interaction is not configured.");
             AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, foreign)))
                 .IsEqual("Interaction is not configured.");
+            AssertThat(door.Interactive.GetPresentation(door.Interactor, true).Actions.Count)
+                .IsEqual(1);
         }
         finally
         {
@@ -708,6 +713,104 @@ public sealed partial class InteractionBehaviorTest
 
         AssertThat(interactive.EvaluateAvailability(interactor) is InteractionHidden).IsTrue();
         AssertThat(interactive.StartInteraction(interactor)).IsFalse();
+    }
+
+    [TestCase]
+    public async Task PresentationExposesOneEntryPerVisibleActionAndOmitsHiddenOnes()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+
+        InteractionTargetPresentation closed = door.Interactive.GetPresentation(
+            door.Interactor,
+            true
+        );
+
+        AssertThat(closed.DisplayName).IsEqual("Door");
+        AssertThat(closed.IsFocused).IsTrue();
+        AssertThat(closed.Actions.Count).IsEqual(1);
+        AssertThat(closed.Actions[0].ActionId.ToString()).IsEqual("open");
+        AssertThat(closed.Actions[0].InputActionName.ToString()).IsEqual("interact");
+        AssertThat(closed.Actions[0].IsAllowed).IsTrue();
+        AssertThat(closed.HasAllowedAction).IsTrue();
+
+        door.State.State = new StringName("open");
+        InteractionTargetPresentation opened = door.Interactive.GetPresentation(
+            door.Interactor,
+            true
+        );
+
+        AssertThat(opened.Actions.Count).IsEqual(1);
+        AssertThat(opened.Actions[0].ActionId.ToString()).IsEqual("close");
+        AssertThat(opened.Actions[0].IsAllowed).IsTrue();
+    }
+
+    [TestCase]
+    public async Task BlockedActionStaysPresentedWithItsOwnReason()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.Open.Rules.Insert(
+            0,
+            new AlwaysBlockedInteractionRule { Reason = "Requires a keycard." }
+        );
+
+        InteractionTargetPresentation presentation = door.Interactive.GetPresentation(
+            door.Interactor,
+            true
+        );
+
+        AssertThat(presentation.Actions.Count).IsEqual(1);
+        AssertThat(presentation.Actions[0].ActionId.ToString()).IsEqual("open");
+        AssertThat(presentation.Actions[0].IsAllowed).IsFalse();
+        AssertThat(presentation.Actions[0].BlockReason).IsEqual("Requires a keycard.");
+        AssertThat(presentation.HasAllowedAction).IsFalse();
+    }
+
+    [TestCase]
+    public async Task TargetWithEveryActionHiddenIsIgnoredByFocus()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.Interactor.AddInteractive(door.Interactive);
+        AssertThat(door.Interactor.FocusedInteractive == door.Interactive).IsTrue();
+
+        door.State.State = new StringName("locked");
+        door.Interactor.RecalculateFocus();
+
+        AssertThat(door.Interactive.HasVisibleAction(door.Interactor)).IsFalse();
+        AssertThat(door.Interactor.FocusedInteractive == null).IsTrue();
+        AssertThat(door.Interactor.GetInteractionPresentation() == null).IsTrue();
+    }
+
+    [TestCase]
+    public async Task FocusMovesToTheNextTargetWhenTheClosestHidesEveryAction()
+    {
+        DoorWorld door = BuildDoorWorld();
+        Node3D crate = new() { Name = "Crate", Position = new Vector3(0, 0, -4) };
+        Area3D crateArea = new() { Name = "InteractionArea" };
+        InteractiveComponent crateInteractive = new()
+        {
+            Name = "Interactive",
+            InteractionArea = crateArea,
+            InteractionAnchor = crate,
+            DisplayName = "Crate",
+        };
+        InteractionAction inspect = CreateAction("inspect");
+        crateInteractive.Actions.Add(inspect);
+        crate.AddChild(crateArea);
+        crate.AddChild(crateInteractive);
+        crateInteractive.AddChild(inspect);
+        door.World.AddChild(crate);
+        await door.Runner.SimulateFrames(1);
+        door.Interactor.AddInteractive(door.Interactive);
+        door.Interactor.AddInteractive(crateInteractive);
+        AssertThat(door.Interactor.FocusedInteractive == door.Interactive).IsTrue();
+
+        door.State.State = new StringName("locked");
+        door.Interactor.RecalculateFocus();
+
+        AssertThat(door.Interactor.FocusedInteractive == crateInteractive).IsTrue();
     }
 
     private static string Describe(InteractionAvailability availability) =>
@@ -829,10 +932,11 @@ public sealed partial class InteractionBehaviorTest
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
 
-        return new DoorWorld(runner, state, interactive, open, close, interactor);
+        return new DoorWorld(world, runner, state, interactive, open, close, interactor);
     }
 
     private sealed record DoorWorld(
+        Node3D World,
         ISceneRunner Runner,
         DoorState State,
         InteractiveComponent Interactive,

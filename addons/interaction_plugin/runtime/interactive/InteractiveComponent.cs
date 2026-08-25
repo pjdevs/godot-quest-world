@@ -91,17 +91,17 @@ public partial class InteractiveComponent : Node
     [Export(PropertyHint.MultilineText)]
     public string Description { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the input action displayed by the prompt.</summary>
-    [Export]
-    public StringName InteractionActionName { get; set; } = "interact";
-
     /// <summary>Gets or sets whether local focus immediately requests interaction without player input.</summary>
     [Export]
     public bool AutomaticInteraction { get; set; }
 
-    /// <summary>Gets or sets the optional prompt scene shown for the focused target.</summary>
+    /// <summary>Gets or sets the optional prompt scene instantiated once per presented action.</summary>
+    /// <remarks>
+    /// The focused target shows one prompt widget per presented action. Stacking and the
+    /// target-level frame around them belong to <c>InteractionPresenter</c>.
+    /// </remarks>
     [Export]
-    public PackedScene? PromptScene { get; set; }
+    public PackedScene? ActionPromptScene { get; set; }
 
     /// <summary>Gets or sets the optional indication scene shown when this target is allowed.</summary>
     [Export]
@@ -266,20 +266,89 @@ public partial class InteractiveComponent : Node
         return new InteractionAllowed();
     }
 
-    /// <summary>Builds the local presentation snapshot for a prompt or indication widget.</summary>
+    /// <summary>Builds the local presentation snapshot for prompt or indication widgets.</summary>
+    /// <remarks>
+    /// One entry is produced per presentable action, in declaration order. Hidden actions are
+    /// omitted; blocked ones are kept so a prompt can explain them.
+    /// </remarks>
     /// <param name="interactor">Interactor viewing this target.</param>
     /// <param name="isFocused">Whether this target currently owns focus.</param>
-    /// <returns>A fresh snapshot including the current evaluated status.</returns>
-    public InteractionPresentation GetPresentation(InteractionInteractor interactor, bool isFocused)
+    /// <returns>A fresh snapshot including the currently evaluated actions.</returns>
+    public InteractionTargetPresentation GetPresentation(
+        InteractionInteractor interactor,
+        bool isFocused
+    )
     {
-        return new InteractionPresentation(
+        List<InteractionActionPresentation> presentedActions = new();
+        foreach (InteractionAction action in Actions)
+        {
+            if (
+                TryGetActionPresentation(
+                    interactor,
+                    action,
+                    out InteractionActionPresentation presentation
+                )
+            )
+            {
+                presentedActions.Add(presentation);
+            }
+        }
+
+        return new InteractionTargetPresentation(
             this,
             DisplayName,
             Description,
-            InteractionActionName,
-            EvaluateAvailability(interactor),
+            presentedActions,
             isFocused
         );
+    }
+
+    /// <summary>Gets whether this target currently offers at least one presentable action.</summary>
+    /// <remarks>
+    /// Focus and indication use this instead of a target-wide availability: a target whose actions
+    /// are all hidden is ignored entirely rather than presented as unavailable.
+    /// </remarks>
+    /// <param name="interactor">Interactor viewing this target.</param>
+    /// <returns><see langword="true"/> when one action is allowed or blocked.</returns>
+    public bool HasVisibleAction(InteractionInteractor interactor)
+    {
+        foreach (InteractionAction action in Actions)
+        {
+            if (TryGetActionPresentation(interactor, action, out _))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryGetActionPresentation(
+        InteractionInteractor interactor,
+        InteractionAction? action,
+        out InteractionActionPresentation presentation
+    )
+    {
+        presentation = default;
+        if (action?.Definition is null)
+        {
+            return false;
+        }
+
+        InteractionAvailability availability = EvaluateAvailability(interactor, action);
+        if (availability is InteractionHidden)
+        {
+            return false;
+        }
+
+        presentation = new InteractionActionPresentation(
+            action.Definition.Id,
+            action.Definition.Label,
+            action.Definition.Description,
+            action.Definition.InputActionName,
+            availability
+        );
+        return true;
     }
 
     /// <summary>

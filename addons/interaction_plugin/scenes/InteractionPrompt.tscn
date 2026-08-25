@@ -5,6 +5,12 @@
 [node name="InteractionPrompt" type="PanelContainer" unique_id=1048885657]
 script = ExtResource("1_prompt")
 
-[node name="Label" type="Label" parent="." unique_id=718202040]
+[node name="Content" type="VBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Content"]
 layout_mode = 2
 text = "Sample object name"
+
+[node name="Actions" type="VBoxContainer" parent="Content"]
+layout_mode = 2

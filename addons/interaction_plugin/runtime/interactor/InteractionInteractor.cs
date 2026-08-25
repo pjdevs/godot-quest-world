@@ -28,16 +28,15 @@ public partial class InteractionInteractor : Node
     [Signal]
     public delegate void FocusedInteractiveChangedEventHandler(Node interactive);
 
-    /// <summary>Emitted locally when a visible target's allowed status or blocked reason changes.</summary>
-    /// <param name="interactive">Interactive whose presentation status changed.</param>
-    /// <param name="isAllowed">Whether interaction is currently allowed.</param>
-    /// <param name="reason">Blocked reason, or an empty string when allowed.</param>
+    /// <summary>Emitted locally when the presentation of a visible target may have changed.</summary>
+    /// <remarks>
+    /// The signal is a notification only. Availability is carried per action, so a consumer reads
+    /// the fresh snapshot from <see cref="InteractiveComponent.GetPresentation"/> instead of relying
+    /// on a target-wide summary.
+    /// </remarks>
+    /// <param name="interactive">Interactive whose presentation may have changed.</param>
     [Signal]
-    public delegate void InteractionStatusChangedEventHandler(
-        Node interactive,
-        bool isAllowed,
-        string reason
-    );
+    public delegate void InteractionStatusChangedEventHandler(Node interactive);
 
     /// <summary>Emitted locally after prevalidation and before any client RPC or host dispatch.</summary>
     /// <param name="interactive">Target requested by the owning player.</param>
@@ -278,7 +277,7 @@ public partial class InteractionInteractor : Node
         float bestScore = float.MinValue;
         foreach (InteractiveComponent candidate in _interactiveCandidates)
         {
-            if (!IsWithinInteractionRange(candidate))
+            if (!IsWithinInteractionRange(candidate) || !candidate.HasVisibleAction(this))
             {
                 continue;
             }
@@ -362,7 +361,7 @@ public partial class InteractionInteractor : Node
 
     /// <summary>Builds a fresh prompt snapshot for the current focused target.</summary>
     /// <returns>The focused presentation, or null when no target is focused.</returns>
-    public InteractionPresentation? GetInteractionPresentation()
+    public InteractionTargetPresentation? GetInteractionPresentation()
     {
         return _focusedInteractive?.GetPresentation(this, true);
     }
@@ -576,16 +575,7 @@ public partial class InteractionInteractor : Node
 
     private void EmitStatusFor(InteractiveComponent interactive)
     {
-        InteractionPresentation presentation = interactive.GetPresentation(
-            this,
-            interactive == _focusedInteractive
-        );
-        EmitSignal(
-            SignalName.InteractionStatusChanged,
-            interactive,
-            presentation.IsAllowed,
-            presentation.BlockReason
-        );
+        EmitSignal(SignalName.InteractionStatusChanged, interactive);
     }
 
     private static string DescribeRefusal(in InteractionAvailability availability) =>

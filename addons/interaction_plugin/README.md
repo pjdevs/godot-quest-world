@@ -6,7 +6,7 @@ The addon is namespaced under `QuestWorld.Interaction` and has no Character depe
 
 `InteractionInteractor.TryStartInteractionInput()` and `TryEndInteractionInput()` are the only input entry points. The node keeps server multiplayer authority while `OwnerPeerId` identifies the client responsible for local focus, UI and input. Offline/listen-server mode uses the authoritative path directly; clients locally prevalidate and send reliable RPC intentions which the server revalidates against its own candidates, distance, angle, state and rules.
 
-`InteractionPresenter` is optional. Assign its `Interactor` and `Camera` exports explicitly; it consumes interactor signals and projects configured `Control` scenes from the component's `Marker3D` anchor. A widget implements `IInteractionWidget` to receive the typed `InteractionPresentation` model.
+`InteractionPresenter` is optional. Assign its `Interactor`, `Camera` and `PromptContainerScene` exports explicitly; it consumes interactor signals and projects configured `Control` scenes from the component's `Marker3D` anchor. The focused target is presented as one container implementing `IInteractionPromptContainer`, carrying the target name and stacking one instance of the component's `ActionPromptScene` per presented action; each action widget implements `IInteractionActionWidget` and shows its own allowed or blocked state. Indications stay one widget per target and implement `IInteractionWidget`.
 
 The addon does not resolve configuration from node names, parents, siblings or recursive tree searches. Required references produce editor configuration warnings and are guarded again at runtime. `NodePath` is reserved for network RPC identities; no focus target is represented by an artificial presentation.
 
