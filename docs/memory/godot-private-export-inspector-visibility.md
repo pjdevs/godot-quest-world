@@ -1,16 +1,28 @@
-# Godot private exports remain visible in the Inspector
+# Godot private exports stay visible in the Inspector
 
 ## Finding
 
-In Godot C#, changing an exported property from `public` to `private` does not remove the `Editor` usage flag. A private property marked `[Export]` therefore remains visible in the Inspector.
+In Godot C#, changing an exported property from `public` to `private` does not remove its `Editor`
+usage flag, so a private `[Export]` property is still shown in the Inspector.
 
-For a technical property that must stay registered with Godot, such as `InteractionStateful.ReplicatedState` used by `MultiplayerSynchronizer`, keep `[Export]` and clear only `PropertyUsageFlags.Editor` in `_ValidateProperty()`.
+Clearing `PropertyUsageFlags.Editor` in `_ValidateProperty()` does **not** fix it either: the property
+keeps appearing in the Inspector. That override was added for `InteractionStateful.ReplicatedState`
+in `a8d52f4` and removed again in `4413901`; only the removal survived, together with a documentation
+claim and a regression test that never existed in the working tree.
 
-## Regression guard
+## Consequence for this project
 
-`InteractionBehaviorTest.ReplicatedStateIsAvailableToGodotButHiddenFromTheEditor` verifies both parts of the contract:
+A replication transport property is kept as a private `[Export]` property and is accepted as visible
+in the Inspector:
 
-- Godot can still discover the property;
-- the Inspector does not expose it.
+- `InteractionStateful.ReplicatedState`
+- `StatefulComponent.ReplicatedState`
 
-Do not remove `_ValidateProperty()` as unrelated cleanup while this transport property exists.
+Do not reintroduce `_ValidateProperty()` for that purpose. The real contract is behavioral, not
+visual: gameplay mutates the authoritative value through `SetState()`, and the `MultiplayerSynchronizer`
+uses the `.:ReplicatedState` path. Both are covered by tests.
+
+## Workflow lesson
+
+A memory note must describe the code as it is committed. Before trusting a note that promises a
+regression guard, grep for the test it names.

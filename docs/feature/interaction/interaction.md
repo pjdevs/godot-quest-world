@@ -32,6 +32,15 @@ La première étape de migration est terminée sans modifier le comportement pub
 
 Les tests distinguent maintenant la mutation pure des notifications : état et focus finaux sans signal pendant les appels core, puis chaque signal attendu exactement une fois pendant le dispatch.
 
+### Task 2 — Generic Stateful
+
+Le composant d'état générique existe désormais dans son propre addon [`addons/stateful_plugin`](../../../addons/stateful_plugin), documenté dans [stateful.md](../state/stateful.md).
+
+- `StatefulComponent` possède une valeur `StringName` libre (`closed`, `open`, `flooded`), autoritaire, répliquée, persistable et observable, sans aucune dépendance à `interaction_plugin`.
+- `StateSchema` déclare optionnellement les valeurs acceptées pour la validation runtime et editor, sans devenir une machine à états.
+- Le composant applique dès l'origine la frontière `ApplyStateCore()` / `DispatchStateTransition()` et les trois scopes de signaux `StateChanged`, `StateChangedAuthority` et `StateChangedPresentation`.
+- `InteractionStateful` n'est pas supprimé : les deux composants coexistent jusqu'à la Task 12. Aucune scène existante n'est migrée à cette étape.
+
 ## Integration
 
 1. Pour le Character du projet, `quest_world/character/Character.tscn` dérive de `addons/dummy_character_plugin/Character.tscn` et ajoute `InteractionInteractor` (distance calculée depuis le player propriétaire, direction calculée depuis la caméra) ainsi que `InteractionPresenter`. Le script global `quest_world/character/Character.cs` échantillonne l'action `interact` (`E` par défaut) et appelle les deux points d'entrée de l'interactor.
