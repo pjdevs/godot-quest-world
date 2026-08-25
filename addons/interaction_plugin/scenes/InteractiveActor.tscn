@@ -7,6 +7,9 @@
 [ext_resource type="PackedScene" uid="uid://mknaynw5h20v" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="5_indicator"]
 [ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_ll77h"]
 [ext_resource type="Script" uid="uid://c2ca7cnp0rpau" path="res://addons/interaction_plugin/examples/rules/InteractorGroupInteractionRule.cs" id="6_ueomp"]
+[ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="7_action"]
+[ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="8_actiondef"]
+[ext_resource type="Script" uid="uid://c54cwju4u00hy" path="res://addons/interaction_plugin/examples/rules/LegacyStatefulInteractionRule.cs" id="9_legacy"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
 
@@ -24,6 +27,20 @@ script = ExtResource("6_ueomp")
 RequiredGroup = &"Player"
 MissingGroupReason = "Only the player can use this."
 metadata/_custom_type_script = "uid://c2ca7cnp0rpau"
+
+[sub_resource type="Resource" id="Resource_activate_definition"]
+script = ExtResource("8_actiondef")
+Id = &"activate"
+Label = "Activate"
+Description = "Hold to activate."
+InputActionName = &"interact"
+metadata/_custom_type_script = "uid://bqs31n67gwjq1"
+
+[sub_resource type="Resource" id="Resource_activate_stateful_rule"]
+script = ExtResource("9_legacy")
+BusyReason = "This is busy."
+ActivatedReason = "This is already activated."
+metadata/_custom_type_script = "uid://c54cwju4u00hy"
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_state"]
 properties/0/path = NodePath(".:ReplicatedState")
@@ -53,7 +70,7 @@ debug_color = Color(0, 0.56349266, 0.8623485, 0.41960785)
 
 [node name="InteractionAnchor" type="Marker3D" parent="." unique_id=818464048]
 
-[node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Stateful")]
+[node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Stateful", "Actions")]
 script = ExtResource("2_interactive")
 InteractionArea = NodePath("../InteractionArea")
 IndicationArea = NodePath("../IndicationArea")
@@ -63,7 +80,14 @@ DisplayName = "Super Interactive"
 Description = "Interact"
 PromptScene = ExtResource("4_prompt")
 IndicationScene = ExtResource("5_indicator")
-InteractionRules = Array[ExtResource("5_ll77h")]([SubResource("Resource_ll77h")])
+Actions = [NodePath("ActivateAction")]
+TargetRules = Array[ExtResource("5_ll77h")]([SubResource("Resource_ll77h")])
+
+[node name="ActivateAction" type="Node" parent="Interactive"]
+script = ExtResource("7_action")
+Definition = SubResource("Resource_activate_definition")
+Rules = Array[ExtResource("5_ll77h")]([SubResource("Resource_activate_stateful_rule")])
+metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
 [node name="Stateful" type="Node" parent="." unique_id=239787997]
 script = ExtResource("3_stateful")

@@ -41,13 +41,31 @@ Le composant d'état générique existe désormais dans son propre addon [`addon
 - Le composant applique dès l'origine la frontière `ApplyStateCore()` / `DispatchStateTransition()` et les trois scopes de signaux `StateChanged`, `StateChangedAuthority` et `StateChangedPresentation`.
 - `InteractionStateful` n'est pas supprimé : les deux composants coexistent jusqu'à la Task 12. Aucune scène existante n'est migrée à cette étape.
 
+### Task 3 — Action model and Availability
+
+Un target expose désormais N actions explicites, chacune évaluée indépendamment.
+
+- `InteractionActionDefinition` (`Resource`) porte les données partageables : `Id` (identité gameplay/réseau stable), `Label`, `Description` et `InputActionName`. Le label n'est jamais une identité.
+- `InteractionAction` (`Node`) lie une definition à une occurrence de target et porte les `Rules` propres à cette occurrence. Il n'évalue rien lui-même et ne mute aucun gameplay.
+- `InteractiveComponent.Actions` référence explicitement les actions, comme les autres références du plugin : rien n'est découvert dans l'arbre. Les actions sont enfants du composant dans les scènes fournies.
+- `InteractionAvailability` remplace `InteractionStatus` : union `InteractionAllowed | InteractionBlocked | InteractionHidden`. Seul `Blocked` porte une raison ; `Hidden` signifie « absent des choix présentés », donc rien à expliquer.
+- `InteractionContext` devient action-aware `(Interactor, Interactive, Action)` et `InteractionRule.Evaluate()` retourne une `InteractionAvailability`. Il n'existe plus de chemin d'évaluation sans action : une rule voit toujours l'action évaluée, y compris une rule target-level.
+- Le pipeline par action est ordonné : invariants de configuration, réservation, `TargetRules`, puis `Action.Rules`. Le premier résultat non-`Allowed` gagne. Une action sans `Definition`, ou qui n'appartient pas au target, est `Blocked("Interaction is not configured.")`.
+- `EvaluateStatus()` disparaît. `EvaluateAvailability(interactor, action)` évalue une action ; `EvaluateAvailability(interactor)` agrège les actions du target (Allowed > Blocked > Hidden) pour alimenter la présentation V1, la prévalidation client et la validation serveur jusqu'à la présentation action-aware de la Task 4. Un target sans action est `Hidden` et n'offre aucune interaction.
+- L'interprétation `Idle == interactible` quitte le core : `BusyReason`, `ActivatedReason` et la lecture de `Stateful` pendant l'évaluation sont supprimés. `LegacyStatefulInteractionRule` reproduit explicitement l'ancien comportement là où une scène V1 le demande, et disparaîtra avec la Task 12. `InteractiveComponent.Stateful` ne sert plus qu'à invalider le statut sur changement d'état.
+- `InteractiveComponent.InteractionRules` est renommé `TargetRules` pour distinguer les conditions du target de celles d'une action.
+- `InteractiveActor.tscn` et `Button.tscn` déclarent chacune une action `activate`. L'exécution reste portée par le signal V1 `InteractionInputStarted` jusqu'à la Task 6, et le RPC transporte encore uniquement le target jusqu'à la Task 5.
+
+Restent volontairement absents de cette étape : `Executor`, `Priority`, `ConcurrencyGroup`, `Automatic` et `CancelOnInputReleased` sur `InteractionAction` (Tasks 5 à 7), la résolution d'action par input (Task 5), et les diagnostics Inspector des actions (Task 11). `InteractionActionName` et `AutomaticInteraction` restent temporairement sur `InteractiveComponent`, en doublon avec la definition, jusqu'aux Tasks 4 et 5.
+
 ## Integration
 
 1. Pour le Character du projet, `quest_world/character/Character.tscn` dérive de `addons/dummy_character_plugin/Character.tscn` et ajoute `InteractionInteractor` (distance calculée depuis le player propriétaire, direction calculée depuis la caméra) ainsi que `InteractionPresenter`. Le script global `quest_world/character/Character.cs` échantillonne l'action `interact` (`E` par défaut) et appelle les deux points d'entrée de l'interactor.
 2. Pour un personnage custom, ajouter `InteractionInteractor` au personnage local et assigner `ViewOrigin` vers un `Marker3D` ou une caméra, puis appeler `TryStartInteractionInput()` / `TryEndInteractionInput()` depuis son contrôleur d'input. `InteractionOrigin` est facultatif et utilise explicitement le parent `Node3D` comme fallback documenté.
-3. Ajouter `InteractionArea`, `InteractionAnchor` et `InteractiveComponent` au propriétaire Node3D, puis assigner `InteractionArea` et `InteractionAnchor` dans l'inspecteur. Ajouter et assigner un `InteractionStateful` seulement si l'objet a besoin d'un état persistant/répliqué. `IndicationArea` reste facultatif. Configurer `BusyReason` et `ActivatedReason` lorsque les blocages internes nécessitent un texte métier, par exemple `Talking...` pendant un dialogue.
-4. Abonner le script gameplay aux signaux `InteractionInputStarted` et `InteractionInputEnded`. Pour une phase longue, appeler `Interactive.StartInteractionPhase(interactor)` synchroniquement depuis le signal de début, puis `Interactive.EndInteractionPhase(nextState)` quand l'opération métier se termine. Ajouter des `InteractionRule` custom pour les conditions gameplay. Pour réagir aux changements d’état, s’abonner au signal universel, autoritaire ou de présentation selon la responsabilité du consommateur.
-5. Ajouter `InteractionPresenter` seulement si une UI est souhaitée, avec `Interactor` et `Camera`. L'absence de scène de widget est valide.
+3. Ajouter `InteractionArea`, `InteractionAnchor` et `InteractiveComponent` au propriétaire Node3D, puis assigner `InteractionArea` et `InteractionAnchor` dans l'inspecteur. Ajouter et assigner un `InteractionStateful` seulement si l'objet a besoin d'un état persistant/répliqué. `IndicationArea` reste facultatif.
+4. Ajouter au moins une `InteractionAction` sous le composant, lui assigner une `InteractionActionDefinition` (`Id`, `Label`, `InputActionName`) et la référencer dans `Actions`. Sans action, le target n'offre aucune interaction. Mettre dans `Action.Rules` les conditions propres à l'action, et dans `TargetRules` celles communes à toutes les actions. Une rule reste une query pure : pour dépendre de l'état du monde, la rule lit l'état, elle ne le modifie jamais.
+5. Abonner le script gameplay aux signaux `InteractionInputStarted` et `InteractionInputEnded`. Pour une phase longue, appeler `Interactive.StartInteractionPhase(interactor)` synchroniquement depuis le signal de début, puis `Interactive.EndInteractionPhase(nextState)` quand l'opération métier se termine. Pour réagir aux changements d’état, s’abonner au signal universel, autoritaire ou de présentation selon la responsabilité du consommateur.
+6. Ajouter `InteractionPresenter` seulement si une UI est souhaitée, avec `Interactor` et `Camera`. L'absence de scène de widget est valide.
 
 ## Explicit configuration and validation
 
@@ -76,10 +94,12 @@ dotnet format quest-world.csproj
 dotnet build
 $env:GODOT_BIN = (Get-Command godot).Source
 dotnet test
-godot --headless --path . --scene res://addons/interaction_plugin/examples/InteractionDemo.tscn --quit-after 2 --log-file .godot/interaction-demo.log
+godot --headless --path . --scene res://quest_world/levels/test_world.tscn --quit-after 3 --log-file .godot/test-world-runtime.log
 ```
 
-Les tests couvrent les deux cas du statut union, l’ordre des rules, l’accès d’une rule au parent gameplay via `context.Interactive`, les raisons internes configurables, les signaux d’input et d’état spécialisés, le focus, la réservation concurrente, la prévalidation, la séparation fin de phase/fin d’input, le nettoyage serveur d’un interacteur distant, l’autorité réseau serveur, le chemin offline, le Stateful autonome sans owner, le snapshot/version y compris la restauration d’un état identique, l’invalidation par signal, la scène composable, le binding widget et la multiplicité/exclusivité des indications.
+Sur macOS, invoquer le binaire Godot Mono par son chemin complet et exporter `GODOT_BIN` vers ce même binaire. Voir [`godot-cli-headless-workflow.md`](../../memory/godot-cli-headless-workflow.md).
+
+Les tests couvrent les trois cas de l’union d’availability, l’ordre `TargetRules` puis `Action.Rules`, l’arrêt au premier résultat non-`Allowed`, la porte dont `Open` et `Close` s’excluent selon l’état du monde, l’agrégation target-level Allowed > Blocked > Hidden, la pureté et la répétabilité de l’évaluation, l’action non configurée ou étrangère au target, le target sans action, l’accès d’une rule au parent gameplay via `context.Interactive`, les raisons de blocage configurées sur la rule, les signaux d’input et d’état spécialisés, le focus, la réservation concurrente, la prévalidation, la séparation fin de phase/fin d’input, le nettoyage serveur d’un interacteur distant, l’autorité réseau serveur, le chemin offline, le Stateful autonome sans owner, le snapshot/version y compris la restauration d’un état identique, l’invalidation par signal, la scène composable avec son action, le binding widget et la multiplicité/exclusivité des indications.
 
 ## Assumptions and deferred work
 
