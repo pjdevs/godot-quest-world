@@ -19,6 +19,7 @@ abort in the middle of a restore.
 
 ```text
 open_scripts=["res://addons/interaction_plugin/examples/interactive/InteractiveActor.cs"]
+# ce fichier a été supprimé par la Task 12 : la réécriture frappe le script ouvert du moment, quel qu'il soit
 ```
 
 Any Godot run that boots the editor infrastructure re-saves those scripts with Godot's own tab

@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="StateSchema" format=3]
+
+[ext_resource type="Script" uid="uid://bncq4bgetbnu7" path="res://addons/stateful_plugin/runtime/StateSchema.cs" id="1_schema"]
+
+[resource]
+script = ExtResource("1_schema")
+States = Array[StringName]([&"idle", &"activating", &"activated"])
+metadata/_custom_type_script = "uid://bncq4bgetbnu7"

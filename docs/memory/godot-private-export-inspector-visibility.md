@@ -15,8 +15,10 @@ claim and a regression test that never existed in the working tree.
 A replication transport property is kept as a private `[Export]` property and is accepted as visible
 in the Inspector:
 
-- `InteractionStateful.ReplicatedState`
 - `StatefulComponent.ReplicatedState`
+
+The finding was originally made on `InteractionStateful.ReplicatedState`; that component was deleted by
+Task 12 of the Interaction V2 refactor, and `StatefulComponent` is now the only case.
 
 Do not reintroduce `_ValidateProperty()` for that purpose. The real contract is behavioral, not
 visual: gameplay mutates the authoritative value through `SetState()`, and the `MultiplayerSynchronizer`

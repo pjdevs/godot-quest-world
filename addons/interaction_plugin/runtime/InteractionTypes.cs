@@ -82,22 +82,6 @@ public static class InteractionUnavailableKindExtensions
         };
 }
 
-/// <summary>Persistent lifecycle state of a stateful interaction.</summary>
-public enum InteractionState
-{
-    /// <summary>The object is available for interaction.</summary>
-    Idle,
-
-    /// <summary>An activation phase is currently running.</summary>
-    Activating,
-
-    /// <summary>The object has completed activation and is no longer available.</summary>
-    Activated,
-
-    /// <summary>A deactivation phase is currently running.</summary>
-    Deactivating
-}
-
 /// <summary>Read-only inputs supplied to every gameplay interaction rule.</summary>
 /// <param name="Interactor">Interactor requesting the availability evaluation.</param>
 /// <param name="Interactive">Interactive component owning the evaluated action.</param>
@@ -267,8 +251,3 @@ public readonly record struct InteractionTargetPresentation(
         }
     }
 }
-
-/// <summary>Versioned state snapshot used by an external persistence system.</summary>
-/// <param name="Version">Serialization contract version.</param>
-/// <param name="State">State captured by the snapshot.</param>
-public readonly record struct InteractionSavedState(int Version, InteractionState State);

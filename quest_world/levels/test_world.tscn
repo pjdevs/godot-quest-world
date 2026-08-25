@@ -5,7 +5,7 @@
 [ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="2_player_controller"]
 [ext_resource type="PackedScene" uid="uid://bnrv7fcbbhuga" path="res://quest_world/interactibles/button/Button.tscn" id="3_kevvi"]
 [ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/NetworkSession.cs" id="3_network_session"]
-[ext_resource type="PackedScene" uid="uid://ccfh2n8mfm2gn" path="res://addons/interaction_plugin/scenes/InteractiveActor.tscn" id="4_2dls1"]
+[ext_resource type="PackedScene" uid="uid://ccfh2n8mfm2gn" path="res://addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn" id="4_2dls1"]
 [ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_rule"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_staterule"]
 
@@ -115,10 +115,10 @@ material = SubResource("StandardMaterial3D_7j4uu")
 [node name="LeverWall" parent="Level" unique_id=1292781680 instance=ExtResource("1_wcunf")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 5, 12)
 
-[node name="InteractiveActor2" parent="Level" unique_id=1742260159 instance=ExtResource("4_2dls1")]
+[node name="LongActionExample2" parent="Level" unique_id=1742260159 instance=ExtResource("4_2dls1")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.193058, 0.49999994, -1.2671959)
 
-[node name="InteractiveActor" parent="Level" unique_id=1889159529 instance=ExtResource("4_2dls1")]
+[node name="LongActionExample" parent="Level" unique_id=1889159529 instance=ExtResource("4_2dls1")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.091249, 0.49999976, -2.677222)
 
 [node name="Button" parent="Level" unique_id=1874486156 instance=ExtResource("3_kevvi")]

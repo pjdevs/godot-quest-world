@@ -5,13 +5,13 @@ using GdUnit4;
 using Godot;
 using InteractionPlugin.Editor;
 using QuestWorld.Interaction;
-using QuestWorld.Interaction.Examples.Interactive;
 using QuestWorld.Interaction.Integration.Stateful;
+using QuestWorld.Interaction.Integration.Stateful.Examples;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
-using QuestWorld.Interaction.Runtime.State;
+using QuestWorld.State;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -84,16 +84,6 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
-    public void StatefulRequiresNoOwnerConfiguration()
-    {
-        InteractionStateful stateful = new();
-
-        string[] warnings = InteractionValidator.Validate(stateful).ToArray();
-
-        AssertThat(warnings.Length).IsEqual(0);
-    }
-
-    [TestCase]
     public void PresenterRequiresExplicitInteractorAndCamera()
     {
         InteractionPresenter presenter = new();
@@ -105,13 +95,12 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
-    public void InteractiveActorRequiresExplicitInteractiveAndStatefulReferences()
+    public void LongActionExecutorRequiresTheStateComponentItDrives()
     {
-        InteractiveActor actor = new();
+        LongActionInteractionExecutor executor = new();
 
-        string[] warnings = InteractionValidator.Validate(actor).ToArray();
+        string[] warnings = InteractionValidator.Validate(executor).ToArray();
 
-        AssertThat(warnings.Contains("Interactive must be assigned.")).IsTrue();
         AssertThat(warnings.Contains("Stateful must be assigned.")).IsTrue();
     }
 
@@ -157,12 +146,25 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
-    public void StatefulDoesNotOwnInteractionLifecycleApi()
+    public void WorldStateAndInteractionStayIndependent()
     {
-        AssertThat(typeof(InteractionStateful).GetProperty("ActiveInteractor") == null).IsTrue();
-        AssertThat(typeof(InteractionStateful).GetMethod("ExecuteAction") == null).IsTrue();
-        AssertThat(typeof(InteractionStateful).GetMethod("CompleteExecution") == null).IsTrue();
-        AssertThat(typeof(InteractionStateful).GetMethod("CancelExecution") == null).IsTrue();
+        AssertThat(typeof(StatefulComponent).GetProperty("ActiveInteractor") == null).IsTrue();
+        AssertThat(typeof(StatefulComponent).GetMethod("ExecuteAction") == null).IsTrue();
+        AssertThat(typeof(StatefulComponent).GetMethod("CompleteExecution") == null).IsTrue();
+        AssertThat(typeof(StatefulComponent).GetMethod("CancelExecution") == null).IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetProperty("Stateful") == null).IsTrue();
+        AssertThat(
+                typeof(InteractiveComponent).Assembly.GetType(
+                    "QuestWorld.Interaction.Runtime.State.InteractionStateful"
+                ) == null
+            )
+            .IsTrue();
+        AssertThat(
+                typeof(InteractiveComponent).Assembly.GetType(
+                    "QuestWorld.Interaction.InteractionState"
+                ) == null
+            )
+            .IsTrue();
     }
 
     [TestCase]

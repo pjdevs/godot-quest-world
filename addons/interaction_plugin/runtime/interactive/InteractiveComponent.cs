@@ -3,7 +3,6 @@ using Godot;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Interaction.Runtime.Rules;
-using QuestWorld.Interaction.Runtime.State;
 
 namespace QuestWorld.Interaction.Runtime.Interactive;
 
@@ -119,10 +118,6 @@ public partial class InteractiveComponent : Node
     [Export]
     public Node3D? InteractionAnchor { get; set; }
 
-    /// <summary>Gets or sets the optional replicated and persistent state component.</summary>
-    [Export]
-    public InteractionStateful? Stateful { get; set; }
-
     /// <summary>Gets or sets the player-facing name used by presentation widgets.</summary>
     [Export]
     public string DisplayName { get; set; } = "Interact";
@@ -207,11 +202,6 @@ public partial class InteractiveComponent : Node
         {
             IndicationArea.BodyEntered += OnIndicationAreaBodyEntered;
             IndicationArea.BodyExited += OnIndicationAreaBodyExited;
-        }
-
-        if (Stateful is not null)
-        {
-            Stateful.InteractionStateChanged += OnStatefulInteractionStateChanged;
         }
     }
 
@@ -794,11 +784,6 @@ public partial class InteractiveComponent : Node
     /// <summary>Godot callback that disconnects state and interactor registrations.</summary>
     public override void _ExitTree()
     {
-        if (Stateful is not null && IsInstanceValid(Stateful))
-        {
-            Stateful.InteractionStateChanged -= OnStatefulInteractionStateChanged;
-        }
-
         _activeExecution = null;
         PurgeInvalidInteractors();
         foreach (
@@ -810,11 +795,6 @@ public partial class InteractiveComponent : Node
         }
 
         _presentInteractors.Clear();
-    }
-
-    private void OnStatefulInteractionStateChanged(int oldState, int newState)
-    {
-        NotifyStatusChanged();
     }
 
     private void OnInteractionAreaBodyEntered(Node3D body)

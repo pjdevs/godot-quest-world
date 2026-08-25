@@ -7,11 +7,12 @@ using GdUnit4;
 using Godot;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
+using QuestWorld.Interaction.Integration.Stateful.Examples;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
-using QuestWorld.Interaction.Runtime.State;
+using QuestWorld.Interaction.Runtime.Rules;
 using QuestWorld.State;
 using static GdUnit4.Assertions;
 
@@ -19,8 +20,8 @@ using static GdUnit4.Assertions;
 [RequireGodotRuntime]
 public sealed partial class InteractionSceneTest
 {
-    private const string ActorScenePath =
-        "res://addons/interaction_plugin/scenes/InteractiveActor.tscn";
+    private const string LongActionScenePath =
+        "res://addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn";
     private const string PromptScenePath =
         "res://addons/interaction_plugin/scenes/InteractionPrompt.tscn";
     private const string ActionPromptScenePath =
@@ -37,19 +38,22 @@ public sealed partial class InteractionSceneTest
     private static readonly StringName LoweringState = new("lowering");
 
     [TestCase]
-    public async Task InteractiveActorSceneProvidesComposableRuntimeParts()
+    public async Task LongActionSceneProvidesComposableRuntimePartsWithoutAnyOwnerScript()
     {
-        PackedScene scene = GD.Load<PackedScene>(ActorScenePath);
+        PackedScene scene = GD.Load<PackedScene>(LongActionScenePath);
         Node3D actor = scene.Instantiate<Node3D>();
         ISceneRunner runner = ISceneRunner.Load(actor);
         await runner.SimulateFrames(1);
 
         InteractiveComponent interactive = actor.GetNode<InteractiveComponent>("Interactive");
-        InteractionStateful stateful = actor.GetNode<InteractionStateful>("Stateful");
+        StatefulComponent stateful = actor.GetNode<StatefulComponent>("StatefulComponent");
 
         AssertThat(interactive.InteractionArea != null).IsTrue();
         AssertThat(interactive.InteractionAnchor != null).IsTrue();
-        AssertThat(stateful.State).IsEqual(InteractionState.Idle);
+        AssertThat(stateful.State.ToString()).IsEqual("idle");
+        AssertThat(stateful.Schema != null).IsTrue();
+        AssertThat(stateful.Schema!.Contains(new StringName("activating"))).IsTrue();
+        AssertThat(stateful.Schema!.Contains(new StringName("activated"))).IsTrue();
         AssertThat(interactive.Actions.Count).IsEqual(1);
         InteractionAction action = interactive.Actions[0];
         AssertThat(action == actor.GetNode<InteractionAction>("Interactive/ActivateAction"))
@@ -64,14 +68,16 @@ public sealed partial class InteractionSceneTest
                     )
             )
             .IsTrue();
-        AssertThat(action.Rules.Count).IsEqual(1);
+        AssertThat(action.Rules.Count).IsEqual(2);
         AssertThat(interactive.TargetRules.Count).IsEqual(1);
         AssertThat(interactive.ActionPromptScene != null).IsTrue();
         MultiplayerSynchronizer synchronizer = actor.GetNode<MultiplayerSynchronizer>(
-            "Stateful/MultiplayerSynchronizer"
+            "StatefulComponent/MultiplayerSynchronizer"
         );
         AssertThat(synchronizer != null).IsTrue();
         AssertThat(synchronizer!.ReplicationConfig != null).IsTrue();
+        AssertThat(actor.GetScript().AsGodotObject() == null).IsTrue();
+        AssertThat(action.Executor is LongActionInteractionExecutor).IsTrue();
     }
 
     [TestCase]
@@ -255,6 +261,173 @@ public sealed partial class InteractionSceneTest
     }
 
     [TestCase]
+    public async Task LongActionSceneGatesItsActionWithGenericStateRules()
+    {
+        LongActionWorld world = BuildLongActionWorld();
+        await world.Runner.SimulateFrames(1);
+
+        AssertThat(Describe(world.Interactive.EvaluateAvailability(world.Interactor, world.Action)))
+            .IsEqual("allowed");
+
+        world.State.SetState(new StringName("activating"));
+
+        AssertThat(Describe(world.Interactive.EvaluateAvailability(world.Interactor, world.Action)))
+            .IsEqual("This is busy.");
+
+        world.State.SetState(new StringName("activated"));
+
+        AssertThat(Describe(world.Interactive.EvaluateAvailability(world.Interactor, world.Action)))
+            .IsEqual("This is already activated.");
+    }
+
+    [TestCase]
+    public async Task LongActionKeepsTheExecutionReservedThenCompletesItself()
+    {
+        LongActionWorld world = BuildLongActionWorld();
+        await world.Runner.SimulateFrames(1);
+        world.Executor.Duration = 0.0f;
+
+        InteractionExecutionResult result = world.Interactive.ExecuteAction(
+            world.Interactor,
+            world.Action
+        );
+
+        AssertThat(result is InteractionExecutionRunning).IsTrue();
+        AssertThat(world.State.State.ToString()).IsEqual("activating");
+        AssertThat(world.Interactive.ActiveInteractor == world.Interactor).IsTrue();
+
+        for (int frame = 0; frame < 300 && world.State.State.ToString() != "activated"; frame++)
+        {
+            await world.Runner.SimulateFrames(1);
+        }
+
+        AssertThat(world.State.State.ToString()).IsEqual("activated");
+        AssertThat(world.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(world.Executor.StartCount).IsEqual(1);
+        AssertThat(world.Executor.CancelCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task LongActionRestoresItsStateWhenTheExecutionIsCancelled()
+    {
+        LongActionWorld world = BuildLongActionWorld();
+        await world.Runner.SimulateFrames(1);
+        world.Executor.Duration = 3600.0f;
+        world.Interactive.ExecuteAction(world.Interactor, world.Action);
+
+        AssertThat(world.State.State.ToString()).IsEqual("activating");
+
+        AssertThat(world.Interactive.CancelExecution("Interrupted.")).IsTrue();
+
+        AssertThat(world.State.State.ToString()).IsEqual("idle");
+        AssertThat(world.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(world.Executor.CancelCount).IsEqual(1);
+    }
+
+    private static LongActionWorld BuildLongActionWorld()
+    {
+        Node3D world = new();
+        Node3D actor = GD.Load<PackedScene>(LongActionScenePath).Instantiate<Node3D>();
+        Node3D view = new() { Name = "ViewOrigin" };
+        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = view };
+        interactor.AddChild(view);
+        interactor.AddToGroup("Player");
+        world.AddChild(actor);
+        world.AddChild(interactor);
+        ISceneRunner runner = ISceneRunner.Load(world);
+        InteractiveComponent interactive = actor.GetNode<InteractiveComponent>("Interactive");
+
+        return new LongActionWorld(
+            runner,
+            interactive,
+            interactor,
+            actor.GetNode<StatefulComponent>("StatefulComponent"),
+            interactive.Actions[0],
+            (LongActionInteractionExecutor)interactive.Actions[0].Executor!
+        );
+    }
+
+    private sealed record LongActionWorld(
+        ISceneRunner Runner,
+        InteractiveComponent Interactive,
+        InteractionInteractor Interactor,
+        StatefulComponent State,
+        InteractionAction Action,
+        LongActionInteractionExecutor Executor
+    );
+
+    [TestCase]
+    public async Task PromptFollowsARuleThatFlipsWithoutAnyStatusNotification()
+    {
+        Node3D world = new();
+        Node3D character = new() { Name = "Character" };
+        Camera3D camera = new() { Name = "Camera" };
+        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = camera };
+        InteractionPresenter presenter = new()
+        {
+            Name = "Presenter",
+            Interactor = interactor,
+            Camera = camera,
+            PromptContainerScene = GD.Load<PackedScene>(PromptScenePath),
+        };
+        character.AddChild(interactor);
+        character.AddChild(camera);
+        character.AddChild(presenter);
+        world.AddChild(character);
+        TestInteractiveActor owner = CreateInteractiveActor(
+            "Villager",
+            new Vector3(0, 0, -2),
+            "talk"
+        );
+        InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
+        interactive.Actions[0].Rules.Add(new DialogInteractionRule());
+        world.AddChild(owner);
+        ISceneRunner runner = ISceneRunner.Load(world);
+        await runner.SimulateFrames(1);
+        int statusNotifications = 0;
+        interactive.InteractiveStatusChanged += () => statusNotifications++;
+        interactor.AddInteractive(interactive);
+        await runner.SimulateFrames(1);
+
+        AssertThat(PromptLabels(presenter)).IsEqual("[interact] talk");
+
+        // No state component, no signal, no explicit invalidation: only the gameplay condition moved.
+        owner.DialogRunning = true;
+        await runner.SimulateFrames(1);
+
+        AssertThat(PromptLabels(presenter)).IsEqual("talk: Someone is talking.");
+
+        owner.DialogRunning = false;
+        await runner.SimulateFrames(1);
+
+        AssertThat(PromptLabels(presenter)).IsEqual("[interact] talk");
+        AssertThat(statusNotifications).IsEqual(0);
+    }
+
+    private static string Describe(InteractionAvailability availability) =>
+        availability switch
+        {
+            InteractionAllowed => "allowed",
+            InteractionBlocked blocked => blocked.Reason,
+            InteractionHidden => "hidden",
+        };
+
+    private static string PromptLabels(InteractionPresenter presenter)
+    {
+        InteractionPromptWidget container = presenter
+            .GetChildren()
+            .OfType<InteractionPromptWidget>()
+            .Single();
+        return string.Join(
+            " | ",
+            container
+                .ActionsContainer.GetChildren()
+                .OfType<InteractionActionPromptWidget>()
+                .Select(widget => widget.GetNode<Label>("Label").Text)
+        );
+    }
+
+    [TestCase]
     public async Task WallControlButtonOffersTheOneActionItsDistantStateAllows()
     {
         WallControlWorld world = BuildWallControlWorld();
@@ -426,7 +599,18 @@ public sealed partial class InteractionSceneTest
         return owner;
     }
 
-    private sealed partial class TestInteractiveActor : Node3D { }
+    private sealed partial class TestInteractiveActor : Node3D
+    {
+        public bool DialogRunning { get; set; }
+    }
+
+    private sealed partial class DialogInteractionRule : InteractionRule
+    {
+        public override InteractionAvailability Evaluate(in InteractionContext context) =>
+            context.Interactive.GetParent() is TestInteractiveActor { DialogRunning: true }
+                ? new InteractionBlocked("Someone is talking.")
+                : new InteractionAllowed();
+    }
 
     private sealed partial class NoopInteractionExecutor : InteractionActionExecutor
     {

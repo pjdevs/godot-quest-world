@@ -1,16 +1,16 @@
 [gd_scene format=3 uid="uid://ccfh2n8mfm2gn"]
 
-[ext_resource type="Script" uid="uid://ci4tv77uumo6i" path="res://addons/interaction_plugin/examples/interactive/InteractiveActor.cs" id="1_actor"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="2_interactive"]
-[ext_resource type="Script" uid="uid://cjrwlmeffknuq" path="res://addons/interaction_plugin/runtime/state/InteractionStateful.cs" id="3_stateful"]
+[ext_resource type="Script" uid="uid://cpbt7qansaxqx" path="res://addons/stateful_plugin/runtime/StatefulComponent.cs" id="3_stateful"]
+[ext_resource type="Resource" path="res://addons/interaction_plugin/integration/stateful/examples/long_action_states.tres" id="3_states"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn" id="4_prompt"]
 [ext_resource type="PackedScene" uid="uid://mknaynw5h20v" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="5_indicator"]
 [ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_ll77h"]
 [ext_resource type="Script" uid="uid://c2ca7cnp0rpau" path="res://addons/interaction_plugin/examples/rules/InteractorGroupInteractionRule.cs" id="6_ueomp"]
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="7_action"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="8_actiondef"]
-[ext_resource type="Script" uid="uid://c54cwju4u00hy" path="res://addons/interaction_plugin/examples/rules/LegacyStatefulInteractionRule.cs" id="9_legacy"]
-[ext_resource type="Script" uid="uid://8wjkotso5o8" path="res://addons/interaction_plugin/examples/interactive/InteractiveActorExecutor.cs" id="10_executor"]
+[ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="9_staterule"]
+[ext_resource type="Script" uid="uid://dafaivn8exu7s" path="res://addons/interaction_plugin/integration/stateful/examples/LongActionInteractionExecutor.cs" id="10_executor"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
 
@@ -37,21 +37,28 @@ Description = "Hold to activate."
 InputActionName = &"interact"
 metadata/_custom_type_script = "uid://bqs31n67gwjq1"
 
-[sub_resource type="Resource" id="Resource_activate_stateful_rule"]
-script = ExtResource("9_legacy")
-BusyReason = "This is busy."
-ActivatedReason = "This is already activated."
-metadata/_custom_type_script = "uid://c54cwju4u00hy"
+[sub_resource type="Resource" id="Resource_activate_phase_rule"]
+script = ExtResource("9_staterule")
+StatefulPath = NodePath("../StatefulComponent")
+ExpectedStates = Array[StringName]([&"idle", &"activating"])
+MismatchAvailability = 1
+BlockReason = "This is already activated."
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
+[sub_resource type="Resource" id="Resource_activate_ready_rule"]
+script = ExtResource("9_staterule")
+StatefulPath = NodePath("../StatefulComponent")
+ExpectedStates = Array[StringName]([&"idle"])
+MismatchAvailability = 1
+BlockReason = "This is busy."
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_state"]
 properties/0/path = NodePath(".:ReplicatedState")
 properties/0/spawn = true
 properties/0/replication_mode = 2
 
-[node name="InteractiveActor" type="Node3D" unique_id=1742260159 node_paths=PackedStringArray("Interactive", "Stateful")]
-script = ExtResource("1_actor")
-Interactive = NodePath("Interactive")
-Stateful = NodePath("Stateful")
+[node name="LongActionExample" type="Node3D" unique_id=1742260159]
 
 [node name="Model" type="MeshInstance3D" parent="." unique_id=1861063650]
 mesh = SubResource("BoxMesh_vq8ek")
@@ -71,12 +78,11 @@ debug_color = Color(0, 0.56349266, 0.8623485, 0.41960785)
 
 [node name="InteractionAnchor" type="Marker3D" parent="." unique_id=818464048]
 
-[node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Stateful", "Actions")]
+[node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Actions")]
 script = ExtResource("2_interactive")
 InteractionArea = NodePath("../InteractionArea")
 IndicationArea = NodePath("../IndicationArea")
 InteractionAnchor = NodePath("../InteractionAnchor")
-Stateful = NodePath("../Stateful")
 DisplayName = "Super Interactive"
 Description = "Interact"
 ActionPromptScene = ExtResource("4_prompt")
@@ -88,16 +94,22 @@ TargetRules = Array[ExtResource("5_ll77h")]([SubResource("Resource_ll77h")])
 script = ExtResource("7_action")
 Definition = SubResource("Resource_activate_definition")
 Executor = NodePath("ActivateExecutor")
-Rules = Array[ExtResource("5_ll77h")]([SubResource("Resource_activate_stateful_rule")])
+Rules = Array[ExtResource("5_ll77h")]([SubResource("Resource_activate_phase_rule"), SubResource("Resource_activate_ready_rule")])
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
-[node name="ActivateExecutor" type="Node" parent="Interactive/ActivateAction" node_paths=PackedStringArray("Actor")]
+[node name="ActivateExecutor" type="Node" parent="Interactive/ActivateAction" node_paths=PackedStringArray("Stateful")]
 script = ExtResource("10_executor")
-Actor = NodePath("../../..")
-metadata/_custom_type_script = "uid://8wjkotso5o8"
+Stateful = NodePath("../../../StatefulComponent")
+RunningState = &"activating"
+CompletedState = &"activated"
+CancelledState = &"idle"
+metadata/_custom_type_script = "uid://dafaivn8exu7s"
 
-[node name="Stateful" type="Node" parent="." unique_id=239787997]
+[node name="StatefulComponent" type="Node" parent="." unique_id=239787997]
 script = ExtResource("3_stateful")
+Schema = ExtResource("3_states")
+InitialState = &"idle"
+metadata/_custom_type_script = "uid://cpbt7qansaxqx"
 
-[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="Stateful" unique_id=1934071616]
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="StatefulComponent" unique_id=1934071616]
 replication_config = SubResource("SceneReplicationConfig_state")

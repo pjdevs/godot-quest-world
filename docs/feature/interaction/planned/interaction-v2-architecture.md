@@ -1828,6 +1828,26 @@ Elles doivent disparaître une fois tous les exemples migrés.
 
 **Note de dev**: le projet est vide donc pas hésiter à casser les micros exemple et les migrer.
 
+**État**: sans objet. `StartInteractionPhase` et `EndInteractionPhase` ont disparu dès la Task 6, sans passer par des wrappers, et les exemples sont déjà migrés (Tasks 6, 8 et 12).
+
+### Automatic action retry
+
+Trou identifié pendant la Task 12, à traiter ici.
+
+`TryStartAutomaticInteraction` n'est appelé que sur *changement* de focus : `DispatchFocusChange` le gate sur `result.Changed`. Une action `Automatic` qui devient `Allowed` alors que le focus ne bouge pas ne part donc jamais d'elle-même, et le joueur doit re-focuser la cible.
+
+Ce n'est pas une régression : le push `NotifyStatusChanged` supprimé en Task 12 était gaté de la même façon et ne la rejouait pas non plus.
+
+Cette task doit décider où vit le retry :
+
+```text
+côté focus      → retenter quand l'availability de la cible focusée passe à Allowed
+côté execution  → une action automatique est une execution comme une autre,
+                  éligible tant qu'aucune n'est en cours
+```
+
+Le second est cohérent avec l'`ExecutionId` et la concurrence de cette étape, et évite de relancer une action déjà `Running`.
+
 ---
 
 ## Task 8 — Stateful integration primitives

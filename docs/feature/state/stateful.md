@@ -59,9 +59,9 @@ DispatchStateTransition
 
 Le validator lit les propriétés via l'API Godot (`Get`) afin de fonctionner avec les placeholders editor, comme `InteractionValidator`.
 
-## Coexistence with InteractionStateful
+## Single world-state component
 
-`InteractionStateful` (enum `Idle/Activating/Activated/Deactivating`) reste en place pendant la migration V2. Les deux composants coexistent volontairement : les scènes existantes ne sont pas migrées à cette étape. `InteractionStateful` disparaîtra avec la Task 12 du chantier [interaction-v2-architecture](../interaction/planned/interaction-v2-architecture.md).
+`InteractionStateful` (enum `Idle/Activating/Activated/Deactivating`) et son `InteractionSavedState` sont supprimés par la Task 12 du chantier [interaction-v2-architecture](../interaction/planned/interaction-v2-architecture.md). `StatefulComponent` est désormais le seul composant d'état monde du projet, et `InteractiveComponent` ne le référence pas : l'interaction ne le lit qu'à travers des rules pures.
 
 ## Validation
 
