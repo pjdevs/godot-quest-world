@@ -8,13 +8,28 @@ namespace QuestWorld.Interaction.Runtime.Interactive;
 
 /// <summary>Execution reserved on a target, owning one interactor and one action.</summary>
 /// <remarks>
-/// A target holds at most one execution. An instant action reserves it only for the duration of its
-/// executor call; a running one keeps it until gameplay completes or cancels it.
+/// A target holds at most one execution per concurrency group. An instant action reserves one only
+/// for the duration of its executor call; a running one keeps it until gameplay completes or cancels
+/// it through <paramref name="Id"/>.
 /// </remarks>
+/// <param name="Id">Identifier allocated before the executor runs, unique for the whole session.</param>
+/// <param name="Interactor">Interactor that reserved the execution.</param>
+/// <param name="Action">Action being executed.</param>
+/// <param name="ConcurrencyGroup">Group this execution is exclusive with on its target.</param>
+/// <param name="Duration">Seconds the target holds the execution, or zero when its executor decides.</param>
+/// <param name="Elapsed">Seconds already spent, advanced by the authoritative target.</param>
 internal readonly record struct InteractionExecution(
+    ulong Id,
     InteractionInteractor Interactor,
-    InteractionAction Action
-);
+    InteractionAction Action,
+    StringName ConcurrencyGroup,
+    float Duration,
+    float Elapsed
+)
+{
+    /// <summary>Gets how far this execution has progressed, or zero when it has no duration.</summary>
+    public float Progress => Duration > 0.0f ? Mathf.Clamp(Elapsed / Duration, 0.0f, 1.0f) : 0.0f;
+}
 
 /// <summary>Notification payload built once an execution result has been applied.</summary>
 internal readonly record struct InteractionExecutionDispatch(
@@ -164,19 +179,25 @@ public partial class InteractiveComponent : Node
     private const string NotAuthoritativeReason = "The interaction is not authoritative.";
     private const string AlreadyRunningReason = "This is already in use.";
 
+    private static ulong _nextExecutionId = 1;
+
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
+    private readonly List<InteractionExecution> _activeExecutions = new();
     private Area3D? _interactionArea;
-    private InteractionExecution? _activeExecution;
 
-    internal bool HasActiveExecution => _activeExecution is not null;
+    internal bool HasActiveExecution => _activeExecutions.Count > 0;
 
-    internal InteractionInteractor? ActiveInteractor => _activeExecution?.Interactor;
+    internal InteractionInteractor? ActiveInteractor =>
+        _activeExecutions.Count > 0 ? _activeExecutions[0].Interactor : null;
 
-    internal InteractionAction? ActiveAction => _activeExecution?.Action;
+    internal InteractionAction? ActiveAction =>
+        _activeExecutions.Count > 0 ? _activeExecutions[0].Action : null;
 
     /// <summary>Godot callback that validates configuration and connects area and state signals.</summary>
     public override void _Ready()
     {
+        SetProcess(false);
+
         if (InteractionArea is null)
         {
             GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionArea.");
@@ -234,7 +255,10 @@ public partial class InteractiveComponent : Node
             return new InteractionBlocked(NotConfiguredReason);
         }
 
-        if (ActiveInteractor is not null && ActiveInteractor != interactor)
+        if (
+            TryGetGroupExecution(action, out InteractionExecution running)
+            && running.Interactor != interactor
+        )
         {
             return new InteractionBlocked("Someone else is using this.");
         }
@@ -335,10 +359,16 @@ public partial class InteractiveComponent : Node
     /// </remarks>
     /// <param name="interactor">Interactor for which availability is evaluated.</param>
     /// <param name="inputActionName">Project input action pressed by the player.</param>
+    /// <param name="heldSeconds">
+    /// How long the input has been held, which excludes the actions asking for a longer hold. The
+    /// default considers every action, since a target whose actions declare no threshold resolves
+    /// the same way whatever the gesture.
+    /// </param>
     /// <returns>The preferred allowed or blocked action, or null when the input offers none.</returns>
     public InteractionAction? ResolveActionForInput(
         InteractionInteractor interactor,
-        StringName inputActionName
+        StringName inputActionName,
+        float heldSeconds = float.MaxValue
     )
     {
         InteractionAction? best = null;
@@ -346,6 +376,11 @@ public partial class InteractiveComponent : Node
         foreach (InteractionAction action in Actions)
         {
             if (action?.Definition is null || action.Definition.InputActionName != inputActionName)
+            {
+                continue;
+            }
+
+            if (action.Definition.HoldThreshold > heldSeconds)
             {
                 continue;
             }
@@ -363,6 +398,40 @@ public partial class InteractiveComponent : Node
         }
 
         return best;
+    }
+
+    /// <summary>Gets the longest hold this target asks for on one input.</summary>
+    /// <remarks>
+    /// A pure query used by the local gesture layer to decide whether pressing the input selects an
+    /// action immediately or starts a hold. Hidden actions are ignored, so a threshold that cannot
+    /// currently be reached never makes the player wait for nothing.
+    /// </remarks>
+    /// <param name="interactor">Interactor for which availability is evaluated.</param>
+    /// <param name="inputActionName">Project input action pressed by the player.</param>
+    /// <returns>The highest threshold in seconds, or zero when no action asks for a hold.</returns>
+    public float GetLongestHoldThreshold(
+        InteractionInteractor interactor,
+        StringName inputActionName
+    )
+    {
+        float longest = 0.0f;
+        foreach (InteractionAction action in Actions)
+        {
+            if (action?.Definition is null || action.Definition.InputActionName != inputActionName)
+            {
+                continue;
+            }
+
+            if (
+                action.Definition.HoldThreshold > longest
+                && TryRankAction(interactor, action, out _)
+            )
+            {
+                longest = action.Definition.HoldThreshold;
+            }
+        }
+
+        return longest;
     }
 
     /// <summary>Resolves the action this target offers to a focusing interactor without input.</summary>
@@ -420,6 +489,15 @@ public partial class InteractiveComponent : Node
         int bestRank
     )
     {
+        // A hold is a deliberate selection, so the action the player held for wins over one asking
+        // for no hold. Without this, holding could never reach the action the threshold exists for.
+        float threshold = action.Definition!.HoldThreshold;
+        float bestThreshold = best.Definition!.HoldThreshold;
+        if (threshold != bestThreshold)
+        {
+            return threshold > bestThreshold;
+        }
+
         if (rank != bestRank)
         {
             return rank < bestRank;
@@ -538,6 +616,26 @@ public partial class InteractiveComponent : Node
         InteractionAction action
     )
     {
+        return ExecuteAction(interactor, action, out _);
+    }
+
+    /// <summary>Runs the authoritative command of one action and reports its reservation.</summary>
+    /// <remarks>
+    /// Same contract as <see cref="ExecuteAction(InteractionInteractor, InteractionAction)"/>. The
+    /// identifier is only meaningful while the result is <see cref="InteractionExecutionRunning"/>:
+    /// any other outcome released the reservation before returning.
+    /// </remarks>
+    /// <param name="interactor">Interactor requesting the action.</param>
+    /// <param name="action">Action of this target resolved from the requested identifier.</param>
+    /// <param name="executionId">Identifier of the reservation, or zero when none was allocated.</param>
+    /// <returns>The outcome returned by the executor, or the refusal that stopped the command.</returns>
+    public InteractionExecutionResult ExecuteAction(
+        InteractionInteractor interactor,
+        InteractionAction action,
+        out ulong executionId
+    )
+    {
+        executionId = 0;
         if (!Multiplayer.IsServer())
         {
             // No notification here: this component only reports what happened authoritatively.
@@ -552,9 +650,9 @@ public partial class InteractiveComponent : Node
         }
 
         // Availability lets an interactor keep requesting a target it already reserved, so the
-        // running execution is what refuses here. Whether two actions of one target may ever run
-        // together is the concurrency question answered by the next step, not by this reason.
-        if (HasActiveExecution)
+        // running execution is what refuses here. Only the concurrency group of this action is
+        // considered: an unrelated group stays free, which is the whole point of naming one.
+        if (TryGetGroupExecution(action, out _))
         {
             return RefuseExecution(interactor, action, AlreadyRunningReason);
         }
@@ -565,14 +663,108 @@ public partial class InteractiveComponent : Node
             return RefuseExecution(interactor, action, NotConfiguredReason);
         }
 
+        executionId = reservation.Value.Id;
+
         // The reservation is complete and every invariant holds before arbitrary gameplay runs.
         InteractionExecutionResult result = action.Executor!.Execute(
-            new InteractionExecutionContext(interactor, this, action)
+            BuildExecutionContext(reservation.Value)
         );
 
         InteractionExecutionDispatch dispatch = ApplyExecutionResultCore(reservation.Value, result);
         DispatchExecutionResult(dispatch);
         return result;
+    }
+
+    /// <summary>Godot callback that advances the timed executions this target owns.</summary>
+    /// <remarks>
+    /// The authoritative peer owns the clock of a running action, so the progress a player watches
+    /// cannot be forged by holding an input longer. Processing stays disabled while no execution
+    /// declares a duration.
+    /// </remarks>
+    public override void _Process(double delta)
+    {
+        if (!Multiplayer.IsServer())
+        {
+            return;
+        }
+
+        for (int index = _activeExecutions.Count - 1; index >= 0; index--)
+        {
+            if (index >= _activeExecutions.Count)
+            {
+                continue;
+            }
+
+            InteractionExecution execution = _activeExecutions[index];
+            if (execution.Duration <= 0.0f)
+            {
+                continue;
+            }
+
+            float elapsed = execution.Elapsed + (float)delta;
+            if (elapsed < execution.Duration)
+            {
+                _activeExecutions[index] = execution with { Elapsed = elapsed };
+                continue;
+            }
+
+            // Completing runs the same path as a gameplay completion, callbacks and notifications
+            // included: nothing about the end differs because the clock happened to own it.
+            CompleteExecution(execution.Id);
+        }
+    }
+
+    /// <summary>Reads how far one running execution has progressed on the authoritative peer.</summary>
+    /// <remarks>
+    /// A pure query. An execution without duration always reports zero: its end is owned by gameplay,
+    /// so the target has nothing to measure it against.
+    /// </remarks>
+    /// <param name="executionId">Identifier carried by the execution context.</param>
+    /// <param name="progress">Progress between zero and one, or zero when unknown.</param>
+    /// <returns><see langword="true"/> while the execution holds its reservation.</returns>
+    public bool TryGetExecutionProgress(ulong executionId, out float progress)
+    {
+        int index = IndexOfExecution(executionId);
+        progress = index < 0 ? 0.0f : _activeExecutions[index].Progress;
+        return index >= 0;
+    }
+
+    private void ApplyRunningDurationCore(ulong executionId, float duration)
+    {
+        int index = duration > 0.0f ? IndexOfExecution(executionId) : -1;
+        if (index < 0)
+        {
+            return;
+        }
+
+        _activeExecutions[index] = _activeExecutions[index] with { Duration = duration };
+        UpdateExecutionProcessing();
+    }
+
+    private void UpdateExecutionProcessing()
+    {
+        foreach (InteractionExecution execution in _activeExecutions)
+        {
+            if (execution.Duration > 0.0f)
+            {
+                SetProcess(true);
+                return;
+            }
+        }
+
+        SetProcess(false);
+    }
+
+    /// <summary>Gets whether one execution is still reserved on this target.</summary>
+    /// <remarks>
+    /// A pure query, safe to call from any peer. Identifiers are never reused, so an unknown one
+    /// simply means the execution already ended.
+    /// </remarks>
+    /// <param name="executionId">Identifier carried by the execution context.</param>
+    /// <returns><see langword="true"/> while the execution holds its reservation.</returns>
+    public bool IsExecutionActive(ulong executionId)
+    {
+        return IndexOfExecution(executionId) >= 0;
     }
 
     internal InteractionExecution? ReserveExecutionCore(
@@ -585,13 +777,21 @@ public partial class InteractiveComponent : Node
             return null;
         }
 
-        if (_activeExecution is not null)
+        if (TryGetGroupExecution(action, out _))
         {
             return null;
         }
 
-        InteractionExecution execution = new(interactor, action);
-        _activeExecution = execution;
+        InteractionExecution execution = new(
+            _nextExecutionId++,
+            interactor,
+            action,
+            action.GetConcurrencyGroup(),
+            Mathf.Max(action.Executor.ExpectedDuration, 0.0f),
+            0.0f
+        );
+        _activeExecutions.Add(execution);
+        UpdateExecutionProcessing();
         return execution;
     }
 
@@ -600,66 +800,60 @@ public partial class InteractiveComponent : Node
         in InteractionExecutionResult result
     )
     {
-        if (result is not InteractionExecutionRunning)
+        if (result is InteractionExecutionRunning running)
         {
-            ReleaseExecutionCore(execution.Interactor);
+            ApplyRunningDurationCore(execution.Id, running.Duration);
+        }
+        else
+        {
+            ReleaseExecutionCore(execution.Id);
         }
 
         return new InteractionExecutionDispatch(execution, result);
     }
 
-    /// <summary>Completes the execution a previous executor left running.</summary>
-    /// <remarks>Call from authoritative gameplay code on the server or offline host.</remarks>
+    /// <summary>Completes the execution an executor left running.</summary>
+    /// <remarks>
+    /// Call from authoritative gameplay code on the server or offline host, with the identifier the
+    /// executor received in its <see cref="InteractionExecutionContext"/>.
+    /// </remarks>
+    /// <param name="executionId">Identifier of the execution to complete.</param>
     /// <returns><see langword="true"/> when a running execution was completed.</returns>
-    public bool CompleteExecution()
+    public bool CompleteExecution(ulong executionId)
     {
-        InteractionExecution? execution = EndExecutionCore(owner: null);
+        InteractionExecution? execution = EndExecutionCore(executionId);
         if (execution is null)
         {
             return false;
         }
 
+        NotifyExecutorCompleted(execution.Value);
         DispatchExecutionCompletion(execution.Value);
         return true;
     }
 
-    /// <summary>Cancels the execution a previous executor left running.</summary>
-    /// <remarks>Call from authoritative gameplay code on the server or offline host.</remarks>
+    /// <summary>Cancels the execution an executor left running.</summary>
+    /// <remarks>
+    /// Call from authoritative gameplay code on the server or offline host, with the identifier the
+    /// executor received in its <see cref="InteractionExecutionContext"/>.
+    /// </remarks>
+    /// <param name="executionId">Identifier of the execution to cancel.</param>
     /// <param name="reason">Reason carried by <see cref="InteractionActionCancelled"/>.</param>
     /// <returns><see langword="true"/> when a running execution was cancelled.</returns>
-    public bool CancelExecution(string reason = "")
+    public bool CancelExecution(ulong executionId, string reason = "")
     {
-        InteractionExecution? execution = EndExecutionCore(owner: null);
+        InteractionExecution? execution = EndExecutionCore(executionId);
         if (execution is null)
         {
             return false;
         }
 
+        NotifyExecutorCancelled(execution.Value, reason);
         DispatchExecutionCancellation(execution.Value, reason);
         return true;
     }
 
-    /// <summary>Cancels the running execution only when the given interactor owns it.</summary>
-    /// <remarks>
-    /// Called by the authoritative interactor when input ends, range is lost, or the interactor
-    /// leaves the tree. An interactor can never end an execution reserved by someone else.
-    /// </remarks>
-    /// <param name="interactor">Interactor expected to own the running execution.</param>
-    /// <param name="reason">Reason carried by <see cref="InteractionActionCancelled"/>.</param>
-    /// <returns><see langword="true"/> when the matching execution was cancelled.</returns>
-    public bool CancelExecution(InteractionInteractor interactor, string reason = "")
-    {
-        InteractionExecution? execution = EndExecutionCore(interactor);
-        if (execution is null)
-        {
-            return false;
-        }
-
-        DispatchExecutionCancellation(execution.Value, reason);
-        return true;
-    }
-
-    internal InteractionExecution? EndExecutionCore(InteractionInteractor? owner)
+    internal InteractionExecution? EndExecutionCore(ulong executionId)
     {
         if (!Multiplayer.IsServer())
         {
@@ -667,24 +861,86 @@ public partial class InteractiveComponent : Node
             return null;
         }
 
-        return ReleaseExecutionCore(owner);
+        return ReleaseExecutionCore(executionId);
     }
 
-    private InteractionExecution? ReleaseExecutionCore(InteractionInteractor? owner)
+    private InteractionExecution? ReleaseExecutionCore(ulong executionId)
     {
-        if (_activeExecution is null)
+        int index = IndexOfExecution(executionId);
+        if (index < 0)
         {
             return null;
         }
 
-        InteractionExecution execution = _activeExecution.Value;
-        if (owner is not null && execution.Interactor != owner)
-        {
-            return null;
-        }
-
-        _activeExecution = null;
+        InteractionExecution execution = _activeExecutions[index];
+        _activeExecutions.RemoveAt(index);
+        UpdateExecutionProcessing();
         return execution;
+    }
+
+    private int IndexOfExecution(ulong executionId)
+    {
+        for (int index = 0; index < _activeExecutions.Count; index++)
+        {
+            if (_activeExecutions[index].Id == executionId)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private bool TryGetGroupExecution(InteractionAction action, out InteractionExecution execution)
+    {
+        execution = default;
+        if (action is null)
+        {
+            return false;
+        }
+
+        StringName group = action.GetConcurrencyGroup();
+        foreach (InteractionExecution candidate in _activeExecutions)
+        {
+            if (candidate.ConcurrencyGroup == group)
+            {
+                execution = candidate;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private InteractionExecutionContext BuildExecutionContext(in InteractionExecution execution)
+    {
+        return new InteractionExecutionContext(
+            execution.Id,
+            execution.Interactor,
+            this,
+            execution.Action
+        );
+    }
+
+    // The owner of the mutation learns that its execution ended before any observer does, and it
+    // learns it by a direct call: nothing is broadcast, so no executor has to filter out the
+    // executions of its siblings.
+    private void NotifyExecutorCompleted(in InteractionExecution execution)
+    {
+        InteractionActionExecutor? executor = execution.Action?.Executor;
+        if (executor is not null && IsInstanceValid(executor))
+        {
+            executor.OnExecutionCompleted(BuildExecutionContext(execution));
+        }
+    }
+
+    private void NotifyExecutorCancelled(in InteractionExecution execution, string reason)
+    {
+        InteractionActionExecutor? executor = execution.Action?.Executor;
+        if (executor is not null && IsInstanceValid(executor))
+        {
+            executor.OnExecutionCancelled(BuildExecutionContext(execution), reason);
+        }
     }
 
     private InteractionExecutionResult RefuseExecution(
@@ -784,7 +1040,7 @@ public partial class InteractiveComponent : Node
     /// <summary>Godot callback that disconnects state and interactor registrations.</summary>
     public override void _ExitTree()
     {
-        _activeExecution = null;
+        _activeExecutions.Clear();
         PurgeInvalidInteractors();
         foreach (
             InteractionInteractor interactor in new List<InteractionInteractor>(_presentInteractors)

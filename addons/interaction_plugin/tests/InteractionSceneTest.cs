@@ -7,7 +7,6 @@ using GdUnit4;
 using Godot;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
-using QuestWorld.Interaction.Integration.Stateful.Examples;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
@@ -77,7 +76,7 @@ public sealed partial class InteractionSceneTest
         AssertThat(synchronizer != null).IsTrue();
         AssertThat(synchronizer!.ReplicationConfig != null).IsTrue();
         AssertThat(actor.GetScript().AsGodotObject() == null).IsTrue();
-        AssertThat(action.Executor is LongActionInteractionExecutor).IsTrue();
+        AssertThat(action.Executor is TransitionStateInteractionExecutor).IsTrue();
     }
 
     [TestCase]
@@ -285,7 +284,11 @@ public sealed partial class InteractionSceneTest
     {
         LongActionWorld world = BuildLongActionWorld();
         await world.Runner.SimulateFrames(1);
-        world.Executor.Duration = 0.0f;
+        world.Executor.Duration = 0.05f;
+        int completedCount = 0;
+        int cancelledCount = 0;
+        world.Interactive.InteractionActionCompleted += (_, _) => completedCount++;
+        world.Interactive.InteractionActionCancelled += (_, _, _) => cancelledCount++;
 
         InteractionExecutionResult result = world.Interactive.ExecuteAction(
             world.Interactor,
@@ -303,8 +306,8 @@ public sealed partial class InteractionSceneTest
 
         AssertThat(world.State.State.ToString()).IsEqual("activated");
         AssertThat(world.Interactive.ActiveInteractor == null).IsTrue();
-        AssertThat(world.Executor.StartCount).IsEqual(1);
-        AssertThat(world.Executor.CancelCount).IsEqual(0);
+        AssertThat(completedCount).IsEqual(1);
+        AssertThat(cancelledCount).IsEqual(0);
     }
 
     [TestCase]
@@ -313,15 +316,17 @@ public sealed partial class InteractionSceneTest
         LongActionWorld world = BuildLongActionWorld();
         await world.Runner.SimulateFrames(1);
         world.Executor.Duration = 3600.0f;
-        world.Interactive.ExecuteAction(world.Interactor, world.Action);
+        string cancelledReason = string.Empty;
+        world.Interactive.InteractionActionCancelled += (_, _, reason) => cancelledReason = reason;
+        world.Interactive.ExecuteAction(world.Interactor, world.Action, out ulong executionId);
 
         AssertThat(world.State.State.ToString()).IsEqual("activating");
 
-        AssertThat(world.Interactive.CancelExecution("Interrupted.")).IsTrue();
+        AssertThat(world.Interactive.CancelExecution(executionId, "Interrupted.")).IsTrue();
 
         AssertThat(world.State.State.ToString()).IsEqual("idle");
         AssertThat(world.Interactive.ActiveInteractor == null).IsTrue();
-        AssertThat(world.Executor.CancelCount).IsEqual(1);
+        AssertThat(cancelledReason).IsEqual("Interrupted.");
     }
 
     private static LongActionWorld BuildLongActionWorld()
@@ -343,7 +348,7 @@ public sealed partial class InteractionSceneTest
             interactor,
             actor.GetNode<StatefulComponent>("StatefulComponent"),
             interactive.Actions[0],
-            (LongActionInteractionExecutor)interactive.Actions[0].Executor!
+            (TransitionStateInteractionExecutor)interactive.Actions[0].Executor!
         );
     }
 
@@ -353,7 +358,7 @@ public sealed partial class InteractionSceneTest
         InteractionInteractor Interactor,
         StatefulComponent State,
         InteractionAction Action,
-        LongActionInteractionExecutor Executor
+        TransitionStateInteractionExecutor Executor
     );
 
     [TestCase]

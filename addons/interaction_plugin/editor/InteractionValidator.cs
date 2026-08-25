@@ -2,7 +2,7 @@
 
 using System.Collections.Generic;
 using Godot;
-using QuestWorld.Interaction.Integration.Stateful.Examples;
+using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
@@ -17,7 +17,7 @@ public static class InteractionValidator
         InteractiveComponent,
         InteractionInteractor,
         InteractionPresenter,
-        LongActionInteractionExecutor,
+        TransitionStateInteractionExecutor,
     }
 
     public static bool CanHandle(GodotObject obj) => ResolveType(obj) != InspectableType.None;
@@ -47,7 +47,7 @@ public static class InteractionValidator
                     yield return "Camera must be assigned.";
 
                 break;
-            case InspectableType.LongActionInteractionExecutor:
+            case InspectableType.TransitionStateInteractionExecutor:
                 if (GetObject(obj, "Stateful") is null)
                     yield return "Stateful must be assigned.";
 
@@ -62,7 +62,8 @@ public static class InteractionValidator
             InteractiveComponent => InspectableType.InteractiveComponent,
             InteractionInteractor => InspectableType.InteractionInteractor,
             InteractionPresenter => InspectableType.InteractionPresenter,
-            LongActionInteractionExecutor => InspectableType.LongActionInteractionExecutor,
+            TransitionStateInteractionExecutor =>
+                InspectableType.TransitionStateInteractionExecutor,
             _ => InspectableType.None,
         };
         if (managedType != InspectableType.None)
@@ -77,7 +78,8 @@ public static class InteractionValidator
             nameof(InteractiveComponent) => InspectableType.InteractiveComponent,
             nameof(InteractionInteractor) => InspectableType.InteractionInteractor,
             nameof(InteractionPresenter) => InspectableType.InteractionPresenter,
-            nameof(LongActionInteractionExecutor) => InspectableType.LongActionInteractionExecutor,
+            nameof(TransitionStateInteractionExecutor) =>
+                InspectableType.TransitionStateInteractionExecutor,
             _ => ResolveTypeFromPath(script?.ResourcePath),
         };
     }
@@ -92,8 +94,8 @@ public static class InteractionValidator
                 InspectableType.InteractionInteractor,
             "res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" =>
                 InspectableType.InteractionPresenter,
-            "res://addons/interaction_plugin/integration/stateful/examples/LongActionInteractionExecutor.cs" =>
-                InspectableType.LongActionInteractionExecutor,
+            "res://addons/interaction_plugin/integration/stateful/TransitionStateInteractionExecutor.cs" =>
+                InspectableType.TransitionStateInteractionExecutor,
             _ => InspectableType.None,
         };
     }

@@ -97,11 +97,20 @@ public readonly record struct InteractionContext(
 public sealed record InteractionExecutionCompleted();
 
 /// <summary>Indicates that the executor started an action that finishes later.</summary>
+/// <param name="Duration">
+/// Seconds the execution should last, or zero to keep the duration authored on the action.
+/// </param>
 /// <remarks>
-/// The target keeps the execution reserved until gameplay calls
-/// <c>InteractiveComponent.CompleteExecution</c> or <c>InteractiveComponent.CancelExecution</c>.
+/// The target keeps the execution reserved until its duration elapses, or until gameplay calls
+/// <c>InteractiveComponent.CompleteExecution</c> or <c>InteractiveComponent.CancelExecution</c> with
+/// the identifier carried by <see cref="InteractionExecutionContext.ExecutionId"/>.
+/// <para>
+/// Supplying a duration is how an executor that knows better than the scene takes over the clock:
+/// the length of the animation it just started, or a delay a skill shortened. It stays the target's
+/// clock either way, so the progress a player watches remains authoritative.
+/// </para>
 /// </remarks>
-public sealed record InteractionExecutionRunning();
+public sealed record InteractionExecutionRunning(float Duration = 0.0f);
 
 /// <summary>Indicates that the executor refused the action at the execution boundary.</summary>
 /// <param name="Reason">Reason reported to the requesting interactor.</param>
@@ -133,10 +142,12 @@ public readonly union InteractionExecutionResult(
 /// happen", while an executor performs it. The target is fully reserved and coherent before this
 /// context is built, so an executor may freely call back into gameplay.
 /// </remarks>
+/// <param name="ExecutionId">Identifier of the reservation, allocated before the executor runs.</param>
 /// <param name="Interactor">Interactor that requested the action.</param>
 /// <param name="Interactive">Interactive component owning the executed action.</param>
 /// <param name="Action">Action being executed.</param>
 public readonly record struct InteractionExecutionContext(
+    ulong ExecutionId,
     InteractionInteractor Interactor,
     InteractiveComponent Interactive,
     InteractionAction Action

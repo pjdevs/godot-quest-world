@@ -10,7 +10,7 @@
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="7_action"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="8_actiondef"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="9_staterule"]
-[ext_resource type="Script" uid="uid://dafaivn8exu7s" path="res://addons/interaction_plugin/integration/stateful/examples/LongActionInteractionExecutor.cs" id="10_executor"]
+[ext_resource type="Script" uid="uid://dafaivn8exu7s" path="res://addons/interaction_plugin/integration/stateful/TransitionStateInteractionExecutor.cs" id="10_executor"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
 
@@ -35,6 +35,7 @@ Id = &"activate"
 Label = "Activate"
 Description = "Hold to activate."
 InputActionName = &"interact"
+CancelOnInputReleased = true
 metadata/_custom_type_script = "uid://bqs31n67gwjq1"
 
 [sub_resource type="Resource" id="Resource_activate_phase_rule"]
@@ -103,6 +104,7 @@ Stateful = NodePath("../../../StatefulComponent")
 RunningState = &"activating"
 CompletedState = &"activated"
 CancelledState = &"idle"
+Duration = 1.5
 metadata/_custom_type_script = "uid://dafaivn8exu7s"
 
 [node name="StatefulComponent" type="Node" parent="." unique_id=239787997]

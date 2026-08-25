@@ -6,7 +6,6 @@ using Godot;
 using InteractionPlugin.Editor;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
-using QuestWorld.Interaction.Integration.Stateful.Examples;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
@@ -97,7 +96,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void LongActionExecutorRequiresTheStateComponentItDrives()
     {
-        LongActionInteractionExecutor executor = new();
+        TransitionStateInteractionExecutor executor = new();
 
         string[] warnings = InteractionValidator.Validate(executor).ToArray();
 
@@ -171,7 +170,8 @@ public sealed partial class InteractionConfigurationTest
     public void ExecutionBelongsToAnExecutorInsteadOfASignalSubscriber()
     {
         AssertThat(typeof(InteractionAction).GetProperty("Executor") != null).IsTrue();
-        AssertThat(typeof(InteractiveComponent).GetMethod("ExecuteAction") != null).IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetMethods().Any(m => m.Name == "ExecuteAction"))
+            .IsTrue();
         AssertThat(typeof(InteractiveComponent).GetMethod("CompleteExecution") != null).IsTrue();
         AssertThat(typeof(InteractiveComponent).GetMethod("StartInteraction") == null).IsTrue();
         AssertThat(typeof(InteractiveComponent).GetMethod("StartInteractionPhase") == null)

@@ -14,6 +14,9 @@ namespace QuestWorld.Interaction.Runtime.Actions;
 [GlobalClass]
 public partial class InteractionAction : Node
 {
+    /// <summary>Concurrency group used by an action that declares none.</summary>
+    public static readonly StringName DefaultConcurrencyGroup = new("default");
+
     /// <summary>Gets or sets the required shared definition providing identity, label, and input.</summary>
     [Export]
     public InteractionActionDefinition? Definition { get; set; }
@@ -44,6 +47,19 @@ public partial class InteractionAction : Node
     [Export]
     public int Priority { get; set; }
 
+    /// <summary>
+    /// Gets or sets the group of executions this action is exclusive with on its own target.
+    /// </summary>
+    /// <remarks>
+    /// Two active executions of the same target sharing one group cannot coexist. The default group
+    /// makes every action of a target mutually exclusive, which is what a single interactable object
+    /// almost always wants. Naming a distinct group is how a long action stops blocking an unrelated
+    /// one, for example an inspection staying available during a hack. Exclusivity never crosses
+    /// targets: this is not a lock manager.
+    /// </remarks>
+    [Export]
+    public StringName ConcurrencyGroup { get; set; } = DefaultConcurrencyGroup;
+
     /// <summary>Gets or sets whether local focus requests this action without any player input.</summary>
     /// <remarks>
     /// An automatic action still goes through the authoritative command path and is still presented,
@@ -51,6 +67,13 @@ public partial class InteractionAction : Node
     /// </remarks>
     [Export]
     public bool Automatic { get; set; }
+
+    /// <summary>Gets the group this action is exclusive with, falling back to the default group.</summary>
+    /// <returns>The authored group, or <see cref="DefaultConcurrencyGroup"/> when none is set.</returns>
+    public StringName GetConcurrencyGroup() =>
+        ConcurrencyGroup is null || ConcurrencyGroup.IsEmpty
+            ? DefaultConcurrencyGroup
+            : ConcurrencyGroup;
 
     /// <summary>Godot callback that reports a missing definition or executor.</summary>
     public override void _Ready()

@@ -12,6 +12,57 @@ internal readonly record struct FocusChangeResult(
     bool Changed
 );
 
+/// <summary>Execution this interactor reserved on a target, tracked on the authoritative peer.</summary>
+/// <remarks>
+/// The interactor keeps the identifier so it can end its own executions without re-resolving
+/// anything. It never ends an execution it does not own, because it only knows about its own.
+/// </remarks>
+/// <param name="Interactive">Target holding the reservation.</param>
+/// <param name="Action">Action that reserved it.</param>
+/// <param name="Id">Identifier allocated by the target.</param>
+internal readonly record struct InteractorExecution(
+    InteractiveComponent Interactive,
+    InteractionAction Action,
+    ulong Id
+);
+
+/// <summary>Hold in progress on one input, resolved entirely on the requesting client.</summary>
+/// <param name="Target">Target focused when the input was pressed.</param>
+/// <param name="Input">Project input action being held.</param>
+/// <param name="Threshold">Longest hold the target asks for on that input.</param>
+/// <param name="Elapsed">Seconds the input has been held.</param>
+internal readonly record struct InteractionGesture(
+    InteractiveComponent Target,
+    StringName Input,
+    float Threshold,
+    float Elapsed
+)
+{
+    /// <summary>Gets how far the hold has progressed towards its threshold.</summary>
+    public float Progress => Threshold > 0.0f ? Mathf.Clamp(Elapsed / Threshold, 0.0f, 1.0f) : 1.0f;
+}
+
+/// <summary>Local prediction of the running execution the owning player requested.</summary>
+/// <remarks>
+/// Built from the duration authored in the scene the client already has, so a progress bar needs no
+/// replication and no acknowledgement. It is feedback only: what actually runs is the authoritative
+/// execution, and a prediction that drifts is corrected by the world state it is waiting for.
+/// </remarks>
+/// <param name="Target">Target the action was requested on.</param>
+/// <param name="ActionId">Identifier of the requested action.</param>
+/// <param name="Duration">Duration authored for that action.</param>
+/// <param name="Elapsed">Seconds since the request was sent.</param>
+internal readonly record struct PredictedExecution(
+    InteractiveComponent Target,
+    StringName ActionId,
+    float Duration,
+    float Elapsed
+)
+{
+    /// <summary>Gets how far the predicted execution has progressed.</summary>
+    public float Progress => Duration > 0.0f ? Mathf.Clamp(Elapsed / Duration, 0.0f, 1.0f) : 0.0f;
+}
+
 /// <summary>
 /// Detects interaction targets, selects local focus, and routes input intentions to the server.
 /// </summary>
@@ -117,11 +168,15 @@ public partial class InteractionInteractor : Node
 
     private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
     private readonly HashSet<InteractiveComponent> _interactiveCandidates = new();
-    private readonly Dictionary<StringName, StringName> _requestedActionsByInput = new();
+    private readonly List<InteractorExecution> _ownedExecutions = new();
+    private readonly HashSet<StringName> _sustainedInputs = new();
     private Node3D? _viewOrigin;
     private Node3D? _resolvedInteractionOrigin;
     private InteractiveComponent? _focusedInteractive;
-    private InteractiveComponent? _activeInteractive;
+    private InteractiveComponent? _automaticTarget;
+    private StringName? _automaticActionId;
+    private InteractionGesture? _gesture;
+    private PredictedExecution? _prediction;
     private bool _hasKnownLocalControl;
     private bool _lastKnownLocalControl;
 
@@ -184,6 +239,84 @@ public partial class InteractionInteractor : Node
         }
 
         RecalculateFocus();
+        AdvanceGesture((float)delta);
+        AdvancePrediction((float)delta);
+    }
+
+    /// <summary>Reads how far the hold in progress is towards selecting its action.</summary>
+    /// <remarks>
+    /// Local feedback for a gesture widget. This is the selection layer, not the action: an action
+    /// the player must stay engaged in reports its progress through
+    /// <see cref="TryGetExecutionProgress"/> instead.
+    /// </remarks>
+    /// <param name="inputActionName">Input being held, or an empty name when none is.</param>
+    /// <param name="progress">Progress between zero and one.</param>
+    /// <returns><see langword="true"/> while an input is being held towards a threshold.</returns>
+    public bool TryGetGestureProgress(out StringName inputActionName, out float progress)
+    {
+        inputActionName = _gesture?.Input ?? new StringName(string.Empty);
+        progress = _gesture?.Progress ?? 0.0f;
+        return _gesture is not null;
+    }
+
+    /// <summary>Reads how far the action requested by the owning player has progressed.</summary>
+    /// <remarks>
+    /// Predicted from the duration authored in the scene, so it works the same on a client and on a
+    /// host. The authoritative clock stays on the target: this only decides what the bar draws.
+    /// </remarks>
+    /// <param name="actionId">Running action, or an empty name when none is.</param>
+    /// <param name="progress">Progress between zero and one.</param>
+    /// <returns><see langword="true"/> while a timed action requested by this peer is running.</returns>
+    public bool TryGetExecutionProgress(out StringName actionId, out float progress)
+    {
+        actionId = _prediction?.ActionId ?? new StringName(string.Empty);
+        progress = _prediction?.Progress ?? 0.0f;
+        return _prediction is not null;
+    }
+
+    private void AdvanceGesture(float delta)
+    {
+        if (_gesture is not InteractionGesture gesture)
+        {
+            return;
+        }
+
+        if (!IsUsable(gesture.Target) || _focusedInteractive != gesture.Target)
+        {
+            // Looking away abandons the hold: the action it was selecting is no longer the one the
+            // player is pointing at.
+            _gesture = null;
+            return;
+        }
+
+        float elapsed = gesture.Elapsed + delta;
+        if (elapsed < gesture.Threshold)
+        {
+            _gesture = gesture with { Elapsed = elapsed };
+            return;
+        }
+
+        // A sustained action is held down by the very key that selected it, so it has to start at
+        // the threshold: starting on release would end it the instant it began.
+        _gesture = null;
+        RequestResolvedAction(gesture.Target, gesture.Input, elapsed);
+    }
+
+    private void AdvancePrediction(float delta)
+    {
+        if (_prediction is not PredictedExecution prediction)
+        {
+            return;
+        }
+
+        float elapsed = prediction.Elapsed + delta;
+        _prediction =
+            elapsed >= prediction.Duration || !IsUsable(prediction.Target)
+                ? null
+                : prediction with
+                {
+                    Elapsed = elapsed,
+                };
     }
 
     internal void AddInteractiveIndication(InteractiveComponent interactive)
@@ -236,10 +369,9 @@ public partial class InteractionInteractor : Node
             return;
         }
 
-        if (_activeInteractive == interactive && Multiplayer.IsServer())
+        if (Multiplayer.IsServer())
         {
-            interactive.CancelExecution(this, InteractorLostReason);
-            _activeInteractive = null;
+            CancelOwnedExecutions(interactive, inputActionName: null, InteractorLostReason);
         }
 
         if (!_indicatedInteractives.Contains(interactive))
@@ -310,15 +442,16 @@ public partial class InteractionInteractor : Node
         {
             Variant focusedInteractive = result.Current is null ? new Variant() : result.Current;
             EmitSignal(SignalName.FocusedInteractiveChanged, focusedInteractive);
+            ForgetAutomaticRequest();
         }
 
         if (result.Current is not null)
         {
             EmitStatusFor(result.Current);
-        }
 
-        if (result.Changed && result.Current is not null)
-        {
+            // Retried on every focused frame, not only when focus moves: an automatic action that
+            // becomes allowed while the player already looks at the target must start by itself.
+            // The request is remembered so a still-allowed action is not re-sent every frame.
             TryStartAutomaticInteraction(result.Current);
         }
     }
@@ -384,17 +517,39 @@ public partial class InteractionInteractor : Node
     /// state or <see cref="InteractionRejected"/>.
     /// </remarks>
     /// <param name="inputActionName">Project input action pressed by the player.</param>
-    /// <returns>Whether a locally valid request was dispatched or accepted by the host.</returns>
+    /// <returns>Whether a locally valid request was dispatched, or a hold towards one started.</returns>
     public bool TryStartInteractionInput(StringName inputActionName)
     {
         RecalculateFocus();
         InteractiveComponent? target = _focusedInteractive;
-        if (target is null)
+        if (target is null || inputActionName is null || inputActionName.IsEmpty)
         {
             return false;
         }
 
-        InteractionAction? action = target.ResolveActionForInput(this, inputActionName);
+        // A threshold only exists to tell apart several actions sharing one input, so pressing an
+        // input nobody asks to hold still selects immediately.
+        float threshold = target.GetLongestHoldThreshold(this, inputActionName);
+        if (threshold <= 0.0f)
+        {
+            return RequestResolvedAction(target, inputActionName, heldSeconds: 0.0f);
+        }
+
+        _gesture = new InteractionGesture(target, inputActionName, threshold, 0.0f);
+        return true;
+    }
+
+    private bool RequestResolvedAction(
+        InteractiveComponent target,
+        StringName inputActionName,
+        float heldSeconds
+    )
+    {
+        InteractionAction? action = target.ResolveActionForInput(
+            this,
+            inputActionName,
+            heldSeconds
+        );
         if (action?.Definition is null)
         {
             return false;
@@ -403,32 +558,48 @@ public partial class InteractionInteractor : Node
         return TryRequestAction(target, action, inputActionName);
     }
 
-    /// <summary>Requests authoritative cancellation of the execution started by one input.</summary>
+    /// <summary>Reports that the player released one interaction input.</summary>
     /// <remarks>
-    /// Call from the local player's input-release code. The action is the one this interactor
-    /// remembers requesting for that input, never a fresh resolution: world state may have changed
-    /// since the press, and re-resolving would cancel an execution the server never started. An
-    /// instant action holds no execution, so releasing its input cancels nothing.
+    /// Call from the local player's input-release code. Nothing else is said: the client states that
+    /// an input ended, and the authoritative peer decides which of the executions this interactor
+    /// owns that concerns. Only an action declared <see cref="InteractionActionDefinition.CancelOnInputReleased"/>
+    /// is ended this way, so an instant or self-sustaining action ignores the release entirely.
     /// </remarks>
     /// <param name="inputActionName">Project input action released by the player.</param>
-    /// <returns>Whether a request was sent or the host cancelled the matching execution.</returns>
+    /// <returns>Whether a release was reported to the authoritative peer or applied by the host.</returns>
     public bool TryEndInteractionInput(StringName inputActionName)
     {
-        if (
-            inputActionName is null
-            || !_requestedActionsByInput.Remove(inputActionName, out StringName? actionId)
-        )
+        if (inputActionName is null || inputActionName.IsEmpty)
         {
             return false;
         }
 
+        // Releasing before the threshold selects the action that asked for no hold, which is how
+        // "tap to open, hold to force" resolves without the two ever competing.
+        bool handled = false;
+        if (_gesture is InteractionGesture gesture && gesture.Input == inputActionName)
+        {
+            _gesture = null;
+            handled =
+                IsUsable(gesture.Target)
+                && _focusedInteractive == gesture.Target
+                && RequestResolvedAction(gesture.Target, inputActionName, gesture.Elapsed);
+        }
+
+        if (!_sustainedInputs.Remove(inputActionName))
+        {
+            return handled;
+        }
+
+        _prediction = null;
+
         if (!Multiplayer.IsServer())
         {
-            RpcId(ServerPeerId, nameof(ServerTryEndInteraction), actionId);
+            RpcId(ServerPeerId, nameof(ServerTryEndInteraction), inputActionName);
             return true;
         }
 
-        return EndInteractionInputAuthoritatively(OwnerPeerId, actionId);
+        return EndInteractionInputAuthoritatively(OwnerPeerId, inputActionName) > 0;
     }
 
     private void TryStartAutomaticInteraction(InteractiveComponent target)
@@ -439,12 +610,31 @@ public partial class InteractionInteractor : Node
         }
 
         InteractionAction? action = target.ResolveAutomaticAction(this);
-        if (action?.Definition is null)
+        if (
+            action?.Definition is null
+            || target.EvaluateAvailability(this, action) is not InteractionAllowed
+        )
+        {
+            // Forgotten while unavailable so the action fires again as soon as it becomes allowed,
+            // without the player having to look away and back.
+            ForgetAutomaticRequest();
+            return;
+        }
+
+        if (_automaticTarget == target && _automaticActionId == action.Definition.Id)
         {
             return;
         }
 
+        _automaticTarget = target;
+        _automaticActionId = action.Definition.Id;
         TryRequestAction(target, action, inputActionName: null);
+    }
+
+    private void ForgetAutomaticRequest()
+    {
+        _automaticTarget = null;
+        _automaticActionId = null;
     }
 
     private bool TryRequestAction(
@@ -470,7 +660,8 @@ public partial class InteractionInteractor : Node
         if (!Multiplayer.IsServer())
         {
             RpcId(ServerPeerId, nameof(ServerTryStartInteraction), target.GetPath(), actionId);
-            RememberRequestedAction(inputActionName, actionId);
+            RememberSustainedInput(inputActionName, action);
+            PredictExecution(target, action);
             return true;
         }
 
@@ -479,16 +670,34 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
-        RememberRequestedAction(inputActionName, actionId);
+        RememberSustainedInput(inputActionName, action);
+        PredictExecution(target, action);
         return true;
     }
 
-    private void RememberRequestedAction(StringName? inputActionName, StringName actionId)
+    // Purely local: the client predicts that it is sustaining this input so a release it never
+    // started stays silent. What the release actually ends is decided authoritatively.
+    private void RememberSustainedInput(StringName? inputActionName, InteractionAction action)
     {
-        if (inputActionName is not null && !inputActionName.IsEmpty)
+        if (
+            inputActionName is not null
+            && !inputActionName.IsEmpty
+            && action.Definition?.CancelOnInputReleased == true
+        )
         {
-            _requestedActionsByInput[inputActionName] = actionId;
+            _sustainedInputs.Add(inputActionName);
         }
+    }
+
+    private void PredictExecution(InteractiveComponent target, InteractionAction action)
+    {
+        // Read straight from the scene the client already has, so a bar needs no replication and no
+        // acknowledgement. An executor that declares no duration simply has nothing to draw.
+        float duration = action.Executor?.ExpectedDuration ?? 0.0f;
+        _prediction =
+            duration > 0.0f
+                ? new PredictedExecution(target, action.Definition!.Id, duration, 0.0f)
+                : null;
     }
 
     internal void NotifyInteractiveStatusChanged(InteractiveComponent interactive)
@@ -509,14 +718,9 @@ public partial class InteractionInteractor : Node
     /// <summary>Godot callback that releases server reservations and unregisters detected targets.</summary>
     public override void _ExitTree()
     {
-        if (
-            _activeInteractive is not null
-            && IsUsable(_activeInteractive)
-            && Multiplayer.IsServer()
-        )
+        if (Multiplayer.IsServer())
         {
-            _activeInteractive.CancelExecution(this, InteractorLostReason);
-            _activeInteractive = null;
+            CancelOwnedExecutions(interactive: null, inputActionName: null, InteractorLostReason);
         }
 
         HashSet<InteractiveComponent> registered = new(_interactiveCandidates);
@@ -531,8 +735,12 @@ public partial class InteractionInteractor : Node
 
         _interactiveCandidates.Clear();
         _indicatedInteractives.Clear();
-        _requestedActionsByInput.Clear();
+        _ownedExecutions.Clear();
+        _sustainedInputs.Clear();
         _focusedInteractive = null;
+        _gesture = null;
+        _prediction = null;
+        ForgetAutomaticRequest();
     }
 
     /// <summary>Reliable client-to-server RPC that validates and executes one action.</summary>
@@ -566,24 +774,28 @@ public partial class InteractionInteractor : Node
         }
     }
 
-    /// <summary>Reliable client-to-server RPC that cancels the caller's running execution.</summary>
-    /// <remarks>Called by Godot RPC dispatch; input code should call <see cref="TryEndInteractionInput"/>.</remarks>
-    /// <param name="actionId">Identifier the client received when its request was sent.</param>
+    /// <summary>Reliable client-to-server RPC reporting that one interaction input was released.</summary>
+    /// <remarks>
+    /// Called by Godot RPC dispatch; input code should call <see cref="TryEndInteractionInput"/>. The
+    /// client names an input, never an execution: the server owns the executions this interactor
+    /// reserved and decides which of them a release ends.
+    /// </remarks>
+    /// <param name="inputActionName">Project input action the client released.</param>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,
         CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
     )]
-    public void ServerTryEndInteraction(StringName actionId)
+    public void ServerTryEndInteraction(StringName inputActionName)
     {
         int senderPeerId = GetRemoteSenderOrOwner();
         if (!ValidateSender(senderPeerId, out string reason))
         {
-            RejectInteraction(senderPeerId, new NodePath(), actionId, reason);
+            RejectInteraction(senderPeerId, new NodePath(), new StringName(string.Empty), reason);
             return;
         }
 
-        EndInteractionInputAuthoritatively(senderPeerId, actionId);
+        EndInteractionInputAuthoritatively(senderPeerId, inputActionName);
     }
 
     /// <summary>Reliable server-to-owner RPC that reports an authoritative rejection.</summary>
@@ -635,12 +847,16 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
-        InteractionExecutionResult result = target.ExecuteAction(this, action);
+        InteractionExecutionResult result = target.ExecuteAction(
+            this,
+            action,
+            out ulong executionId
+        );
         switch (result)
         {
             case InteractionExecutionRunning:
                 // Only a running execution keeps a reservation the interactor may later release.
-                _activeInteractive = target;
+                RememberOwnedExecution(target, action, executionId);
                 return true;
 
             case InteractionExecutionCompleted:
@@ -659,28 +875,80 @@ public partial class InteractionInteractor : Node
         return false;
     }
 
-    private bool EndInteractionInputAuthoritatively(int senderPeerId, StringName actionId)
+    private int EndInteractionInputAuthoritatively(int senderPeerId, StringName inputActionName)
     {
         if (!ValidateSender(senderPeerId, out _))
         {
-            return false;
+            return 0;
         }
 
-        InteractiveComponent? target = _activeInteractive;
-        if (target is null)
+        return CancelOwnedExecutions(interactive: null, inputActionName, ReleasedReason);
+    }
+
+    private void RememberOwnedExecution(
+        InteractiveComponent interactive,
+        InteractionAction action,
+        ulong executionId
+    )
+    {
+        PruneOwnedExecutions();
+        _ownedExecutions.Add(new InteractorExecution(interactive, action, executionId));
+    }
+
+    /// <summary>Ends the executions this interactor owns that match an optional target and input.</summary>
+    /// <remarks>
+    /// An entry whose execution already ended is simply dropped: identifiers are never reused, so a
+    /// stale one can never cancel somebody else's execution.
+    /// </remarks>
+    private int CancelOwnedExecutions(
+        InteractiveComponent? interactive,
+        StringName? inputActionName,
+        string reason
+    )
+    {
+        int cancelled = 0;
+        for (int index = _ownedExecutions.Count - 1; index >= 0; index--)
         {
-            return false;
+            InteractorExecution owned = _ownedExecutions[index];
+            if (!IsUsable(owned.Interactive) || !owned.Interactive.IsExecutionActive(owned.Id))
+            {
+                _ownedExecutions.RemoveAt(index);
+                continue;
+            }
+
+            if (interactive is not null && owned.Interactive != interactive)
+            {
+                continue;
+            }
+
+            if (inputActionName is not null && !IsEndedByInput(owned.Action, inputActionName))
+            {
+                continue;
+            }
+
+            _ownedExecutions.RemoveAt(index);
+            if (owned.Interactive.CancelExecution(owned.Id, reason))
+            {
+                cancelled++;
+            }
         }
 
-        // A running execution only answers to the action that reserved it. An instant action holds
-        // no reservation at all, so there is nothing to release once it has completed.
-        if (target.ActiveAction is not null && target.ActiveAction.Definition?.Id != actionId)
-        {
-            return false;
-        }
+        return cancelled;
+    }
 
-        _activeInteractive = null;
-        return target.CancelExecution(this, ReleasedReason);
+    private void PruneOwnedExecutions()
+    {
+        _ownedExecutions.RemoveAll(owned =>
+            !IsUsable(owned.Interactive) || !owned.Interactive.IsExecutionActive(owned.Id)
+        );
+    }
+
+    private static bool IsEndedByInput(InteractionAction action, StringName inputActionName)
+    {
+        InteractionActionDefinition? definition = action?.Definition;
+        return definition is not null
+            && definition.CancelOnInputReleased
+            && definition.InputActionName == inputActionName;
     }
 
     private void EmitStatusFor(InteractiveComponent interactive)

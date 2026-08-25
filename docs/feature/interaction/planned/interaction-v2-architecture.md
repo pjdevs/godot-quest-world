@@ -1807,9 +1807,15 @@ ConcurrencyGroup
 CancelOnInputReleased
 ```
 
+**État**: livré. `InteractionExecution` porte `Id`, `ConcurrencyGroup`, `Duration` et `Elapsed` ; `InteractiveComponent` garde plusieurs exécutions et expose `CompleteExecution(id)`, `CancelExecution(id, reason)`, `IsExecutionActive(id)` et `TryGetExecutionProgress(id, out progress)`. Deux ajouts hors liste se sont imposés. D'abord le chrono appartient au target — sinon chaque executor réécrit son `_Process` et la barre redevient cliente, contre le §18.1 — mais la **durée** appartient à l'executor via `ExpectedDuration`, parce qu'une durée déclarée sur l'action serait silencieusement ignorée dès que son executor retourne `Completed` ; zéro y signifie « pas d'échéance », donc le modèle où le gameplay termine l'exécution lui-même reste intact, et `InteractionExecutionRunning(seconds)` surcharge la valeur quand elle n'est connue qu'après le démarrage. Ensuite `InteractionActionExecutor` reçoit `OnExecutionCompleted` / `OnExecutionCancelled` appelés directement, pour qu'un executor n'ait plus à s'abonner à un signal ni à filtrer les exécutions de ses voisins.
+
+Le §16 gagne aussi son pendant long : `TransitionStateInteractionExecutor` applique un état de course, laisse le target tenir l'exécution, puis applique l'état de fin ou restaure celui d'annulation. C'est la brique du cas courant, à côté de `SetStateInteractionExecutor` ; elle ne doit pas grossir, une action qui fait davantage écrit son propre executor.
+
 ### Hold
 
 Livrer également le Hold spécifié en §18.1. La couche de geste est entièrement locale et ne touche pas au contrat réseau ; ce qui est autoritaire, c'est l'execution `Running` et sa validation continue. Une action `CancelOnInputReleased` se déclenche au seuil, jamais au relâchement. La mémoire locale `input → actionId` introduite en Task 5 disparaît ici, remplacée par l'`ExecutionId`.
+
+**État**: livré, avec une correction sur le dernier point. L'`ExecutionId` ne remplace pas la mémoire locale : il reste **entièrement serveur**. Le client dit « j'ai appuyé sur cet input » et « j'ai relâché cet input », et le serveur retrouve seul l'exécution concernée parmi celles que cet interactor possède. Faire voyager l'`ExecutionId` jusqu'au client aurait exigé un ack serveur→client et une corrélation pour le tap relâché avant son arrivée, pour zéro gain : le client n'a rien à identifier. L'interactor ne garde qu'une prédiction locale des inputs qu'il croit soutenir, ce qui sert aussi à la barre. Au seuil, la résolution préfère l'action au plus long seuil atteint avant le rang et la priorité, sans quoi tenir la touche n'atteindrait jamais l'action pour laquelle le seuil existe.
 
 ### Replace
 
@@ -1847,6 +1853,8 @@ côté execution  → une action automatique est une execution comme une autre,
 ```
 
 Le second est cohérent avec l'`ExecutionId` et la concurrence de cette étape, et évite de relancer une action déjà `Running`.
+
+**État**: livré côté execution. `TryStartAutomaticInteraction` tourne à chaque frame focusée au lieu du seul changement de focus, et mémorise la requête en cours. L'oubli se fait dès que l'action cesse d'être `Allowed`, ce qui la rejoue quand elle le redevient sans que le joueur ait à re-focuser, et ce qui évite à la fois le spam de requêtes et le spam d'`InteractionRejected` sur une action indisponible.
 
 ---
 
