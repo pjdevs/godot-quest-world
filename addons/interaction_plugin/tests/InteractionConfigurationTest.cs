@@ -159,9 +159,47 @@ public sealed partial class InteractionConfigurationTest
     public void StatefulDoesNotOwnInteractionLifecycleApi()
     {
         AssertThat(typeof(InteractionStateful).GetProperty("ActiveInteractor") == null).IsTrue();
-        AssertThat(typeof(InteractionStateful).GetMethod("StartInteractionPhase") == null).IsTrue();
-        AssertThat(typeof(InteractionStateful).GetMethod("EndInteractionPhase") == null).IsTrue();
-        AssertThat(typeof(InteractionStateful).GetMethod("ReleaseInteractionInput") == null)
+        AssertThat(typeof(InteractionStateful).GetMethod("ExecuteAction") == null).IsTrue();
+        AssertThat(typeof(InteractionStateful).GetMethod("CompleteExecution") == null).IsTrue();
+        AssertThat(typeof(InteractionStateful).GetMethod("CancelExecution") == null).IsTrue();
+    }
+
+    [TestCase]
+    public void ExecutionBelongsToAnExecutorInsteadOfASignalSubscriber()
+    {
+        AssertThat(typeof(InteractionAction).GetProperty("Executor") != null).IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetMethod("ExecuteAction") != null).IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetMethod("CompleteExecution") != null).IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetMethod("StartInteraction") == null).IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetMethod("StartInteractionPhase") == null)
             .IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetMethod("EndInteractionPhase") == null).IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetMethod("ReleaseInteractionInput") == null)
+            .IsTrue();
+    }
+
+    [TestCase]
+    public void InteractionInputSignalsNoLongerExistAsACommandPath()
+    {
+        InteractiveComponent interactive = new();
+
+        try
+        {
+            string[] signals = interactive
+                .GetSignalList()
+                .Select(signal => signal["name"].AsString())
+                .ToArray();
+
+            AssertThat(signals.Contains("InteractionInputStarted")).IsFalse();
+            AssertThat(signals.Contains("InteractionInputEnded")).IsFalse();
+            AssertThat(signals.Contains("InteractionActionStarted")).IsTrue();
+            AssertThat(signals.Contains("InteractionActionCompleted")).IsTrue();
+            AssertThat(signals.Contains("InteractionActionCancelled")).IsTrue();
+            AssertThat(signals.Contains("InteractionActionRejected")).IsTrue();
+        }
+        finally
+        {
+            interactive.Free();
+        }
     }
 }

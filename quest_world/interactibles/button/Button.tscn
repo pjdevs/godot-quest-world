@@ -1,10 +1,10 @@
 [gd_scene format=3 uid="uid://bnrv7fcbbhuga"]
 
-[ext_resource type="Script" uid="uid://c28xhmer8uduy" path="res://quest_world/interactibles/button/Button.cs" id="1_4q3fs"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="1_lq42h"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn" id="2_2ck07"]
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="3_action"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="4_actiondef"]
+[ext_resource type="Script" uid="uid://bkb5nh6iohu5a" path="res://quest_world/interactibles/button/ButtonInteractionExecutor.cs" id="5_buttonexec"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_mokd0"]
 size = Vector3(0.25, 0.25, 0.25)
@@ -22,9 +22,7 @@ Label = "Activate"
 InputActionName = &"interact"
 metadata/_custom_type_script = "uid://bqs31n67gwjq1"
 
-[node name="Button" type="Node3D" unique_id=1874486156 node_paths=PackedStringArray("Interactive")]
-script = ExtResource("1_4q3fs")
-Interactive = NodePath("InteractiveComponent")
+[node name="Button" type="Node3D" unique_id=1874486156]
 
 [node name="ButtonModel" type="MeshInstance3D" parent="." unique_id=684315169]
 mesh = SubResource("BoxMesh_mokd0")
@@ -39,10 +37,15 @@ ActionPromptScene = ExtResource("2_2ck07")
 Actions = [NodePath("ActivateAction")]
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
 
-[node name="ActivateAction" type="Node" parent="InteractiveComponent"]
+[node name="ActivateAction" type="Node" parent="InteractiveComponent" node_paths=PackedStringArray("Executor")]
 script = ExtResource("3_action")
 Definition = SubResource("Resource_activate_definition")
+Executor = NodePath("ActivateExecutor")
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+
+[node name="ActivateExecutor" type="Node" parent="InteractiveComponent/ActivateAction"]
+script = ExtResource("5_buttonexec")
+metadata/_custom_type_script = "uid://bkb5nh6iohu5a"
 
 [node name="InteractionArea" type="Area3D" parent="." unique_id=2064253587]
 

@@ -46,6 +46,14 @@ public sealed partial class InteractionSceneTest
             .IsTrue();
         AssertThat(action.Definition?.Id.ToString()).IsEqual("activate");
         AssertThat(action.Definition?.InputActionName.ToString()).IsEqual("interact");
+        AssertThat(action.Executor != null).IsTrue();
+        AssertThat(
+                action.Executor
+                    == actor.GetNode<InteractionActionExecutor>(
+                        "Interactive/ActivateAction/ActivateExecutor"
+                    )
+            )
+            .IsTrue();
         AssertThat(action.Rules.Count).IsEqual(1);
         AssertThat(interactive.TargetRules.Count).IsEqual(1);
         AssertThat(interactive.ActionPromptScene != null).IsTrue();
@@ -268,10 +276,20 @@ public sealed partial class InteractionSceneTest
             };
             interactive.Actions.Add(action);
             interactive.AddChild(action);
+            NoopInteractionExecutor executor = new() { Name = $"{actionId}Executor" };
+            action.AddChild(executor);
+            action.Executor = executor;
         }
 
         return owner;
     }
 
     private sealed partial class TestInteractiveActor : Node3D { }
+
+    private sealed partial class NoopInteractionExecutor : InteractionActionExecutor
+    {
+        public override InteractionExecutionResult Execute(
+            in InteractionExecutionContext context
+        ) => new InteractionExecutionCompleted();
+    }
 }

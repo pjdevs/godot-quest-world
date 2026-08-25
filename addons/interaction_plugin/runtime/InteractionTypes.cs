@@ -27,6 +27,28 @@ public readonly union InteractionAvailability(
     InteractionHidden
 );
 
+/// <summary>Turns an availability into the text reported to a refused interactor.</summary>
+public static class InteractionAvailabilityExtensions
+{
+    /// <summary>Reason used when a refusal must not reveal why an action is unavailable.</summary>
+    public const string UnavailableReason = "Interaction unavailable.";
+
+    /// <summary>Describes why an action was refused, without disclosing a hidden action.</summary>
+    /// <remarks>
+    /// Hidden and blocked deliberately share one wording on the authoritative side: an action absent
+    /// from the offered choices must not become discoverable through the refusal it produces.
+    /// </remarks>
+    /// <param name="availability">Availability that stopped the request.</param>
+    /// <returns>The blocked reason, the neutral wording, or an empty string when allowed.</returns>
+    public static string DescribeRefusal(this InteractionAvailability availability) =>
+        availability switch
+        {
+            InteractionAllowed => string.Empty,
+            InteractionBlocked blocked => blocked.Reason,
+            InteractionHidden => UnavailableReason,
+        };
+}
+
 /// <summary>Persistent lifecycle state of a stateful interaction.</summary>
 public enum InteractionState
 {
@@ -48,6 +70,56 @@ public enum InteractionState
 /// <param name="Interactive">Interactive component owning the evaluated action.</param>
 /// <param name="Action">Action being evaluated, including for target-level rules.</param>
 public readonly record struct InteractionContext(
+    InteractionInteractor Interactor,
+    InteractiveComponent Interactive,
+    InteractionAction Action
+);
+
+/// <summary>Indicates that the executor finished the action synchronously.</summary>
+/// <remarks>The reservation held during the call is released immediately.</remarks>
+public sealed record InteractionExecutionCompleted();
+
+/// <summary>Indicates that the executor started an action that finishes later.</summary>
+/// <remarks>
+/// The target keeps the execution reserved until gameplay calls
+/// <c>InteractiveComponent.CompleteExecution</c> or <c>InteractiveComponent.CancelExecution</c>.
+/// </remarks>
+public sealed record InteractionExecutionRunning();
+
+/// <summary>Indicates that the executor refused the action at the execution boundary.</summary>
+/// <param name="Reason">Reason reported to the requesting interactor.</param>
+/// <remarks>
+/// This case must stay rare: an ordinary gameplay condition belongs to a rule, where it is also
+/// visible to presentation, instead of being discovered once the command is already authoritative.
+/// </remarks>
+public sealed record InteractionExecutionRejected(string Reason = "Interaction unavailable.");
+
+/// <summary>Indicates that the action was accepted and then failed.</summary>
+/// <param name="Reason">Reason reported to the requesting interactor.</param>
+/// <remarks>
+/// A failure is a gameplay or technical error discovered after acceptance, never a plain
+/// "not allowed": the action did start, so it is notified as started and then cancelled.
+/// </remarks>
+public sealed record InteractionExecutionFailed(string Reason = "The interaction failed.");
+
+/// <summary>Outcome returned by the single executor owning the gameplay mutation of an action.</summary>
+public readonly union InteractionExecutionResult(
+    InteractionExecutionCompleted,
+    InteractionExecutionRunning,
+    InteractionExecutionRejected,
+    InteractionExecutionFailed
+);
+
+/// <summary>Read-only inputs supplied to the executor of an authoritative action.</summary>
+/// <remarks>
+/// This is deliberately distinct from <see cref="InteractionContext"/>: a rule answers "may this
+/// happen", while an executor performs it. The target is fully reserved and coherent before this
+/// context is built, so an executor may freely call back into gameplay.
+/// </remarks>
+/// <param name="Interactor">Interactor that requested the action.</param>
+/// <param name="Interactive">Interactive component owning the executed action.</param>
+/// <param name="Action">Action being executed.</param>
+public readonly record struct InteractionExecutionContext(
     InteractionInteractor Interactor,
     InteractiveComponent Interactive,
     InteractionAction Action

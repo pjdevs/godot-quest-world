@@ -10,6 +10,7 @@
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="7_action"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="8_actiondef"]
 [ext_resource type="Script" uid="uid://c54cwju4u00hy" path="res://addons/interaction_plugin/examples/rules/LegacyStatefulInteractionRule.cs" id="9_legacy"]
+[ext_resource type="Script" uid="uid://8wjkotso5o8" path="res://addons/interaction_plugin/examples/interactive/InteractiveActorExecutor.cs" id="10_executor"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
 
@@ -83,11 +84,17 @@ IndicationScene = ExtResource("5_indicator")
 Actions = [NodePath("ActivateAction")]
 TargetRules = Array[ExtResource("5_ll77h")]([SubResource("Resource_ll77h")])
 
-[node name="ActivateAction" type="Node" parent="Interactive"]
+[node name="ActivateAction" type="Node" parent="Interactive" node_paths=PackedStringArray("Executor")]
 script = ExtResource("7_action")
 Definition = SubResource("Resource_activate_definition")
+Executor = NodePath("ActivateExecutor")
 Rules = Array[ExtResource("5_ll77h")]([SubResource("Resource_activate_stateful_rule")])
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+
+[node name="ActivateExecutor" type="Node" parent="Interactive/ActivateAction" node_paths=PackedStringArray("Actor")]
+script = ExtResource("10_executor")
+Actor = NodePath("../../..")
+metadata/_custom_type_script = "uid://8wjkotso5o8"
 
 [node name="Stateful" type="Node" parent="." unique_id=239787997]
 script = ExtResource("3_stateful")

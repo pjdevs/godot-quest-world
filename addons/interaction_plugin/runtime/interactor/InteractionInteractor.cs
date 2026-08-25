@@ -22,7 +22,8 @@ internal readonly record struct FocusChangeResult(
 [GlobalClass]
 public partial class InteractionInteractor : Node
 {
-    private const string UnavailableReason = "Interaction unavailable.";
+    private const string ReleasedReason = "The interaction input was released.";
+    private const string InteractorLostReason = "The interactor left the interaction.";
 
     /// <summary>Emitted locally when the best target changes.</summary>
     /// <param name="interactive">New focused interactive, or null when focus is cleared.</param>
@@ -237,7 +238,7 @@ public partial class InteractionInteractor : Node
 
         if (_activeInteractive == interactive && Multiplayer.IsServer())
         {
-            interactive.ReleaseInteractionInput(this);
+            interactive.CancelExecution(this, InteractorLostReason);
             _activeInteractive = null;
         }
 
@@ -402,14 +403,15 @@ public partial class InteractionInteractor : Node
         return TryRequestAction(target, action, inputActionName);
     }
 
-    /// <summary>Requests authoritative release of the action started by one input.</summary>
+    /// <summary>Requests authoritative cancellation of the execution started by one input.</summary>
     /// <remarks>
     /// Call from the local player's input-release code. The action is the one this interactor
     /// remembers requesting for that input, never a fresh resolution: world state may have changed
-    /// since the press, and re-resolving would release an action the server never started.
+    /// since the press, and re-resolving would cancel an execution the server never started. An
+    /// instant action holds no execution, so releasing its input cancels nothing.
     /// </remarks>
     /// <param name="inputActionName">Project input action released by the player.</param>
-    /// <returns>Whether a request was sent or the host released the matching interaction.</returns>
+    /// <returns>Whether a request was sent or the host cancelled the matching execution.</returns>
     public bool TryEndInteractionInput(StringName inputActionName)
     {
         if (
@@ -459,7 +461,7 @@ public partial class InteractionInteractor : Node
                 SignalName.InteractionRejected,
                 target,
                 actionId,
-                DescribeRefusal(localAvailability)
+                localAvailability.DescribeRefusal()
             );
             return false;
         }
@@ -504,11 +506,6 @@ public partial class InteractionInteractor : Node
         RecalculateFocus();
     }
 
-    internal bool ReleaseInteractionInput(InteractiveComponent interactive)
-    {
-        return interactive.ReleaseInteractionInput(this);
-    }
-
     /// <summary>Godot callback that releases server reservations and unregisters detected targets.</summary>
     public override void _ExitTree()
     {
@@ -518,7 +515,7 @@ public partial class InteractionInteractor : Node
             && Multiplayer.IsServer()
         )
         {
-            _activeInteractive.ReleaseInteractionInput(this);
+            _activeInteractive.CancelExecution(this, InteractorLostReason);
             _activeInteractive = null;
         }
 
@@ -538,7 +535,7 @@ public partial class InteractionInteractor : Node
         _focusedInteractive = null;
     }
 
-    /// <summary>Reliable client-to-server RPC that validates and starts one target.</summary>
+    /// <summary>Reliable client-to-server RPC that validates and executes one action.</summary>
     /// <remarks>Called by Godot RPC dispatch; input code should call <see cref="TryStartInteractionInput"/>.</remarks>
     /// <param name="targetPath">Scene-tree path of the client-selected interactive.</param>
     /// <param name="actionId">Identifier of the action the client believes it can request.</param>
@@ -569,7 +566,7 @@ public partial class InteractionInteractor : Node
         }
     }
 
-    /// <summary>Reliable client-to-server RPC that releases the caller's active interaction.</summary>
+    /// <summary>Reliable client-to-server RPC that cancels the caller's running execution.</summary>
     /// <remarks>Called by Godot RPC dispatch; input code should call <see cref="TryEndInteractionInput"/>.</remarks>
     /// <param name="actionId">Identifier the client received when its request was sent.</param>
     [Rpc(
@@ -627,25 +624,39 @@ public partial class InteractionInteractor : Node
         InteractionAction? action = target.ResolveAction(actionId);
         if (action is null)
         {
-            reason = UnavailableReason;
+            reason = InteractionAvailabilityExtensions.UnavailableReason;
             return false;
         }
 
         InteractionAvailability availability = target.EvaluateAvailability(this, action);
         if (availability is not InteractionAllowed)
         {
-            reason = DescribeRefusal(availability);
+            reason = availability.DescribeRefusal();
             return false;
         }
 
-        if (!target.StartInteraction(this, action))
+        InteractionExecutionResult result = target.ExecuteAction(this, action);
+        switch (result)
         {
-            reason = "The interaction could not be started.";
-            return false;
+            case InteractionExecutionRunning:
+                // Only a running execution keeps a reservation the interactor may later release.
+                _activeInteractive = target;
+                return true;
+
+            case InteractionExecutionCompleted:
+                return true;
+
+            case InteractionExecutionRejected rejected:
+                reason = rejected.Reason;
+                return false;
+
+            case InteractionExecutionFailed failed:
+                reason = failed.Reason;
+                return false;
         }
 
-        _activeInteractive = target;
-        return true;
+        reason = InteractionAvailabilityExtensions.UnavailableReason;
+        return false;
     }
 
     private bool EndInteractionInputAuthoritatively(int senderPeerId, StringName actionId)
@@ -661,29 +672,21 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
-        // A reserved phase only answers to the action that reserved it. An instant interaction
-        // reserves nothing, so its target is simply forgotten like in V1.
+        // A running execution only answers to the action that reserved it. An instant action holds
+        // no reservation at all, so there is nothing to release once it has completed.
         if (target.ActiveAction is not null && target.ActiveAction.Definition?.Id != actionId)
         {
             return false;
         }
 
         _activeInteractive = null;
-        return target.ReleaseInteractionInput(this);
+        return target.CancelExecution(this, ReleasedReason);
     }
 
     private void EmitStatusFor(InteractiveComponent interactive)
     {
         EmitSignal(SignalName.InteractionStatusChanged, interactive);
     }
-
-    private static string DescribeRefusal(in InteractionAvailability availability) =>
-        availability switch
-        {
-            InteractionAllowed => string.Empty,
-            InteractionBlocked blocked => blocked.Reason,
-            InteractionHidden => UnavailableReason,
-        };
 
     private bool ValidateSender(int senderPeerId, out string reason)
     {

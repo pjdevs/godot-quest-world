@@ -7,59 +7,85 @@ using QuestWorld.Interaction.Runtime.State;
 
 namespace QuestWorld.Interaction.Runtime.Interactive;
 
-internal readonly record struct InteractionStartResult(
+/// <summary>Execution reserved on a target, owning one interactor and one action.</summary>
+/// <remarks>
+/// A target holds at most one execution. An instant action reserves it only for the duration of its
+/// executor call; a running one keeps it until gameplay completes or cancels it.
+/// </remarks>
+internal readonly record struct InteractionExecution(
     InteractionInteractor Interactor,
     InteractionAction Action
 );
 
-internal readonly record struct InteractionPhaseStartResult(
-    InteractionInteractor Interactor,
-    InteractionStateful Stateful,
-    InteractionState NextState
-);
-
-internal readonly record struct InteractionPhaseEndResult(
-    InteractionInteractor Interactor,
-    InteractionStateful Stateful,
-    InteractionState NextState
-);
-
-internal readonly record struct InteractionReleaseResult(
-    InteractionInteractor Interactor,
-    InteractionAction Action
+/// <summary>Notification payload built once an execution result has been applied.</summary>
+internal readonly record struct InteractionExecutionDispatch(
+    InteractionExecution Execution,
+    InteractionExecutionResult Result
 );
 
 /// <summary>
-/// Defines an interactable target, evaluates its rules, and owns any active interaction phase.
+/// Defines an interactable target, evaluates its rules, and owns the execution of its actions.
 /// </summary>
 /// <remarks>
 /// Add this node beside its gameplay node and assign explicit scene references in the Inspector.
-/// Authoritative start, end, and phase mutations run on the server or offline host.
+/// Availability evaluation is pure and runs anywhere; reserving, executing, completing, and
+/// cancelling run on the server or offline host.
 /// </remarks>
 [GlobalClass]
 public partial class InteractiveComponent : Node
 {
-    /// <summary>
-    /// Emitted on the authoritative instance after start validation succeeds. Gameplay subscribers
-    /// start the concrete action here and may synchronously call <see cref="StartInteractionPhase"/>.
-    /// </summary>
-    /// <param name="interactor">Interactor that requested the interaction.</param>
-    /// <param name="action">Action of this target that was requested and validated.</param>
+    /// <summary>Emitted on the authoritative instance once an executor has accepted an action.</summary>
+    /// <remarks>
+    /// Every notification of this component reports something that already happened. None of them is
+    /// a command: the gameplay mutation belongs to <see cref="InteractionAction.Executor"/>, so
+    /// connecting any number of observers never runs the action more than once. A started action is
+    /// always followed by exactly one completion or cancellation.
+    /// </remarks>
+    /// <param name="interactor">Interactor that requested the action.</param>
+    /// <param name="action">Action whose executor accepted the command.</param>
     [Signal]
-    public delegate void InteractionInputStartedEventHandler(
+    public delegate void InteractionActionStartedEventHandler(
         InteractionInteractor interactor,
         InteractionAction action
     );
 
-    /// <summary>
-    /// Emitted on the authoritative instance when the active interactor releases input or is removed.
-    /// </summary>
-    /// <param name="interactor">Interactor whose active input was released.</param>
-    /// <param name="action">Action that owned the released phase.</param>
+    /// <summary>Emitted on the authoritative instance when a started action reaches its end.</summary>
+    /// <param name="interactor">Interactor that requested the action.</param>
+    /// <param name="action">Action that completed.</param>
     [Signal]
-    public delegate void InteractionInputEndedEventHandler(
+    public delegate void InteractionActionCompletedEventHandler(
         InteractionInteractor interactor,
         InteractionAction action
+    );
+
+    /// <summary>Emitted on the authoritative instance when a started action ends without completing.</summary>
+    /// <remarks>
+    /// This covers a released input, an interactor leaving range, an explicit gameplay cancellation,
+    /// and an executor failing after acceptance.
+    /// </remarks>
+    /// <param name="interactor">Interactor that requested the action.</param>
+    /// <param name="action">Action that was cancelled.</param>
+    /// <param name="reason">Reason describing why the action did not complete.</param>
+    [Signal]
+    public delegate void InteractionActionCancelledEventHandler(
+        InteractionInteractor interactor,
+        InteractionAction action,
+        string reason
+    );
+
+    /// <summary>Emitted on the authoritative instance when an action was refused before starting.</summary>
+    /// <remarks>
+    /// A refused action never runs its executor, so this notification is never preceded by
+    /// <see cref="InteractionActionStarted"/>.
+    /// </remarks>
+    /// <param name="interactor">Interactor that requested the action.</param>
+    /// <param name="action">Action that was refused.</param>
+    /// <param name="reason">Reason describing the refusal.</param>
+    [Signal]
+    public delegate void InteractionActionRejectedEventHandler(
+        InteractionInteractor interactor,
+        InteractionAction action,
+        string reason
     );
 
     /// <summary>
@@ -139,14 +165,19 @@ public partial class InteractiveComponent : Node
     [Export]
     public Godot.Collections.Array<InteractionRule> TargetRules { get; set; } = new();
 
+    private const string NotConfiguredReason = "Interaction is not configured.";
+    private const string NotAuthoritativeReason = "The interaction is not authoritative.";
+    private const string AlreadyRunningReason = "This is already in use.";
+
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
     private Area3D? _interactionArea;
-    private InteractionInteractor? _activeInteractor;
-    private InteractionAction? _activeAction;
+    private InteractionExecution? _activeExecution;
 
-    internal InteractionInteractor? ActiveInteractor => _activeInteractor;
+    internal bool HasActiveExecution => _activeExecution is not null;
 
-    internal InteractionAction? ActiveAction => _activeAction;
+    internal InteractionInteractor? ActiveInteractor => _activeExecution?.Interactor;
+
+    internal InteractionAction? ActiveAction => _activeExecution?.Action;
 
     /// <summary>Godot callback that validates configuration and connects area and state signals.</summary>
     public override void _Ready()
@@ -206,10 +237,11 @@ public partial class InteractiveComponent : Node
             || InteractionAnchor is null
             || action is null
             || action.Definition is null
+            || action.Executor is null
             || !Actions.Contains(action)
         )
         {
-            return new InteractionBlocked("Interaction is not configured.");
+            return new InteractionBlocked(NotConfiguredReason);
         }
 
         if (ActiveInteractor is not null && ActiveInteractor != interactor)
@@ -500,165 +532,235 @@ public partial class InteractiveComponent : Node
         return true;
     }
 
-    /// <summary>
-    /// Revalidates and emits <see cref="InteractionInputStarted"/> for an authoritative request.
-    /// </summary>
-    /// <remarks>Called by <see cref="InteractionInteractor"/> on the server or offline host.</remarks>
-    /// <param name="interactor">Interactor starting the gameplay action.</param>
+    /// <summary>Runs the authoritative command of one action through its single executor.</summary>
+    /// <remarks>
+    /// This is the only supported way to perform an action. Called by
+    /// <see cref="InteractionInteractor"/> on the server or offline host, it re-evaluates
+    /// availability, reserves the execution, hands a coherent target to the executor, applies the
+    /// returned outcome, and only then notifies. No signal is a command, so observers cannot make the
+    /// action run twice or run it at all.
+    /// </remarks>
+    /// <param name="interactor">Interactor requesting the action.</param>
     /// <param name="action">Action of this target resolved from the requested identifier.</param>
-    /// <returns><see langword="true"/> when validation succeeded and the signal was emitted.</returns>
-    public bool StartInteraction(InteractionInteractor interactor, InteractionAction action)
-    {
-        InteractionStartResult? result = StartInteractionCore(interactor, action);
-        if (result is null)
-        {
-            return false;
-        }
-
-        DispatchInteractionStart(result.Value);
-        return true;
-    }
-
-    internal InteractionStartResult? StartInteractionCore(
+    /// <returns>The outcome returned by the executor, or the refusal that stopped the command.</returns>
+    public InteractionExecutionResult ExecuteAction(
         InteractionInteractor interactor,
         InteractionAction action
     )
     {
-        if (action is null || EvaluateAvailability(interactor, action) is not InteractionAllowed)
+        if (!Multiplayer.IsServer())
         {
-            return null;
+            // No notification here: this component only reports what happened authoritatively.
+            GD.PushWarning($"{GetPath()}: only the server may execute an interaction action.");
+            return new InteractionExecutionRejected(NotAuthoritativeReason);
         }
 
-        return new InteractionStartResult(interactor, action);
+        InteractionAvailability availability = EvaluateAvailability(interactor, action);
+        if (availability is not InteractionAllowed)
+        {
+            return RefuseExecution(interactor, action, availability.DescribeRefusal());
+        }
+
+        // Availability lets an interactor keep requesting a target it already reserved, so the
+        // running execution is what refuses here. Whether two actions of one target may ever run
+        // together is the concurrency question answered by the next step, not by this reason.
+        if (HasActiveExecution)
+        {
+            return RefuseExecution(interactor, action, AlreadyRunningReason);
+        }
+
+        InteractionExecution? reservation = ReserveExecutionCore(interactor, action);
+        if (reservation is null)
+        {
+            return RefuseExecution(interactor, action, NotConfiguredReason);
+        }
+
+        // The reservation is complete and every invariant holds before arbitrary gameplay runs.
+        InteractionExecutionResult result = action.Executor!.Execute(
+            new InteractionExecutionContext(interactor, this, action)
+        );
+
+        InteractionExecutionDispatch dispatch = ApplyExecutionResultCore(reservation.Value, result);
+        DispatchExecutionResult(dispatch);
+        return result;
     }
 
-    private void DispatchInteractionStart(in InteractionStartResult result)
-    {
-        EmitSignal(SignalName.InteractionInputStarted, result.Interactor, result.Action);
-    }
-
-    /// <summary>Reserves this stateful interaction and moves it to <see cref="InteractionState.Activating"/>.</summary>
-    /// <remarks>
-    /// Call synchronously from an authoritative <see cref="InteractionInputStarted"/> subscriber for
-    /// long-running interactions. Returns false on clients or stateless targets.
-    /// </remarks>
-    /// <param name="interactor">Interactor to reserve until the phase ends or input is released.</param>
-    /// <param name="action">Action received with <see cref="InteractionInputStarted"/>.</param>
-    /// <returns><see langword="true"/> when the server started and reserved the phase.</returns>
-    public bool StartInteractionPhase(InteractionInteractor interactor, InteractionAction action)
-    {
-        InteractionPhaseStartResult? result = StartInteractionPhaseCore(interactor, action);
-        if (result is null)
-        {
-            return false;
-        }
-
-        if (result.Value.Stateful.SetState(result.Value.NextState))
-        {
-            return true;
-        }
-
-        if (ActiveInteractor == result.Value.Interactor)
-        {
-            _activeInteractor = null;
-            _activeAction = null;
-        }
-
-        return false;
-    }
-
-    internal InteractionPhaseStartResult? StartInteractionPhaseCore(
+    internal InteractionExecution? ReserveExecutionCore(
         InteractionInteractor interactor,
         InteractionAction action
     )
     {
-        if (
-            interactor is null
-            || action is null
-            || !Actions.Contains(action)
-            || ActiveInteractor is not null
-            || Stateful is null
-            || Stateful.State != InteractionState.Idle
-            || !Multiplayer.IsServer()
-        )
+        if (interactor is null || action?.Executor is null || !Actions.Contains(action))
         {
             return null;
         }
 
-        _activeInteractor = interactor;
-        _activeAction = action;
-        return new InteractionPhaseStartResult(interactor, Stateful, InteractionState.Activating);
+        if (_activeExecution is not null)
+        {
+            return null;
+        }
+
+        InteractionExecution execution = new(interactor, action);
+        _activeExecution = execution;
+        return execution;
     }
 
-    /// <summary>Completes the active phase, releases its interactor, and applies the next state.</summary>
+    internal InteractionExecutionDispatch ApplyExecutionResultCore(
+        in InteractionExecution execution,
+        in InteractionExecutionResult result
+    )
+    {
+        if (result is not InteractionExecutionRunning)
+        {
+            ReleaseExecutionCore(execution.Interactor);
+        }
+
+        return new InteractionExecutionDispatch(execution, result);
+    }
+
+    /// <summary>Completes the execution a previous executor left running.</summary>
     /// <remarks>Call from authoritative gameplay code on the server or offline host.</remarks>
-    /// <param name="nextState">State to apply after the phase completes.</param>
-    /// <returns><see langword="true"/> when the state changed successfully.</returns>
-    public bool EndInteractionPhase(InteractionState nextState)
+    /// <returns><see langword="true"/> when a running execution was completed.</returns>
+    public bool CompleteExecution()
     {
-        InteractionPhaseEndResult? result = EndInteractionPhaseCore(nextState);
-        if (result is null)
+        InteractionExecution? execution = EndExecutionCore(owner: null);
+        if (execution is null)
         {
             return false;
         }
 
-        bool stateChanged = result.Value.Stateful.SetState(result.Value.NextState);
-        if (!stateChanged)
-        {
-            NotifyStatusChanged();
-        }
-
-        return stateChanged;
-    }
-
-    internal InteractionPhaseEndResult? EndInteractionPhaseCore(InteractionState nextState)
-    {
-        if (ActiveInteractor is null || Stateful is null || !Multiplayer.IsServer())
-        {
-            return null;
-        }
-
-        InteractionInteractor interactor = ActiveInteractor;
-        _activeInteractor = null;
-        _activeAction = null;
-        return new InteractionPhaseEndResult(interactor, Stateful, nextState);
-    }
-
-    /// <summary>Releases matching active input and emits <see cref="InteractionInputEnded"/>.</summary>
-    /// <remarks>
-    /// Called by the authoritative interactor when input ends, range is lost, or the interactor exits.
-    /// This is distinct from completing a phase with <see cref="EndInteractionPhase"/>.
-    /// </remarks>
-    /// <param name="interactor">Interactor expected to own the active phase.</param>
-    /// <returns><see langword="true"/> when matching active input was released.</returns>
-    public bool ReleaseInteractionInput(InteractionInteractor interactor)
-    {
-        InteractionReleaseResult? result = ReleaseInteractionInputCore(interactor);
-        if (result is null)
-        {
-            return false;
-        }
-
-        DispatchInteractionRelease(result.Value);
+        DispatchExecutionCompletion(execution.Value);
         return true;
     }
 
-    internal InteractionReleaseResult? ReleaseInteractionInputCore(InteractionInteractor interactor)
+    /// <summary>Cancels the execution a previous executor left running.</summary>
+    /// <remarks>Call from authoritative gameplay code on the server or offline host.</remarks>
+    /// <param name="reason">Reason carried by <see cref="InteractionActionCancelled"/>.</param>
+    /// <returns><see langword="true"/> when a running execution was cancelled.</returns>
+    public bool CancelExecution(string reason = "")
     {
-        if (ActiveInteractor != interactor || _activeAction is null)
+        InteractionExecution? execution = EndExecutionCore(owner: null);
+        if (execution is null)
+        {
+            return false;
+        }
+
+        DispatchExecutionCancellation(execution.Value, reason);
+        return true;
+    }
+
+    /// <summary>Cancels the running execution only when the given interactor owns it.</summary>
+    /// <remarks>
+    /// Called by the authoritative interactor when input ends, range is lost, or the interactor
+    /// leaves the tree. An interactor can never end an execution reserved by someone else.
+    /// </remarks>
+    /// <param name="interactor">Interactor expected to own the running execution.</param>
+    /// <param name="reason">Reason carried by <see cref="InteractionActionCancelled"/>.</param>
+    /// <returns><see langword="true"/> when the matching execution was cancelled.</returns>
+    public bool CancelExecution(InteractionInteractor interactor, string reason = "")
+    {
+        InteractionExecution? execution = EndExecutionCore(interactor);
+        if (execution is null)
+        {
+            return false;
+        }
+
+        DispatchExecutionCancellation(execution.Value, reason);
+        return true;
+    }
+
+    internal InteractionExecution? EndExecutionCore(InteractionInteractor? owner)
+    {
+        if (!Multiplayer.IsServer())
+        {
+            GD.PushWarning($"{GetPath()}: only the server may end an interaction execution.");
+            return null;
+        }
+
+        return ReleaseExecutionCore(owner);
+    }
+
+    private InteractionExecution? ReleaseExecutionCore(InteractionInteractor? owner)
+    {
+        if (_activeExecution is null)
         {
             return null;
         }
 
-        InteractionAction action = _activeAction;
-        _activeInteractor = null;
-        _activeAction = null;
-        return new InteractionReleaseResult(interactor, action);
+        InteractionExecution execution = _activeExecution.Value;
+        if (owner is not null && execution.Interactor != owner)
+        {
+            return null;
+        }
+
+        _activeExecution = null;
+        return execution;
     }
 
-    private void DispatchInteractionRelease(in InteractionReleaseResult result)
+    private InteractionExecutionResult RefuseExecution(
+        InteractionInteractor interactor,
+        InteractionAction action,
+        string reason
+    )
     {
-        EmitSignal(SignalName.InteractionInputEnded, result.Interactor, result.Action);
+        // A refused action changed nothing, so no status invalidation follows the notification.
+        EmitSignal(SignalName.InteractionActionRejected, interactor, action, reason);
+        return new InteractionExecutionRejected(reason);
+    }
+
+    internal void DispatchExecutionResult(in InteractionExecutionDispatch dispatch)
+    {
+        InteractionInteractor interactor = dispatch.Execution.Interactor;
+        InteractionAction action = dispatch.Execution.Action;
+        switch (dispatch.Result)
+        {
+            case InteractionExecutionCompleted:
+                EmitSignal(SignalName.InteractionActionStarted, interactor, action);
+                EmitSignal(SignalName.InteractionActionCompleted, interactor, action);
+                break;
+
+            case InteractionExecutionRunning:
+                EmitSignal(SignalName.InteractionActionStarted, interactor, action);
+                break;
+
+            case InteractionExecutionRejected rejected:
+                // Nothing ran, so the refusal alone is reported and no status is invalidated.
+                EmitSignal(
+                    SignalName.InteractionActionRejected,
+                    interactor,
+                    action,
+                    rejected.Reason
+                );
+                return;
+
+            case InteractionExecutionFailed failed:
+                EmitSignal(SignalName.InteractionActionStarted, interactor, action);
+                EmitSignal(
+                    SignalName.InteractionActionCancelled,
+                    interactor,
+                    action,
+                    failed.Reason
+                );
+                break;
+        }
+
+        NotifyStatusChanged();
+    }
+
+    private void DispatchExecutionCompletion(in InteractionExecution execution)
+    {
+        EmitSignal(SignalName.InteractionActionCompleted, execution.Interactor, execution.Action);
+        NotifyStatusChanged();
+    }
+
+    private void DispatchExecutionCancellation(in InteractionExecution execution, string reason)
+    {
+        EmitSignal(
+            SignalName.InteractionActionCancelled,
+            execution.Interactor,
+            execution.Action,
+            reason
+        );
         NotifyStatusChanged();
     }
 
@@ -697,8 +799,7 @@ public partial class InteractiveComponent : Node
             Stateful.InteractionStateChanged -= OnStatefulInteractionStateChanged;
         }
 
-        _activeInteractor = null;
-        _activeAction = null;
+        _activeExecution = null;
         PurgeInvalidInteractors();
         foreach (
             InteractionInteractor interactor in new List<InteractionInteractor>(_presentInteractors)

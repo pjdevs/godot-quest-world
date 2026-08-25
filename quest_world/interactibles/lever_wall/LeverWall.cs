@@ -1,9 +1,8 @@
-using System;
 using Godot;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Runtime.State;
 
-public partial class LeverWall : Node3D, IStatefulProvider
+public partial class LeverWall : Node3D
 {
     [Export]
     public InteractionStateful? Stateful { get; set; } = null;

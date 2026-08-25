@@ -68,94 +68,158 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task InteractionPhaseCoreReservesWithoutChangingExternalState()
+    public async Task ExecutionReservationCoreMutatesWithoutRunningAnythingExternal()
     {
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
         int stateSignalCount = 0;
+        int startedCount = 0;
         testWorld.Stateful.InteractionStateChanged += (_, _) => stateSignalCount++;
+        testWorld.Interactive.InteractionActionStarted += (_, _) => startedCount++;
 
-        InteractionPhaseStartResult? result = testWorld.Interactive.StartInteractionPhaseCore(
+        InteractionExecution? reservation = testWorld.Interactive.ReserveExecutionCore(
             testWorld.Interactor,
             testWorld.Action
         );
 
-        AssertThat(result.HasValue).IsTrue();
-        AssertThat(result?.Interactor == testWorld.Interactor).IsTrue();
-        AssertThat(result?.Stateful == testWorld.Stateful).IsTrue();
-        AssertThat(result?.NextState).IsEqual(InteractionState.Activating);
+        AssertThat(reservation.HasValue).IsTrue();
+        AssertThat(reservation?.Interactor == testWorld.Interactor).IsTrue();
+        AssertThat(reservation?.Action == testWorld.Action).IsTrue();
         AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
+        AssertThat(testWorld.Owner.StartCount).IsEqual(0);
         AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Idle);
         AssertThat(stateSignalCount).IsEqual(0);
+        AssertThat(startedCount).IsEqual(0);
     }
 
     [TestCase]
-    public async Task InteractionPhaseEndCoreReleasesBeforeExternalDispatch()
+    public async Task ReservedExecutionRefusesASecondReservation()
     {
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
-        AssertThat(testWorld.Interactive.StartInteraction(testWorld.Interactor, testWorld.Action))
-            .IsTrue();
-        int stateSignalCount = 0;
-        int statusSignalCount = 0;
-        testWorld.Stateful.InteractionStateChanged += (_, _) => stateSignalCount++;
-        testWorld.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
+        testWorld.Interactive.ReserveExecutionCore(testWorld.Interactor, testWorld.Action);
 
-        InteractionPhaseEndResult? result = testWorld.Interactive.EndInteractionPhaseCore(
-            InteractionState.Activated
+        InteractionExecution? second = testWorld.Interactive.ReserveExecutionCore(
+            testWorld.Interactor,
+            testWorld.Action
         );
 
-        AssertThat(result.HasValue).IsTrue();
-        AssertThat(result?.Interactor == testWorld.Interactor).IsTrue();
-        AssertThat(result?.Stateful == testWorld.Stateful).IsTrue();
-        AssertThat(result?.NextState).IsEqual(InteractionState.Activated);
+        AssertThat(second.HasValue).IsFalse();
+        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
+    }
+
+    [TestCase]
+    public async Task ExecutionResultCoreReleasesTheReservationWithoutDispatch()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+        InteractionExecution reservation = testWorld
+            .Interactive.ReserveExecutionCore(testWorld.Interactor, testWorld.Action)!
+            .Value;
+        int startedCount = 0;
+        int completedCount = 0;
+        int statusSignalCount = 0;
+        testWorld.Interactive.InteractionActionStarted += (_, _) => startedCount++;
+        testWorld.Interactive.InteractionActionCompleted += (_, _) => completedCount++;
+        testWorld.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
+
+        InteractionExecutionDispatch dispatch = testWorld.Interactive.ApplyExecutionResultCore(
+            reservation,
+            new InteractionExecutionCompleted()
+        );
+
+        AssertThat(dispatch.Execution.Interactor == testWorld.Interactor).IsTrue();
+        AssertThat(dispatch.Result is InteractionExecutionCompleted).IsTrue();
         AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
-        AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
-        AssertThat(stateSignalCount).IsEqual(0);
+        AssertThat(startedCount).IsEqual(0);
+        AssertThat(completedCount).IsEqual(0);
         AssertThat(statusSignalCount).IsEqual(0);
     }
 
     [TestCase]
-    public async Task InteractionReleaseCoreMutatesWithoutDispatch()
+    public async Task ExecutionResultCoreKeepsARunningReservation()
     {
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
-        AssertThat(testWorld.Interactive.StartInteraction(testWorld.Interactor, testWorld.Action))
-            .IsTrue();
-        int inputEndedCount = 0;
+        InteractionExecution reservation = testWorld
+            .Interactive.ReserveExecutionCore(testWorld.Interactor, testWorld.Action)!
+            .Value;
+
+        testWorld.Interactive.ApplyExecutionResultCore(
+            reservation,
+            new InteractionExecutionRunning()
+        );
+
+        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
+    }
+
+    [TestCase]
+    public async Task ExecutionEndCoreReleasesBeforeExternalDispatch()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactive.ExecuteAction(testWorld.Interactor, testWorld.Action);
+        int cancelledCount = 0;
+        int completedCount = 0;
         int statusSignalCount = 0;
-        testWorld.Interactive.InteractionInputEnded += (_, _) => inputEndedCount++;
+        testWorld.Interactive.InteractionActionCancelled += (_, _, _) => cancelledCount++;
+        testWorld.Interactive.InteractionActionCompleted += (_, _) => completedCount++;
         testWorld.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
 
-        InteractionReleaseResult? result = testWorld.Interactive.ReleaseInteractionInputCore(
+        InteractionExecution? execution = testWorld.Interactive.EndExecutionCore(
             testWorld.Interactor
         );
 
-        AssertThat(result.HasValue).IsTrue();
-        AssertThat(result?.Interactor == testWorld.Interactor).IsTrue();
+        AssertThat(execution.HasValue).IsTrue();
+        AssertThat(execution?.Interactor == testWorld.Interactor).IsTrue();
+        AssertThat(execution?.Action == testWorld.Action).IsTrue();
         AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
-        AssertThat(inputEndedCount).IsEqual(0);
+        AssertThat(cancelledCount).IsEqual(0);
+        AssertThat(completedCount).IsEqual(0);
         AssertThat(statusSignalCount).IsEqual(0);
     }
 
     [TestCase]
-    public async Task InteractionStartCoreProducesResultWithoutDispatch()
+    public async Task ExecutionEndCoreRefusesAnInteractorThatDoesNotOwnTheExecution()
+    {
+        TestWorld testWorld = BuildWorld();
+        Node3D secondView = new() { Name = "ViewOrigin" };
+        InteractionInteractor secondInteractor = new() { ViewOrigin = secondView };
+        secondInteractor.AddChild(secondView);
+        testWorld.World.AddChild(secondInteractor);
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactive.ExecuteAction(testWorld.Interactor, testWorld.Action);
+
+        InteractionExecution? execution = testWorld.Interactive.EndExecutionCore(secondInteractor);
+
+        AssertThat(execution.HasValue).IsFalse();
+        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
+    }
+
+    [TestCase]
+    public async Task ExecutionDispatchEmitsStartedThenCompletedExactlyOnce()
     {
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
-        int inputStartedCount = 0;
-        testWorld.Interactive.InteractionInputStarted += (_, _) => inputStartedCount++;
-
-        InteractionStartResult? result = testWorld.Interactive.StartInteractionCore(
-            testWorld.Interactor,
-            testWorld.Action
+        InteractionExecution reservation = testWorld
+            .Interactive.ReserveExecutionCore(testWorld.Interactor, testWorld.Action)!
+            .Value;
+        InteractionExecutionDispatch dispatch = testWorld.Interactive.ApplyExecutionResultCore(
+            reservation,
+            new InteractionExecutionCompleted()
         );
+        List<string> notifications = new();
+        testWorld.Interactive.InteractionActionStarted += (_, _) => notifications.Add("started");
+        testWorld.Interactive.InteractionActionCompleted += (_, _) =>
+            notifications.Add("completed");
+        testWorld.Interactive.InteractionActionCancelled += (_, _, _) =>
+            notifications.Add("cancelled");
+        testWorld.Interactive.InteractionActionRejected += (_, _, _) =>
+            notifications.Add("rejected");
 
-        AssertThat(result.HasValue).IsTrue();
-        AssertThat(result?.Interactor == testWorld.Interactor).IsTrue();
-        AssertThat(inputStartedCount).IsEqual(0);
-        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
-        AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Idle);
+        testWorld.Interactive.DispatchExecutionResult(dispatch);
+
+        AssertThat(string.Join(",", notifications)).IsEqual("started,completed");
     }
 
     [TestCase]
@@ -376,7 +440,7 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task LongPhaseReservesObjectAndRejectsACompetitorRelease()
+    public async Task RunningExecutionReservesObjectAndRejectsACompetitorRelease()
     {
         TestWorld testWorld = BuildWorld();
         Node3D secondView = new() { Name = "ViewOrigin" };
@@ -387,21 +451,217 @@ public sealed partial class InteractionBehaviorTest
 
         testWorld.Interactor.AddInteractive(testWorld.Interactive);
         secondInteractor.AddInteractive(testWorld.Interactive);
-        AssertThat(testWorld.Interactive.StartInteraction(testWorld.Interactor, testWorld.Action))
+        AssertThat(
+                testWorld.Interactive.ExecuteAction(testWorld.Interactor, testWorld.Action)
+                    is InteractionExecutionRunning
+            )
             .IsTrue();
         AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
-        AssertThat(testWorld.Interactive.StartInteraction(secondInteractor, testWorld.Action))
-            .IsFalse();
+        AssertThat(
+                testWorld.Interactive.ExecuteAction(secondInteractor, testWorld.Action)
+                    is InteractionExecutionRejected
+            )
+            .IsTrue();
 
-        AssertThat(testWorld.Interactive.ReleaseInteractionInput(secondInteractor)).IsFalse();
+        AssertThat(testWorld.Interactive.CancelExecution(secondInteractor)).IsFalse();
         AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
         AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
-        AssertThat(testWorld.Interactive.EndInteractionPhase(InteractionState.Activated)).IsTrue();
+        testWorld.Stateful.SetState(InteractionState.Activated);
+        AssertThat(testWorld.Interactive.CompleteExecution()).IsTrue();
 
         AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
         AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activated);
         AssertThat(testWorld.Owner.StartCount).IsEqual(1);
         AssertThat(testWorld.Owner.EndCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task ObserversOfTheNotificationsNeverRunTheExecutorASecondTime()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        RecordingInteractionExecutor executor = ExecutorOf(door.Open);
+        int startedCount = 0;
+        int completedCount = 0;
+        for (int observer = 0; observer < 3; observer++)
+        {
+            door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
+            door.Interactive.InteractionActionCompleted += (_, _) => completedCount++;
+            door.Interactive.InteractionActionCancelled += (_, _, _) => { };
+            door.Interactive.InteractionActionRejected += (_, _, _) => { };
+        }
+
+        InteractionExecutionResult result = door.Interactive.ExecuteAction(
+            door.Interactor,
+            door.Open
+        );
+
+        AssertThat(result is InteractionExecutionCompleted).IsTrue();
+        AssertThat(executor.ExecuteCount).IsEqual(1);
+        AssertThat(startedCount).IsEqual(3);
+        AssertThat(completedCount).IsEqual(3);
+        AssertThat(executor.LastInteractor == door.Interactor).IsTrue();
+        AssertThat(executor.LastAction == door.Open).IsTrue();
+    }
+
+    [TestCase]
+    public async Task TheTargetIsAlreadyReservedWhenTheExecutorRuns()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        RecordingInteractionExecutor executor = ExecutorOf(door.Open);
+
+        door.Interactive.ExecuteAction(door.Interactor, door.Open);
+
+        AssertThat(executor.ReservedInteractorDuringExecute == door.Interactor).IsTrue();
+    }
+
+    [TestCase]
+    public async Task ARunningExecutionRefusesTheSameInteractorWithItsOwnReason()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactive.ExecuteAction(testWorld.Interactor, testWorld.Action);
+        InteractionAction inspect = CreateAction("inspect");
+        AddAction(testWorld.Interactive, inspect);
+        string rejectedReason = string.Empty;
+        testWorld.Interactive.InteractionActionRejected += (_, _, reason) =>
+            rejectedReason = reason;
+
+        InteractionExecutionResult result = testWorld.Interactive.ExecuteAction(
+            testWorld.Interactor,
+            inspect
+        );
+
+        AssertThat(result is InteractionExecutionRejected).IsTrue();
+        AssertThat(rejectedReason).IsEqual("This is already in use.");
+        AssertThat(ExecutorOf(inspect).ExecuteCount).IsEqual(0);
+        AssertThat(testWorld.Owner.StartCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public async Task CompletedExecutionHoldsNoReservation()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+
+        door.Interactive.ExecuteAction(door.Interactor, door.Open);
+
+        AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(door.Interactive.CompleteExecution()).IsFalse();
+    }
+
+    [TestCase]
+    public async Task RejectedExecutionIsNeverAnnouncedAsStarted()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        ExecutorOf(door.Open).Result = new InteractionExecutionRejected("The hinges are stuck.");
+        List<string> notifications = new();
+        string rejectedReason = string.Empty;
+        door.Interactive.InteractionActionStarted += (_, _) => notifications.Add("started");
+        door.Interactive.InteractionActionCompleted += (_, _) => notifications.Add("completed");
+        door.Interactive.InteractionActionCancelled += (_, _, _) => notifications.Add("cancelled");
+        door.Interactive.InteractionActionRejected += (_, _, reason) =>
+        {
+            notifications.Add("rejected");
+            rejectedReason = reason;
+        };
+
+        InteractionExecutionResult result = door.Interactive.ExecuteAction(
+            door.Interactor,
+            door.Open
+        );
+
+        AssertThat(result is InteractionExecutionRejected).IsTrue();
+        AssertThat(string.Join(",", notifications)).IsEqual("rejected");
+        AssertThat(rejectedReason).IsEqual("The hinges are stuck.");
+        AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
+    }
+
+    [TestCase]
+    public async Task FailedExecutionIsAnnouncedAsStartedThenCancelled()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        ExecutorOf(door.Open).Result = new InteractionExecutionFailed("The door came off.");
+        List<string> notifications = new();
+        string cancelledReason = string.Empty;
+        door.Interactive.InteractionActionStarted += (_, _) => notifications.Add("started");
+        door.Interactive.InteractionActionCompleted += (_, _) => notifications.Add("completed");
+        door.Interactive.InteractionActionRejected += (_, _, _) => notifications.Add("rejected");
+        door.Interactive.InteractionActionCancelled += (_, _, reason) =>
+        {
+            notifications.Add("cancelled");
+            cancelledReason = reason;
+        };
+
+        InteractionExecutionResult result = door.Interactive.ExecuteAction(
+            door.Interactor,
+            door.Open
+        );
+
+        AssertThat(result is InteractionExecutionFailed).IsTrue();
+        AssertThat(string.Join(",", notifications)).IsEqual("started,cancelled");
+        AssertThat(cancelledReason).IsEqual("The door came off.");
+        AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
+    }
+
+    [TestCase]
+    public async Task ActionWithoutExecutorIsBlockedAndNeverRuns()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        InteractionActionExecutor executor = door.Open.Executor!;
+        door.Open.Executor = null;
+        int rejectedCount = 0;
+        int startedCount = 0;
+        door.Interactive.InteractionActionRejected += (_, _, _) => rejectedCount++;
+        door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
+
+        InteractionAvailability availability = door.Interactive.EvaluateAvailability(
+            door.Interactor,
+            door.Open
+        );
+        InteractionExecutionResult result = door.Interactive.ExecuteAction(
+            door.Interactor,
+            door.Open
+        );
+
+        AssertThat(Describe(availability)).IsEqual("Interaction is not configured.");
+        AssertThat(result is InteractionExecutionRejected).IsTrue();
+        AssertThat(((RecordingInteractionExecutor)executor).ExecuteCount).IsEqual(0);
+        AssertThat(rejectedCount).IsEqual(1);
+        AssertThat(startedCount).IsEqual(0);
+        AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
+    }
+
+    [TestCase]
+    public async Task CancellingARunningExecutionFreesTheTargetForAnotherInteractor()
+    {
+        TestWorld testWorld = BuildWorld();
+        Node3D secondView = new() { Name = "ViewOrigin" };
+        InteractionInteractor secondInteractor = new() { ViewOrigin = secondView };
+        secondInteractor.AddChild(secondView);
+        testWorld.World.AddChild(secondInteractor);
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactive.ExecuteAction(testWorld.Interactor, testWorld.Action);
+        string cancelledReason = string.Empty;
+        testWorld.Interactive.InteractionActionCancelled += (_, _, reason) =>
+            cancelledReason = reason;
+
+        AssertThat(testWorld.Interactive.CancelExecution("Interrupted.")).IsTrue();
+
+        AssertThat(cancelledReason).IsEqual("Interrupted.");
+        AssertThat(testWorld.Owner.EndCount).IsEqual(1);
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
+        testWorld.Stateful.SetState(InteractionState.Idle);
+        AssertThat(
+                testWorld.Interactive.ExecuteAction(secondInteractor, testWorld.Action)
+                    is InteractionExecutionRunning
+            )
+            .IsTrue();
     }
 
     [TestCase]
@@ -500,12 +760,11 @@ public sealed partial class InteractionBehaviorTest
             InteractionArea = area,
             InteractionAnchor = owner,
         };
-        InteractionAction action = CreateAction("activate");
+        InteractionAction action = CreateActivationAction("activate", owner);
         interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
         interactive.AddChild(action);
-        interactive.InteractionInputStarted += owner.OnInteractionInputStarted;
         owner.Interactive = interactive;
         InteractionInteractor interactor = new();
         Node3D world = new();
@@ -515,8 +774,10 @@ public sealed partial class InteractionBehaviorTest
         await runner.SimulateFrames(1);
 
         AssertThat(interactive.EvaluateAvailability(interactor) is InteractionAllowed).IsTrue();
-        AssertThat(interactive.StartInteraction(interactor, action)).IsTrue();
-        AssertThat(interactive.StartInteractionPhase(interactor, action)).IsFalse();
+        AssertThat(interactive.ExecuteAction(interactor, action) is InteractionExecutionCompleted)
+            .IsTrue();
+        AssertThat(interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(interactive.CompleteExecution()).IsFalse();
         AssertThat(owner.StartCount).IsEqual(1);
     }
 
@@ -655,9 +916,8 @@ public sealed partial class InteractionBehaviorTest
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
         int statusSignalCount = 0;
-        int inputStartedCount = 0;
+        RecordingInteractionExecutor executor = ExecutorOf(door.Open);
         door.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
-        door.Interactive.InteractionInputStarted += (_, _) => inputStartedCount++;
 
         InteractionAvailability first = door.Interactive.EvaluateAvailability(
             door.Interactor,
@@ -673,7 +933,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(door.State.State.ToString()).IsEqual("closed");
         AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
         AssertThat(statusSignalCount).IsEqual(0);
-        AssertThat(inputStartedCount).IsEqual(0);
+        AssertThat(executor.ExecuteCount).IsEqual(0);
     }
 
     [TestCase]
@@ -725,7 +985,11 @@ public sealed partial class InteractionBehaviorTest
         {
             AssertThat(interactive.EvaluateAvailability(interactor) is InteractionHidden).IsTrue();
             AssertThat(interactive.ResolveAction(new StringName("foreign")) == null).IsTrue();
-            AssertThat(interactive.StartInteraction(interactor, foreign)).IsFalse();
+            AssertThat(
+                    interactive.ExecuteAction(interactor, foreign) is InteractionExecutionRejected
+                )
+                .IsTrue();
+            AssertThat(ExecutorOf(foreign).ExecuteCount).IsEqual(0);
         }
         finally
         {
@@ -838,7 +1102,7 @@ public sealed partial class InteractionBehaviorTest
         await door.Runner.SimulateFrames(1);
         door.Interactor.AddInteractive(door.Interactive);
         List<string> startedActions = new();
-        door.Interactive.InteractionInputStarted += (_, action) =>
+        door.Interactive.InteractionActionStarted += (_, action) =>
             startedActions.Add(action.Definition!.Id.ToString());
 
         AssertThat(door.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
@@ -889,10 +1153,11 @@ public sealed partial class InteractionBehaviorTest
         await door.Runner.SimulateFrames(1);
         door.Interactor.AddInteractive(door.Interactive);
         int startedCount = 0;
-        door.Interactive.InteractionInputStarted += (_, _) => startedCount++;
+        door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
 
         AssertThat(door.Interactor.TryStartInteractionInput(new StringName("inspect"))).IsFalse();
         AssertThat(startedCount).IsEqual(0);
+        AssertThat(ExecutorOf(door.Open).ExecuteCount).IsEqual(0);
     }
 
     [TestCase]
@@ -906,7 +1171,7 @@ public sealed partial class InteractionBehaviorTest
             new AlwaysBlockedInteractionRule { Reason = "Requires a keycard." }
         );
         int startedCount = 0;
-        door.Interactive.InteractionInputStarted += (_, _) => startedCount++;
+        door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
         string rejectedActionId = string.Empty;
         string rejectedReason = string.Empty;
         door.Interactor.InteractionRejected += (_, actionId, reason) =>
@@ -921,6 +1186,7 @@ public sealed partial class InteractionBehaviorTest
         );
 
         AssertThat(startedCount).IsEqual(0);
+        AssertThat(ExecutorOf(door.Open).ExecuteCount).IsEqual(0);
         AssertThat(rejectedActionId).IsEqual("open");
         AssertThat(rejectedReason).IsEqual("Requires a keycard.");
     }
@@ -932,7 +1198,7 @@ public sealed partial class InteractionBehaviorTest
         await door.Runner.SimulateFrames(1);
         door.Interactor.AddInteractive(door.Interactive);
         int startedCount = 0;
-        door.Interactive.InteractionInputStarted += (_, _) => startedCount++;
+        door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
         string rejectedReason = string.Empty;
         door.Interactor.InteractionRejected += (_, _, reason) => rejectedReason = reason;
 
@@ -942,6 +1208,7 @@ public sealed partial class InteractionBehaviorTest
         );
 
         AssertThat(startedCount).IsEqual(0);
+        AssertThat(ExecutorOf(door.Close).ExecuteCount).IsEqual(0);
         AssertThat(rejectedReason).IsEqual("Interaction unavailable.");
     }
 
@@ -953,7 +1220,7 @@ public sealed partial class InteractionBehaviorTest
         door.Interactor.AddInteractive(door.Interactive);
         int startedCount = 0;
         int rejectedCount = 0;
-        door.Interactive.InteractionInputStarted += (_, _) => startedCount++;
+        door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
         door.Interactor.InteractionRejected += (_, _, _) => rejectedCount++;
 
         door.Interactor.ServerTryStartInteraction(
@@ -1093,17 +1360,17 @@ public sealed partial class InteractionBehaviorTest
             InteractionAnchor = owner,
         };
         LegacyStatefulInteractionRule statefulRule = new();
-        InteractionAction action = CreateAction("activate", statefulRule);
+        InteractionAction action = CreateActivationAction("activate", owner, statefulRule);
         interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(stateful);
         owner.AddChild(interactive);
         interactive.AddChild(action);
-        interactive.InteractionInputStarted += owner.OnInteractionInputStarted;
-        interactive.InteractionInputEnded += owner.OnInteractionInputEnded;
+        interactive.InteractionActionCancelled += owner.OnInteractionActionCancelled;
         stateful.InteractionStateChangedAuthority += owner.OnInteractionStateChangedAuthority;
         stateful.InteractionStateChangedPresentation += owner.OnInteractionStateChangedPresentation;
         owner.Interactive = interactive;
+        owner.Stateful = stateful;
 
         Node3D view = new() { Name = "ViewOrigin" };
         InteractionInteractor interactor = new()
@@ -1134,7 +1401,29 @@ public sealed partial class InteractionBehaviorTest
         interactive.Actions.Add(action);
     }
 
+    private static InteractionAction CreateActivationAction(
+        string id,
+        TestInteractiveActor owner,
+        params InteractionRule[] rules
+    )
+    {
+        InteractionAction action = NewAction(id, rules);
+        TestActivationExecutor executor = new() { Name = $"{id}Executor", Actor = owner };
+        action.AddChild(executor);
+        action.Executor = executor;
+        return action;
+    }
+
     private static InteractionAction CreateAction(string id, params InteractionRule[] rules)
+    {
+        InteractionAction action = NewAction(id, rules);
+        RecordingInteractionExecutor executor = new() { Name = $"{id}Executor" };
+        action.AddChild(executor);
+        action.Executor = executor;
+        return action;
+    }
+
+    private static InteractionAction NewAction(string id, InteractionRule[] rules)
     {
         InteractionAction action = new()
         {
@@ -1153,6 +1442,9 @@ public sealed partial class InteractionBehaviorTest
 
         return action;
     }
+
+    private static RecordingInteractionExecutor ExecutorOf(InteractionAction action) =>
+        (RecordingInteractionExecutor)action.Executor!;
 
     private static DoorWorld BuildDoorWorld()
     {
@@ -1219,6 +1511,8 @@ public sealed partial class InteractionBehaviorTest
     {
         public InteractiveComponent? Interactive { get; set; }
 
+        public InteractionStateful? Stateful { get; set; }
+
         public bool GameplayBlocked { get; set; }
 
         public int StartCount { get; private set; }
@@ -1226,18 +1520,22 @@ public sealed partial class InteractionBehaviorTest
         public int AuthorityStateChanges { get; private set; }
         public int PresentationStateChanges { get; private set; }
 
-        public void OnInteractionInputStarted(
-            InteractionInteractor interactor,
-            InteractionAction action
-        )
+        public InteractionExecutionResult BeginActivation()
         {
             StartCount++;
-            Interactive?.StartInteractionPhase(interactor, action);
+            if (Stateful is null)
+            {
+                return new InteractionExecutionCompleted();
+            }
+
+            Stateful.SetState(InteractionState.Activating);
+            return new InteractionExecutionRunning();
         }
 
-        public void OnInteractionInputEnded(
+        public void OnInteractionActionCancelled(
             InteractionInteractor interactor,
-            InteractionAction action
+            InteractionAction action,
+            string reason
         ) => EndCount++;
 
         public void OnInteractionStateChangedAuthority(int oldState, int newState)
@@ -1248,6 +1546,38 @@ public sealed partial class InteractionBehaviorTest
         public void OnInteractionStateChangedPresentation(int oldState, int newState)
         {
             PresentationStateChanges++;
+        }
+    }
+
+    private sealed partial class TestActivationExecutor : InteractionActionExecutor
+    {
+        public TestInteractiveActor? Actor { get; set; }
+
+        public override InteractionExecutionResult Execute(
+            in InteractionExecutionContext context
+        ) => Actor is null ? new InteractionExecutionFailed("No actor.") : Actor.BeginActivation();
+    }
+
+    private sealed partial class RecordingInteractionExecutor : InteractionActionExecutor
+    {
+        public InteractionExecutionResult Result { get; set; } =
+            new InteractionExecutionCompleted();
+
+        public int ExecuteCount { get; private set; }
+
+        public InteractionInteractor? LastInteractor { get; private set; }
+
+        public InteractionAction? LastAction { get; private set; }
+
+        public InteractionInteractor? ReservedInteractorDuringExecute { get; private set; }
+
+        public override InteractionExecutionResult Execute(in InteractionExecutionContext context)
+        {
+            ExecuteCount++;
+            LastInteractor = context.Interactor;
+            LastAction = context.Action;
+            ReservedInteractorDuringExecute = context.Interactive.ActiveInteractor;
+            return Result;
         }
     }
 

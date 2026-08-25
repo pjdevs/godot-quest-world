@@ -18,6 +18,15 @@ public partial class InteractionAction : Node
     [Export]
     public InteractionActionDefinition? Definition { get; set; }
 
+    /// <summary>Gets or sets the required single owner of the gameplay mutation of this action.</summary>
+    /// <remarks>
+    /// Add the executor node to the target scene, conventionally as a child of this action, and
+    /// reference it here. An action without executor is a configuration error and stays blocked: the
+    /// core never falls back to a signal that some subscriber might handle.
+    /// </remarks>
+    [Export]
+    public InteractionActionExecutor? Executor { get; set; }
+
     /// <summary>
     /// Gets or sets the ordered gameplay conditions of this action. Evaluation stops at the first
     /// hidden or blocked result.
@@ -43,12 +52,17 @@ public partial class InteractionAction : Node
     [Export]
     public bool Automatic { get; set; }
 
-    /// <summary>Godot callback that reports a missing definition.</summary>
+    /// <summary>Godot callback that reports a missing definition or executor.</summary>
     public override void _Ready()
     {
         if (Definition is null)
         {
             GD.PushError($"{GetPath()}: InteractionAction requires a Definition.");
+        }
+
+        if (Executor is null)
+        {
+            GD.PushError($"{GetPath()}: InteractionAction requires an Executor.");
         }
     }
 }
