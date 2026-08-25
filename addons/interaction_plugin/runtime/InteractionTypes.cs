@@ -49,6 +49,39 @@ public static class InteractionAvailabilityExtensions
         };
 }
 
+/// <summary>Availability an authoring-time choice may select when a rule condition does not hold.</summary>
+/// <remarks>
+/// <see cref="InteractionAvailability"/> is a union and cannot be exported, so a rule exposing its
+/// own refusal to the Inspector declares this enum instead. Only the two unavailable cases exist:
+/// a rule that would select <c>Allowed</c> carries no condition at all.
+/// </remarks>
+public enum InteractionUnavailableKind
+{
+    /// <summary>The action leaves the offered choices, without any reason to display.</summary>
+    Hidden,
+
+    /// <summary>The action stays presentable and explains why it cannot run.</summary>
+    Blocked
+}
+
+/// <summary>Turns an authored unavailable kind into the availability returned by a rule.</summary>
+public static class InteractionUnavailableKindExtensions
+{
+    /// <summary>Builds the availability selected by an authored refusal.</summary>
+    /// <param name="kind">Unavailable case chosen in the Inspector.</param>
+    /// <param name="reason">Reason carried by a blocked result, ignored when hidden.</param>
+    /// <returns>A hidden or blocked availability.</returns>
+    public static InteractionAvailability ToAvailability(
+        this InteractionUnavailableKind kind,
+        string reason
+    ) =>
+        kind switch
+        {
+            InteractionUnavailableKind.Blocked => new InteractionBlocked(reason),
+            _ => new InteractionHidden(),
+        };
+}
+
 /// <summary>Persistent lifecycle state of a stateful interaction.</summary>
 public enum InteractionState
 {

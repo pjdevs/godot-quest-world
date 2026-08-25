@@ -4,7 +4,7 @@
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn" id="2_2ck07"]
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="3_action"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="4_actiondef"]
-[ext_resource type="Script" uid="uid://bkb5nh6iohu5a" path="res://quest_world/interactibles/button/ButtonInteractionExecutor.cs" id="5_buttonexec"]
+[ext_resource type="Script" uid="uid://bw02qn7pyxpy4" path="res://addons/interaction_plugin/integration/stateful/SetStateInteractionExecutor.cs" id="5_setstate"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_mokd0"]
 size = Vector3(0.25, 0.25, 0.25)
@@ -15,10 +15,17 @@ albedo_color = Color(0, 1, 0, 1)
 [sub_resource type="BoxShape3D" id="BoxShape3D_mokd0"]
 size = Vector3(5, 3, 5)
 
-[sub_resource type="Resource" id="Resource_activate_definition"]
+[sub_resource type="Resource" id="Resource_raise_definition"]
 script = ExtResource("4_actiondef")
-Id = &"activate"
-Label = "Activate"
+Id = &"raise"
+Label = "Raise wall"
+InputActionName = &"interact"
+metadata/_custom_type_script = "uid://bqs31n67gwjq1"
+
+[sub_resource type="Resource" id="Resource_lower_definition"]
+script = ExtResource("4_actiondef")
+Id = &"lower"
+Label = "Lower wall"
 InputActionName = &"interact"
 metadata/_custom_type_script = "uid://bqs31n67gwjq1"
 
@@ -32,20 +39,32 @@ surface_material_override/0 = SubResource("StandardMaterial3D_f0qss")
 script = ExtResource("1_lq42h")
 InteractionArea = NodePath("../InteractionArea")
 InteractionAnchor = NodePath("../ButtonModel")
-DisplayName = "Activate"
+DisplayName = "Wall control"
 ActionPromptScene = ExtResource("2_2ck07")
-Actions = [NodePath("ActivateAction")]
+Actions = [NodePath("RaiseAction"), NodePath("LowerAction")]
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
 
-[node name="ActivateAction" type="Node" parent="InteractiveComponent" node_paths=PackedStringArray("Executor")]
+[node name="RaiseAction" type="Node" parent="InteractiveComponent" node_paths=PackedStringArray("Executor")]
 script = ExtResource("3_action")
-Definition = SubResource("Resource_activate_definition")
-Executor = NodePath("ActivateExecutor")
+Definition = SubResource("Resource_raise_definition")
+Executor = NodePath("RaiseExecutor")
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
-[node name="ActivateExecutor" type="Node" parent="InteractiveComponent/ActivateAction"]
-script = ExtResource("5_buttonexec")
-metadata/_custom_type_script = "uid://bkb5nh6iohu5a"
+[node name="RaiseExecutor" type="Node" parent="InteractiveComponent/RaiseAction"]
+script = ExtResource("5_setstate")
+TargetState = &"raising"
+metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
+
+[node name="LowerAction" type="Node" parent="InteractiveComponent" node_paths=PackedStringArray("Executor")]
+script = ExtResource("3_action")
+Definition = SubResource("Resource_lower_definition")
+Executor = NodePath("LowerExecutor")
+metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+
+[node name="LowerExecutor" type="Node" parent="InteractiveComponent/LowerAction"]
+script = ExtResource("5_setstate")
+TargetState = &"lowering"
+metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
 
 [node name="InteractionArea" type="Area3D" parent="." unique_id=2064253587]
 

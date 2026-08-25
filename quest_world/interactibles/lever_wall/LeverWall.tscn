@@ -1,7 +1,8 @@
 [gd_scene format=3 uid="uid://b8e873ujmp8or"]
 
-[ext_resource type="Script" uid="uid://cjrwlmeffknuq" path="res://addons/interaction_plugin/runtime/state/InteractionStateful.cs" id="1_k2b6f"]
 [ext_resource type="Script" uid="uid://dlwlpwo643xqr" path="res://quest_world/interactibles/lever_wall/LeverWall.cs" id="1_rr51t"]
+[ext_resource type="Script" uid="uid://cpbt7qansaxqx" path="res://addons/stateful_plugin/runtime/StatefulComponent.cs" id="2_stateful"]
+[ext_resource type="Resource" path="res://quest_world/interactibles/lever_wall/lever_wall_states.tres" id="3_states"]
 
 [sub_resource type="Animation" id="Animation_wmbty"]
 length = 0.001
@@ -30,13 +31,13 @@ _data = {
 }
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_rr51t"]
-properties/0/path = NodePath("../../InteractionStateful:ReplicatedState")
+properties/0/path = NodePath("../../StatefulComponent:ReplicatedState")
 properties/0/spawn = true
 properties/0/replication_mode = 2
 
 [node name="LeverWall" type="Node3D" unique_id=956452046 node_paths=PackedStringArray("Stateful", "AnimationPlayer")]
 script = ExtResource("1_rr51t")
-Stateful = NodePath("InteractionStateful")
+Stateful = NodePath("StatefulComponent")
 AnimationPlayer = NodePath("AnimationPlayer")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=511834669]
@@ -47,9 +48,11 @@ libraries/ = SubResource("AnimationLibrary_wmbty")
 root_path = NodePath("../Animated/LeverWallMesh")
 replication_config = SubResource("SceneReplicationConfig_rr51t")
 
-[node name="InteractionStateful" type="Node" parent="." unique_id=1602224621]
-script = ExtResource("1_k2b6f")
-metadata/_custom_type_script = "uid://cjrwlmeffknuq"
+[node name="StatefulComponent" type="Node" parent="." unique_id=1602224621]
+script = ExtResource("2_stateful")
+Schema = ExtResource("3_states")
+InitialState = &"lowered"
+metadata/_custom_type_script = "uid://cpbt7qansaxqx"
 
 [node name="Animated" type="Node3D" parent="." unique_id=1433067633]
 

@@ -7,11 +7,13 @@ using GdUnit4;
 using Godot;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Examples.Rules;
+using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Interaction.Runtime.Rules;
 using QuestWorld.Interaction.Runtime.State;
+using QuestWorld.State;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -878,7 +880,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Close)))
             .IsEqual("hidden");
 
-        door.State.State = new StringName("open");
+        door.State.SetState(new StringName("open"));
 
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
             .IsEqual("hidden");
@@ -891,7 +893,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        door.State.State = new StringName("locked");
+        door.State.SetState(new StringName("locked"));
 
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor)))
             .IsEqual("hidden");
@@ -904,7 +906,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor)))
             .IsEqual("Requires a keycard.");
 
-        door.State.State = new StringName("open");
+        door.State.SetState(new StringName("open"));
 
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor)))
             .IsEqual("allowed");
@@ -1016,7 +1018,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(closed.Actions[0].IsAllowed).IsTrue();
         AssertThat(closed.HasAllowedAction).IsTrue();
 
-        door.State.State = new StringName("open");
+        door.State.SetState(new StringName("open"));
         InteractionTargetPresentation opened = door.Interactive.GetPresentation(
             door.Interactor,
             true
@@ -1057,7 +1059,7 @@ public sealed partial class InteractionBehaviorTest
         door.Interactor.AddInteractive(door.Interactive);
         AssertThat(door.Interactor.FocusedInteractive == door.Interactive).IsTrue();
 
-        door.State.State = new StringName("locked");
+        door.State.SetState(new StringName("locked"));
         door.Interactor.RecalculateFocus();
 
         AssertThat(door.Interactive.HasVisibleAction(door.Interactor)).IsFalse();
@@ -1089,7 +1091,7 @@ public sealed partial class InteractionBehaviorTest
         door.Interactor.AddInteractive(crateInteractive);
         AssertThat(door.Interactor.FocusedInteractive == door.Interactive).IsTrue();
 
-        door.State.State = new StringName("locked");
+        door.State.SetState(new StringName("locked"));
         door.Interactor.RecalculateFocus();
 
         AssertThat(door.Interactor.FocusedInteractive == crateInteractive).IsTrue();
@@ -1106,7 +1108,7 @@ public sealed partial class InteractionBehaviorTest
             startedActions.Add(action.Definition!.Id.ToString());
 
         AssertThat(door.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
-        door.State.State = new StringName("open");
+        door.State.SetState(new StringName("open"));
         AssertThat(door.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
         AssertThat(string.Join(",", startedActions)).IsEqual("open,close");
@@ -1117,7 +1119,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        door.State.State = new StringName("locked");
+        door.State.SetState(new StringName("locked"));
         InteractionAction zulu = CreateAction("zulu");
         InteractionAction alpha = CreateAction("alpha");
         InteractionAction blocked = CreateAction(
@@ -1333,6 +1335,219 @@ public sealed partial class InteractionBehaviorTest
             .IsTrue();
     }
 
+    [TestCase]
+    public async Task StateRuleAllowsEveryStateOfTheExpectedPhase()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.Open.Rules.Clear();
+        door.Open.Rules.Add(
+            new StatefulStateInteractionRule
+            {
+                StatefulPath = new NodePath("../StatefulComponent"),
+                ExpectedStates = States("closed", "opening"),
+            }
+        );
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("allowed");
+
+        door.State.SetState(new StringName("opening"));
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("allowed");
+
+        door.State.SetState(new StringName("open"));
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("hidden");
+    }
+
+    [TestCase]
+    public async Task StateRuleBlocksWithItsOwnReasonWhenTheMismatchIsBlocked()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.Open.Rules.Clear();
+        door.Open.Rules.Add(
+            new StatefulStateInteractionRule
+            {
+                StatefulPath = new NodePath("../StatefulComponent"),
+                ExpectedStates = States("closed"),
+                MismatchAvailability = InteractionUnavailableKind.Blocked,
+                BlockReason = "The door is moving.",
+            }
+        );
+
+        door.State.SetState(new StringName("opening"));
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("The door is moving.");
+        AssertThat(door.Interactive.GetPresentation(door.Interactor, true).Actions.Count)
+            .IsEqual(1);
+    }
+
+    [TestCase]
+    public async Task StateRuleInvertsTheExpectedStatesWhenAsked()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.Open.Rules.Clear();
+        door.Open.Rules.Add(
+            new StatefulStateInteractionRule
+            {
+                StatefulPath = new NodePath("../StatefulComponent"),
+                ExpectedStates = States("jammed"),
+                Invert = true,
+            }
+        );
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("allowed");
+
+        door.State.SetState(new StringName("jammed"));
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("hidden");
+    }
+
+    [TestCase]
+    public async Task StateRuleWithoutAnyResolvableStateIsNotConfigured()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        StatefulStateInteractionRule rule = new() { ExpectedStates = States("closed") };
+        door.Open.Rules.Clear();
+        door.Open.Rules.Add(rule);
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("Interaction is not configured.");
+
+        rule.StatefulPath = new NodePath("../MissingStateful");
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("Interaction is not configured.");
+
+        rule.StatefulPath = new NodePath("../StatefulComponent");
+        rule.ExpectedStates.Clear();
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("Interaction is not configured.");
+    }
+
+    [TestCase]
+    public async Task StateRuleReadsTheStateOfAnotherObject()
+    {
+        DoorWorld door = BuildDoorWorld();
+        Node3D wall = new() { Name = "LeverWall" };
+        StatefulComponent wallState = new()
+        {
+            Name = "StatefulComponent",
+            InitialState = new StringName("lowered"),
+        };
+        wall.AddChild(wallState);
+        door.World.AddChild(wall);
+        await door.Runner.SimulateFrames(1);
+        door.Open.Rules.Clear();
+        door.Open.Rules.Add(
+            new StatefulStateInteractionRule
+            {
+                StatefulPath = new NodePath("../../LeverWall/StatefulComponent"),
+                ExpectedStates = States("lowered"),
+            }
+        );
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("allowed");
+
+        wallState.SetState(new StringName("raised"));
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("hidden");
+        AssertThat(door.State.State.ToString()).IsEqual("closed");
+    }
+
+    [TestCase]
+    public async Task GenericStatePrimitivesRunTheWholeOpenCloseCycleWithoutGlue()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        BindSetStateExecutor(door.Open, door.State, "open");
+        BindSetStateExecutor(door.Close, door.State, "closed");
+        int stateChanges = 0;
+        door.State.StateChanged += (_, _) => stateChanges++;
+
+        InteractionAction? first = door.Interactive.ResolveActionForInput(
+            door.Interactor,
+            InteractInput
+        );
+        InteractionExecutionResult openResult = door.Interactive.ExecuteAction(
+            door.Interactor,
+            first!
+        );
+
+        AssertThat(first == door.Open).IsTrue();
+        AssertThat(openResult is InteractionExecutionCompleted).IsTrue();
+        AssertThat(door.State.State.ToString()).IsEqual("open");
+        AssertThat(stateChanges).IsEqual(1);
+
+        InteractionAction? second = door.Interactive.ResolveActionForInput(
+            door.Interactor,
+            InteractInput
+        );
+        InteractionExecutionResult closeResult = door.Interactive.ExecuteAction(
+            door.Interactor,
+            second!
+        );
+
+        AssertThat(second == door.Close).IsTrue();
+        AssertThat(closeResult is InteractionExecutionCompleted).IsTrue();
+        AssertThat(door.State.State.ToString()).IsEqual("closed");
+        AssertThat(stateChanges).IsEqual(2);
+        AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
+    }
+
+    [TestCase]
+    public async Task SetStateExecutorFailsWhenNothingWouldChange()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        SetStateInteractionExecutor executor = new()
+        {
+            Stateful = door.State,
+            TargetState = new StringName("closed"),
+        };
+
+        InteractionExecutionResult result = executor.Execute(
+            new InteractionExecutionContext(door.Interactor, door.Interactive, door.Open)
+        );
+
+        AssertThat(result is InteractionExecutionFailed).IsTrue();
+        AssertThat(door.State.State.ToString()).IsEqual("closed");
+        executor.Free();
+    }
+
+    [TestCase]
+    public async Task SetStateExecutorFailsWithoutTargetOrOutsideTheSchema()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        SetStateInteractionExecutor orphan = new() { TargetState = new StringName("open") };
+        door.State.Schema = new StateSchema { States = States("closed", "open") };
+        SetStateInteractionExecutor undeclared = new()
+        {
+            Stateful = door.State,
+            TargetState = new StringName("melted"),
+        };
+        InteractionExecutionContext context = new(door.Interactor, door.Interactive, door.Open);
+
+        AssertThat(orphan.Execute(context) is InteractionExecutionFailed).IsTrue();
+        AssertThat(undeclared.Execute(context) is InteractionExecutionFailed).IsTrue();
+        AssertThat(door.State.State.ToString()).IsEqual("closed");
+        orphan.Free();
+        undeclared.Free();
+    }
+
     private static string Describe(InteractionAvailability availability) =>
         availability switch
         {
@@ -1443,6 +1658,40 @@ public sealed partial class InteractionBehaviorTest
         return action;
     }
 
+    private static Godot.Collections.Array<StringName> States(params string[] states)
+    {
+        Godot.Collections.Array<StringName> array = new();
+        foreach (string state in states)
+        {
+            array.Add(new StringName(state));
+        }
+
+        return array;
+    }
+
+    private static void BindSetStateExecutor(
+        InteractionAction action,
+        StatefulComponent stateful,
+        string targetState
+    )
+    {
+        SetStateInteractionExecutor executor = new()
+        {
+            Name = $"{action.Name}SetState",
+            Stateful = stateful,
+            TargetState = new StringName(targetState),
+        };
+        action.AddChild(executor);
+        action.Executor = executor;
+    }
+
+    private static StatefulStateInteractionRule DoorStateRule(string expectedState) =>
+        new()
+        {
+            StatefulPath = new NodePath("../StatefulComponent"),
+            ExpectedStates = { new StringName(expectedState) },
+        };
+
     private static RecordingInteractionExecutor ExecutorOf(InteractionAction action) =>
         (RecordingInteractionExecutor)action.Executor!;
 
@@ -1452,7 +1701,11 @@ public sealed partial class InteractionBehaviorTest
         Node3D door = new() { Name = "Door", Position = new Vector3(0, 0, -2) };
         Area3D area = new() { Name = "InteractionArea" };
         area.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = 3.0f } });
-        DoorState state = new() { Name = "DoorState" };
+        StatefulComponent state = new()
+        {
+            Name = "StatefulComponent",
+            InitialState = new StringName("closed"),
+        };
         InteractiveComponent interactive = new()
         {
             Name = "Interactive",
@@ -1460,14 +1713,8 @@ public sealed partial class InteractionBehaviorTest
             InteractionAnchor = door,
             DisplayName = "Door",
         };
-        InteractionAction open = CreateAction(
-            "open",
-            new DoorStateInteractionRule { Door = state, ExpectedState = new StringName("closed") }
-        );
-        InteractionAction close = CreateAction(
-            "close",
-            new DoorStateInteractionRule { Door = state, ExpectedState = new StringName("open") }
-        );
+        InteractionAction open = CreateAction("open", DoorStateRule("closed"));
+        InteractionAction close = CreateAction("close", DoorStateRule("open"));
         interactive.Actions.Add(open);
         interactive.Actions.Add(close);
         door.AddChild(area);
@@ -1489,7 +1736,7 @@ public sealed partial class InteractionBehaviorTest
     private sealed record DoorWorld(
         Node3D World,
         ISceneRunner Runner,
-        DoorState State,
+        StatefulComponent State,
         InteractiveComponent Interactive,
         InteractionAction Open,
         InteractionAction Close,
@@ -1579,23 +1826,6 @@ public sealed partial class InteractionBehaviorTest
             ReservedInteractorDuringExecute = context.Interactive.ActiveInteractor;
             return Result;
         }
-    }
-
-    private sealed partial class DoorState : Node
-    {
-        public StringName State { get; set; } = new("closed");
-    }
-
-    private sealed partial class DoorStateInteractionRule : InteractionRule
-    {
-        public DoorState? Door { get; set; }
-
-        public StringName ExpectedState { get; set; } = new(string.Empty);
-
-        public override InteractionAvailability Evaluate(in InteractionContext context) =>
-            Door is not null && Door.State == ExpectedState
-                ? new InteractionAllowed()
-                : new InteractionHidden();
     }
 
     private sealed partial class InteractiveParentGameplayRule : InteractionRule

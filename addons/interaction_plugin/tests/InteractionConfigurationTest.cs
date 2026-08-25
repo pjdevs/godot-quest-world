@@ -6,6 +6,7 @@ using Godot;
 using InteractionPlugin.Editor;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Examples.Interactive;
+using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
@@ -176,6 +177,61 @@ public sealed partial class InteractionConfigurationTest
         AssertThat(typeof(InteractiveComponent).GetMethod("EndInteractionPhase") == null).IsTrue();
         AssertThat(typeof(InteractiveComponent).GetMethod("ReleaseInteractionInput") == null)
             .IsTrue();
+    }
+
+    [TestCase]
+    public void LevelWiresTheWallControlButtonToTheStateOfAnotherScene()
+    {
+        const string buttonPath = "./Level/Button/InteractiveComponent";
+        SceneState level = GD.Load<PackedScene>("res://quest_world/levels/test_world.tscn")
+            .GetState();
+
+        AssertThat(
+                Declared(level, $"{buttonPath}/RaiseAction/RaiseExecutor", "Stateful")
+                    .AsNodePath()
+                    .ToString()
+            )
+            .IsEqual("../../../../LeverWall/StatefulComponent");
+        AssertThat(
+                Declared(level, $"{buttonPath}/LowerAction/LowerExecutor", "Stateful")
+                    .AsNodePath()
+                    .ToString()
+            )
+            .IsEqual("../../../../LeverWall/StatefulComponent");
+
+        Godot.Collections.Array rules = Declared(level, $"{buttonPath}/RaiseAction", "Rules")
+            .AsGodotArray();
+        StatefulStateInteractionRule phase = rules[0].As<StatefulStateInteractionRule>();
+        StatefulStateInteractionRule ready = rules[1].As<StatefulStateInteractionRule>();
+
+        AssertThat(rules.Count).IsEqual(2);
+        AssertThat(phase.StatefulPath.ToString()).IsEqual("../../LeverWall/StatefulComponent");
+        AssertThat(phase.ExpectedStates.Count).IsEqual(2);
+        AssertThat(phase.MismatchAvailability).IsEqual(InteractionUnavailableKind.Hidden);
+        AssertThat(ready.ExpectedStates.Count).IsEqual(1);
+        AssertThat(ready.MismatchAvailability).IsEqual(InteractionUnavailableKind.Blocked);
+        AssertThat(ready.BlockReason).IsEqual("The wall is moving.");
+    }
+
+    private static Variant Declared(SceneState state, string nodePath, string property)
+    {
+        for (int node = 0; node < state.GetNodeCount(); node++)
+        {
+            if (state.GetNodePath(node).ToString() != nodePath)
+            {
+                continue;
+            }
+
+            for (int index = 0; index < state.GetNodePropertyCount(node); index++)
+            {
+                if (state.GetNodePropertyName(node, index).ToString() == property)
+                {
+                    return state.GetNodePropertyValue(node, index);
+                }
+            }
+        }
+
+        return new Variant();
     }
 
     [TestCase]

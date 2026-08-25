@@ -77,4 +77,4 @@ Les tests couvrent la mutation core sans signal, le dispatch de chaque scope exa
 
 - La propriété `ReplicatedState` reste visible dans l'Inspector. Voir [`godot-private-export-inspector-visibility.md`](../../memory/godot-private-export-inspector-visibility.md).
 - Aucune FSM, aucun graphe de transitions, aucun effect d'entrée/sortie : ce serait un autre système.
-- Les primitives d'intégration interaction (`StatefulStateInteractionRule`, `SetStateInteractionExecutor`) arrivent à la Task 8 du chantier V2.
+- Les primitives d'intégration interaction (`StatefulStateInteractionRule`, `SetStateInteractionExecutor`) sont livrées par la Task 8 du chantier V2 et vivent dans [`addons/interaction_plugin/integration/stateful`](../../../addons/interaction_plugin/integration/stateful) : la dépendance va de l'interaction vers le stateful, jamais l'inverse. Le premier consommateur est `LeverWall`, piloté à distance par `Button.tscn` sans aucun script de glue. Voir [interaction.md](../interaction/interaction.md).

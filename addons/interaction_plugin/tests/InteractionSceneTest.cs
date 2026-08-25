@@ -6,11 +6,13 @@ using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
 using QuestWorld.Interaction;
+using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Interaction.Runtime.State;
+using QuestWorld.State;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -25,6 +27,14 @@ public sealed partial class InteractionSceneTest
         "res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn";
     private const string IndicatorScenePath =
         "res://addons/interaction_plugin/scenes/InteractionIndicator.tscn";
+    private const string ButtonScenePath = "res://quest_world/interactibles/button/Button.tscn";
+    private const string LeverWallScenePath =
+        "res://quest_world/interactibles/lever_wall/LeverWall.tscn";
+
+    private static readonly StringName LoweredState = new("lowered");
+    private static readonly StringName RaisingState = new("raising");
+    private static readonly StringName RaisedState = new("raised");
+    private static readonly StringName LoweringState = new("lowering");
 
     [TestCase]
     public async Task InteractiveActorSceneProvidesComposableRuntimeParts()
@@ -243,6 +253,138 @@ public sealed partial class InteractionSceneTest
 
         AssertThat(presenter.GetChildCount()).IsEqual(0);
     }
+
+    [TestCase]
+    public async Task WallControlButtonOffersTheOneActionItsDistantStateAllows()
+    {
+        WallControlWorld world = BuildWallControlWorld();
+        await world.Runner.SimulateFrames(1);
+
+        AssertThat(world.WallState.State.ToString()).IsEqual("lowered");
+        AssertThat(Presented(world)).IsEqual("[interact] Raise wall");
+
+        InteractionExecutionResult raise = world.Interactive.ExecuteAction(
+            world.Interactor,
+            world.Interactive.ResolveActionForInput(world.Interactor, new StringName("interact"))!
+        );
+
+        AssertThat(raise is InteractionExecutionCompleted).IsTrue();
+        AssertThat(world.WallState.State).IsEqual(RaisingState);
+        AssertThat(Presented(world)).IsEqual("Raise wall: The wall is moving.");
+
+        world.WallState.SetState(RaisedState);
+
+        AssertThat(Presented(world)).IsEqual("[interact] Lower wall");
+
+        InteractionExecutionResult lower = world.Interactive.ExecuteAction(
+            world.Interactor,
+            world.Interactive.ResolveActionForInput(world.Interactor, new StringName("interact"))!
+        );
+
+        AssertThat(lower is InteractionExecutionCompleted).IsTrue();
+        AssertThat(world.WallState.State).IsEqual(LoweringState);
+        AssertThat(Presented(world)).IsEqual("Lower wall: The wall is moving.");
+    }
+
+    [TestCase]
+    public async Task LeverWallOwnsItsTransitionAndReachesTheEndStateOnItsOwn()
+    {
+        WallControlWorld world = BuildWallControlWorld();
+        await world.Runner.SimulateFrames(1);
+
+        world.Interactive.ExecuteAction(
+            world.Interactor,
+            world.Interactive.ResolveActionForInput(world.Interactor, new StringName("interact"))!
+        );
+
+        AssertThat(world.WallState.State).IsEqual(RaisingState);
+
+        for (int frame = 0; frame < 300 && world.WallState.State != RaisedState; frame++)
+        {
+            await world.Runner.SimulateFrames(1);
+        }
+
+        AssertThat(world.WallState.State).IsEqual(RaisedState);
+        AssertThat(Presented(world)).IsEqual("[interact] Lower wall");
+    }
+
+    private static string Presented(WallControlWorld world)
+    {
+        InteractionTargetPresentation presentation = world.Interactive.GetPresentation(
+            world.Interactor,
+            true
+        );
+        return string.Join(
+            " | ",
+            presentation.Actions.Select(action =>
+                action.IsAllowed
+                    ? $"[{action.InputActionName}] {action.Label}"
+                    : $"{action.Label}: {action.BlockReason}"
+            )
+        );
+    }
+
+    private static WallControlWorld BuildWallControlWorld()
+    {
+        Node3D world = new();
+        Node3D level = new() { Name = "Level" };
+        Node3D wall = GD.Load<PackedScene>(LeverWallScenePath).Instantiate<Node3D>();
+        Node3D button = GD.Load<PackedScene>(ButtonScenePath).Instantiate<Node3D>();
+        button.Position = new Vector3(0, 0, -2);
+        level.AddChild(wall);
+        level.AddChild(button);
+        world.AddChild(level);
+
+        StatefulComponent wallState = wall.GetNode<StatefulComponent>("StatefulComponent");
+        InteractiveComponent interactive = button.GetNode<InteractiveComponent>(
+            "InteractiveComponent"
+        );
+        WireWallControlAction(interactive.Actions[0], wallState, LoweredState, RaisingState);
+        WireWallControlAction(interactive.Actions[1], wallState, RaisedState, LoweringState);
+
+        Node3D view = new() { Name = "ViewOrigin" };
+        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = view };
+        interactor.AddChild(view);
+        world.AddChild(interactor);
+        ISceneRunner runner = ISceneRunner.Load(world);
+        interactor.AddInteractive(interactive);
+
+        return new WallControlWorld(runner, interactive, interactor, wallState);
+    }
+
+    private static void WireWallControlAction(
+        InteractionAction action,
+        StatefulComponent wallState,
+        StringName readyState,
+        StringName movingState
+    )
+    {
+        ((SetStateInteractionExecutor)action.Executor!).Stateful = wallState;
+        NodePath statefulPath = new("../../LeverWall/StatefulComponent");
+        action.Rules.Add(
+            new StatefulStateInteractionRule
+            {
+                StatefulPath = statefulPath,
+                ExpectedStates = { readyState, movingState },
+            }
+        );
+        action.Rules.Add(
+            new StatefulStateInteractionRule
+            {
+                StatefulPath = statefulPath,
+                ExpectedStates = { readyState },
+                MismatchAvailability = InteractionUnavailableKind.Blocked,
+                BlockReason = "The wall is moving.",
+            }
+        );
+    }
+
+    private sealed record WallControlWorld(
+        ISceneRunner Runner,
+        InteractiveComponent Interactive,
+        InteractionInteractor Interactor,
+        StatefulComponent WallState
+    );
 
     private static TestInteractiveActor CreateInteractiveActor(
         string displayName,

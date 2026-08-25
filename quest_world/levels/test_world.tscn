@@ -6,6 +6,8 @@
 [ext_resource type="PackedScene" uid="uid://bnrv7fcbbhuga" path="res://quest_world/interactibles/button/Button.tscn" id="3_kevvi"]
 [ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/NetworkSession.cs" id="3_network_session"]
 [ext_resource type="PackedScene" uid="uid://ccfh2n8mfm2gn" path="res://addons/interaction_plugin/scenes/InteractiveActor.tscn" id="4_2dls1"]
+[ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_rule"]
+[ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_staterule"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_edcox"]
 ground_color = Color(0.160784, 0.815686, 0.905882, 1)
@@ -39,6 +41,34 @@ metallic_specular = 0.2
 roughness = 0.5
 uv1_triplanar = true
 uv1_triplanar_sharpness = 0.000850145
+
+[sub_resource type="Resource" id="Resource_raise_phase"]
+script = ExtResource("6_staterule")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
+ExpectedStates = Array[StringName]([&"lowered", &"raising"])
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
+[sub_resource type="Resource" id="Resource_raise_ready"]
+script = ExtResource("6_staterule")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
+ExpectedStates = Array[StringName]([&"lowered"])
+MismatchAvailability = 1
+BlockReason = "The wall is moving."
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
+[sub_resource type="Resource" id="Resource_lower_phase"]
+script = ExtResource("6_staterule")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
+ExpectedStates = Array[StringName]([&"raised", &"lowering"])
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
+[sub_resource type="Resource" id="Resource_lower_ready"]
+script = ExtResource("6_staterule")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
+ExpectedStates = Array[StringName]([&"raised"])
+MismatchAvailability = 1
+BlockReason = "The wall is moving."
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
 
 [node name="test_world" type="Node3D" unique_id=1604557493]
 
@@ -94,8 +124,17 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.091249, 0.49999976, -2.677
 [node name="Button" parent="Level" unique_id=1874486156 instance=ExtResource("3_kevvi")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 10)
 
-[node name="ActivateExecutor" parent="Level/Button/InteractiveComponent/ActivateAction" index="0" node_paths=PackedStringArray("TargetStateful")]
-TargetStateful = NodePath("../../../../LeverWall/InteractionStateful")
+[node name="RaiseAction" parent="Level/Button/InteractiveComponent" index="0"]
+Rules = Array[ExtResource("5_rule")]([SubResource("Resource_raise_phase"), SubResource("Resource_raise_ready")])
+
+[node name="RaiseExecutor" parent="Level/Button/InteractiveComponent/RaiseAction" index="0" node_paths=PackedStringArray("Stateful")]
+Stateful = NodePath("../../../../LeverWall/StatefulComponent")
+
+[node name="LowerAction" parent="Level/Button/InteractiveComponent" index="1"]
+Rules = Array[ExtResource("5_rule")]([SubResource("Resource_lower_phase"), SubResource("Resource_lower_ready")])
+
+[node name="LowerExecutor" parent="Level/Button/InteractiveComponent/LowerAction" index="0" node_paths=PackedStringArray("Stateful")]
+Stateful = NodePath("../../../../LeverWall/StatefulComponent")
 
 [node name="Players" type="Node3D" parent="." unique_id=7684642]
 
