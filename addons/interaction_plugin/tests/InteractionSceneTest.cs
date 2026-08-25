@@ -6,6 +6,7 @@ using GdUnit4;
 using Godot;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Presentation.UI;
+using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Interaction.Runtime.State;
@@ -32,6 +33,14 @@ public sealed partial class InteractionSceneTest
         AssertThat(interactive.InteractionArea != null).IsTrue();
         AssertThat(interactive.InteractionAnchor != null).IsTrue();
         AssertThat(stateful.State).IsEqual(InteractionState.Idle);
+        AssertThat(interactive.Actions.Count).IsEqual(1);
+        InteractionAction action = interactive.Actions[0];
+        AssertThat(action == actor.GetNode<InteractionAction>("Interactive/ActivateAction"))
+            .IsTrue();
+        AssertThat(action.Definition?.Id.ToString()).IsEqual("activate");
+        AssertThat(action.Definition?.InputActionName.ToString()).IsEqual("interact");
+        AssertThat(action.Rules.Count).IsEqual(1);
+        AssertThat(interactive.TargetRules.Count).IsEqual(1);
         MultiplayerSynchronizer synchronizer = actor.GetNode<MultiplayerSynchronizer>(
             "Stateful/MultiplayerSynchronizer"
         );
@@ -157,7 +166,18 @@ public sealed partial class InteractionSceneTest
                 "res://addons/interaction_plugin/scenes/InteractionIndicator.tscn"
             ),
         };
+        InteractionAction action = new()
+        {
+            Name = "ActivateAction",
+            Definition = new InteractionActionDefinition
+            {
+                Id = new StringName("activate"),
+                Label = displayName,
+            },
+        };
+        interactive.Actions.Add(action);
         owner.AddChild(interactive);
+        interactive.AddChild(action);
         return owner;
     }
 

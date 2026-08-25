@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Interaction.Runtime.Rules;
 using QuestWorld.Interaction.Runtime.State;
@@ -90,14 +91,6 @@ public partial class InteractiveComponent : Node
     [Export(PropertyHint.MultilineText)]
     public string Description { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the reason shown while the stateful interaction is in a transient state.</summary>
-    [Export]
-    public string BusyReason { get; set; } = "This is busy.";
-
-    /// <summary>Gets or sets the reason shown after the stateful interaction has been activated.</summary>
-    [Export]
-    public string ActivatedReason { get; set; } = "This is already activated.";
-
     /// <summary>Gets or sets the input action displayed by the prompt.</summary>
     [Export]
     public StringName InteractionActionName { get; set; } = "interact";
@@ -119,10 +112,22 @@ public partial class InteractiveComponent : Node
     public PackedScene? BlockedIndicationScene { get; set; }
 
     /// <summary>
-    /// Gets or sets the ordered gameplay conditions. Evaluation stops at the first blocked result.
+    /// Gets or sets the explicit actions offered by this target, evaluated in declaration order.
+    /// </summary>
+    /// <remarks>
+    /// Add each <see cref="InteractionAction"/> to the target scene and reference it here. Nothing is
+    /// discovered from the tree, and a target without action offers no interaction at all.
+    /// </remarks>
+    [ExportGroup("Actions")]
+    [Export]
+    public Godot.Collections.Array<InteractionAction> Actions { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the ordered gameplay conditions shared by every action of this target.
+    /// Evaluation stops at the first hidden or blocked result, before the action rules run.
     /// </summary>
     [Export]
-    public Godot.Collections.Array<InteractionRule> InteractionRules { get; set; } = new();
+    public Godot.Collections.Array<InteractionRule> TargetRules { get; set; } = new();
 
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
     private Area3D? _interactionArea;
@@ -141,6 +146,11 @@ public partial class InteractiveComponent : Node
         if (InteractionAnchor is null)
         {
             GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionAnchor.");
+        }
+
+        if (Actions.Count == 0)
+        {
+            GD.PushError($"{GetPath()}: InteractiveComponent requires at least one Action.");
         }
 
         if (InteractionArea is not null)
@@ -162,17 +172,29 @@ public partial class InteractiveComponent : Node
     }
 
     /// <summary>
-    /// Evaluates configuration, reservation, state, and gameplay rules for one interactor.
+    /// Evaluates configuration, reservation, target rules, and action rules for one action.
     /// </summary>
     /// <remarks>
     /// Called repeatedly during local client presentation and again on the server before dispatch.
-    /// The evaluation and every rule must be side-effect free.
+    /// The evaluation and every rule must be side-effect free. World state influences the result only
+    /// through an explicit rule: this component never interprets a state value itself.
     /// </remarks>
     /// <param name="interactor">Interactor for which availability is evaluated.</param>
-    /// <returns>The first blocked status, or an allowed status when every check succeeds.</returns>
-    public InteractionStatus EvaluateStatus(InteractionInteractor interactor)
+    /// <param name="action">Action of this target being evaluated.</param>
+    /// <returns>The first hidden or blocked result, or allowed when every check succeeds.</returns>
+    public InteractionAvailability EvaluateAvailability(
+        InteractionInteractor interactor,
+        InteractionAction action
+    )
     {
-        if (interactor is null || InteractionArea is null || InteractionAnchor is null)
+        if (
+            interactor is null
+            || InteractionArea is null
+            || InteractionAnchor is null
+            || action is null
+            || action.Definition is null
+            || !Actions.Contains(action)
+        )
         {
             return new InteractionBlocked("Interaction is not configured.");
         }
@@ -182,25 +204,62 @@ public partial class InteractiveComponent : Node
             return new InteractionBlocked("Someone else is using this.");
         }
 
-        if (Stateful is not null && Stateful.State != InteractionState.Idle)
+        InteractionContext context = new(interactor, this, action);
+        InteractionAvailability targetAvailability = EvaluateRules(TargetRules, context);
+
+        return targetAvailability is InteractionAllowed
+            ? EvaluateRules(action.Rules, context)
+            : targetAvailability;
+    }
+
+    /// <summary>Aggregates the availability of every action into one target-level result.</summary>
+    /// <remarks>
+    /// Allowed wins over blocked, and blocked over hidden, so a target is presentable as long as one
+    /// action is requestable or explained. A target without any action is hidden.
+    /// </remarks>
+    /// <param name="interactor">Interactor for which availability is evaluated.</param>
+    /// <returns>Allowed when one action is allowed, the first blocked result, or hidden.</returns>
+    public InteractionAvailability EvaluateAvailability(InteractionInteractor interactor)
+    {
+        InteractionAvailability aggregate = new InteractionHidden();
+        foreach (InteractionAction action in Actions)
         {
-            return Stateful.State == InteractionState.Activated
-                ? new InteractionBlocked(ActivatedReason)
-                : new InteractionBlocked(BusyReason);
+            if (action is null)
+            {
+                continue;
+            }
+
+            InteractionAvailability availability = EvaluateAvailability(interactor, action);
+            if (availability is InteractionAllowed)
+            {
+                return availability;
+            }
+
+            if (availability is InteractionBlocked && aggregate is InteractionHidden)
+            {
+                aggregate = availability;
+            }
         }
 
-        InteractionContext context = new(interactor, this);
-        foreach (InteractionRule rule in InteractionRules)
+        return aggregate;
+    }
+
+    private static InteractionAvailability EvaluateRules(
+        Godot.Collections.Array<InteractionRule> rules,
+        in InteractionContext context
+    )
+    {
+        foreach (InteractionRule rule in rules)
         {
             if (rule is null)
             {
                 continue;
             }
 
-            InteractionStatus status = rule.Evaluate(context);
-            if (status is InteractionBlocked)
+            InteractionAvailability availability = rule.Evaluate(context);
+            if (availability is not InteractionAllowed)
             {
-                return status;
+                return availability;
             }
         }
 
@@ -218,7 +277,7 @@ public partial class InteractiveComponent : Node
             DisplayName,
             Description,
             InteractionActionName,
-            EvaluateStatus(interactor),
+            EvaluateAvailability(interactor),
             isFocused
         );
     }
@@ -243,7 +302,7 @@ public partial class InteractiveComponent : Node
 
     internal InteractionStartResult? StartInteractionCore(InteractionInteractor interactor)
     {
-        if (EvaluateStatus(interactor) is not InteractionAllowed)
+        if (EvaluateAvailability(interactor) is not InteractionAllowed)
         {
             return null;
         }

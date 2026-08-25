@@ -16,7 +16,7 @@ public partial class InteractorGroupInteractionRule : InteractionRule
     public string MissingGroupReason { get; set; } = "You cannot use this yet.";
 
     /// <inheritdoc />
-    public override InteractionStatus Evaluate(in InteractionContext context)
+    public override InteractionAvailability Evaluate(in InteractionContext context)
     {
         if (string.IsNullOrEmpty(RequiredGroup) || context.Interactor.IsInGroup(RequiredGroup))
         {

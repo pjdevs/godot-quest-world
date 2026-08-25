@@ -6,6 +6,7 @@ using GdUnit4;
 using Godot;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Examples.Rules;
+using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Interaction.Runtime.Rules;
@@ -217,13 +218,15 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public void StatusUsesExhaustiveAllowedAndBlockedCases()
+    public void AvailabilityUsesExhaustiveAllowedBlockedAndHiddenCases()
     {
-        InteractionStatus allowed = new InteractionAllowed();
-        InteractionStatus blocked = new InteractionBlocked("Needs a key");
+        InteractionAvailability allowed = new InteractionAllowed();
+        InteractionAvailability blocked = new InteractionBlocked("Needs a key");
+        InteractionAvailability hidden = new InteractionHidden();
 
         AssertThat(Describe(allowed)).IsEqual("allowed");
         AssertThat(Describe(blocked)).IsEqual("Needs a key");
+        AssertThat(Describe(hidden)).IsEqual("hidden");
     }
 
     [TestCase]
@@ -242,7 +245,7 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task RulesStopAtFirstBlock()
+    public async Task TargetRulesStopAtFirstBlock()
     {
         TestInteractiveActor owner = new();
         Area3D area = new() { Name = "InteractionArea" };
@@ -250,14 +253,17 @@ public sealed partial class InteractionBehaviorTest
         {
             InteractionArea = area,
             InteractionAnchor = owner,
-            InteractionRules = new Godot.Collections.Array<InteractionRule>
+            TargetRules = new Godot.Collections.Array<InteractionRule>
             {
                 new AlwaysBlockedInteractionRule { Reason = "First reason" },
                 new AlwaysBlockedInteractionRule { Reason = "Second reason" },
             },
         };
+        InteractionAction action = CreateAction("activate");
+        interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
+        interactive.AddChild(action);
         InteractionInteractor interactor = new();
         Node3D view = new() { Name = "ViewOrigin" };
         interactor.ViewOrigin = view;
@@ -268,10 +274,44 @@ public sealed partial class InteractionBehaviorTest
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
 
-        InteractionStatus status = interactive.EvaluateStatus(interactor);
+        InteractionAvailability availability = interactive.EvaluateAvailability(interactor, action);
 
-        AssertThat(status is InteractionBlocked blocked && blocked.Reason == "First reason")
+        AssertThat(availability is InteractionBlocked blocked && blocked.Reason == "First reason")
             .IsTrue();
+    }
+
+    [TestCase]
+    public async Task TargetRulesRunBeforeActionRules()
+    {
+        TestInteractiveActor owner = new();
+        Area3D area = new() { Name = "InteractionArea" };
+        InteractiveComponent interactive = new()
+        {
+            InteractionArea = area,
+            InteractionAnchor = owner,
+            TargetRules = new Godot.Collections.Array<InteractionRule>
+            {
+                new AlwaysBlockedInteractionRule { Reason = "Target reason" },
+            },
+        };
+        InteractionAction action = CreateAction(
+            "activate",
+            new AlwaysBlockedInteractionRule { Reason = "Action reason" }
+        );
+        interactive.Actions.Add(action);
+        owner.AddChild(area);
+        owner.AddChild(interactive);
+        interactive.AddChild(action);
+        InteractionInteractor interactor = new();
+        Node3D world = new();
+        world.AddChild(owner);
+        world.AddChild(interactor);
+        ISceneRunner runner = ISceneRunner.Load(world);
+        await runner.SimulateFrames(1);
+
+        InteractionAvailability availability = interactive.EvaluateAvailability(interactor, action);
+
+        AssertThat(Describe(availability)).IsEqual("Target reason");
     }
 
     [TestCase]
@@ -283,13 +323,12 @@ public sealed partial class InteractionBehaviorTest
         {
             InteractionArea = area,
             InteractionAnchor = owner,
-            InteractionRules = new Godot.Collections.Array<InteractionRule>
-            {
-                new InteractiveParentGameplayRule(),
-            },
         };
+        InteractionAction action = CreateAction("activate", new InteractiveParentGameplayRule());
+        interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
+        interactive.AddChild(action);
         InteractionInteractor interactor = new();
         Node3D world = new();
         world.AddChild(owner);
@@ -297,16 +336,18 @@ public sealed partial class InteractionBehaviorTest
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
 
-        InteractionStatus blockedStatus = interactive.EvaluateStatus(interactor);
+        InteractionAvailability blockedAvailability = interactive.EvaluateAvailability(
+            interactor,
+            action
+        );
         owner.GameplayBlocked = false;
-        InteractionStatus allowedStatus = interactive.EvaluateStatus(interactor);
+        InteractionAvailability allowedAvailability = interactive.EvaluateAvailability(
+            interactor,
+            action
+        );
 
-        AssertThat(
-                blockedStatus is InteractionBlocked blocked
-                    && blocked.Reason == "Gameplay condition is blocked."
-            )
-            .IsTrue();
-        AssertThat(allowedStatus is InteractionAllowed).IsTrue();
+        AssertThat(Describe(blockedAvailability)).IsEqual("Gameplay condition is blocked.");
+        AssertThat(allowedAvailability is InteractionAllowed).IsTrue();
     }
 
     [TestCase]
@@ -352,27 +393,25 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task StatefulBlockReasonsAreConfigurable()
+    public async Task StatefulBlockReasonsAreConfigurableOnTheRule()
     {
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactive.BusyReason = "Talking...";
-        testWorld.Interactive.ActivatedReason = "Already used.";
+        testWorld.StatefulRule.BusyReason = "Talking...";
+        testWorld.StatefulRule.ActivatedReason = "Already used.";
         testWorld.Stateful.SetState(InteractionState.Activating);
 
-        InteractionStatus busyStatus = testWorld.Interactive.EvaluateStatus(testWorld.Interactor);
+        InteractionAvailability busy = testWorld.Interactive.EvaluateAvailability(
+            testWorld.Interactor
+        );
         testWorld.Stateful.SetState(InteractionState.Activated);
 
-        InteractionStatus activatedStatus = testWorld.Interactive.EvaluateStatus(
+        InteractionAvailability activated = testWorld.Interactive.EvaluateAvailability(
             testWorld.Interactor
         );
 
-        AssertThat(busyStatus is InteractionBlocked busy && busy.Reason == "Talking...").IsTrue();
-        AssertThat(
-                activatedStatus is InteractionBlocked activated
-                    && activated.Reason == "Already used."
-            )
-            .IsTrue();
+        AssertThat(Describe(busy)).IsEqual("Talking...");
+        AssertThat(Describe(activated)).IsEqual("Already used.");
     }
 
     [TestCase]
@@ -449,8 +488,11 @@ public sealed partial class InteractionBehaviorTest
             InteractionArea = area,
             InteractionAnchor = owner,
         };
+        InteractionAction action = CreateAction("activate");
+        interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
+        interactive.AddChild(action);
         interactive.InteractionInputStarted += owner.OnInteractionInputStarted;
         owner.Interactive = interactive;
         InteractionInteractor interactor = new();
@@ -460,7 +502,7 @@ public sealed partial class InteractionBehaviorTest
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
 
-        AssertThat(interactive.EvaluateStatus(interactor) is InteractionAllowed).IsTrue();
+        AssertThat(interactive.EvaluateAvailability(interactor) is InteractionAllowed).IsTrue();
         AssertThat(interactive.StartInteraction(interactor)).IsTrue();
         AssertThat(interactive.StartInteractionPhase(interactor)).IsFalse();
         AssertThat(owner.StartCount).IsEqual(1);
@@ -497,10 +539,10 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task BlockedStatusStopsRequestBeforeAuthoritativeDispatch()
+    public async Task BlockedAvailabilityStopsRequestBeforeAuthoritativeDispatch()
     {
         TestWorld testWorld = BuildWorld();
-        testWorld.Interactive.InteractionRules.Add(
+        testWorld.Interactive.TargetRules.Add(
             new AlwaysBlockedInteractionRule { Reason = "Locked" }
         );
         bool requestEmitted = false;
@@ -552,11 +594,128 @@ public sealed partial class InteractionBehaviorTest
             .IsEqual(testWorld.Interactor.ServerPeerId);
     }
 
-    private static string Describe(InteractionStatus status) =>
-        status switch
+    [TestCase]
+    public async Task DoorActionsExposeOppositeAvailabilityPerWorldState()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("allowed");
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Close)))
+            .IsEqual("hidden");
+
+        door.State.State = new StringName("open");
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
+            .IsEqual("hidden");
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Close)))
+            .IsEqual("allowed");
+    }
+
+    [TestCase]
+    public async Task TargetAvailabilityPrefersAllowedThenBlockedThenHidden()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.State.State = new StringName("locked");
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor)))
+            .IsEqual("hidden");
+
+        door.Open.Rules.Insert(
+            0,
+            new AlwaysBlockedInteractionRule { Reason = "Requires a keycard." }
+        );
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor)))
+            .IsEqual("Requires a keycard.");
+
+        door.State.State = new StringName("open");
+
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor)))
+            .IsEqual("allowed");
+    }
+
+    [TestCase]
+    public async Task AvailabilityEvaluationStaysPureAndRepeatable()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        int statusSignalCount = 0;
+        int inputStartedCount = 0;
+        door.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
+        door.Interactive.InteractionInputStarted += _ => inputStartedCount++;
+
+        InteractionAvailability first = door.Interactive.EvaluateAvailability(
+            door.Interactor,
+            door.Open
+        );
+        InteractionAvailability second = door.Interactive.EvaluateAvailability(
+            door.Interactor,
+            door.Open
+        );
+
+        AssertThat(Describe(first)).IsEqual("allowed");
+        AssertThat(Describe(second)).IsEqual("allowed");
+        AssertThat(door.State.State.ToString()).IsEqual("closed");
+        AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(statusSignalCount).IsEqual(0);
+        AssertThat(inputStartedCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task ActionWithoutDefinitionOrFromAnotherTargetIsNotConfigured()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        InteractionAction undefined = new() { Name = "UndefinedAction" };
+        door.Interactive.Actions.Add(undefined);
+        InteractionAction foreign = CreateAction("foreign");
+
+        try
+        {
+            AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, undefined)))
+                .IsEqual("Interaction is not configured.");
+            AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, foreign)))
+                .IsEqual("Interaction is not configured.");
+        }
+        finally
+        {
+            undefined.Free();
+            foreign.Free();
+        }
+    }
+
+    [TestCase]
+    public async Task TargetWithoutActionOffersNoInteraction()
+    {
+        TestInteractiveActor owner = new();
+        Area3D area = new() { Name = "InteractionArea" };
+        InteractiveComponent interactive = new()
+        {
+            InteractionArea = area,
+            InteractionAnchor = owner,
+        };
+        owner.AddChild(area);
+        owner.AddChild(interactive);
+        InteractionInteractor interactor = new();
+        Node3D world = new();
+        world.AddChild(owner);
+        world.AddChild(interactor);
+        ISceneRunner runner = ISceneRunner.Load(world);
+        await runner.SimulateFrames(1);
+
+        AssertThat(interactive.EvaluateAvailability(interactor) is InteractionHidden).IsTrue();
+        AssertThat(interactive.StartInteraction(interactor)).IsFalse();
+    }
+
+    private static string Describe(InteractionAvailability availability) =>
+        availability switch
         {
             InteractionAllowed => "allowed",
             InteractionBlocked blocked => blocked.Reason,
+            InteractionHidden => "hidden",
         };
 
     private static TestWorld BuildWorld(int ownerPeerId = 1)
@@ -577,9 +736,13 @@ public sealed partial class InteractionBehaviorTest
             Stateful = stateful,
             InteractionAnchor = owner,
         };
+        LegacyStatefulInteractionRule statefulRule = new();
+        InteractionAction action = CreateAction("activate", statefulRule);
+        interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(stateful);
         owner.AddChild(interactive);
+        interactive.AddChild(action);
         interactive.InteractionInputStarted += owner.OnInteractionInputStarted;
         interactive.InteractionInputEnded += owner.OnInteractionInputEnded;
         stateful.InteractionStateChangedAuthority += owner.OnInteractionStateChangedAuthority;
@@ -597,8 +760,86 @@ public sealed partial class InteractionBehaviorTest
         world.AddChild(owner);
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
-        return new TestWorld(world, runner, owner, stateful, interactive, interactor);
+        return new TestWorld(
+            world,
+            runner,
+            owner,
+            stateful,
+            interactive,
+            interactor,
+            action,
+            statefulRule
+        );
     }
+
+    private static InteractionAction CreateAction(string id, params InteractionRule[] rules)
+    {
+        InteractionAction action = new()
+        {
+            Name = $"{id}Action",
+            Definition = new InteractionActionDefinition
+            {
+                Id = new StringName(id),
+                Label = id,
+                InputActionName = new StringName("interact"),
+            },
+        };
+        foreach (InteractionRule rule in rules)
+        {
+            action.Rules.Add(rule);
+        }
+
+        return action;
+    }
+
+    private static DoorWorld BuildDoorWorld()
+    {
+        Node3D world = new();
+        Node3D door = new() { Name = "Door", Position = new Vector3(0, 0, -2) };
+        Area3D area = new() { Name = "InteractionArea" };
+        area.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = 3.0f } });
+        DoorState state = new() { Name = "DoorState" };
+        InteractiveComponent interactive = new()
+        {
+            Name = "Interactive",
+            InteractionArea = area,
+            InteractionAnchor = door,
+            DisplayName = "Door",
+        };
+        InteractionAction open = CreateAction(
+            "open",
+            new DoorStateInteractionRule { Door = state, ExpectedState = new StringName("closed") }
+        );
+        InteractionAction close = CreateAction(
+            "close",
+            new DoorStateInteractionRule { Door = state, ExpectedState = new StringName("open") }
+        );
+        interactive.Actions.Add(open);
+        interactive.Actions.Add(close);
+        door.AddChild(area);
+        door.AddChild(state);
+        door.AddChild(interactive);
+        interactive.AddChild(open);
+        interactive.AddChild(close);
+
+        Node3D view = new() { Name = "ViewOrigin" };
+        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = view };
+        interactor.AddChild(view);
+        world.AddChild(door);
+        world.AddChild(interactor);
+        ISceneRunner runner = ISceneRunner.Load(world);
+
+        return new DoorWorld(runner, state, interactive, open, close, interactor);
+    }
+
+    private sealed record DoorWorld(
+        ISceneRunner Runner,
+        DoorState State,
+        InteractiveComponent Interactive,
+        InteractionAction Open,
+        InteractionAction Close,
+        InteractionInteractor Interactor
+    );
 
     private sealed record TestWorld(
         Node3D World,
@@ -606,7 +847,9 @@ public sealed partial class InteractionBehaviorTest
         TestInteractiveActor Owner,
         InteractionStateful Stateful,
         InteractiveComponent Interactive,
-        InteractionInteractor Interactor
+        InteractionInteractor Interactor,
+        InteractionAction Action,
+        LegacyStatefulInteractionRule StatefulRule
     );
 
     private sealed partial class TestInteractiveActor : Node3D
@@ -639,9 +882,26 @@ public sealed partial class InteractionBehaviorTest
         }
     }
 
+    private sealed partial class DoorState : Node
+    {
+        public StringName State { get; set; } = new("closed");
+    }
+
+    private sealed partial class DoorStateInteractionRule : InteractionRule
+    {
+        public DoorState? Door { get; set; }
+
+        public StringName ExpectedState { get; set; } = new(string.Empty);
+
+        public override InteractionAvailability Evaluate(in InteractionContext context) =>
+            Door is not null && Door.State == ExpectedState
+                ? new InteractionAllowed()
+                : new InteractionHidden();
+    }
+
     private sealed partial class InteractiveParentGameplayRule : InteractionRule
     {
-        public override InteractionStatus Evaluate(in InteractionContext context)
+        public override InteractionAvailability Evaluate(in InteractionContext context)
         {
             return context.Interactive.GetParent() is TestInteractiveActor { GameplayBlocked: true }
                 ? new InteractionBlocked("Gameplay condition is blocked.")

@@ -3,6 +3,8 @@
 [ext_resource type="Script" uid="uid://c28xhmer8uduy" path="res://quest_world/interactibles/button/Button.cs" id="1_4q3fs"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="1_lq42h"]
 [ext_resource type="PackedScene" uid="uid://m4nr18qimc1s" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="2_2ck07"]
+[ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="3_action"]
+[ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="4_actiondef"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_mokd0"]
 size = Vector3(0.25, 0.25, 0.25)
@@ -13,6 +15,13 @@ albedo_color = Color(0, 1, 0, 1)
 [sub_resource type="BoxShape3D" id="BoxShape3D_mokd0"]
 size = Vector3(5, 3, 5)
 
+[sub_resource type="Resource" id="Resource_activate_definition"]
+script = ExtResource("4_actiondef")
+Id = &"activate"
+Label = "Activate"
+InputActionName = &"interact"
+metadata/_custom_type_script = "uid://bqs31n67gwjq1"
+
 [node name="Button" type="Node3D" unique_id=1874486156 node_paths=PackedStringArray("Interactive")]
 script = ExtResource("1_4q3fs")
 Interactive = NodePath("InteractiveComponent")
@@ -21,15 +30,19 @@ Interactive = NodePath("InteractiveComponent")
 mesh = SubResource("BoxMesh_mokd0")
 surface_material_override/0 = SubResource("StandardMaterial3D_f0qss")
 
-[node name="InteractiveComponent" type="Node" parent="." unique_id=745842554 node_paths=PackedStringArray("InteractionArea", "InteractionAnchor")]
+[node name="InteractiveComponent" type="Node" parent="." unique_id=745842554 node_paths=PackedStringArray("InteractionArea", "InteractionAnchor", "Actions")]
 script = ExtResource("1_lq42h")
 InteractionArea = NodePath("../InteractionArea")
 InteractionAnchor = NodePath("../ButtonModel")
 DisplayName = "Activate"
-BusyReason = "Activating..."
-ActivatedReason = "Already activated"
 PromptScene = ExtResource("2_2ck07")
+Actions = [NodePath("ActivateAction")]
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
+
+[node name="ActivateAction" type="Node" parent="InteractiveComponent"]
+script = ExtResource("3_action")
+Definition = SubResource("Resource_activate_definition")
+metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
 [node name="InteractionArea" type="Area3D" parent="." unique_id=2064253587]
 

@@ -21,6 +21,8 @@ internal readonly record struct FocusChangeResult(
 [GlobalClass]
 public partial class InteractionInteractor : Node
 {
+    private const string UnavailableReason = "Interaction unavailable.";
+
     /// <summary>Emitted locally when the best target changes.</summary>
     /// <param name="interactive">New focused interactive, or null when focus is cleared.</param>
     [Signal]
@@ -380,10 +382,10 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
-        InteractionStatus localStatus = target.EvaluateStatus(this);
-        if (localStatus is InteractionBlocked blocked)
+        InteractionAvailability localAvailability = target.EvaluateAvailability(this);
+        if (localAvailability is not InteractionAllowed)
         {
-            EmitSignal(SignalName.InteractionRejected, target, blocked.Reason);
+            EmitSignal(SignalName.InteractionRejected, target, DescribeRefusal(localAvailability));
             return false;
         }
 
@@ -538,10 +540,10 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
-        InteractionStatus status = target.EvaluateStatus(this);
-        if (status is InteractionBlocked blocked)
+        InteractionAvailability availability = target.EvaluateAvailability(this);
+        if (availability is not InteractionAllowed)
         {
-            reason = blocked.Reason;
+            reason = DescribeRefusal(availability);
             return false;
         }
 
@@ -585,6 +587,14 @@ public partial class InteractionInteractor : Node
             presentation.BlockReason
         );
     }
+
+    private static string DescribeRefusal(in InteractionAvailability availability) =>
+        availability switch
+        {
+            InteractionAllowed => string.Empty,
+            InteractionBlocked blocked => blocked.Reason,
+            InteractionHidden => UnavailableReason,
+        };
 
     private bool ValidateSender(int senderPeerId, out string reason)
     {

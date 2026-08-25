@@ -12,6 +12,6 @@ public partial class AlwaysBlockedInteractionRule : InteractionRule
     public string Reason { get; set; } = "Interaction unavailable.";
 
     /// <inheritdoc />
-    public override InteractionStatus Evaluate(in InteractionContext context) =>
+    public override InteractionAvailability Evaluate(in InteractionContext context) =>
         new InteractionBlocked(Reason);
 }

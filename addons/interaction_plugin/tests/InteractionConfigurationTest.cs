@@ -62,6 +62,15 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
+    public void InteractiveComponentNoLongerInterpretsWorldStateItself()
+    {
+        AssertThat(typeof(InteractiveComponent).GetProperty("BusyReason") == null).IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetProperty("ActivatedReason") == null).IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetProperty("InteractionRules") == null).IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetMethod("EvaluateStatus") == null).IsTrue();
+    }
+
+    [TestCase]
     public void InteractorRequiresAnExplicitViewOriginOnly()
     {
         InteractionInteractor interactor = new();
