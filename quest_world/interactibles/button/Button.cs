@@ -1,5 +1,6 @@
 using Godot;
 using QuestWorld.Interaction;
+using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 
@@ -36,7 +37,10 @@ public partial class Button : Node3D
         Interactive?.InteractionInputStarted -= OnInteractionInputStarted;
     }
 
-    private void OnInteractionInputStarted(InteractionInteractor interactor)
+    private void OnInteractionInputStarted(
+        InteractionInteractor interactor,
+        InteractionAction action
+    )
     {
         (TargetStateful as IStatefulProvider)?.Stateful?.SetState(TargetState);
     }

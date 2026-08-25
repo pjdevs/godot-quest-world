@@ -7,6 +7,7 @@ using InteractionPlugin.Editor;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Examples.Interactive;
 using QuestWorld.Interaction.Presentation.UI;
+using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Interaction.Runtime.State;
@@ -141,6 +142,17 @@ public sealed partial class InteractionConfigurationTest
             .IsTrue();
         AssertThat(typeof(InteractionInteractor).GetProperty("IsConfigurationValid") == null)
             .IsTrue();
+    }
+
+    [TestCase]
+    public void InputAndAutomationBelongToTheActionNotToTheInteractorOrTarget()
+    {
+        AssertThat(typeof(InteractionInteractor).GetProperty("InteractionActionName") == null)
+            .IsTrue();
+        AssertThat(typeof(InteractiveComponent).GetProperty("AutomaticInteraction") == null)
+            .IsTrue();
+        AssertThat(typeof(InteractionAction).GetProperty("Priority") != null).IsTrue();
+        AssertThat(typeof(InteractionAction).GetProperty("Automatic") != null).IsTrue();
     }
 
     [TestCase]

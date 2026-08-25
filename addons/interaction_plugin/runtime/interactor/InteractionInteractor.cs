@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 
 namespace QuestWorld.Interaction.Runtime.Interactor;
@@ -40,14 +41,24 @@ public partial class InteractionInteractor : Node
 
     /// <summary>Emitted locally after prevalidation and before any client RPC or host dispatch.</summary>
     /// <param name="interactive">Target requested by the owning player.</param>
+    /// <param name="actionId">Identifier of the action resolved from the local input.</param>
     [Signal]
-    public delegate void InteractionRequestedEventHandler(Node interactive);
+    public delegate void InteractionRequestedEventHandler(Node interactive, StringName actionId);
 
     /// <summary>Emitted locally for a prevalidation failure or a rejection returned by the server.</summary>
+    /// <remarks>
+    /// The refusal carries the action so presentation can attach it to the right prompt instead of
+    /// to the whole target. The identifier is empty when no action could be resolved at all.
+    /// </remarks>
     /// <param name="interactive">Rejected target, or null when no target can be resolved.</param>
+    /// <param name="actionId">Identifier of the rejected action, or an empty name.</param>
     /// <param name="reason">User-facing rejection reason.</param>
     [Signal]
-    public delegate void InteractionRejectedEventHandler(Node interactive, string reason);
+    public delegate void InteractionRejectedEventHandler(
+        Node interactive,
+        StringName actionId,
+        string reason
+    );
 
     /// <summary>Emitted when an interactive enters the optional indication area.</summary>
     /// <param name="interactive">Interactive available for indication presentation.</param>
@@ -94,12 +105,8 @@ public partial class InteractionInteractor : Node
     [Export]
     public float DistanceScoreCoefficient { get; set; } = 0.5f;
 
-    /// <summary>Gets or sets the project input action associated with this interactor.</summary>
-    [ExportGroup("Input")]
-    [Export]
-    public StringName InteractionActionName { get; set; } = "interact";
-
     /// <summary>Gets or sets the server peer that receives reliable interaction RPCs.</summary>
+    [ExportGroup("Network")]
     [Export]
     public int ServerPeerId { get; set; } = 1;
 
@@ -109,6 +116,7 @@ public partial class InteractionInteractor : Node
 
     private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
     private readonly HashSet<InteractiveComponent> _interactiveCandidates = new();
+    private readonly Dictionary<StringName, StringName> _requestedActionsByInput = new();
     private Node3D? _viewOrigin;
     private Node3D? _resolvedInteractionOrigin;
     private InteractiveComponent? _focusedInteractive;
@@ -174,11 +182,7 @@ public partial class InteractionInteractor : Node
             return;
         }
 
-        bool focusChanged = RecalculateFocus();
-        if (focusChanged && _focusedInteractive?.AutomaticInteraction == true)
-        {
-            TryStartInteractionInput();
-        }
+        RecalculateFocus();
     }
 
     internal void AddInteractiveIndication(InteractiveComponent interactive)
@@ -311,6 +315,11 @@ public partial class InteractionInteractor : Node
         {
             EmitStatusFor(result.Current);
         }
+
+        if (result.Changed && result.Current is not null)
+        {
+            TryStartAutomaticInteraction(result.Current);
+        }
     }
 
     internal float CalculateInteractionScore(InteractiveComponent interactive)
@@ -366,13 +375,16 @@ public partial class InteractionInteractor : Node
         return _focusedInteractive?.GetPresentation(this, true);
     }
 
-    /// <summary>Prevalidates the focused target and requests authoritative interaction start.</summary>
+    /// <summary>Resolves one input into an action of the focused target and requests its start.</summary>
     /// <remarks>
-    /// Call from the local player's input code. On a client, true means the reliable request was sent;
-    /// final acceptance is reported by gameplay state or <see cref="InteractionRejected"/>.
+    /// Call from the local player's input code. The resolved action is only a local intention: the
+    /// authoritative peer re-resolves the identifier against its own scene and re-evaluates it. On a
+    /// client, true means the reliable request was sent; final acceptance is reported by gameplay
+    /// state or <see cref="InteractionRejected"/>.
     /// </remarks>
+    /// <param name="inputActionName">Project input action pressed by the player.</param>
     /// <returns>Whether a locally valid request was dispatched or accepted by the host.</returns>
-    public bool TryStartInteractionInput()
+    public bool TryStartInteractionInput(StringName inputActionName)
     {
         RecalculateFocus();
         InteractiveComponent? target = _focusedInteractive;
@@ -381,37 +393,100 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
-        InteractionAvailability localAvailability = target.EvaluateAvailability(this);
-        if (localAvailability is not InteractionAllowed)
+        InteractionAction? action = target.ResolveActionForInput(this, inputActionName);
+        if (action?.Definition is null)
         {
-            EmitSignal(SignalName.InteractionRejected, target, DescribeRefusal(localAvailability));
             return false;
         }
 
-        EmitSignal(SignalName.InteractionRequested, target);
-        if (!Multiplayer.IsServer())
-        {
-            RpcId(ServerPeerId, nameof(ServerTryStartInteraction), target.GetPath());
-            return true;
-        }
-
-        return TryStartInteractionAuthoritatively(target, OwnerPeerId, out _);
+        return TryRequestAction(target, action, inputActionName);
     }
 
-    /// <summary>Requests authoritative release of the currently active interaction input.</summary>
+    /// <summary>Requests authoritative release of the action started by one input.</summary>
     /// <remarks>
-    /// Call from the local player's input-release code. On a client, true means the request was sent.
+    /// Call from the local player's input-release code. The action is the one this interactor
+    /// remembers requesting for that input, never a fresh resolution: world state may have changed
+    /// since the press, and re-resolving would release an action the server never started.
     /// </remarks>
-    /// <returns>Whether a request was sent or the host released an active interaction.</returns>
-    public bool TryEndInteractionInput()
+    /// <param name="inputActionName">Project input action released by the player.</param>
+    /// <returns>Whether a request was sent or the host released the matching interaction.</returns>
+    public bool TryEndInteractionInput(StringName inputActionName)
     {
+        if (
+            inputActionName is null
+            || !_requestedActionsByInput.Remove(inputActionName, out StringName? actionId)
+        )
+        {
+            return false;
+        }
+
         if (!Multiplayer.IsServer())
         {
-            RpcId(ServerPeerId, nameof(ServerTryEndInteraction));
+            RpcId(ServerPeerId, nameof(ServerTryEndInteraction), actionId);
             return true;
         }
 
-        return EndInteractionInputAuthoritatively(OwnerPeerId);
+        return EndInteractionInputAuthoritatively(OwnerPeerId, actionId);
+    }
+
+    private void TryStartAutomaticInteraction(InteractiveComponent target)
+    {
+        if (!IsLocallyControlled)
+        {
+            return;
+        }
+
+        InteractionAction? action = target.ResolveAutomaticAction(this);
+        if (action?.Definition is null)
+        {
+            return;
+        }
+
+        TryRequestAction(target, action, inputActionName: null);
+    }
+
+    private bool TryRequestAction(
+        InteractiveComponent target,
+        InteractionAction action,
+        StringName? inputActionName
+    )
+    {
+        StringName actionId = action.Definition!.Id;
+        InteractionAvailability localAvailability = target.EvaluateAvailability(this, action);
+        if (localAvailability is not InteractionAllowed)
+        {
+            EmitSignal(
+                SignalName.InteractionRejected,
+                target,
+                actionId,
+                DescribeRefusal(localAvailability)
+            );
+            return false;
+        }
+
+        EmitSignal(SignalName.InteractionRequested, target, actionId);
+        if (!Multiplayer.IsServer())
+        {
+            RpcId(ServerPeerId, nameof(ServerTryStartInteraction), target.GetPath(), actionId);
+            RememberRequestedAction(inputActionName, actionId);
+            return true;
+        }
+
+        if (!TryStartInteractionAuthoritatively(target, actionId, OwnerPeerId, out _))
+        {
+            return false;
+        }
+
+        RememberRequestedAction(inputActionName, actionId);
+        return true;
+    }
+
+    private void RememberRequestedAction(StringName? inputActionName, StringName actionId)
+    {
+        if (inputActionName is not null && !inputActionName.IsEmpty)
+        {
+            _requestedActionsByInput[inputActionName] = actionId;
+        }
     }
 
     internal void NotifyInteractiveStatusChanged(InteractiveComponent interactive)
@@ -459,70 +534,80 @@ public partial class InteractionInteractor : Node
 
         _interactiveCandidates.Clear();
         _indicatedInteractives.Clear();
+        _requestedActionsByInput.Clear();
         _focusedInteractive = null;
     }
 
     /// <summary>Reliable client-to-server RPC that validates and starts one target.</summary>
     /// <remarks>Called by Godot RPC dispatch; input code should call <see cref="TryStartInteractionInput"/>.</remarks>
     /// <param name="targetPath">Scene-tree path of the client-selected interactive.</param>
+    /// <param name="actionId">Identifier of the action the client believes it can request.</param>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,
         CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
     )]
-    public void ServerTryStartInteraction(NodePath targetPath)
+    public void ServerTryStartInteraction(NodePath targetPath, StringName actionId)
     {
         int senderPeerId = GetRemoteSenderOrOwner();
         InteractiveComponent? target = GetTree()
             .Root.GetNodeOrNull<InteractiveComponent>(targetPath);
         if (target is null)
         {
-            RejectInteraction(senderPeerId, targetPath, "The interaction target no longer exists.");
+            RejectInteraction(
+                senderPeerId,
+                targetPath,
+                actionId,
+                "The interaction target no longer exists."
+            );
             return;
         }
 
-        if (!TryStartInteractionAuthoritatively(target, senderPeerId, out string reason))
+        if (!TryStartInteractionAuthoritatively(target, actionId, senderPeerId, out string reason))
         {
-            RejectInteraction(senderPeerId, targetPath, reason);
+            RejectInteraction(senderPeerId, targetPath, actionId, reason);
         }
     }
 
     /// <summary>Reliable client-to-server RPC that releases the caller's active interaction.</summary>
     /// <remarks>Called by Godot RPC dispatch; input code should call <see cref="TryEndInteractionInput"/>.</remarks>
+    /// <param name="actionId">Identifier the client received when its request was sent.</param>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,
         CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
     )]
-    public void ServerTryEndInteraction()
+    public void ServerTryEndInteraction(StringName actionId)
     {
         int senderPeerId = GetRemoteSenderOrOwner();
         if (!ValidateSender(senderPeerId, out string reason))
         {
-            RejectInteraction(senderPeerId, new NodePath(), reason);
+            RejectInteraction(senderPeerId, new NodePath(), actionId, reason);
             return;
         }
 
-        EndInteractionInputAuthoritatively(senderPeerId);
+        EndInteractionInputAuthoritatively(senderPeerId, actionId);
     }
 
     /// <summary>Reliable server-to-owner RPC that reports an authoritative rejection.</summary>
     /// <remarks>Called by Godot RPC dispatch on the owning client or directly on an offline host.</remarks>
     /// <param name="targetPath">Rejected target path, which may be empty.</param>
+    /// <param name="actionId">Identifier of the rejected action, which may be empty.</param>
     /// <param name="reason">User-facing rejection reason.</param>
     [Rpc(
         MultiplayerApi.RpcMode.Authority,
         CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
     )]
-    public void ClientInteractionRejected(NodePath targetPath, string reason)
+    public void ClientInteractionRejected(NodePath targetPath, StringName actionId, string reason)
     {
         Node? target = GetTree().Root.GetNodeOrNull(targetPath);
-        EmitSignal(SignalName.InteractionRejected, target, reason);
+        EmitSignal(SignalName.InteractionRejected, target, actionId, reason);
     }
 
     private bool TryStartInteractionAuthoritatively(
         InteractiveComponent target,
+        StringName actionId,
         int senderPeerId,
         out string reason
     )
@@ -539,14 +624,21 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
-        InteractionAvailability availability = target.EvaluateAvailability(this);
+        InteractionAction? action = target.ResolveAction(actionId);
+        if (action is null)
+        {
+            reason = UnavailableReason;
+            return false;
+        }
+
+        InteractionAvailability availability = target.EvaluateAvailability(this, action);
         if (availability is not InteractionAllowed)
         {
             reason = DescribeRefusal(availability);
             return false;
         }
 
-        if (!target.StartInteraction(this))
+        if (!target.StartInteraction(this, action))
         {
             reason = "The interaction could not be started.";
             return false;
@@ -556,21 +648,28 @@ public partial class InteractionInteractor : Node
         return true;
     }
 
-    private bool EndInteractionInputAuthoritatively(int senderPeerId)
+    private bool EndInteractionInputAuthoritatively(int senderPeerId, StringName actionId)
     {
         if (!ValidateSender(senderPeerId, out _))
         {
             return false;
         }
 
-        if (_activeInteractive is null)
+        InteractiveComponent? target = _activeInteractive;
+        if (target is null)
         {
             return false;
         }
 
-        bool released = _activeInteractive.ReleaseInteractionInput(this);
+        // A reserved phase only answers to the action that reserved it. An instant interaction
+        // reserves nothing, so its target is simply forgotten like in V1.
+        if (target.ActiveAction is not null && target.ActiveAction.Definition?.Id != actionId)
+        {
+            return false;
+        }
+
         _activeInteractive = null;
-        return released;
+        return target.ReleaseInteractionInput(this);
     }
 
     private void EmitStatusFor(InteractiveComponent interactive)
@@ -598,16 +697,21 @@ public partial class InteractionInteractor : Node
         return true;
     }
 
-    private void RejectInteraction(int senderPeerId, NodePath targetPath, string reason)
+    private void RejectInteraction(
+        int senderPeerId,
+        NodePath targetPath,
+        StringName actionId,
+        string reason
+    )
     {
         GD.PushWarning($"{GetPath()}: rejected interaction from peer {senderPeerId}: {reason}");
         if (senderPeerId == OwnerPeerId && IsLocallyControlled)
         {
-            ClientInteractionRejected(targetPath, reason);
+            ClientInteractionRejected(targetPath, actionId, reason);
         }
         else if (senderPeerId > 0)
         {
-            RpcId(senderPeerId, nameof(ClientInteractionRejected), targetPath, reason);
+            RpcId(senderPeerId, nameof(ClientInteractionRejected), targetPath, actionId, reason);
         }
     }
 

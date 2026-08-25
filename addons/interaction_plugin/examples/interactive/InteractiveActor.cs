@@ -1,4 +1,5 @@
 using Godot;
+using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Interaction.Runtime.State;
@@ -105,14 +106,17 @@ public partial class InteractiveActor : Node3D
         }
     }
 
-    private void OnInteractionInputStarted(InteractionInteractor interactor)
+    private void OnInteractionInputStarted(
+        InteractionInteractor interactor,
+        InteractionAction action
+    )
     {
         StartCount++;
         _activationElapsed = 0.0f;
-        Interactive?.StartInteractionPhase(interactor);
+        Interactive?.StartInteractionPhase(interactor, action);
     }
 
-    private void OnInteractionInputEnded(InteractionInteractor interactor)
+    private void OnInteractionInputEnded(InteractionInteractor interactor, InteractionAction action)
     {
         EndCount++;
         _releaseRequested = true;

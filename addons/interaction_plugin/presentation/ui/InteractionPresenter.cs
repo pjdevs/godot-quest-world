@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.Interaction;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 
@@ -68,6 +69,7 @@ public partial class InteractionPresenter : CanvasLayer
     private string _promptContainerKey = string.Empty;
     private string _promptActionKey = string.Empty;
     private readonly List<Control> _promptActions = new();
+    private readonly List<InteractionActionPresentation> _promptedActions = new();
     private readonly Dictionary<InteractiveComponent, Control> _indications = new();
     private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
 
@@ -160,12 +162,7 @@ public partial class InteractionPresenter : CanvasLayer
 
         InteractiveComponent? focused = Interactor.FocusedInteractive;
         InteractionTargetPresentation? presentation = Interactor.GetInteractionPresentation();
-        if (
-            focused is null
-            || focused.AutomaticInteraction
-            || presentation is null
-            || presentation.Value.Actions.Count == 0
-        )
+        if (focused is null || presentation is null || !presentation.Value.HasPromptableAction)
         {
             ClearPrompt();
             RefreshIndications();
@@ -211,9 +208,10 @@ public partial class InteractionPresenter : CanvasLayer
             return;
         }
 
+        CollectPromptedActions(presentation);
         PackedScene? scene = presentation.Interactive.ActionPromptScene;
         Control container = (_prompt as IInteractionPromptContainer)?.ActionsContainer ?? _prompt;
-        int expectedCount = scene is null ? 0 : presentation.Actions.Count;
+        int expectedCount = scene is null ? 0 : _promptedActions.Count;
         while (_promptActions.Count > expectedCount)
         {
             int lastIndex = _promptActions.Count - 1;
@@ -235,7 +233,24 @@ public partial class InteractionPresenter : CanvasLayer
 
         for (int index = 0; index < _promptActions.Count; index++)
         {
-            (_promptActions[index] as IInteractionActionWidget)?.Bind(presentation.Actions[index]);
+            (_promptActions[index] as IInteractionActionWidget)?.Bind(_promptedActions[index]);
+        }
+    }
+
+    private void CollectPromptedActions(in InteractionTargetPresentation presentation)
+    {
+        _promptedActions.Clear();
+        if (presentation.Actions is null)
+        {
+            return;
+        }
+
+        foreach (InteractionActionPresentation action in presentation.Actions)
+        {
+            if (!action.IsAutomatic)
+            {
+                _promptedActions.Add(action);
+            }
         }
     }
 

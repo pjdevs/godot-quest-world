@@ -45,7 +45,7 @@ public partial class Character : QuestWorld.Character.Character
         {
             if (wasPossessed)
             {
-                _interactionInteractor.TryEndInteractionInput();
+                _interactionInteractor.TryEndInteractionInput(InteractionActionName);
             }
 
             _wasPossessed = false;
@@ -60,11 +60,11 @@ public partial class Character : QuestWorld.Character.Character
 
         if (Input.IsActionJustPressed(InteractionActionName))
         {
-            _interactionInteractor.TryStartInteractionInput();
+            _interactionInteractor.TryStartInteractionInput(InteractionActionName);
         }
         else if (Input.IsActionJustReleased(InteractionActionName))
         {
-            _interactionInteractor.TryEndInteractionInput();
+            _interactionInteractor.TryEndInteractionInput(InteractionActionName);
         }
     }
 
@@ -76,7 +76,7 @@ public partial class Character : QuestWorld.Character.Character
             && _interactionInteractor.IsInsideTree()
         )
         {
-            _interactionInteractor.TryEndInteractionInput();
+            _interactionInteractor.TryEndInteractionInput(InteractionActionName);
         }
     }
 }

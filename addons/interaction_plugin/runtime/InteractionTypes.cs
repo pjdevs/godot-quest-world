@@ -63,12 +63,14 @@ public readonly record struct InteractionContext(
 /// <param name="Description">Optional player-facing description of the action.</param>
 /// <param name="InputActionName">Project input action requesting this action.</param>
 /// <param name="Availability">Availability of this action, either allowed or blocked.</param>
+/// <param name="IsAutomatic">Whether local focus requests this action without any player input.</param>
 public readonly record struct InteractionActionPresentation(
     StringName ActionId,
     string Label,
     string Description,
     StringName InputActionName,
-    InteractionAvailability Availability
+    InteractionAvailability Availability,
+    bool IsAutomatic = false
 )
 {
     /// <summary>Gets whether this action can currently be requested.</summary>
@@ -125,6 +127,32 @@ public readonly record struct InteractionTargetPresentation(
             foreach (InteractionActionPresentation action in Actions)
             {
                 if (action.Availability is InteractionAllowed)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>Gets whether at least one presented action is requested by player input.</summary>
+    /// <remarks>
+    /// Automatic actions stay in <see cref="Actions"/> so focus and indication keep seeing them, but
+    /// a prompt showing an input the player cannot press would be misleading.
+    /// </remarks>
+    public bool HasPromptableAction
+    {
+        get
+        {
+            if (Actions is null)
+            {
+                return false;
+            }
+
+            foreach (InteractionActionPresentation action in Actions)
+            {
+                if (!action.IsAutomatic)
                 {
                     return true;
                 }

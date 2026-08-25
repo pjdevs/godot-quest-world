@@ -1,6 +1,7 @@
 namespace QuestWorld.Tests;
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
@@ -17,6 +18,8 @@ using static GdUnit4.Assertions;
 [RequireGodotRuntime]
 public sealed partial class InteractionBehaviorTest
 {
+    private static readonly StringName InteractInput = new("interact");
+
     [TestCase]
     public void StatefulCoreTransitionMutatesWithoutDispatch()
     {
@@ -73,7 +76,8 @@ public sealed partial class InteractionBehaviorTest
         testWorld.Stateful.InteractionStateChanged += (_, _) => stateSignalCount++;
 
         InteractionPhaseStartResult? result = testWorld.Interactive.StartInteractionPhaseCore(
-            testWorld.Interactor
+            testWorld.Interactor,
+            testWorld.Action
         );
 
         AssertThat(result.HasValue).IsTrue();
@@ -90,7 +94,8 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
-        AssertThat(testWorld.Interactive.StartInteraction(testWorld.Interactor)).IsTrue();
+        AssertThat(testWorld.Interactive.StartInteraction(testWorld.Interactor, testWorld.Action))
+            .IsTrue();
         int stateSignalCount = 0;
         int statusSignalCount = 0;
         testWorld.Stateful.InteractionStateChanged += (_, _) => stateSignalCount++;
@@ -115,10 +120,11 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
-        AssertThat(testWorld.Interactive.StartInteraction(testWorld.Interactor)).IsTrue();
+        AssertThat(testWorld.Interactive.StartInteraction(testWorld.Interactor, testWorld.Action))
+            .IsTrue();
         int inputEndedCount = 0;
         int statusSignalCount = 0;
-        testWorld.Interactive.InteractionInputEnded += _ => inputEndedCount++;
+        testWorld.Interactive.InteractionInputEnded += (_, _) => inputEndedCount++;
         testWorld.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
 
         InteractionReleaseResult? result = testWorld.Interactive.ReleaseInteractionInputCore(
@@ -138,10 +144,11 @@ public sealed partial class InteractionBehaviorTest
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
         int inputStartedCount = 0;
-        testWorld.Interactive.InteractionInputStarted += _ => inputStartedCount++;
+        testWorld.Interactive.InteractionInputStarted += (_, _) => inputStartedCount++;
 
         InteractionStartResult? result = testWorld.Interactive.StartInteractionCore(
-            testWorld.Interactor
+            testWorld.Interactor,
+            testWorld.Action
         );
 
         AssertThat(result.HasValue).IsTrue();
@@ -380,9 +387,11 @@ public sealed partial class InteractionBehaviorTest
 
         testWorld.Interactor.AddInteractive(testWorld.Interactive);
         secondInteractor.AddInteractive(testWorld.Interactive);
-        AssertThat(testWorld.Interactive.StartInteraction(testWorld.Interactor)).IsTrue();
+        AssertThat(testWorld.Interactive.StartInteraction(testWorld.Interactor, testWorld.Action))
+            .IsTrue();
         AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
-        AssertThat(testWorld.Interactive.StartInteraction(secondInteractor)).IsFalse();
+        AssertThat(testWorld.Interactive.StartInteraction(secondInteractor, testWorld.Action))
+            .IsFalse();
 
         AssertThat(testWorld.Interactive.ReleaseInteractionInput(secondInteractor)).IsFalse();
         AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
@@ -506,8 +515,8 @@ public sealed partial class InteractionBehaviorTest
         await runner.SimulateFrames(1);
 
         AssertThat(interactive.EvaluateAvailability(interactor) is InteractionAllowed).IsTrue();
-        AssertThat(interactive.StartInteraction(interactor)).IsTrue();
-        AssertThat(interactive.StartInteractionPhase(interactor)).IsFalse();
+        AssertThat(interactive.StartInteraction(interactor, action)).IsTrue();
+        AssertThat(interactive.StartInteractionPhase(interactor, action)).IsFalse();
         AssertThat(owner.StartCount).IsEqual(1);
     }
 
@@ -532,11 +541,11 @@ public sealed partial class InteractionBehaviorTest
         testWorld.Interactor.AddInteractive(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
 
-        AssertThat(testWorld.Interactor.TryStartInteractionInput()).IsTrue();
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
         AssertThat(testWorld.Owner.StartCount).IsEqual(1);
         AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
 
-        AssertThat(testWorld.Interactor.TryEndInteractionInput()).IsTrue();
+        AssertThat(testWorld.Interactor.TryEndInteractionInput(InteractInput)).IsTrue();
         AssertThat(testWorld.Owner.EndCount).IsEqual(1);
         AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
     }
@@ -549,11 +558,11 @@ public sealed partial class InteractionBehaviorTest
             new AlwaysBlockedInteractionRule { Reason = "Locked" }
         );
         bool requestEmitted = false;
-        testWorld.Interactor.InteractionRequested += _ => requestEmitted = true;
+        testWorld.Interactor.InteractionRequested += (_, _) => requestEmitted = true;
         testWorld.Interactor.AddInteractive(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
 
-        AssertThat(testWorld.Interactor.TryStartInteractionInput()).IsFalse();
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsFalse();
         AssertThat(requestEmitted).IsFalse();
         AssertThat(testWorld.Owner.StartCount).IsEqual(0);
     }
@@ -564,7 +573,7 @@ public sealed partial class InteractionBehaviorTest
         TestWorld testWorld = BuildWorld(ownerPeerId: 2);
         await testWorld.Runner.SimulateFrames(1);
         testWorld.Interactor.AddInteractive(testWorld.Interactive);
-        AssertThat(testWorld.Interactor.TryStartInteractionInput()).IsTrue();
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
         testWorld.Interactor.RemoveInteractive(testWorld.Interactive);
 
@@ -578,7 +587,7 @@ public sealed partial class InteractionBehaviorTest
         TestWorld testWorld = BuildWorld(ownerPeerId: 2);
         await testWorld.Runner.SimulateFrames(1);
         testWorld.Interactor.AddInteractive(testWorld.Interactive);
-        AssertThat(testWorld.Interactor.TryStartInteractionInput()).IsTrue();
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
         testWorld.Interactor.QueueFree();
         await testWorld.Runner.SimulateFrames(1);
@@ -648,7 +657,7 @@ public sealed partial class InteractionBehaviorTest
         int statusSignalCount = 0;
         int inputStartedCount = 0;
         door.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
-        door.Interactive.InteractionInputStarted += _ => inputStartedCount++;
+        door.Interactive.InteractionInputStarted += (_, _) => inputStartedCount++;
 
         InteractionAvailability first = door.Interactive.EvaluateAvailability(
             door.Interactor,
@@ -711,8 +720,17 @@ public sealed partial class InteractionBehaviorTest
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
 
-        AssertThat(interactive.EvaluateAvailability(interactor) is InteractionHidden).IsTrue();
-        AssertThat(interactive.StartInteraction(interactor)).IsFalse();
+        InteractionAction foreign = CreateAction("foreign");
+        try
+        {
+            AssertThat(interactive.EvaluateAvailability(interactor) is InteractionHidden).IsTrue();
+            AssertThat(interactive.ResolveAction(new StringName("foreign")) == null).IsTrue();
+            AssertThat(interactive.StartInteraction(interactor, foreign)).IsFalse();
+        }
+        finally
+        {
+            foreign.Free();
+        }
     }
 
     [TestCase]
@@ -813,6 +831,241 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(door.Interactor.FocusedInteractive == crateInteractive).IsTrue();
     }
 
+    [TestCase]
+    public async Task OneInputResolvesToTheActionAllowedByTheCurrentWorldState()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.Interactor.AddInteractive(door.Interactive);
+        List<string> startedActions = new();
+        door.Interactive.InteractionInputStarted += (_, action) =>
+            startedActions.Add(action.Definition!.Id.ToString());
+
+        AssertThat(door.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+        door.State.State = new StringName("open");
+        AssertThat(door.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+
+        AssertThat(string.Join(",", startedActions)).IsEqual("open,close");
+    }
+
+    [TestCase]
+    public async Task InputResolutionPrefersAllowedThenPriorityThenIdentifier()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.State.State = new StringName("locked");
+        InteractionAction zulu = CreateAction("zulu");
+        InteractionAction alpha = CreateAction("alpha");
+        InteractionAction blocked = CreateAction(
+            "blocked",
+            new AlwaysBlockedInteractionRule { Reason = "Locked" }
+        );
+        blocked.Priority = 10;
+        AddAction(door.Interactive, zulu);
+        AddAction(door.Interactive, alpha);
+        AddAction(door.Interactive, blocked);
+
+        AssertThat(door.Interactive.ResolveActionForInput(door.Interactor, InteractInput) == alpha)
+            .IsTrue();
+
+        zulu.Priority = 5;
+
+        AssertThat(door.Interactive.ResolveActionForInput(door.Interactor, InteractInput) == zulu)
+            .IsTrue();
+
+        zulu.Rules.Add(new AlwaysBlockedInteractionRule { Reason = "Locked" });
+        alpha.Rules.Add(new AlwaysBlockedInteractionRule { Reason = "Locked" });
+
+        AssertThat(
+                door.Interactive.ResolveActionForInput(door.Interactor, InteractInput) == blocked
+            )
+            .IsTrue();
+    }
+
+    [TestCase]
+    public async Task AnInputWithoutAnyMatchingActionRequestsNothing()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.Interactor.AddInteractive(door.Interactive);
+        int startedCount = 0;
+        door.Interactive.InteractionInputStarted += (_, _) => startedCount++;
+
+        AssertThat(door.Interactor.TryStartInteractionInput(new StringName("inspect"))).IsFalse();
+        AssertThat(startedCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task ServerRejectsAnActionTheClientBelievesIsAllowed()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.Interactor.AddInteractive(door.Interactive);
+        door.Open.Rules.Insert(
+            0,
+            new AlwaysBlockedInteractionRule { Reason = "Requires a keycard." }
+        );
+        int startedCount = 0;
+        door.Interactive.InteractionInputStarted += (_, _) => startedCount++;
+        string rejectedActionId = string.Empty;
+        string rejectedReason = string.Empty;
+        door.Interactor.InteractionRejected += (_, actionId, reason) =>
+        {
+            rejectedActionId = actionId.ToString();
+            rejectedReason = reason;
+        };
+
+        door.Interactor.ServerTryStartInteraction(
+            door.Interactive.GetPath(),
+            new StringName("open")
+        );
+
+        AssertThat(startedCount).IsEqual(0);
+        AssertThat(rejectedActionId).IsEqual("open");
+        AssertThat(rejectedReason).IsEqual("Requires a keycard.");
+    }
+
+    [TestCase]
+    public async Task ServerRejectsAnActionHiddenByItsOwnWorldState()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.Interactor.AddInteractive(door.Interactive);
+        int startedCount = 0;
+        door.Interactive.InteractionInputStarted += (_, _) => startedCount++;
+        string rejectedReason = string.Empty;
+        door.Interactor.InteractionRejected += (_, _, reason) => rejectedReason = reason;
+
+        door.Interactor.ServerTryStartInteraction(
+            door.Interactive.GetPath(),
+            new StringName("close")
+        );
+
+        AssertThat(startedCount).IsEqual(0);
+        AssertThat(rejectedReason).IsEqual("Interaction unavailable.");
+    }
+
+    [TestCase]
+    public async Task ServerRejectsAnActionIdentifierItsOwnTargetDoesNotDeclare()
+    {
+        DoorWorld door = BuildDoorWorld();
+        await door.Runner.SimulateFrames(1);
+        door.Interactor.AddInteractive(door.Interactive);
+        int startedCount = 0;
+        int rejectedCount = 0;
+        door.Interactive.InteractionInputStarted += (_, _) => startedCount++;
+        door.Interactor.InteractionRejected += (_, _, _) => rejectedCount++;
+
+        door.Interactor.ServerTryStartInteraction(
+            door.Interactive.GetPath(),
+            new StringName("teleport")
+        );
+        door.Interactor.ServerTryStartInteraction(
+            door.Interactive.GetPath(),
+            new StringName(string.Empty)
+        );
+
+        AssertThat(startedCount).IsEqual(0);
+        AssertThat(rejectedCount).IsEqual(2);
+    }
+
+    [TestCase]
+    public async Task ReleasingAnotherInputKeepsTheActiveInteraction()
+    {
+        TestWorld testWorld = BuildWorld();
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+
+        AssertThat(testWorld.Interactor.TryEndInteractionInput(new StringName("inspect")))
+            .IsFalse();
+
+        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
+        AssertThat(testWorld.Owner.EndCount).IsEqual(0);
+        AssertThat(testWorld.Interactor.TryEndInteractionInput(InteractInput)).IsTrue();
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Owner.EndCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public async Task ServerKeepsAReservationWhenTheReleasedActionDoesNotMatch()
+    {
+        TestWorld testWorld = BuildWorld();
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+
+        testWorld.Interactor.ServerTryEndInteraction(new StringName("alternative"));
+
+        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
+        AssertThat(testWorld.Owner.EndCount).IsEqual(0);
+
+        testWorld.Interactor.ServerTryEndInteraction(new StringName("activate"));
+
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Owner.EndCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public async Task ReleaseUsesTheStartedActionEvenWhenTheInputNowResolvesToAnother()
+    {
+        TestWorld testWorld = BuildWorld();
+        InteractionAction alternative = CreateAction("alternative");
+        AddAction(testWorld.Interactive, alternative);
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+        AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
+        AssertThat(
+                testWorld.Interactive.ResolveActionForInput(testWorld.Interactor, InteractInput)
+                    == alternative
+            )
+            .IsTrue();
+
+        AssertThat(testWorld.Interactor.TryEndInteractionInput(InteractInput)).IsTrue();
+
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Owner.EndCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public async Task AutomaticActionStartsOnFocusAndStaysOutOfPrompts()
+    {
+        TestWorld testWorld = BuildWorld();
+        testWorld.Action.Automatic = true;
+        await testWorld.Runner.SimulateFrames(1);
+
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+
+        AssertThat(testWorld.Owner.StartCount).IsEqual(1);
+        AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
+        InteractionTargetPresentation presentation = testWorld.Interactive.GetPresentation(
+            testWorld.Interactor,
+            true
+        );
+        AssertThat(presentation.Actions.Count).IsEqual(1);
+        AssertThat(presentation.Actions[0].IsAutomatic).IsTrue();
+        AssertThat(presentation.HasPromptableAction).IsFalse();
+    }
+
+    [TestCase]
+    public async Task AutomaticActionDoesNotAnswerAPlayerInput()
+    {
+        TestWorld testWorld = BuildWorld();
+        InteractionAction automatic = CreateAction("automatic");
+        automatic.Automatic = true;
+        AddAction(testWorld.Interactive, automatic);
+        await testWorld.Runner.SimulateFrames(1);
+
+        AssertThat(testWorld.Interactive.ResolveAutomaticAction(testWorld.Interactor) == automatic)
+            .IsTrue();
+        AssertThat(
+                testWorld.Interactive.ResolveActionForInput(testWorld.Interactor, InteractInput)
+                    == testWorld.Action
+            )
+            .IsTrue();
+    }
+
     private static string Describe(InteractionAvailability availability) =>
         availability switch
         {
@@ -873,6 +1126,12 @@ public sealed partial class InteractionBehaviorTest
             action,
             statefulRule
         );
+    }
+
+    private static void AddAction(InteractiveComponent interactive, InteractionAction action)
+    {
+        interactive.AddChild(action);
+        interactive.Actions.Add(action);
     }
 
     private static InteractionAction CreateAction(string id, params InteractionRule[] rules)
@@ -967,13 +1226,19 @@ public sealed partial class InteractionBehaviorTest
         public int AuthorityStateChanges { get; private set; }
         public int PresentationStateChanges { get; private set; }
 
-        public void OnInteractionInputStarted(InteractionInteractor interactor)
+        public void OnInteractionInputStarted(
+            InteractionInteractor interactor,
+            InteractionAction action
+        )
         {
             StartCount++;
-            Interactive?.StartInteractionPhase(interactor);
+            Interactive?.StartInteractionPhase(interactor, action);
         }
 
-        public void OnInteractionInputEnded(InteractionInteractor interactor) => EndCount++;
+        public void OnInteractionInputEnded(
+            InteractionInteractor interactor,
+            InteractionAction action
+        ) => EndCount++;
 
         public void OnInteractionStateChangedAuthority(int oldState, int newState)
         {

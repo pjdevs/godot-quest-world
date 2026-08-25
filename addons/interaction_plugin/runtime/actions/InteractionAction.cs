@@ -25,6 +25,24 @@ public partial class InteractionAction : Node
     [Export]
     public Godot.Collections.Array<InteractionRule> Rules { get; set; } = new();
 
+    /// <summary>
+    /// Gets or sets the local weight used when several actions of this target share one input.
+    /// </summary>
+    /// <remarks>
+    /// The resolver prefers an allowed action over a blocked one, then the highest priority. A
+    /// remaining tie is broken by ascending action identifier so the choice stays deterministic.
+    /// </remarks>
+    [Export]
+    public int Priority { get; set; }
+
+    /// <summary>Gets or sets whether local focus requests this action without any player input.</summary>
+    /// <remarks>
+    /// An automatic action still goes through the authoritative command path and is still presented,
+    /// but prompts omit it because no input is bound to it.
+    /// </remarks>
+    [Export]
+    public bool Automatic { get; set; }
+
     /// <summary>Godot callback that reports a missing definition.</summary>
     public override void _Ready()
     {

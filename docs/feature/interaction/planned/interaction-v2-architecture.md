@@ -849,6 +849,8 @@ reason
 
 afin que l'UI puisse rattacher le refus à la bonne action.
 
+Ce contrat vaut aussi pour les gestes : voir §18.1, la couche de geste est locale et ne transporte rien de nouveau.
+
 ---
 
 # 11. Explicit executor model
@@ -1195,6 +1197,76 @@ C'est précisément cette séparation qu'il faut préserver.
 
 **Note de dev**: Comme dit plus haut seul le Hold reste essentiel donc le livrera direct
 ça permettre aussi de valider qu'on peut s'implémenter différents type d'action.
+
+## 18.1 Input = sélection, jamais une garde
+
+Décision prise après la Task 5. Ce cas est structurant, il doit être pris en compte avant d'écrire la Task 7.
+
+### Règle
+
+> L'input, geste compris, est un **mécanisme de sélection local**. Il ne garde rien.
+>
+> Tout ce qui doit être gardé est soit une **rule d'availability** — est-ce que j'ai le droit ? — soit une **durée d'exécution** — pendant combien de temps suis-je engagé ? Ces deux-là sont autoritaires.
+
+Le contrat §10 ne change donc pas. Le client résout `(target, input, geste)` → `actionId` localement et envoie `targetPath + actionId`, exactement comme la Task 5 le fait déjà. La couche de geste est entièrement cliente.
+
+### Pourquoi un geste forgé ne gagne rien
+
+Un client qui prétend « j'ai fait hold E » au lieu de « tap E » ne fait que désigner une autre action. Le serveur la re-résout depuis sa propre scène et réévalue ses rules. Si `force_open` demande un pied-de-biche, c'est la rule qui garde, pas le geste.
+
+Le seul gain d'un geste forgé est d'économiser le temps d'appui, ce qui n'est pas un privilège.
+
+Rendre le seuil autoritaire coûterait un RPC de press supplémentaire à chaque interaction, un état de geste en attente par interactor, une tolérance de jitter et une divergence de prédiction entre la barre cliente et le chrono serveur — pour zéro gain de sécurité.
+
+### Le vrai hold gameplay est une execution, pas un geste
+
+Quand le joueur doit **rester engagé**, cinq secondes devant un terminal et vulnérable, l'autorité est dans l'exécution :
+
+```text
+client  : commande l'action
+serveur : démarre une execution Running et possède le chrono
+serveur : valide en continu portée, angle, LOS, availability
+serveur : complète quand SON chrono est écoulé
+client  : un end anticipé ne fait qu'annuler
+```
+
+Le serveur n'a pas besoin du `end` du client pour terminer : son propre chrono complète. Un client forgé ne peut donc ni raccourcir ni allonger la durée.
+
+Résidu accepté : un client qui ne renvoie jamais son `end` reste « en train de tenir » sans tenir. Il ne gagne rien de plus, la portée et le LOS restant validés pendant toute l'exécution — il doit rester physiquement devant l'objet.
+
+### Seuil de geste ≠ durée d'exécution
+
+§12 pose déjà la distinction. Elle doit être appliquée strictement, sinon deux chronos font le même travail et la barre de progression redevient client-authoritative.
+
+```text
+seuil de hold     = sélection, local,   feedback local
+Running execution = durée,     serveur, feedback autoritaire
+```
+
+Les combinaisons doivent être exprimables :
+
+- « hold E 5 s pour hacker, barre de progression, annulé si je lâche » est une action **immédiate**, seuil `0`, avec une execution `Running` de 5 s et `CancelOnInputReleased`. La barre vient de l'exécution autoritaire, pas du timer d'input.
+- « E ouvre, E maintenu 1 s défonce » est deux actions, seuil `1 s` local, exécutions instantanées.
+- Composer les deux étages est possible mais **additionne** les durées : un seuil de 5 s devant un Running de 5 s fait 10 s pour le joueur. À n'utiliser que si c'est réellement voulu.
+
+Le seuil n'existe donc que pour **départager** plusieurs actions sur un même input. Une action seule sur son input a un seuil de `0`.
+
+### Une action soutenue doit partir au seuil
+
+Une action `CancelOnInputReleased` est soutenue par **la même touche** que celle qui l'a sélectionnée. Si elle partait au relâchement, son start et son end arriveraient au même instant : elle naîtrait annulée.
+
+```text
+CancelOnInputReleased
+→ déclenchement au seuil, jamais au relâchement
+```
+
+Cela tranche par la correction, et non par le feeling, le choix du moment de déclenchement : **au seuil**. Le multi-marche — 1 s ouvrir, 3 s défoncer — exigerait le relâchement et est donc incompatible avec les actions soutenues. Le retenir comme non-objectif tant qu'un besoin réel n'apparaît pas.
+
+### Emplacement
+
+Le chrono de geste et le ratio de progression appartiennent à `InteractionInteractor`, conformément à la note de dev de §9. Le contrôleur d'input du jeu continue d'appeler press et release sans rien connaître des gestes.
+
+Deux actions `Allowed` sur le même couple `(input, trigger)` restent une erreur de configuration à signaler dans l'éditeur en Task 11 : le joueur n'a aucun moyen de les distinguer.
 
 ---
 
@@ -1734,6 +1806,10 @@ CancelExecution
 ConcurrencyGroup
 CancelOnInputReleased
 ```
+
+### Hold
+
+Livrer également le Hold spécifié en §18.1. La couche de geste est entièrement locale et ne touche pas au contrat réseau ; ce qui est autoritaire, c'est l'execution `Running` et sa validation continue. Une action `CancelOnInputReleased` se déclenche au seuil, jamais au relâchement. La mémoire locale `input → actionId` introduite en Task 5 disparaît ici, remplacée par l'`ExecutionId`.
 
 ### Replace
 

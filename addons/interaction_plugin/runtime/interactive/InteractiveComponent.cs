@@ -7,7 +7,10 @@ using QuestWorld.Interaction.Runtime.State;
 
 namespace QuestWorld.Interaction.Runtime.Interactive;
 
-internal readonly record struct InteractionStartResult(InteractionInteractor Interactor);
+internal readonly record struct InteractionStartResult(
+    InteractionInteractor Interactor,
+    InteractionAction Action
+);
 
 internal readonly record struct InteractionPhaseStartResult(
     InteractionInteractor Interactor,
@@ -21,7 +24,10 @@ internal readonly record struct InteractionPhaseEndResult(
     InteractionState NextState
 );
 
-internal readonly record struct InteractionReleaseResult(InteractionInteractor Interactor);
+internal readonly record struct InteractionReleaseResult(
+    InteractionInteractor Interactor,
+    InteractionAction Action
+);
 
 /// <summary>
 /// Defines an interactable target, evaluates its rules, and owns any active interaction phase.
@@ -38,15 +44,23 @@ public partial class InteractiveComponent : Node
     /// start the concrete action here and may synchronously call <see cref="StartInteractionPhase"/>.
     /// </summary>
     /// <param name="interactor">Interactor that requested the interaction.</param>
+    /// <param name="action">Action of this target that was requested and validated.</param>
     [Signal]
-    public delegate void InteractionInputStartedEventHandler(InteractionInteractor interactor);
+    public delegate void InteractionInputStartedEventHandler(
+        InteractionInteractor interactor,
+        InteractionAction action
+    );
 
     /// <summary>
     /// Emitted on the authoritative instance when the active interactor releases input or is removed.
     /// </summary>
     /// <param name="interactor">Interactor whose active input was released.</param>
+    /// <param name="action">Action that owned the released phase.</param>
     [Signal]
-    public delegate void InteractionInputEndedEventHandler(InteractionInteractor interactor);
+    public delegate void InteractionInputEndedEventHandler(
+        InteractionInteractor interactor,
+        InteractionAction action
+    );
 
     /// <summary>
     /// Emitted on any peer whose visible interaction status may have changed.
@@ -91,10 +105,6 @@ public partial class InteractiveComponent : Node
     [Export(PropertyHint.MultilineText)]
     public string Description { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets whether local focus immediately requests interaction without player input.</summary>
-    [Export]
-    public bool AutomaticInteraction { get; set; }
-
     /// <summary>Gets or sets the optional prompt scene instantiated once per presented action.</summary>
     /// <remarks>
     /// The focused target shows one prompt widget per presented action. Stacking and the
@@ -132,8 +142,11 @@ public partial class InteractiveComponent : Node
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
     private Area3D? _interactionArea;
     private InteractionInteractor? _activeInteractor;
+    private InteractionAction? _activeAction;
 
     internal InteractionInteractor? ActiveInteractor => _activeInteractor;
+
+    internal InteractionAction? ActiveAction => _activeAction;
 
     /// <summary>Godot callback that validates configuration and connects area and state signals.</summary>
     public override void _Ready()
@@ -266,6 +279,141 @@ public partial class InteractiveComponent : Node
         return new InteractionAllowed();
     }
 
+    /// <summary>Resolves one action of this target from its stable identifier.</summary>
+    /// <remarks>
+    /// This is the only supported way for the authoritative peer to turn a requested identifier into
+    /// an action. The scene owns the mapping, so a client can never designate an executor or an
+    /// action this target does not declare.
+    /// </remarks>
+    /// <param name="actionId">Stable identifier carried by the interaction command.</param>
+    /// <returns>The matching action, or null when this target declares no such action.</returns>
+    public InteractionAction? ResolveAction(StringName actionId)
+    {
+        if (actionId is null || actionId.IsEmpty)
+        {
+            return null;
+        }
+
+        foreach (InteractionAction action in Actions)
+        {
+            if (action?.Definition is not null && action.Definition.Id == actionId)
+            {
+                return action;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Resolves the action this target offers for one project input action.</summary>
+    /// <remarks>
+    /// Hidden actions are ignored, so an input can be reused by mutually exclusive actions such as
+    /// <c>open</c> and <c>close</c>. A blocked action is still resolved so the refusal can be
+    /// explained instead of the input silently doing nothing.
+    /// </remarks>
+    /// <param name="interactor">Interactor for which availability is evaluated.</param>
+    /// <param name="inputActionName">Project input action pressed by the player.</param>
+    /// <returns>The preferred allowed or blocked action, or null when the input offers none.</returns>
+    public InteractionAction? ResolveActionForInput(
+        InteractionInteractor interactor,
+        StringName inputActionName
+    )
+    {
+        InteractionAction? best = null;
+        int bestRank = 0;
+        foreach (InteractionAction action in Actions)
+        {
+            if (action?.Definition is null || action.Definition.InputActionName != inputActionName)
+            {
+                continue;
+            }
+
+            if (!TryRankAction(interactor, action, out int rank))
+            {
+                continue;
+            }
+
+            if (best is null || IsBetterCandidate(action, rank, best, bestRank))
+            {
+                best = action;
+                bestRank = rank;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>Resolves the action this target offers to a focusing interactor without input.</summary>
+    /// <remarks>
+    /// A blocked automatic action is still resolved so focusing a target that cannot run it reports
+    /// the reason, exactly like a pressed input would.
+    /// </remarks>
+    /// <param name="interactor">Interactor for which availability is evaluated.</param>
+    /// <returns>The preferred automatic action, or null when this target declares none.</returns>
+    public InteractionAction? ResolveAutomaticAction(InteractionInteractor interactor)
+    {
+        InteractionAction? best = null;
+        int bestRank = 0;
+        foreach (InteractionAction action in Actions)
+        {
+            if (action?.Definition is null || !action.Automatic)
+            {
+                continue;
+            }
+
+            if (!TryRankAction(interactor, action, out int rank))
+            {
+                continue;
+            }
+
+            if (best is null || IsBetterCandidate(action, rank, best, bestRank))
+            {
+                best = action;
+                bestRank = rank;
+            }
+        }
+
+        return best;
+    }
+
+    private bool TryRankAction(
+        InteractionInteractor interactor,
+        InteractionAction action,
+        out int rank
+    )
+    {
+        rank = EvaluateAvailability(interactor, action) switch
+        {
+            InteractionAllowed => 0,
+            InteractionBlocked => 1,
+            InteractionHidden => -1,
+        };
+        return rank >= 0;
+    }
+
+    private static bool IsBetterCandidate(
+        InteractionAction action,
+        int rank,
+        InteractionAction best,
+        int bestRank
+    )
+    {
+        if (rank != bestRank)
+        {
+            return rank < bestRank;
+        }
+
+        if (action.Priority != best.Priority)
+        {
+            return action.Priority > best.Priority;
+        }
+
+        return string.CompareOrdinal(
+                action.Definition!.Id.ToString(),
+                best.Definition!.Id.ToString()
+            ) < 0;
+    }
+
     /// <summary>Builds the local presentation snapshot for prompt or indication widgets.</summary>
     /// <remarks>
     /// One entry is produced per presentable action, in declaration order. Hidden actions are
@@ -346,7 +494,8 @@ public partial class InteractiveComponent : Node
             action.Definition.Label,
             action.Definition.Description,
             action.Definition.InputActionName,
-            availability
+            availability,
+            action.Automatic
         );
         return true;
     }
@@ -356,10 +505,11 @@ public partial class InteractiveComponent : Node
     /// </summary>
     /// <remarks>Called by <see cref="InteractionInteractor"/> on the server or offline host.</remarks>
     /// <param name="interactor">Interactor starting the gameplay action.</param>
+    /// <param name="action">Action of this target resolved from the requested identifier.</param>
     /// <returns><see langword="true"/> when validation succeeded and the signal was emitted.</returns>
-    public bool StartInteraction(InteractionInteractor interactor)
+    public bool StartInteraction(InteractionInteractor interactor, InteractionAction action)
     {
-        InteractionStartResult? result = StartInteractionCore(interactor);
+        InteractionStartResult? result = StartInteractionCore(interactor, action);
         if (result is null)
         {
             return false;
@@ -369,19 +519,22 @@ public partial class InteractiveComponent : Node
         return true;
     }
 
-    internal InteractionStartResult? StartInteractionCore(InteractionInteractor interactor)
+    internal InteractionStartResult? StartInteractionCore(
+        InteractionInteractor interactor,
+        InteractionAction action
+    )
     {
-        if (EvaluateAvailability(interactor) is not InteractionAllowed)
+        if (action is null || EvaluateAvailability(interactor, action) is not InteractionAllowed)
         {
             return null;
         }
 
-        return new InteractionStartResult(interactor);
+        return new InteractionStartResult(interactor, action);
     }
 
     private void DispatchInteractionStart(in InteractionStartResult result)
     {
-        EmitSignal(SignalName.InteractionInputStarted, result.Interactor);
+        EmitSignal(SignalName.InteractionInputStarted, result.Interactor, result.Action);
     }
 
     /// <summary>Reserves this stateful interaction and moves it to <see cref="InteractionState.Activating"/>.</summary>
@@ -390,10 +543,11 @@ public partial class InteractiveComponent : Node
     /// long-running interactions. Returns false on clients or stateless targets.
     /// </remarks>
     /// <param name="interactor">Interactor to reserve until the phase ends or input is released.</param>
+    /// <param name="action">Action received with <see cref="InteractionInputStarted"/>.</param>
     /// <returns><see langword="true"/> when the server started and reserved the phase.</returns>
-    public bool StartInteractionPhase(InteractionInteractor interactor)
+    public bool StartInteractionPhase(InteractionInteractor interactor, InteractionAction action)
     {
-        InteractionPhaseStartResult? result = StartInteractionPhaseCore(interactor);
+        InteractionPhaseStartResult? result = StartInteractionPhaseCore(interactor, action);
         if (result is null)
         {
             return false;
@@ -407,17 +561,21 @@ public partial class InteractiveComponent : Node
         if (ActiveInteractor == result.Value.Interactor)
         {
             _activeInteractor = null;
+            _activeAction = null;
         }
 
         return false;
     }
 
     internal InteractionPhaseStartResult? StartInteractionPhaseCore(
-        InteractionInteractor interactor
+        InteractionInteractor interactor,
+        InteractionAction action
     )
     {
         if (
             interactor is null
+            || action is null
+            || !Actions.Contains(action)
             || ActiveInteractor is not null
             || Stateful is null
             || Stateful.State != InteractionState.Idle
@@ -428,6 +586,7 @@ public partial class InteractiveComponent : Node
         }
 
         _activeInteractor = interactor;
+        _activeAction = action;
         return new InteractionPhaseStartResult(interactor, Stateful, InteractionState.Activating);
     }
 
@@ -461,6 +620,7 @@ public partial class InteractiveComponent : Node
 
         InteractionInteractor interactor = ActiveInteractor;
         _activeInteractor = null;
+        _activeAction = null;
         return new InteractionPhaseEndResult(interactor, Stateful, nextState);
     }
 
@@ -485,18 +645,20 @@ public partial class InteractiveComponent : Node
 
     internal InteractionReleaseResult? ReleaseInteractionInputCore(InteractionInteractor interactor)
     {
-        if (ActiveInteractor != interactor)
+        if (ActiveInteractor != interactor || _activeAction is null)
         {
             return null;
         }
 
+        InteractionAction action = _activeAction;
         _activeInteractor = null;
-        return new InteractionReleaseResult(interactor);
+        _activeAction = null;
+        return new InteractionReleaseResult(interactor, action);
     }
 
     private void DispatchInteractionRelease(in InteractionReleaseResult result)
     {
-        EmitSignal(SignalName.InteractionInputEnded, result.Interactor);
+        EmitSignal(SignalName.InteractionInputEnded, result.Interactor, result.Action);
         NotifyStatusChanged();
     }
 
@@ -536,6 +698,7 @@ public partial class InteractiveComponent : Node
         }
 
         _activeInteractor = null;
+        _activeAction = null;
         PurgeInvalidInteractors();
         foreach (
             InteractionInteractor interactor in new List<InteractionInteractor>(_presentInteractors)
