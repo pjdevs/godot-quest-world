@@ -3,6 +3,11 @@ using Godot;
 
 namespace QuestWorld.Interaction.Runtime.State;
 
+internal readonly record struct InteractionStateTransition(
+    InteractionState OldState,
+    InteractionState NewState
+);
+
 /// <summary>
 /// Owns an interaction state that can be changed authoritatively, replicated, and persisted.
 /// </summary>
@@ -106,27 +111,58 @@ public partial class InteractionStateful : Node
         ApplyState(savedState.State, forceSignals: true);
     }
 
-    private bool ApplyState(InteractionState state, bool forceSignals = false)
+    internal InteractionStateTransition? ApplyStateCore(
+        InteractionState state,
+        bool forceTransition = false
+    )
     {
-        if (_state == state && !forceSignals)
+        if (_state == state && !forceTransition)
         {
-            return false;
+            return null;
         }
 
         InteractionState oldState = _state;
         _state = state;
-        EmitSignal(SignalName.InteractionStateChanged, (int)oldState, (int)state);
+
+        return new InteractionStateTransition(oldState, state);
+    }
+
+    private bool ApplyState(InteractionState state, bool forceSignals = false)
+    {
+        InteractionStateTransition? transition = ApplyStateCore(state, forceSignals);
+        if (transition is null)
+        {
+            return false;
+        }
+
+        DispatchStateTransition(transition.Value);
+        return true;
+    }
+
+    internal void DispatchStateTransition(in InteractionStateTransition transition)
+    {
+        EmitSignal(
+            SignalName.InteractionStateChanged,
+            (int)transition.OldState,
+            (int)transition.NewState
+        );
 
         if (Multiplayer.IsServer())
         {
-            EmitSignal(SignalName.InteractionStateChangedAuthority, (int)oldState, (int)state);
+            EmitSignal(
+                SignalName.InteractionStateChangedAuthority,
+                (int)transition.OldState,
+                (int)transition.NewState
+            );
         }
 
         if (!OS.HasFeature("dedicated_server"))
         {
-            EmitSignal(SignalName.InteractionStateChangedPresentation, (int)oldState, (int)state);
+            EmitSignal(
+                SignalName.InteractionStateChangedPresentation,
+                (int)transition.OldState,
+                (int)transition.NewState
+            );
         }
-
-        return true;
     }
 }

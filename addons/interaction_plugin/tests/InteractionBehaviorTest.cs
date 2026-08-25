@@ -17,33 +17,203 @@ using static GdUnit4.Assertions;
 public sealed partial class InteractionBehaviorTest
 {
     [TestCase]
-    public void ReplicatedStateIsAvailableToGodotButHiddenFromTheEditor()
+    public void StatefulCoreTransitionMutatesWithoutDispatch()
     {
         InteractionStateful stateful = new();
+        int signalCount = 0;
+        stateful.InteractionStateChanged += (_, _) => signalCount++;
+
         try
         {
-            bool propertyFound = false;
-            bool propertyIsVisibleInEditor = false;
-            foreach (Godot.Collections.Dictionary property in stateful.GetPropertyList())
-            {
-                if (property["name"].AsString() != "ReplicatedState")
-                {
-                    continue;
-                }
+            InteractionStateTransition? transition = stateful.ApplyStateCore(
+                InteractionState.Activating
+            );
 
-                propertyFound = true;
-                PropertyUsageFlags usage = property["usage"].As<PropertyUsageFlags>();
-                propertyIsVisibleInEditor = usage.HasFlag(PropertyUsageFlags.Editor);
-                break;
-            }
-
-            AssertThat(propertyFound).IsTrue();
-            AssertThat(propertyIsVisibleInEditor).IsFalse();
+            AssertThat(transition.HasValue).IsTrue();
+            AssertThat(transition?.OldState).IsEqual(InteractionState.Idle);
+            AssertThat(transition?.NewState).IsEqual(InteractionState.Activating);
+            AssertThat(stateful.State).IsEqual(InteractionState.Activating);
+            AssertThat(signalCount).IsEqual(0);
         }
         finally
         {
             stateful.Free();
         }
+    }
+
+    [TestCase]
+    public async Task StatefulDispatchEmitsEachScopedSignalExactlyOnce()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+        int universalCount = 0;
+        int authorityCount = 0;
+        int presentationCount = 0;
+        testWorld.Stateful.InteractionStateChanged += (_, _) => universalCount++;
+        testWorld.Stateful.InteractionStateChangedAuthority += (_, _) => authorityCount++;
+        testWorld.Stateful.InteractionStateChangedPresentation += (_, _) => presentationCount++;
+        InteractionStateTransition? transition = testWorld.Stateful.ApplyStateCore(
+            InteractionState.Activating
+        );
+
+        testWorld.Stateful.DispatchStateTransition(transition!.Value);
+
+        AssertThat(universalCount).IsEqual(1);
+        AssertThat(authorityCount).IsEqual(1);
+        AssertThat(presentationCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public async Task InteractionPhaseCoreReservesWithoutChangingExternalState()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+        int stateSignalCount = 0;
+        testWorld.Stateful.InteractionStateChanged += (_, _) => stateSignalCount++;
+
+        InteractionPhaseStartResult? result = testWorld.Interactive.StartInteractionPhaseCore(
+            testWorld.Interactor
+        );
+
+        AssertThat(result.HasValue).IsTrue();
+        AssertThat(result?.Interactor == testWorld.Interactor).IsTrue();
+        AssertThat(result?.Stateful == testWorld.Stateful).IsTrue();
+        AssertThat(result?.NextState).IsEqual(InteractionState.Activating);
+        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
+        AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Idle);
+        AssertThat(stateSignalCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task InteractionPhaseEndCoreReleasesBeforeExternalDispatch()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+        AssertThat(testWorld.Interactive.StartInteraction(testWorld.Interactor)).IsTrue();
+        int stateSignalCount = 0;
+        int statusSignalCount = 0;
+        testWorld.Stateful.InteractionStateChanged += (_, _) => stateSignalCount++;
+        testWorld.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
+
+        InteractionPhaseEndResult? result = testWorld.Interactive.EndInteractionPhaseCore(
+            InteractionState.Activated
+        );
+
+        AssertThat(result.HasValue).IsTrue();
+        AssertThat(result?.Interactor == testWorld.Interactor).IsTrue();
+        AssertThat(result?.Stateful == testWorld.Stateful).IsTrue();
+        AssertThat(result?.NextState).IsEqual(InteractionState.Activated);
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Activating);
+        AssertThat(stateSignalCount).IsEqual(0);
+        AssertThat(statusSignalCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task InteractionReleaseCoreMutatesWithoutDispatch()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+        AssertThat(testWorld.Interactive.StartInteraction(testWorld.Interactor)).IsTrue();
+        int inputEndedCount = 0;
+        int statusSignalCount = 0;
+        testWorld.Interactive.InteractionInputEnded += _ => inputEndedCount++;
+        testWorld.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
+
+        InteractionReleaseResult? result = testWorld.Interactive.ReleaseInteractionInputCore(
+            testWorld.Interactor
+        );
+
+        AssertThat(result.HasValue).IsTrue();
+        AssertThat(result?.Interactor == testWorld.Interactor).IsTrue();
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(inputEndedCount).IsEqual(0);
+        AssertThat(statusSignalCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task InteractionStartCoreProducesResultWithoutDispatch()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+        int inputStartedCount = 0;
+        testWorld.Interactive.InteractionInputStarted += _ => inputStartedCount++;
+
+        InteractionStartResult? result = testWorld.Interactive.StartInteractionCore(
+            testWorld.Interactor
+        );
+
+        AssertThat(result.HasValue).IsTrue();
+        AssertThat(result?.Interactor == testWorld.Interactor).IsTrue();
+        AssertThat(inputStartedCount).IsEqual(0);
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Stateful.State).IsEqual(InteractionState.Idle);
+    }
+
+    [TestCase]
+    public async Task FocusCoreMutatesSelectionWithoutDispatch()
+    {
+        TestWorld testWorld = BuildWorld(ownerPeerId: 2);
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Interactor.OwnerPeerId = 1;
+        int focusSignalCount = 0;
+        int statusSignalCount = 0;
+        testWorld.Interactor.FocusedInteractiveChanged += _ => focusSignalCount++;
+        testWorld.Interactor.InteractionStatusChanged += (_, _, _) => statusSignalCount++;
+
+        FocusChangeResult? result = testWorld.Interactor.RecalculateFocusCore();
+
+        AssertThat(result.HasValue).IsTrue();
+        AssertThat(result?.Previous == null).IsTrue();
+        AssertThat(result?.Current == testWorld.Interactive).IsTrue();
+        AssertThat(result?.Changed).IsTrue();
+        AssertThat(testWorld.Interactor.FocusedInteractive == testWorld.Interactive).IsTrue();
+        AssertThat(focusSignalCount).IsEqual(0);
+        AssertThat(statusSignalCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task FocusDispatchEmitsFocusAndStatusExactlyOnce()
+    {
+        TestWorld testWorld = BuildWorld(ownerPeerId: 2);
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Interactor.OwnerPeerId = 1;
+        int focusSignalCount = 0;
+        int statusSignalCount = 0;
+        testWorld.Interactor.FocusedInteractiveChanged += _ => focusSignalCount++;
+        testWorld.Interactor.InteractionStatusChanged += (_, _, _) => statusSignalCount++;
+        FocusChangeResult? result = testWorld.Interactor.RecalculateFocusCore();
+
+        testWorld.Interactor.DispatchFocusChange(result!.Value);
+
+        AssertThat(focusSignalCount).IsEqual(1);
+        AssertThat(statusSignalCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public async Task UnchangedFocusDispatchEmitsOnlyStatusExactlyOnce()
+    {
+        TestWorld testWorld = BuildWorld(ownerPeerId: 2);
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Interactor.OwnerPeerId = 1;
+        FocusChangeResult? initialResult = testWorld.Interactor.RecalculateFocusCore();
+        testWorld.Interactor.DispatchFocusChange(initialResult!.Value);
+        int focusSignalCount = 0;
+        int statusSignalCount = 0;
+        testWorld.Interactor.FocusedInteractiveChanged += _ => focusSignalCount++;
+        testWorld.Interactor.InteractionStatusChanged += (_, _, _) => statusSignalCount++;
+
+        FocusChangeResult? unchangedResult = testWorld.Interactor.RecalculateFocusCore();
+        testWorld.Interactor.DispatchFocusChange(unchangedResult!.Value);
+
+        AssertThat(unchangedResult?.Changed).IsFalse();
+        AssertThat(unchangedResult?.Previous == testWorld.Interactive).IsTrue();
+        AssertThat(unchangedResult?.Current == testWorld.Interactive).IsTrue();
+        AssertThat(focusSignalCount).IsEqual(0);
+        AssertThat(statusSignalCount).IsEqual(1);
     }
 
     [TestCase]

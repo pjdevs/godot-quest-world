@@ -6,6 +6,22 @@ using QuestWorld.Interaction.Runtime.State;
 
 namespace QuestWorld.Interaction.Runtime.Interactive;
 
+internal readonly record struct InteractionStartResult(InteractionInteractor Interactor);
+
+internal readonly record struct InteractionPhaseStartResult(
+    InteractionInteractor Interactor,
+    InteractionStateful Stateful,
+    InteractionState NextState
+);
+
+internal readonly record struct InteractionPhaseEndResult(
+    InteractionInteractor Interactor,
+    InteractionStateful Stateful,
+    InteractionState NextState
+);
+
+internal readonly record struct InteractionReleaseResult(InteractionInteractor Interactor);
+
 /// <summary>
 /// Defines an interactable target, evaluates its rules, and owns any active interaction phase.
 /// </summary>
@@ -215,13 +231,29 @@ public partial class InteractiveComponent : Node
     /// <returns><see langword="true"/> when validation succeeded and the signal was emitted.</returns>
     public bool StartInteraction(InteractionInteractor interactor)
     {
-        if (EvaluateStatus(interactor) is not InteractionAllowed)
+        InteractionStartResult? result = StartInteractionCore(interactor);
+        if (result is null)
         {
             return false;
         }
 
-        EmitSignal(SignalName.InteractionInputStarted, interactor);
+        DispatchInteractionStart(result.Value);
         return true;
+    }
+
+    internal InteractionStartResult? StartInteractionCore(InteractionInteractor interactor)
+    {
+        if (EvaluateStatus(interactor) is not InteractionAllowed)
+        {
+            return null;
+        }
+
+        return new InteractionStartResult(interactor);
+    }
+
+    private void DispatchInteractionStart(in InteractionStartResult result)
+    {
+        EmitSignal(SignalName.InteractionInputStarted, result.Interactor);
     }
 
     /// <summary>Reserves this stateful interaction and moves it to <see cref="InteractionState.Activating"/>.</summary>
@@ -233,6 +265,29 @@ public partial class InteractiveComponent : Node
     /// <returns><see langword="true"/> when the server started and reserved the phase.</returns>
     public bool StartInteractionPhase(InteractionInteractor interactor)
     {
+        InteractionPhaseStartResult? result = StartInteractionPhaseCore(interactor);
+        if (result is null)
+        {
+            return false;
+        }
+
+        if (result.Value.Stateful.SetState(result.Value.NextState))
+        {
+            return true;
+        }
+
+        if (ActiveInteractor == result.Value.Interactor)
+        {
+            _activeInteractor = null;
+        }
+
+        return false;
+    }
+
+    internal InteractionPhaseStartResult? StartInteractionPhaseCore(
+        InteractionInteractor interactor
+    )
+    {
         if (
             interactor is null
             || ActiveInteractor is not null
@@ -241,17 +296,11 @@ public partial class InteractiveComponent : Node
             || !Multiplayer.IsServer()
         )
         {
-            return false;
+            return null;
         }
 
         _activeInteractor = interactor;
-        if (Stateful.SetState(InteractionState.Activating))
-        {
-            return true;
-        }
-
-        _activeInteractor = null;
-        return false;
+        return new InteractionPhaseStartResult(interactor, Stateful, InteractionState.Activating);
     }
 
     /// <summary>Completes the active phase, releases its interactor, and applies the next state.</summary>
@@ -260,19 +309,31 @@ public partial class InteractiveComponent : Node
     /// <returns><see langword="true"/> when the state changed successfully.</returns>
     public bool EndInteractionPhase(InteractionState nextState)
     {
-        if (ActiveInteractor is null || Stateful is null || !Multiplayer.IsServer())
+        InteractionPhaseEndResult? result = EndInteractionPhaseCore(nextState);
+        if (result is null)
         {
             return false;
         }
 
-        _activeInteractor = null;
-        bool stateChanged = Stateful.SetState(nextState);
+        bool stateChanged = result.Value.Stateful.SetState(result.Value.NextState);
         if (!stateChanged)
         {
             NotifyStatusChanged();
         }
 
         return stateChanged;
+    }
+
+    internal InteractionPhaseEndResult? EndInteractionPhaseCore(InteractionState nextState)
+    {
+        if (ActiveInteractor is null || Stateful is null || !Multiplayer.IsServer())
+        {
+            return null;
+        }
+
+        InteractionInteractor interactor = ActiveInteractor;
+        _activeInteractor = null;
+        return new InteractionPhaseEndResult(interactor, Stateful, nextState);
     }
 
     /// <summary>Releases matching active input and emits <see cref="InteractionInputEnded"/>.</summary>
@@ -284,15 +345,31 @@ public partial class InteractiveComponent : Node
     /// <returns><see langword="true"/> when matching active input was released.</returns>
     public bool ReleaseInteractionInput(InteractionInteractor interactor)
     {
-        if (ActiveInteractor != interactor)
+        InteractionReleaseResult? result = ReleaseInteractionInputCore(interactor);
+        if (result is null)
         {
             return false;
         }
 
-        _activeInteractor = null;
-        EmitSignal(SignalName.InteractionInputEnded, interactor);
-        NotifyStatusChanged();
+        DispatchInteractionRelease(result.Value);
         return true;
+    }
+
+    internal InteractionReleaseResult? ReleaseInteractionInputCore(InteractionInteractor interactor)
+    {
+        if (ActiveInteractor != interactor)
+        {
+            return null;
+        }
+
+        _activeInteractor = null;
+        return new InteractionReleaseResult(interactor);
+    }
+
+    private void DispatchInteractionRelease(in InteractionReleaseResult result)
+    {
+        EmitSignal(SignalName.InteractionInputEnded, result.Interactor);
+        NotifyStatusChanged();
     }
 
     internal void NotifyStatusChanged()

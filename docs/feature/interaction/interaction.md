@@ -18,6 +18,20 @@ L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interacti
 - `InteractionPresenter`, `InteractionPromptWidget` et `InteractionIndicatorWidget` constituent la présentation facultative screen-space. Le prompt reste unique et centré sur l’ancre de la cible focusée ; un widget d’indication est présenté pour chaque interactable présent dans sa `IndicationArea`, sauf la cible focusée. Un widget projet peut implémenter `IInteractionWidget`.
 - `scenes/InteractiveActor.tscn` et `examples/InteractionDemo.tscn` fournissent un objet à activation longue avec réservation, transition vers `Activated`, synchroniseur d’état et widgets de démonstration.
 
+## V2 migration status
+
+### Task 1 — Mutation/dispatch boundaries
+
+La première étape de migration est terminée sans modifier le comportement public V1.
+
+- `InteractionStateful` applique désormais sa valeur dans `ApplyStateCore()` et retourne une `InteractionStateTransition`. Les signaux universel, autoritaire et de présentation sont émis ensuite par `DispatchStateTransition()`.
+- `InteractiveComponent` sépare la validation et les mutations locales de `StartInteraction`, `StartInteractionPhase`, `EndInteractionPhase` et `ReleaseInteractionInput` de leurs appels externes et notifications.
+- La réservation d'une phase est complète avant l'appel à `InteractionStateful.SetState()`. La libération de l'interacteur actif est complète avant tout signal de fin ou de statut.
+- `InteractionInteractor` calcule et applique le nouveau focus dans `RecalculateFocusCore()`, puis émet le changement de focus et le statut dans `DispatchFocusChange()`.
+- Les résultats core sont des types `internal` afin de tester directement les transitions sans agrandir l'API publique du plugin.
+
+Les tests distinguent maintenant la mutation pure des notifications : état et focus finaux sans signal pendant les appels core, puis chaque signal attendu exactement une fois pendant le dispatch.
+
 ## Integration
 
 1. Pour le Character du projet, `quest_world/character/Character.tscn` dérive de `addons/dummy_character_plugin/Character.tscn` et ajoute `InteractionInteractor` (distance calculée depuis le player propriétaire, direction calculée depuis la caméra) ainsi que `InteractionPresenter`. Le script global `quest_world/character/Character.cs` échantillonne l'action `interact` (`E` par défaut) et appelle les deux points d'entrée de l'interactor.

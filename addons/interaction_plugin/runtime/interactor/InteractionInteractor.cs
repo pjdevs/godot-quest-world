@@ -5,6 +5,12 @@ using QuestWorld.Interaction.Runtime.Interactive;
 
 namespace QuestWorld.Interaction.Runtime.Interactor;
 
+internal readonly record struct FocusChangeResult(
+    InteractiveComponent? Previous,
+    InteractiveComponent? Current,
+    bool Changed
+);
+
 /// <summary>
 /// Detects interaction targets, selects local focus, and routes input intentions to the server.
 /// </summary>
@@ -247,12 +253,25 @@ public partial class InteractionInteractor : Node
 
     internal bool RecalculateFocus()
     {
-        if (ViewOrigin is null || _resolvedInteractionOrigin is null)
+        FocusChangeResult? result = RecalculateFocusCore();
+        if (result is null)
         {
             return false;
         }
 
+        DispatchFocusChange(result.Value);
+        return result.Value.Changed;
+    }
+
+    internal FocusChangeResult? RecalculateFocusCore()
+    {
+        if (ViewOrigin is null || _resolvedInteractionOrigin is null)
+        {
+            return null;
+        }
+
         PurgeInvalidCandidates();
+        InteractiveComponent? previous = _focusedInteractive;
         InteractiveComponent? best = null;
         float bestScore = float.MinValue;
         foreach (InteractiveComponent candidate in _interactiveCandidates)
@@ -272,25 +291,25 @@ public partial class InteractionInteractor : Node
 
         if (_focusedInteractive == best)
         {
-            if (best is not null)
-            {
-                EmitStatusFor(best);
-            }
-
-            return false;
+            return new FocusChangeResult(previous, best, Changed: false);
         }
 
         _focusedInteractive = best;
-        Variant focusedInteractive = _focusedInteractive is null
-            ? new Variant()
-            : _focusedInteractive;
-        EmitSignal(SignalName.FocusedInteractiveChanged, focusedInteractive);
-        if (best is not null)
+        return new FocusChangeResult(previous, best, Changed: true);
+    }
+
+    internal void DispatchFocusChange(in FocusChangeResult result)
+    {
+        if (result.Changed)
         {
-            EmitStatusFor(best);
+            Variant focusedInteractive = result.Current is null ? new Variant() : result.Current;
+            EmitSignal(SignalName.FocusedInteractiveChanged, focusedInteractive);
         }
 
-        return true;
+        if (result.Current is not null)
+        {
+            EmitStatusFor(result.Current);
+        }
     }
 
     internal float CalculateInteractionScore(InteractiveComponent interactive)
