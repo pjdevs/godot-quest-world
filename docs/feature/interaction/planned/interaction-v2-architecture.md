@@ -1940,6 +1940,8 @@ sans rendre le runtime `[Tool]`.
 
 Conserver le pattern editor/runtime déjà adopté par le projet.
 
+**État**: livré. `InteractionValidator` valide huit types (les trois composants principaux, `InteractionAction`, `InteractionActionDefinition`, les deux executors d'état et `StatefulStateInteractionRule`) et couvre toute la liste du §26. Deux choix se sont imposés. D'abord les diagnostics croisés — `Id` dupliqué, deux actions partageant le couple (`input`, `HoldThreshold`) — appartiennent à l'`InteractiveComponent` : une action ne connaît pas ses voisines. Ensuite `StatefulPath` n'est résolu que depuis l'`InteractiveComponent` et seulement s'il est dans l'arbre, parce que le path est relatif à l'interactive ; une rule ou une action inspectée seule ne signale que le vide, jamais un faux « ne résout pas ». L'`InputActionName` d'une definition est en plus confronté à l'`InputMap` du projet.
+
 ---
 
 ## Task 12 — Remove V1 compatibility layer

@@ -31,11 +31,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void InteractiveComponentAcceptsAssignedAreaAndAnchor()
     {
-        InteractiveComponent interactive = new()
-        {
-            InteractionArea = new Area3D(),
-            InteractionAnchor = new Node3D(),
-        };
+        InteractiveComponent interactive = NewConfiguredInteractive();
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
@@ -45,11 +41,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void InteractiveComponentAllowsOptionalReferencesToRemainUnset()
     {
-        InteractiveComponent interactive = new()
-        {
-            InteractionArea = new Area3D(),
-            InteractionAnchor = new Node3D(),
-        };
+        InteractiveComponent interactive = NewConfiguredInteractive();
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
@@ -259,5 +251,111 @@ public sealed partial class InteractionConfigurationTest
         {
             interactive.Free();
         }
+    }
+
+    [TestCase]
+    public void InteractiveReportsActionsWithoutDefinitionOrExecutor()
+    {
+        InteractiveComponent interactive = new()
+        {
+            InteractionArea = new Area3D(),
+            InteractionAnchor = new Node3D(),
+            Actions = new() { new InteractionAction() },
+        };
+
+        string[] warnings = InteractionValidator.Validate(interactive).ToArray();
+
+        AssertThat(warnings.Contains("Actions[0] has no Definition.")).IsTrue();
+    }
+
+    [TestCase]
+    public void InteractiveReportsDuplicateActionIds()
+    {
+        InteractionActionDefinition definition = new() { Id = "open" };
+        InteractiveComponent interactive = new()
+        {
+            InteractionArea = new Area3D(),
+            InteractionAnchor = new Node3D(),
+            Actions = new() { NewAction(definition), NewAction(definition) },
+        };
+
+        string[] warnings = InteractionValidator.Validate(interactive).ToArray();
+
+        AssertThat(warnings.Contains("Actions declare the action id 'open' more than once."))
+            .IsTrue();
+    }
+
+    [TestCase]
+    public void InteractiveReportsTwoActionsSharingOneTrigger()
+    {
+        InteractiveComponent interactive = new()
+        {
+            InteractionArea = new Area3D(),
+            InteractionAnchor = new Node3D(),
+            Actions = new()
+            {
+                NewAction(new InteractionActionDefinition { Id = "open" }),
+                NewAction(new InteractionActionDefinition { Id = "force" }),
+            },
+        };
+
+        string[] warnings = InteractionValidator.Validate(interactive).ToArray();
+
+        AssertThat(warnings.Any(warning => warning.Contains("share the input 'interact'")))
+            .IsTrue();
+    }
+
+    [TestCase]
+    public void ActionRequiresADefinitionAndAnExecutor()
+    {
+        InteractionAction action = new();
+
+        string[] warnings = InteractionValidator.Validate(action).ToArray();
+
+        AssertThat(warnings.Contains("Definition must be assigned.")).IsTrue();
+        AssertThat(warnings.Contains("Executor must be assigned.")).IsTrue();
+    }
+
+    [TestCase]
+    public void ActionDefinitionRequiresAnId()
+    {
+        InteractionActionDefinition definition = new();
+
+        string[] warnings = InteractionValidator.Validate(definition).ToArray();
+
+        AssertThat(warnings.Contains("Id must be assigned.")).IsTrue();
+    }
+
+    [TestCase]
+    public void ShortActionExecutorReportsAStateOutsideTheSchema()
+    {
+        SetStateInteractionExecutor executor = new()
+        {
+            Stateful = new StatefulComponent
+            {
+                Schema = new StateSchema { States = new() { "closed" } },
+            },
+            TargetState = "open",
+        };
+
+        string[] warnings = InteractionValidator.Validate(executor).ToArray();
+
+        AssertThat(warnings.Contains("TargetState 'open' is absent from the assigned StateSchema."))
+            .IsTrue();
+    }
+
+    private static InteractiveComponent NewConfiguredInteractive()
+    {
+        return new()
+        {
+            InteractionArea = new Area3D(),
+            InteractionAnchor = new Node3D(),
+            Actions = new() { NewAction(new InteractionActionDefinition { Id = "open" }) },
+        };
+    }
+
+    private static InteractionAction NewAction(InteractionActionDefinition definition)
+    {
+        return new() { Definition = definition, Executor = new SetStateInteractionExecutor() };
     }
 }

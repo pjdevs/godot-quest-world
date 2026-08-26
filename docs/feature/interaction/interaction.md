@@ -187,6 +187,32 @@ L'interaction ne connaît plus aucun état monde : elle ne le lit qu'à travers 
 Restaient volontairement absents de cette étape : l'`ExecutionId`, `ConcurrencyGroup`, `CancelOnInputReleased` et le hold, tous livrés par la Task 7 ci-dessus. Restent hors périmètre les combinateurs de rules (Task 9), l'occlusion (Task 10) et les diagnostics editor des nœuds d'intégration (Task 11).
 
 
+### Task 11 — Editor diagnostics
+
+- `InteractionValidator` couvre maintenant huit types au lieu de quatre : il ajoute `InteractionAction`,
+  `InteractionActionDefinition`, `SetStateInteractionExecutor` et `StatefulStateInteractionRule` aux
+  composants principaux déjà validés. La résolution de type et la lecture des propriétés continuent de
+  passer par la classe globale / le chemin de script et par `Object.Get()`, donc les diagnostics
+  fonctionnent sur les placeholders editor sans rendre le runtime `[Tool]`.
+- Les diagnostics du §26 sont livrés : target sans action, entrée nulle dans `Actions`, action sans
+  `Definition` ou sans `Executor`, `Id` vide, `Id` dupliqué sur un même target, deux actions non
+  automatiques partageant le couple (`InputActionName`, `HoldThreshold`), action non automatique sans
+  input, `ConcurrencyGroup` vide, `StatefulPath` vide ou non résolvable, `ExpectedStates` vide, état
+  absent du `StateSchema` assigné (rules et executors d'état), et `Duration`/`HoldThreshold` négatifs.
+  `InputActionName` est aussi confronté à l'`InputMap` du projet.
+- Le `StatefulPath` d'une `StatefulStateInteractionRule` est **résolu depuis l'`InteractiveComponent`**,
+  jamais depuis l'action ni depuis la rule inspectée seule : le path est relatif à l'interactive (§Task 8),
+  donc l'interactive est le seul objet capable de dire qu'il ne pointe sur rien. Inspecter la rule ou
+  l'action isolée ne signale que ce qui est vérifiable sans arbre (path vide, liste vide). La résolution
+  est également gardée par `IsInsideTree()`, ce qui évite un faux positif hors scène éditée.
+- Les diagnostics croisés (id dupliqué, conflit d'input) vivent sur l'`InteractiveComponent` parce
+  qu'une action seule ne connaît pas ses voisines. Une action dont la `Definition` est absente est
+  signalée puis ignorée pour ces croisements, afin de ne pas produire une cascade de warnings dérivés.
+- Deux tests de configuration qui attendaient zéro warning sur un interactive sans action utilisent
+  maintenant un helper qui déclare une action complète : « aucune action » est désormais une erreur de
+  configuration, ce qui était l'intention du §26.
+
+
 ## Integration
 
 1. Pour le Character du projet, `quest_world/character/Character.tscn` dérive de `addons/dummy_character_plugin/Character.tscn` et ajoute `InteractionInteractor` (distance calculée depuis le player propriétaire, direction calculée depuis la caméra) ainsi que `InteractionPresenter`. Le script global `quest_world/character/Character.cs` échantillonne l'action `interact` (`E` par défaut) et appelle les deux points d'entrée de l'interactor.
@@ -199,11 +225,11 @@ Restaient volontairement absents de cette étape : l'`ExecutionId`, `Concurrency
 
 ## Explicit configuration and validation
 
-Les composants principaux (`InteractiveComponent`, `InteractionInteractor` et `InteractionPresenter`) sont des classes globales Godot. Le plugin editor `InteractionEditorPlugin` enregistre `InteractionInspectorPlugin`, qui délègue toutes les validations à `InteractionValidator` (`InteractionArea`/`InteractionAnchor`, `ViewOrigin`, `Interactor`/`Camera`). `InteractionAnchor` est obligatoire pour tout `InteractiveComponent`. `TransitionStateInteractionExecutor` impose séparément sa référence `Stateful`. La validation de `StatefulComponent` et de `StateSchema` appartient au `StatefulValidator` de son propre addon. Les scripts runtime ne sont plus marqués `[Tool]` pour exposer ces warnings ; leurs gardes et erreurs runtime restent locales, et aucun booléen `IsConfigurationValid` n’est maintenu.
+Les composants principaux (`InteractiveComponent`, `InteractionInteractor` et `InteractionPresenter`) sont des classes globales Godot. Le plugin editor `InteractionEditorPlugin` enregistre `InteractionInspectorPlugin`, qui délègue toutes les validations à `InteractionValidator` (`InteractionArea`/`InteractionAnchor`, `ViewOrigin`, `Interactor`/`Camera`, et les diagnostics d'actions, de definitions, d'executors d'état et de rules d'état listés en Task 11). `InteractionAnchor` est obligatoire pour tout `InteractiveComponent`. `TransitionStateInteractionExecutor` impose séparément sa référence `Stateful`. La validation de `StatefulComponent` et de `StateSchema` appartient au `StatefulValidator` de son propre addon. Les scripts runtime ne sont plus marqués `[Tool]` pour exposer ces warnings ; leurs gardes et erreurs runtime restent locales, et aucun booléen `IsConfigurationValid` n’est maintenu.
 
 `InteractionInteractor.GetInteractionPresentation()` retourne `InteractionTargetPresentation?`; l’absence de focus est donc représentée par l’absence de valeur. Le Presenter maintient sa propre liste d’indications à partir des signaux `InteractiveIndicationAdded` et `InteractiveIndicationRemoved`, sans lire les collections privées de détection.
 
-Les warnings sont compilés sous `TOOLS` dans les scripts du plugin editor et affichés directement dans l’Inspector. `plugin.cfg` charge `editor/InteractionEditorPlugin.cs`, qui couvre les quatre types validés. L’Inspector identifie les scripts par leur classe globale ou leur chemin et lit leurs propriétés exportées via l’API Godot, afin de fonctionner avec les placeholders editor sans rendre les composants runtime `[Tool]`. `TransitionStateInteractionExecutor` signale séparément l’absence de sa référence `Stateful`.
+Les warnings sont compilés sous `TOOLS` dans les scripts du plugin editor et affichés directement dans l’Inspector. `plugin.cfg` charge `editor/InteractionEditorPlugin.cs`, qui couvre les huit types validés. L’Inspector identifie les scripts par leur classe globale ou leur chemin et lit leurs propriétés exportées via l’API Godot, afin de fonctionner avec les placeholders editor sans rendre les composants runtime `[Tool]`. `TransitionStateInteractionExecutor` signale séparément l’absence de sa référence `Stateful`.
 
 ## XML API documentation
 
