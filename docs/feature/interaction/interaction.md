@@ -301,8 +301,11 @@ placement du joint. Seul l'ajout du registre et des rayons par cible touche du c
   modèle ne sait pas exprimer, c'est une **forme** — pour ça la cible garde le détecteur d'area.
 - **Visée (D)** : un `ShapeCast3D` que le détecteur crée lui-même en enfant (un détecteur est un Node
   précisément pour ça) et qui balaie les `InteractionArea` déjà authorées — donc zéro collider à ajouter.
-  `AimRadius` est le pardon : à zéro c'est un rayon précis, élargi il rapporte plusieurs objets autour du
-  réticule. `Score` classe sur l'**angle** et non sur la distance : viser est une intention plus forte
+  `AimRadius` est le pardon : à zéro c'est un rayon précis, élargi il touche encore ce que le réticule
+  rate de peu. Le sweep s'arrête à son premier impact, donc il rapporte l'area la **plus proche** et ce
+  qui la chevauche là, pas une liste d'objets à des profondeurs différentes — vérifié en scène. Ce qui
+  décide du palier et du focus reste la fenêtre et le score, mesurés sur l'**ancre** : viser le bord d'un
+  gros objet donne `Indicated`, pas `Interactible`. `Score` classe sur l'**angle** et non sur la distance : viser est une intention plus forte
   qu'être à côté. Le cast tourne en `_PhysicsProcess` et **reste une source** : `Detect` n'est qu'une
   fenêtre, le serveur ne rejoue jamais le cast, sans quoi le ping seul suffirait à refuser une commande.
 - **Pour essayer** : remplacer le nœud détecteur sous `InteractionInteractor` par celui qu'on veut et

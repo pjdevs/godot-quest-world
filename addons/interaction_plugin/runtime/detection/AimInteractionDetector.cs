@@ -20,8 +20,9 @@ namespace QuestWorld.Interaction.Runtime.Detection;
 /// <para>
 /// The cast collides with the interaction areas the targets already author, so switching a character to
 /// this detector needs no new collider anywhere. <see cref="AimRadius"/> is the forgiveness: at zero it
-/// is a single precise ray, and widening it sweeps a cylinder that reports several objects around the
-/// crosshair — the ones the window then demotes to merely indicated.
+/// is a single precise ray, and widening it sweeps a cylinder that still touches what the crosshair
+/// misses by a little. The sweep stops at its first impact, so what it reports is the <b>nearest</b>
+/// area it meets and whatever overlaps it there, not a list of objects at different depths.
 /// </para>
 /// <para>
 /// The cast reports areas and <b>not</b> bodies, so a wall does not stop it: the line of sight predicate
@@ -36,6 +37,10 @@ public partial class AimInteractionDetector : InteractionDetector
     public float MaxDistance { get; set; } = 10.0f;
 
     /// <summary>Gets or sets the radius of the swept sphere, or zero for a single ray.</summary>
+    /// <remarks>
+    /// It forgives the aim without moving what wins: the tier and the focus are decided by the window
+    /// and the score, both measured on the anchor.
+    /// </remarks>
     [Export]
     public float AimRadius { get; set; } = 0.35f;
 
