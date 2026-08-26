@@ -243,8 +243,10 @@ Un détecteur factice qui retourne un ensemble fixe permet de tester focus, pré
 
 - Le registre : un groupe Godot est l'idiome §25, mais `GetNodesInGroup` alloue à chaque appel. Une liste
   statique interne au plugin est plus honnête et reste portable GDExtension.
-  **Repoussée.** `GetCandidates` est livré `abstract` : un défaut sans consommateur aurait figé ce choix
-  pour rien. Il sera tranché par le détecteur de proximité, et le repasser en virtual sera additif.
+  **Tranchée provisoirement par le spike**, dans le sens de la liste statique interne : le détecteur de
+  proximité en a eu besoin, et un `GetNodesInGroup` par frame allouait pour rien. `GetCandidates` reste
+  `abstract` — le registre est un membre statique de `InteractiveComponent`, pas un défaut de la classe de
+  base, donc rien n'est figé si on veut le groupe Godot plus tard.
 - Qui remplit la `Distance` de la présentation : le détecteur (il la calcule déjà pour son score) ou un
   accesseur public sur l'interacteur ?
   **Hors périmètre**, elle appartient à [`presentation-progress-and-distance.md`](./presentation-progress-and-distance.md).
@@ -301,3 +303,14 @@ document.
 La validation continue est livrée avec le joint et non avec la présence, parce qu'elle *remplace* le
 `RemoveInteractive → CancelOwnedExecutions` que le joint supprime. Le second commit n'ajoute donc que
 l'axe de sortie (`RequiresInteractorPresence`).
+
+Les détecteurs C et D existent en **spike** (`ProximityInteractionDetector`, `AimInteractionDetector`) :
+un smoke test chacun, à garder ou à jeter après essai en scène. Ils ont été écrits **sans modifier une
+ligne du framework** — seuls le registre et les deux rayons par cible s'ajoutent à l'existant — ce qui est
+la vérification que ce document annonçait pour le placement du joint. Deux points relevés à l'écriture :
+
+- Le LOS manque déjà. Sans lui, C rend une cible interactible à travers un mur ; c'est le prédicat qui
+  fait la différence entre « portée » et « portée utile ».
+- Chez D, l'ensemble **indiqué** vient du cast élargi et non du registre. Le doc supposait qu'il aurait
+  besoin du LOS pour ne pas indiquer un objet derrière un mur ; avec un cast comme source, ce que le cast
+  arrête est déjà exclu, et le LOS ne redevient nécessaire que si la source s'élargit au registre.

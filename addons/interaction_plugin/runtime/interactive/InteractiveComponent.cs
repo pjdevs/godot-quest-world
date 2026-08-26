@@ -134,6 +134,21 @@ public partial class InteractiveComponent : Node
     [Export]
     public Node3D? InteractionAnchor { get; set; }
 
+    /// <summary>Gets or sets the distance at which this target may be interacted with, or zero.</summary>
+    /// <remarks>
+    /// Only a detector that decides range per target reads this — the proximity one. Zero means "use
+    /// the detector's default", so an object that has no opinion authors nothing. A target that wants a
+    /// <b>shape</b> rather than a radius does not fiddle with this: it uses the area detector, which is
+    /// made for that. The choice is made per scene and even per interactor.
+    /// </remarks>
+    [Export]
+    public float InteractionRadius { get; set; }
+
+    /// <summary>Gets or sets the distance at which this target is worth indicating, or zero.</summary>
+    /// <remarks>Same contract as <see cref="InteractionRadius"/>, for the wider tier.</remarks>
+    [Export]
+    public float IndicationRadius { get; set; }
+
     /// <summary>Gets or sets the player-facing name used by presentation widgets.</summary>
     [Export]
     public string DisplayName { get; set; } = "Interact";
@@ -183,6 +198,12 @@ public partial class InteractiveComponent : Node
 
     private static ulong _nextExecutionId = 1;
 
+    // Every target currently in the tree, for the detectors whose source is not an overlap event. A
+    // plain list rather than a Godot group: GetNodesInGroup allocates on every call, and a detector
+    // walks this once per frame. It stays retranscriptible in GDExtension, which a static of the
+    // plugin trivially is.
+    private static readonly List<InteractiveComponent> _registered = new();
+
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
     private readonly HashSet<InteractionInteractor> _interactionOverlaps = new();
     private readonly HashSet<InteractionInteractor> _indicationOverlaps = new();
@@ -206,6 +227,39 @@ public partial class InteractiveComponent : Node
     /// </remarks>
     private bool IsAuthoritative =>
         Multiplayer is null || Multiplayer.MultiplayerPeer is null || Multiplayer.IsServer();
+
+    /// <summary>Gets every target currently in the tree, in registration order.</summary>
+    internal static IReadOnlyList<InteractiveComponent> Registered => _registered;
+
+    /// <summary>Finds the target owning one of the areas a physics query returned.</summary>
+    /// <param name="area">Collider reported by a cast or an overlap query.</param>
+    /// <returns>The owning target, or null when the area belongs to something else.</returns>
+    internal static InteractiveComponent? FindByArea(GodotObject? area)
+    {
+        if (area is null)
+        {
+            return null;
+        }
+
+        foreach (InteractiveComponent candidate in _registered)
+        {
+            if (candidate.InteractionArea == area || candidate.IndicationArea == area)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Godot callback that joins the registry the sourceless detectors read.</summary>
+    public override void _EnterTree()
+    {
+        if (!_registered.Contains(this))
+        {
+            _registered.Add(this);
+        }
+    }
 
     /// <summary>Godot callback that validates configuration and connects area and state signals.</summary>
     public override void _Ready()
@@ -1057,6 +1111,7 @@ public partial class InteractiveComponent : Node
     /// <summary>Godot callback that disconnects state and interactor registrations.</summary>
     public override void _ExitTree()
     {
+        _registered.Remove(this);
         _activeExecutions.Clear();
         PurgeInvalidInteractors();
 

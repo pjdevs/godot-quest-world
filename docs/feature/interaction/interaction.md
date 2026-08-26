@@ -265,8 +265,32 @@ Restaient volontairement absents de cette étape : l'`ExecutionId`, `Concurrency
   par identifiant. `TransitionStateInteractionExecutor` expose le drapeau (`RequiresPresence`) puisqu'il
   sert précisément les deux usages.
 - Le LOS n'est pas livré ici : c'est un prédicat de la classe de base, et il attend son chantier annexe
-  ([`line-of-sight-occlusion.md`](./planned/line-of-sight-occlusion.md)). Les détecteurs de proximité et
-  de visée sont des ajouts purs, sans toucher au framework.
+  ([`line-of-sight-occlusion.md`](./planned/line-of-sight-occlusion.md)).
+
+#### Spike — `ProximityInteractionDetector` et `AimInteractionDetector`
+
+**Statut : spike à évaluer, pas un contrat livré.** Les deux sont là pour être essayés dans une scène et
+gardés ou jetés sur cette base ; ils ne portent qu'un smoke test chacun, qui partira avec eux. Ce qu'ils
+prouvent déjà : **aucune ligne du framework n'a bougé pour les écrire**, ce qui était le test annoncé du
+placement du joint. Seul l'ajout du registre et des rayons par cible touche du code existant.
+
+- **Registre** : `InteractiveComponent` tient une liste statique interne des cibles présentes dans
+  l'arbre (`_EnterTree` / `_ExitTree`), lue par les détecteurs sans source propre. Choix provisoire de la
+  question ouverte : un groupe Godot serait l'idiome §25 mais `GetNodesInGroup` alloue à chaque appel, et
+  un détecteur la parcourt par frame.
+- **Proximité (C)** : ni area, ni collider, ni événement d'overlap. La portée est un nombre que la cible
+  authore (`InteractionRadius` / `IndicationRadius`, `0` = « prends le défaut du détecteur »), donc aucune
+  scène existante n'a besoin d'être retouchée pour l'essayer. Le palier d'indication est
+  **omnidirectionnel** : savoir qu'un truc est autour de soi ne demande pas de le regarder. Ce que ce
+  modèle ne sait pas exprimer, c'est une **forme** — pour ça la cible garde le détecteur d'area.
+- **Visée (D)** : un `ShapeCast3D` que le détecteur crée lui-même en enfant (un détecteur est un Node
+  précisément pour ça) et qui balaie les `InteractionArea` déjà authorées — donc zéro collider à ajouter.
+  `AimRadius` est le pardon : à zéro c'est un rayon précis, élargi il rapporte plusieurs objets autour du
+  réticule. `Score` classe sur l'**angle** et non sur la distance : viser est une intention plus forte
+  qu'être à côté. Le cast tourne en `_PhysicsProcess` et **reste une source** : `Detect` n'est qu'une
+  fenêtre, le serveur ne rejoue jamais le cast, sans quoi le ping seul suffirait à refuser une commande.
+- **Pour essayer** : remplacer le nœud détecteur sous `InteractionInteractor` par celui qu'on veut et
+  réassigner `Detector`. `ViewOrigin` reste à câbler sur le détecteur dans les deux cas.
 
 ## Integration
 
@@ -318,7 +342,8 @@ Les tests couvrent les trois cas de l’union d’availability, l’ordre `Targe
 - Le transport reste `SceneMultiplayer`; les personnages/interactables dynamiques doivent conserver des chemins identiques via le système de spawn du projet.
 - La synchronisation est portée par `MultiplayerSynchronizer` sur la propriété technique privée `ReplicatedState`. Elle reste enregistrée auprès de Godot pour le chemin `.:ReplicatedState` et reste visible dans l’inspecteur — un `[Export]` privé garde son flag `Editor`, voir [`godot-private-export-inspector-visibility.md`](../../memory/godot-private-export-inspector-visibility.md) ; le contrat est comportemental, le gameplay passe exclusivement par `SetState`. Les exécutions actives d'un `InteractiveComponent` restent transitoires et server-only : leur identifiant n'est jamais répliqué, et la progression affichée par un client est une prédiction locale bâtie sur l'`ExpectedDuration` lue dans la scène.
 - Godot 4.7.1 Mono charge les assemblies avec .NET 10. Le projet cible donc `net10.0`, conserve `LangVersion=preview` et fournit un shim minimal `IUnion`/`UnionAttribute` pour utiliser le contrat union C# preview sans référence runtime .NET 11. Voir [`godot-dotnet-runtime-target.md`](../memory/godot-dotnet-runtime-target.md).
-- Le LOS reste hors périmètre : il est spécifié comme un prédicat de `InteractionDetector` et attend son chantier. Les détecteurs de proximité et de visée décrits dans [`interaction-detector.md`](./planned/interaction-detector.md) ne sont pas livrés non plus, et le registre global de candidats attendra d'avoir un consommateur.
+- Le LOS reste hors périmètre : il est spécifié comme un prédicat de `InteractionDetector` et attend son chantier. Sans lui, le détecteur de proximité rend un coffre interactible à travers un mur et le détecteur de visée n'occlut pas son ensemble indiqué : c'est la limite à garder en tête en les évaluant.
+- Les détecteurs de proximité et de visée sont des **spikes** : un smoke test chacun, aucune validation editor spécifique (ils héritent des diagnostics de la classe de base), et le registre statique qu'ils introduisent est un choix provisoire. Les garder demandera de trancher le registre pour de bon et de leur donner une vraie couverture.
 - La persistance réelle, les intégrations Quest/Dialog/Inventory, les combinateurs de règles, l'occlusion, les widgets 3D cliquables et les transports hors `SceneMultiplayer` restent hors V1.
 - Le Character projet n'a plus de nom d'input codé en dur : il itère `InteractionInteractor.GetRelevantInputs()` et échantillonne ce que la cible focusée déclare. Les noms d'input viennent donc des `InteractionActionDefinition` des scènes, `interact` (touche `E`) étant simplement celui des définitions actuelles.
 - L'addon Character générique reste sous `QuestWorld.Character` et ne référence pas `QuestWorld.Interaction`; seule la sous-classe globale du projet compose les deux systèmes.

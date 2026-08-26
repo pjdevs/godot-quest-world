@@ -188,6 +188,78 @@ public sealed partial class InteractionDetectionTest
         interactor.QueueFree();
     }
 
+    // Smoke checks for the two spike detectors: they prove the model runs at all, nothing more, and
+    // they are meant to be deleted along with their detector if the spike is dropped.
+
+    [TestCase]
+    public async Task ProximitySpikeDetectsWithoutAnyPhysics()
+    {
+        Node3D world = new();
+        Node3D target = new() { Name = "Target", Position = new Vector3(0, 0, -2) };
+        Area3D area = new() { Name = "InteractionArea" };
+        InteractiveComponent interactive = BuildInteractive(target, area);
+        target.AddChild(area);
+        target.AddChild(interactive);
+        Node3D view = new() { Name = "ViewOrigin" };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
+        interactor.AddChild(view);
+        ProximityInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
+        interactor.AddChild(detector);
+        interactor.Detector = detector;
+        world.AddChild(target);
+        world.AddChild(interactor);
+        ISceneRunner runner = ISceneRunner.Load(world);
+        await runner.SimulateFrames(1);
+
+        AssertThat(detector.Detect(interactive)).IsEqual(InteractionDetectionKind.Interactible);
+        AssertThat(interactor.FocusedInteractive == interactive).IsTrue();
+
+        // Indication is omnidirectional, and the target authors its own reach.
+        target.Position = new Vector3(0, 0, 6);
+        interactor.RecalculateFocus();
+        AssertThat(detector.Detect(interactive)).IsEqual(InteractionDetectionKind.Indicated);
+
+        interactive.InteractionRadius = 8.0f;
+        AssertThat(detector.Detect(interactive)).IsEqual(InteractionDetectionKind.Indicated);
+        target.Position = new Vector3(0, 0, -6);
+        AssertThat(detector.Detect(interactive)).IsEqual(InteractionDetectionKind.Interactible);
+    }
+
+    [TestCase]
+    public async Task AimSpikeDetectsThroughItsOwnCast()
+    {
+        Node3D world = new();
+        Node3D target = new() { Name = "Target", Position = new Vector3(0, 0, -3) };
+        Area3D area = new() { Name = "InteractionArea" };
+        area.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = 1.0f } });
+        InteractiveComponent interactive = BuildInteractive(target, area);
+        target.AddChild(area);
+        target.AddChild(interactive);
+        Node3D view = new() { Name = "ViewOrigin" };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
+        interactor.AddChild(view);
+        AimInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
+        interactor.AddChild(detector);
+        interactor.Detector = detector;
+        world.AddChild(target);
+        world.AddChild(interactor);
+        ISceneRunner runner = ISceneRunner.Load(world);
+
+        await runner.SimulateFrames(4);
+        interactor.RecalculateFocus();
+
+        AssertThat(detector.GetCandidates().Contains(interactive)).IsTrue();
+        AssertThat(interactor.FocusedInteractive == interactive).IsTrue();
+
+        // The cast is the source, so looking away empties it instead of filtering it.
+        view.RotateY(Mathf.Pi);
+        await runner.SimulateFrames(4);
+        interactor.RecalculateFocus();
+
+        AssertThat(detector.GetCandidates().Any()).IsFalse();
+        AssertThat(interactor.FocusedInteractive == null).IsTrue();
+    }
+
     private static DetectionWorld BuildWorld(Vector3 targetPosition)
     {
         Node3D world = new();

@@ -347,6 +347,8 @@ public static class InteractionValidator
             InteractiveComponent => InspectableType.InteractiveComponent,
             InteractionInteractor => InspectableType.InteractionInteractor,
             AreaInteractionDetector => InspectableType.AreaInteractionDetector,
+            ProximityInteractionDetector => InspectableType.InteractionDetector,
+            AimInteractionDetector => InspectableType.InteractionDetector,
             InteractionDetector => InspectableType.InteractionDetector,
             InteractionPresenter => InspectableType.InteractionPresenter,
             InteractionAction => InspectableType.InteractionAction,
@@ -369,6 +371,8 @@ public static class InteractionValidator
             nameof(InteractiveComponent) => InspectableType.InteractiveComponent,
             nameof(InteractionInteractor) => InspectableType.InteractionInteractor,
             nameof(AreaInteractionDetector) => InspectableType.AreaInteractionDetector,
+            nameof(ProximityInteractionDetector) => InspectableType.InteractionDetector,
+            nameof(AimInteractionDetector) => InspectableType.InteractionDetector,
             nameof(InteractionDetector) => InspectableType.InteractionDetector,
             nameof(InteractionPresenter) => InspectableType.InteractionPresenter,
             nameof(InteractionAction) => InspectableType.InteractionAction,
@@ -392,6 +396,10 @@ public static class InteractionValidator
             "res://addons/interaction_plugin/runtime/detection/AreaInteractionDetector.cs" =>
                 InspectableType.AreaInteractionDetector,
             "res://addons/interaction_plugin/runtime/detection/InteractionDetector.cs" =>
+                InspectableType.InteractionDetector,
+            "res://addons/interaction_plugin/runtime/detection/ProximityInteractionDetector.cs" =>
+                InspectableType.InteractionDetector,
+            "res://addons/interaction_plugin/runtime/detection/AimInteractionDetector.cs" =>
                 InspectableType.InteractionDetector,
             "res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" =>
                 InspectableType.InteractionPresenter,
