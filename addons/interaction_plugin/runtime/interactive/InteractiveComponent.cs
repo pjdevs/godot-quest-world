@@ -198,6 +198,15 @@ public partial class InteractiveComponent : Node
     internal InteractionAction? ActiveAction =>
         _activeExecutions.Count > 0 ? _activeExecutions[0].Action : null;
 
+    /// <summary>Gets whether this peer runs the authoritative half of an interaction.</summary>
+    /// <remarks>
+    /// Offline counts as authoritative: a peerless game is its own server. Asking the multiplayer API
+    /// for an id it does not have only pushes an error and answers no, which would make every
+    /// authoritative path refuse itself outside a session.
+    /// </remarks>
+    private bool IsAuthoritative =>
+        Multiplayer is null || Multiplayer.MultiplayerPeer is null || Multiplayer.IsServer();
+
     /// <summary>Godot callback that validates configuration and connects area and state signals.</summary>
     public override void _Ready()
     {
@@ -652,7 +661,7 @@ public partial class InteractiveComponent : Node
     )
     {
         executionId = 0;
-        if (!Multiplayer.IsServer())
+        if (!IsAuthoritative)
         {
             // No notification here: this component only reports what happened authoritatively.
             GD.PushWarning($"{GetPath()}: only the server may execute an interaction action.");
@@ -691,7 +700,7 @@ public partial class InteractiveComponent : Node
     /// </remarks>
     public override void _Process(double delta)
     {
-        if (!Multiplayer.IsServer())
+        if (!IsAuthoritative)
         {
             return;
         }
@@ -863,7 +872,7 @@ public partial class InteractiveComponent : Node
 
     internal InteractionExecution? EndExecutionCore(ulong executionId)
     {
-        if (!Multiplayer.IsServer())
+        if (!IsAuthoritative)
         {
             GD.PushWarning($"{GetPath()}: only the server may end an interaction execution.");
             return null;

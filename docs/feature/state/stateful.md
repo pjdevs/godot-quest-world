@@ -17,7 +17,7 @@ Cet addon répond uniquement à la question **« qu'est-ce qui est vrai dans le 
 
 ## Authority, replication and notifications
 
-- `SetState()` est server-only. Il retourne `false` pour un peer non serveur, une valeur absente du `Schema` assigné, ou une valeur déjà appliquée.
+- `SetState()` est server-only. Il retourne `false` pour un peer non serveur, une valeur absente du `Schema` assigné, ou une valeur déjà appliquée. L'absence de `MultiplayerPeer` compte comme autorité — un jeu sans session est son propre serveur — parce que `Multiplayer.IsServer()` sans peer pousse une erreur *et* répond non, ce qui refusait toute mutation hors session. Voir [`godot-multiplayer-isserver-requires-peer.md`](../../memory/godot-multiplayer-isserver-requires-peer.md).
 - La réplication passe par la propriété technique privée `ReplicatedState`. Un `MultiplayerSynchronizer` enfant du composant réplique le chemin `.:ReplicatedState`. Le gameplay n'assigne jamais cette propriété directement.
 - Le setter répliqué applique la valeur autoritaire du serveur **sans** revalider le schema : le serveur fait autorité et un schema divergent entre builds ne doit pas désynchroniser un client.
 - Trois signaux séparent les scopes consommateurs : `StateChanged` partout, `StateChangedAuthority` uniquement avec autorité (offline, listen host, dedicated server), `StateChangedPresentation` partout sauf sur un dedicated server.
@@ -71,7 +71,7 @@ dotnet build
 GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot dotnet test
 ```
 
-Les tests couvrent la mutation core sans signal, le dispatch de chaque scope exactement une fois, l'application de `InitialState` sans signal au `_Ready`, l'application autoritaire, l'absence de changement pour une valeur identique, la valeur libre sans schema, le refus d'une valeur hors schema, la conservation d'un `InitialState` hors schema, l'application d'une valeur répliquée sans validation de schema, le snapshot/restauration y compris pour une valeur identique, le refus d'une version inconnue et d'un état hors schema, la query pure du schema, et l'ensemble des warnings du validator.
+Les tests couvrent la mutation core sans signal, le dispatch de chaque scope exactement une fois, l'application de `InitialState` sans signal au `_Ready`, l'application autoritaire, l'absence de changement pour une valeur identique, la valeur libre sans schema, le refus d'une valeur hors schema, la conservation d'un `InitialState` hors schema, l'application d'une valeur répliquée sans validation de schema, le snapshot/restauration y compris pour une valeur identique, le refus d'une version inconnue et d'un état hors schema, la query pure du schema, l'application autoritaire hors arbre sans peer multijoueur, et l'ensemble des warnings du validator.
 
 ## Assumptions and deferred work
 

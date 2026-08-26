@@ -274,7 +274,7 @@ exactement le test qui prouve que le joint est bien placé.
 `InteractionTypes.cs` aux côtés de `InteractionUnavailableKind`. Voir la Task 10 de
 [`interaction.md`](../interaction.md) pour le détail.
 
-Quatre décisions ont été prises pendant l'implémentation, dont deux s'écartent de la lettre de ce
+Quatre décisions ont été prises pendant l'implémentation, dont une s'écarte de la lettre de ce
 document.
 
 1. **Le push des overlaps passe par deux virtuels no-op de la classe de base**
@@ -285,10 +285,11 @@ document.
    retranscriptible en GDExtension (§25). `Forget` existe parce qu'une area ne rapporte jamais l'overlap
    qu'elle perd en étant libérée : c'est déjà pour cette raison que `InteractiveComponent._ExitTree`
    prévient ses interacteurs, et il prévient maintenant aussi ceux dont seul le détecteur la tient.
-2. **Écart assumé sur `Detect` du détecteur d'area.** Le snippet de ce document renvoie `Indicated` pour
-   une cible dans l'area d'interaction mais hors fenêtre. Livré strict : sans `IndicationArea`, elle
-   renvoie `None`. Sinon un objet n'ayant authoré qu'une area d'interaction gagnait une indication qu'il
-   n'avait jamais eue, ce qui contredit le « zéro migration, comportement identique » de la roadmap.
+2. **`Detect` suit le snippet à la lettre**, y compris pour une cible dans l'area d'interaction mais
+   hors fenêtre : elle est `Indicated`, `IndicationArea` authorée ou pas. Une première version stricte
+   renvoyait `None` par souci de « comportement identique » — c'était le mauvais invariant à préserver.
+   Le bon est qu'un objet ne disparaît pas parce qu'on tourne la tête : perdre la fenêtre coûte le
+   focus, jamais l'existence. Les paliers sont donc monotones dans les deux sens.
 3. **Les paliers sont cumulatifs pour l'indication.** `Interactible` implique `Indicated` côté
    interacteur : deux cibles utilisables et non focusées gardent leur widget. L'enum reste exclusif
    comme valeur de retour, la cumulativité est dans la lecture qu'en fait l'interacteur.

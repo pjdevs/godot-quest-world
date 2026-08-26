@@ -82,13 +82,22 @@ public partial class StatefulComponent : Node
     /// <returns><see langword="true"/> when no schema is assigned or when the schema declares the value.</returns>
     public bool IsStateDeclared(StringName state) => Schema is null || Schema.Contains(state);
 
+    /// <summary>Gets whether this peer runs the authoritative half of the world state.</summary>
+    /// <remarks>
+    /// Offline counts as authoritative: a peerless game is its own server. Asking the multiplayer API
+    /// for an id it does not have only pushes an error and answers no, which would make every
+    /// authoritative path refuse itself outside a session.
+    /// </remarks>
+    private bool IsAuthoritative =>
+        Multiplayer is null || Multiplayer.MultiplayerPeer is null || Multiplayer.IsServer();
+
     /// <summary>Applies an authoritative state change and dispatches the appropriate signals.</summary>
     /// <remarks>Call from server gameplay code; clients receive the result through replication.</remarks>
     /// <param name="state">New authoritative state.</param>
     /// <returns><see langword="true"/> when the server applied a different state.</returns>
     public bool SetState(StringName state)
     {
-        if (!Multiplayer.IsServer())
+        if (!IsAuthoritative)
         {
             GD.PushWarning($"{GetPath()}: only the server may change StatefulComponent.State.");
             return false;
@@ -126,7 +135,7 @@ public partial class StatefulComponent : Node
             );
         }
 
-        if (!Multiplayer.IsServer())
+        if (!IsAuthoritative)
         {
             throw new InvalidOperationException(
                 $"{GetPath()}: state restoration requires authority."
@@ -174,7 +183,7 @@ public partial class StatefulComponent : Node
     {
         EmitSignal(SignalName.StateChanged, transition.OldState, transition.NewState);
 
-        if (Multiplayer.IsServer())
+        if (IsAuthoritative)
         {
             EmitSignal(SignalName.StateChangedAuthority, transition.OldState, transition.NewState);
         }

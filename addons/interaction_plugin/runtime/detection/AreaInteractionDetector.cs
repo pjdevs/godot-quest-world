@@ -34,29 +34,31 @@ public partial class AreaInteractionDetector : InteractionDetector
 
     /// <inheritdoc />
     /// <remarks>
-    /// Reaching the interaction area is what makes a target eligible, and the window then decides
-    /// whether the player is looking at it. The wider indication area is the only thing that makes a
-    /// target merely indicated: a target inside the interaction area but outside the window stays
-    /// silent unless its owner authored an indication volume around it.
+    /// Being inside either area is what makes a target exist at all; the window then decides whether
+    /// the player is also looking at it. Losing the window therefore demotes a target to
+    /// <see cref="InteractionDetectionKind.Indicated"/> and never to
+    /// <see cref="InteractionDetectionKind.None"/>: the focused object one turns away from is still
+    /// there, and its indication must stay where it was instead of blinking out.
     /// </remarks>
     public override InteractionDetectionKind Detect(InteractiveComponent interactive)
     {
-        if (interactive is null || !IsInstanceValid(interactive))
+        if (
+            interactive is null
+            || !IsInstanceValid(interactive)
+            || (
+                !_interactionOverlaps.Contains(interactive)
+                && !_indicationOverlaps.Contains(interactive)
+            )
+        )
         {
             return InteractionDetectionKind.None;
         }
 
-        if (
+        return
             _interactionOverlaps.Contains(interactive)
             && IsWithinRange(interactive, MaxDistance, MaxAngleDegrees)
-        )
-        {
-            return InteractionDetectionKind.Interactible;
-        }
-
-        return _indicationOverlaps.Contains(interactive)
-            ? InteractionDetectionKind.Indicated
-            : InteractionDetectionKind.None;
+            ? InteractionDetectionKind.Interactible
+            : InteractionDetectionKind.Indicated;
     }
 
     /// <inheritdoc />

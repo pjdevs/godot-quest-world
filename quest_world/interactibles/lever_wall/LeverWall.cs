@@ -49,10 +49,19 @@ public partial class LeverWall : Node3D
         ApplyStateAnimation(Stateful.State);
     }
 
+    /// <summary>Gets whether this peer runs the authoritative half of this wall.</summary>
+    /// <remarks>
+    /// Offline counts as authoritative: a peerless game is its own server. Asking the multiplayer API
+    /// for an id it does not have only pushes an error and answers no, which would make every
+    /// authoritative path refuse itself outside a session.
+    /// </remarks>
+    private bool IsAuthoritative =>
+        Multiplayer is null || Multiplayer.MultiplayerPeer is null || Multiplayer.IsServer();
+
     /// <summary>Godot callback that completes an authoritative transition once its animation is over.</summary>
     public override void _Process(double delta)
     {
-        if (_pendingState is null || Stateful is null || !Multiplayer.IsServer())
+        if (_pendingState is null || Stateful is null || !IsAuthoritative)
         {
             return;
         }
@@ -90,7 +99,7 @@ public partial class LeverWall : Node3D
 
     private void ScheduleTransition(StringName state)
     {
-        if (!Multiplayer.IsServer())
+        if (!IsAuthoritative)
         {
             return;
         }

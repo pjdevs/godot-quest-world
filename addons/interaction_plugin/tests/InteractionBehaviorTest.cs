@@ -285,6 +285,39 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public void AnOfflineTargetStillExecutesItsActionWithoutAMultiplayerPeer()
+    {
+        // Outside any tree, Multiplayer is null, which is the peerless game: asking the API for an id
+        // it does not have would push an error and answer that nobody is the server, so every
+        // authoritative path would refuse itself.
+        TestInteractiveActor owner = new();
+        Area3D area = new() { Name = "InteractionArea" };
+        InteractiveComponent interactive = new()
+        {
+            InteractionArea = area,
+            InteractionAnchor = owner,
+        };
+        InteractionAction action = CreateAction("activate");
+        interactive.Actions.Add(action);
+        InteractionInteractor interactor = new();
+
+        try
+        {
+            InteractionExecutionResult result = interactive.ExecuteAction(interactor, action);
+
+            AssertThat(result is InteractionExecutionCompleted).IsTrue();
+        }
+        finally
+        {
+            interactive.Free();
+            action.Free();
+            area.Free();
+            owner.Free();
+            interactor.Free();
+        }
+    }
+
+    [TestCase]
     public async Task TargetRulesStopAtFirstBlock()
     {
         TestInteractiveActor owner = new();

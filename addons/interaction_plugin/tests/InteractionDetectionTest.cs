@@ -33,7 +33,7 @@ public sealed partial class InteractionDetectionTest
     }
 
     [TestCase]
-    public async Task ATargetBehindTheInteractorIsNotIndicatedWithoutItsOwnIndicationArea()
+    public async Task ATargetBehindTheInteractorIsIndicatedRatherThanUndetected()
     {
         DetectionWorld world = BuildWorld(new Vector3(0, 0, 2));
         await world.Runner.SimulateFrames(1);
@@ -43,13 +43,8 @@ public sealed partial class InteractionDetectionTest
             InteractionDetectionKind.Interactible
         );
 
-        // Reaching the interaction volume is not looking at it, and an object that authored no
-        // indication volume has nothing to say from behind the player.
-        AssertThat(world.Detector.Detect(world.Interactive))
-            .IsEqual(InteractionDetectionKind.None);
-
-        world.Detector.OnEnteredTargetArea(world.Interactive, InteractionDetectionKind.Indicated);
-
+        // Reaching the interaction volume is not looking at it, but the object is still there: losing
+        // the window costs the focus, never the indication.
         AssertThat(world.Detector.Detect(world.Interactive))
             .IsEqual(InteractionDetectionKind.Indicated);
         await world.Runner.SimulateFrames(1);
@@ -67,10 +62,32 @@ public sealed partial class InteractionDetectionTest
             world.Interactive,
             InteractionDetectionKind.Interactible
         );
-        world.Detector.OnEnteredTargetArea(world.Interactive, InteractionDetectionKind.Indicated);
 
         AssertThat(world.Detector.Detect(world.Interactive))
             .IsEqual(InteractionDetectionKind.Indicated);
+    }
+
+    [TestCase]
+    public async Task TurningAwayFromTheFocusedTargetDemotesItWithoutRetractingItsIndication()
+    {
+        DetectionWorld world = BuildWorld(new Vector3(0, 0, -2));
+        await world.Runner.SimulateFrames(1);
+        world.Detector.OnEnteredTargetArea(
+            world.Interactive,
+            InteractionDetectionKind.Interactible
+        );
+        await world.Runner.SimulateFrames(1);
+        int removed = 0;
+        world.Interactor.InteractiveIndicationRemoved += _ => removed++;
+        AssertThat(world.Interactor.FocusedInteractive == world.Interactive).IsTrue();
+
+        world.Detector.ViewOrigin!.RotateY(Mathf.Pi);
+        await world.Runner.SimulateFrames(1);
+
+        AssertThat(world.Detector.Detect(world.Interactive))
+            .IsEqual(InteractionDetectionKind.Indicated);
+        AssertThat(world.Interactor.FocusedInteractive == null).IsTrue();
+        AssertThat(removed).IsEqual(0);
     }
 
     [TestCase]

@@ -88,6 +88,26 @@ public sealed partial class StatefulBehaviorTest
     }
 
     [TestCase]
+    public void SetStateAppliesOfflineWithoutAMultiplayerPeer()
+    {
+        // Outside any tree, Multiplayer is null, which is the peerless game: asking the API for an id
+        // it does not have would push an error and answer that nobody is the server, so the only
+        // authoritative path of this component would refuse itself.
+        StatefulComponent stateful = CreateStateful(initialState: "closed");
+
+        try
+        {
+            AssertThat(stateful.SetState(new StringName("open"))).IsTrue();
+
+            AssertThat(stateful.State.ToString()).IsEqual("open");
+        }
+        finally
+        {
+            stateful.Free();
+        }
+    }
+
+    [TestCase]
     public async Task SetStateReportsNoChangeWhenValueIsAlreadyApplied()
     {
         StatefulComponent stateful = CreateStateful(initialState: "closed");

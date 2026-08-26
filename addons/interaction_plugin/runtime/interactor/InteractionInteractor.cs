@@ -641,7 +641,7 @@ public partial class InteractionInteractor : Node
 
         _prediction = null;
 
-        if (!Multiplayer.IsServer())
+        if (!IsAuthoritative)
         {
             RpcId(ServerPeerId, nameof(ServerTryEndInteraction), inputActionName);
             return true;
@@ -712,7 +712,7 @@ public partial class InteractionInteractor : Node
         }
 
         EmitSignal(SignalName.InteractionRequested, target, actionId);
-        if (!Multiplayer.IsServer())
+        if (!IsAuthoritative)
         {
             RpcId(ServerPeerId, nameof(ServerTryStartInteraction), target.GetPath(), actionId);
             RememberSustainedInput(inputActionName, action);
