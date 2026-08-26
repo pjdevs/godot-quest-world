@@ -8,7 +8,6 @@
 
 [node name="Character" unique_id=493885237 instance=ExtResource("1_base")]
 script = ExtResource("2_project_character")
-InteractionActionName = &"interact"
 
 [node name="UALCharacter" parent="Visual" parent_id_path=PackedInt32Array(1801593725) index="0" unique_id=1190744522]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)

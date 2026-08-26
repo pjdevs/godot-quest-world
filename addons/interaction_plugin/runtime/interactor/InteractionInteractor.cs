@@ -170,6 +170,7 @@ public partial class InteractionInteractor : Node
     private readonly HashSet<InteractiveComponent> _interactiveCandidates = new();
     private readonly List<InteractorExecution> _ownedExecutions = new();
     private readonly HashSet<StringName> _sustainedInputs = new();
+    private readonly List<StringName> _relevantInputs = new();
     private Node3D? _viewOrigin;
     private Node3D? _resolvedInteractionOrigin;
     private InteractiveComponent? _focusedInteractive;
@@ -502,6 +503,70 @@ public partial class InteractionInteractor : Node
         return alignment >= minimumAlignment;
     }
 
+    /// <summary>Lists the project inputs worth sampling for the owning player right now.</summary>
+    /// <remarks>
+    /// An input controller iterates this instead of hard-coding one action name, so adding an action
+    /// bound to a different input to a scene needs no change in the character. The interactor only
+    /// reports what is relevant; deciding that interaction wins over, say, an attack bound to the
+    /// same key stays the game's call, because the interactor never samples input itself.
+    /// <para>
+    /// The list holds the inputs of the focused target's presentable actions, automatic ones
+    /// excluded since no key requests them, plus every input this interactor believes it is
+    /// currently sustaining. That second half matters: without it, looking away from a target while
+    /// holding its key would drop the release, and the execution would run on until the player
+    /// walked out of range.
+    /// </para>
+    /// <para>
+    /// The returned list is reused between calls and is only valid until the next one. Copy it
+    /// before storing it.
+    /// </para>
+    /// </remarks>
+    /// <returns>Distinct project input action names, empty when this peer controls nothing.</returns>
+    public IReadOnlyList<StringName> GetRelevantInputs()
+    {
+        _relevantInputs.Clear();
+        if (!IsLocallyControlled)
+        {
+            return _relevantInputs;
+        }
+
+        if (_focusedInteractive is not null && IsUsable(_focusedInteractive))
+        {
+            foreach (InteractionAction action in _focusedInteractive.Actions)
+            {
+                if (
+                    action?.Definition is null
+                    || action.Automatic
+                    || _focusedInteractive.EvaluateAvailability(this, action) is InteractionHidden
+                )
+                {
+                    continue;
+                }
+
+                AddRelevantInput(action.Definition.InputActionName);
+            }
+        }
+
+        foreach (StringName sustained in _sustainedInputs)
+        {
+            AddRelevantInput(sustained);
+        }
+
+        return _relevantInputs;
+    }
+
+    private void AddRelevantInput(StringName inputActionName)
+    {
+        if (
+            inputActionName is not null
+            && !inputActionName.IsEmpty
+            && !_relevantInputs.Contains(inputActionName)
+        )
+        {
+            _relevantInputs.Add(inputActionName);
+        }
+    }
+
     /// <summary>Builds a fresh prompt snapshot for the current focused target.</summary>
     /// <returns>The focused presentation, or null when no target is focused.</returns>
     public InteractionTargetPresentation? GetInteractionPresentation()
@@ -610,24 +675,31 @@ public partial class InteractionInteractor : Node
         }
 
         InteractionAction? action = target.ResolveAutomaticAction(this);
-        if (
-            action?.Definition is null
-            || target.EvaluateAvailability(this, action) is not InteractionAllowed
-        )
+        InteractionAvailability availability = action?.Definition is null
+            ? new InteractionHidden()
+            : target.EvaluateAvailability(this, action);
+
+        if (availability is InteractionHidden)
         {
-            // Forgotten while unavailable so the action fires again as soon as it becomes allowed,
-            // without the player having to look away and back.
+            // Only leaving the offered choices forgets the request. Blocked must not, because the
+            // running execution of this very action blocks it: forgetting there would re-fire the
+            // action the moment it completes, forever.
             ForgetAutomaticRequest();
             return;
         }
 
-        if (_automaticTarget == target && _automaticActionId == action.Definition.Id)
+        // A blocked action is left alone rather than requested, so an action that stays unavailable
+        // never floods the owner with refusals.
+        if (
+            availability is not InteractionAllowed
+            || (_automaticTarget == target && _automaticActionId == action!.Definition!.Id)
+        )
         {
             return;
         }
 
         _automaticTarget = target;
-        _automaticActionId = action.Definition.Id;
+        _automaticActionId = action!.Definition!.Id;
         TryRequestAction(target, action, inputActionName: null);
     }
 
@@ -737,6 +809,7 @@ public partial class InteractionInteractor : Node
         _indicatedInteractives.Clear();
         _ownedExecutions.Clear();
         _sustainedInputs.Clear();
+        _relevantInputs.Clear();
         _focusedInteractive = null;
         _gesture = null;
         _prediction = null;

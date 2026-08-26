@@ -3,10 +3,6 @@ using QuestWorld.Interaction.Runtime.Interactor;
 
 public partial class Character : QuestWorld.Character.Character
 {
-    [ExportGroup("Interaction")]
-    [Export]
-    public StringName InteractionActionName { get; set; } = "interact";
-
     private InteractionInteractor _interactionInteractor = null!;
     private bool _wasPossessed;
 
@@ -45,7 +41,7 @@ public partial class Character : QuestWorld.Character.Character
         {
             if (wasPossessed)
             {
-                _interactionInteractor.TryEndInteractionInput(InteractionActionName);
+                ReleaseInteractionInputs();
             }
 
             _wasPossessed = false;
@@ -53,18 +49,28 @@ public partial class Character : QuestWorld.Character.Character
         }
 
         _wasPossessed = true;
-        if (InteractionActionName.IsEmpty)
-        {
-            return;
-        }
 
-        if (Input.IsActionJustPressed(InteractionActionName))
+        // The focused target decides which inputs matter, so binding an action to another key in a
+        // scene needs no change here. What the interactor reports is information, not a command:
+        // arbitrating between interacting and anything else sharing a key stays this class's job.
+        foreach (StringName inputActionName in _interactionInteractor.GetRelevantInputs())
         {
-            _interactionInteractor.TryStartInteractionInput(InteractionActionName);
+            if (Input.IsActionJustPressed(inputActionName))
+            {
+                _interactionInteractor.TryStartInteractionInput(inputActionName);
+            }
+            else if (Input.IsActionJustReleased(inputActionName))
+            {
+                _interactionInteractor.TryEndInteractionInput(inputActionName);
+            }
         }
-        else if (Input.IsActionJustReleased(InteractionActionName))
+    }
+
+    private void ReleaseInteractionInputs()
+    {
+        foreach (StringName inputActionName in _interactionInteractor.GetRelevantInputs())
         {
-            _interactionInteractor.TryEndInteractionInput(InteractionActionName);
+            _interactionInteractor.TryEndInteractionInput(inputActionName);
         }
     }
 
@@ -76,7 +82,7 @@ public partial class Character : QuestWorld.Character.Character
             && _interactionInteractor.IsInsideTree()
         )
         {
-            _interactionInteractor.TryEndInteractionInput(InteractionActionName);
+            ReleaseInteractionInputs();
         }
     }
 }

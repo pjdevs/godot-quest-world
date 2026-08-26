@@ -1149,6 +1149,9 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         InteractionAction alternative = CreateAction("alternative");
+        // A group of its own, so the running execution leaves it available and a fresh resolution
+        // really would pick it. Sharing the default group would block it like everything else.
+        alternative.ConcurrencyGroup = new StringName("inspection");
         AddAction(testWorld.Interactive, alternative);
         testWorld.Interactor.AddInteractive(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
@@ -1415,6 +1418,89 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(door.State.State.ToString()).IsEqual("closed");
         orphan.Free();
         undeclared.Free();
+    }
+
+    [TestCase]
+    public async Task TheInteractorReportsWhichInputsAreWorthSampling()
+    {
+        TestWorld testWorld = BuildWorld();
+        InteractionAction inspect = CreateAction("inspect");
+        inspect.Definition!.InputActionName = new StringName("inspect");
+        inspect.ConcurrencyGroup = new StringName("inspection");
+        InteractionAction pickup = CreateAction("pickup");
+        pickup.Automatic = true;
+        AddAction(testWorld.Interactive, inspect);
+        AddAction(testWorld.Interactive, pickup);
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+
+        List<StringName> focused = new(testWorld.Interactor.GetRelevantInputs());
+
+        // Both bound inputs of the focused target, and only once each. The automatic action shares
+        // the interact input but is not what puts it there: no key requests an automatic action.
+        AssertThat(focused.Count).IsEqual(2);
+        AssertThat(focused.Contains(InteractInput)).IsTrue();
+        AssertThat(focused.Contains(new StringName("inspect"))).IsTrue();
+
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+        testWorld.Interactor.RemoveInteractive(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+
+        // Nothing is focused any more, yet the input this interactor believes it is sustaining stays
+        // reportable, so a release is still forwarded instead of being silently dropped.
+        List<StringName> sustained = new(testWorld.Interactor.GetRelevantInputs());
+
+        AssertThat(sustained.Contains(InteractInput)).IsTrue();
+    }
+
+    [TestCase]
+    public async Task AnOpenEndedExecutionStaysPresentedAndBlockedForEveryone()
+    {
+        DoorWorld door = BuildDoorWorld();
+        Node3D otherView = new() { Name = "ViewOrigin" };
+        InteractionInteractor other = new() { Name = "Other", ViewOrigin = otherView };
+        other.AddChild(otherView);
+        door.World.AddChild(other);
+        await door.Runner.SimulateFrames(1);
+
+        // The shape of a dialogue: the executor opens it and holds the execution with no deadline,
+        // until whatever owns the conversation completes it.
+        ExecutorOf(door.Open).Result = new InteractionExecutionRunning();
+        door.Interactive.ExecuteAction(door.Interactor, door.Open, out ulong executionId);
+
+        InteractionTargetPresentation owner = door.Interactive.GetPresentation(
+            door.Interactor,
+            true
+        );
+
+        // Still presented, so a prompt keeps somewhere to explain it, but no longer available: a
+        // prompt never claims an action the target would immediately refuse.
+        AssertThat(owner.Actions.Count).IsEqual(1);
+        AssertThat(owner.Actions[0].ActionId).IsEqual(new StringName("open"));
+        AssertThat(owner.Actions[0].IsAllowed).IsFalse();
+        AssertThat(owner.Actions[0].BlockReason).IsEqual("This is already in use.");
+        AssertThat(owner.HasAllowedAction).IsFalse();
+        AssertThat(door.Interactive.HasVisibleAction(door.Interactor)).IsTrue();
+
+        // Close was hidden by its own state rule and stays hidden: concurrency is evaluated after
+        // the rules, so a running sibling never drags a hidden action into the prompt.
+        AssertThat(
+                door.Interactive.EvaluateAvailability(door.Interactor, door.Close)
+                    is InteractionHidden
+            )
+            .IsTrue();
+
+        // Anybody else gets a different wording, because the two situations are not the same.
+        AssertThat(Describe(door.Interactive.EvaluateAvailability(other, door.Open)))
+            .IsEqual("Someone else is using this.");
+
+        AssertThat(door.Interactive.CompleteExecution(executionId)).IsTrue();
+        AssertThat(
+                door.Interactive.EvaluateAvailability(door.Interactor, door.Open)
+                    is InteractionAllowed
+            )
+            .IsTrue();
     }
 
     [TestCase]

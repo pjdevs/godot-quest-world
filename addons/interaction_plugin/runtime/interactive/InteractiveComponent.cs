@@ -178,6 +178,7 @@ public partial class InteractiveComponent : Node
     private const string NotConfiguredReason = "Interaction is not configured.";
     private const string NotAuthoritativeReason = "The interaction is not authoritative.";
     private const string AlreadyRunningReason = "This is already in use.";
+    private const string SomeoneElseReason = "Someone else is using this.";
 
     private static ulong _nextExecutionId = 1;
 
@@ -255,20 +256,31 @@ public partial class InteractiveComponent : Node
             return new InteractionBlocked(NotConfiguredReason);
         }
 
-        if (
-            TryGetGroupExecution(action, out InteractionExecution running)
-            && running.Interactor != interactor
-        )
-        {
-            return new InteractionBlocked("Someone else is using this.");
-        }
-
         InteractionContext context = new(interactor, this, action);
         InteractionAvailability targetAvailability = EvaluateRules(TargetRules, context);
+        if (targetAvailability is not InteractionAllowed)
+        {
+            return targetAvailability;
+        }
 
-        return targetAvailability is InteractionAllowed
-            ? EvaluateRules(action.Rules, context)
-            : targetAvailability;
+        InteractionAvailability actionAvailability = EvaluateRules(action.Rules, context);
+        if (actionAvailability is not InteractionAllowed)
+        {
+            return actionAvailability;
+        }
+
+        // Concurrency is evaluated last, after the rules. An action the rules already hid stays
+        // hidden instead of surfacing as blocked just because a sibling is running, and an action
+        // the rules already explained keeps its own reason.
+        //
+        // A reserved group blocks the action for everybody, its own interactor included. Staying
+        // allowed for the owner would make a prompt claim an action the target would immediately
+        // refuse; blocked keeps the action presented, with the reason, which is what a prompt needs.
+        return TryGetGroupExecution(action, out InteractionExecution running)
+            ? new InteractionBlocked(
+                running.Interactor == interactor ? AlreadyRunningReason : SomeoneElseReason
+            )
+            : new InteractionAllowed();
     }
 
     /// <summary>Aggregates the availability of every action into one target-level result.</summary>
@@ -647,14 +659,6 @@ public partial class InteractiveComponent : Node
         if (availability is not InteractionAllowed)
         {
             return RefuseExecution(interactor, action, availability.DescribeRefusal());
-        }
-
-        // Availability lets an interactor keep requesting a target it already reserved, so the
-        // running execution is what refuses here. Only the concurrency group of this action is
-        // considered: an unrelated group stays free, which is the whole point of naming one.
-        if (TryGetGroupExecution(action, out _))
-        {
-            return RefuseExecution(interactor, action, AlreadyRunningReason);
         }
 
         InteractionExecution? reservation = ReserveExecutionCore(interactor, action);
