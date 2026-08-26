@@ -1,34 +1,293 @@
 # Interaction Plugin
 
-This addon ports the Unreal interaction boundaries to Godot 4.7 C# without an autoload or hidden input actions.
+A composable Godot 4.7 C# interaction framework for offline and authoritative multiplayer games.
 
-The addon is namespaced under `QuestWorld.Interaction` and has no Character dependency. Add `InteractionInteractor` to a locally controlled character and assign its `ViewOrigin` explicitly in the Inspector. Add `InteractiveComponent` to an object with an `Area3D`, assign `InteractionArea` and `InteractionAnchor`, add one `InteractionAction` per offered action with its `InteractionActionDefinition` and its required `InteractionActionExecutor`, and compose custom `InteractionRule` resources for gameplay conditions. The executor is the single owner of the gameplay mutation; the `InteractionActionStarted`, `InteractionActionCompleted`, `InteractionActionCancelled`, and `InteractionActionRejected` signals are notifications only. World state lives in the separate `stateful_plugin` addon: add a `StatefulComponent` when the object needs replicated, persistable state, read it from availability with `StatefulStateInteractionRule`, and write it with `SetStateInteractionExecutor`. The interaction runtime holds no reference to it and interprets no state value. A long interaction returns a running execution and later calls `InteractiveComponent.CompleteExecution` or `CancelExecution`.
+## Philosophy
 
-## Execution or rule?
+Interaction separates five questions:
 
-The one distinction to learn before writing anything:
+1. A **detector** finds and ranks possible targets.
+2. An **interactive** declares what a target offers.
+3. A **rule** answers whether one action is allowed, blocked, or hidden.
+4. One **executor** performs the accepted gameplay mutation.
+5. A **presenter** renders local, replaceable UI.
 
-> An **execution** says *"this interactor is engaged with this target, right now."*
-> A **rule** says *"the world is in a state where this action is (un)available."*
+The owning client predicts focus and prevalidates an intention. The server resolves the target and action again, rechecks detection and rules, reserves the target, then calls exactly one executor. Signals only report what already happened.
 
-They are not two ways of doing the same thing, even though they look interchangeable in single player. Talking to an NPC is an execution: the executor opens the dialogue and returns `InteractionExecutionRunning()` with no duration, and whatever owns the conversation calls `CompleteExecution(id)` when it closes. Do not write an "is in dialogue" rule for this — the reservation already knows *who* is engaged, so another player is told someone else is busy with that NPC rather than being blocked by a global flag, and the framework ends the execution by itself when the player walks out of range, releases a sustained input, or leaves the tree.
+> A rule describes a world condition. A running execution describes who is engaged with a target right now.
 
-The test for having picked wrong: **if a rule reads a flag that one of your executors sets and clears, you have re-implemented the reservation by hand**, without its safety net — your flag stays set when the player disconnects mid-dialogue.
+Do not set and clear an “is interacting” flag from an executor and read it from a rule. That duplicates the built-in reservation and leaks when a player disconnects, releases a sustained input, or leaves range.
 
-Rules own the other two scopes. A condition about the player — *"I am already busy"* — is a rule reading `context.Interactor`. A condition about the world — *"this terminal has no power"*, *"this door is already open"* — is a rule reading state, usually `StatefulStateInteractionRule`. Rules must stay pure: they are re-evaluated every frame while a target is focused, and they run on both the requesting client and the authoritative server.
+## Quick start
 
-While an execution is running, its action is presented as **blocked** rather than allowed, for its own interactor too: a prompt keeps somewhere to explain the situation, but never offers an action the target would immediately refuse.
+Enable `interaction_plugin` in **Project Settings > Plugins** for Inspector validation. The runtime creates no autoload and no Input Map action.
 
-## Input
+### 1. Configure an interactor
 
-`InteractionInteractor.TryStartInteractionInput(inputActionName)` and `TryEndInteractionInput(inputActionName)` are the only input entry points. They resolve the pressed input into one action of the focused target, and the reliable RPC carries `targetPath + actionId` so the server re-resolves and re-evaluates that action against its own scene. The node keeps server multiplayer authority while `OwnerPeerId` identifies the client responsible for local focus, UI and input. Offline/listen-server mode uses the authoritative path directly; clients locally prevalidate and send reliable RPC intentions which the server revalidates against its own candidates, distance, angle, state and rules.
+Add one `InteractionInteractor` to each character, add a detector below it, and assign `Detector`. Set:
 
-`InteractionPresenter` is optional. Assign its `Interactor`, `Camera` and `PromptContainerScene` exports explicitly; it consumes interactor signals and projects configured `Control` scenes from the component's `Marker3D` anchor. The focused target is presented as one container implementing `IInteractionPromptContainer`, carrying the target name and stacking one instance of the component's `ActionPromptScene` per presented action; each action widget implements `IInteractionActionWidget` and shows its own allowed or blocked state. Indications stay one widget per target and implement `IInteractionWidget`.
+- `OwnerPeerId`: peer that owns focus, input, and presentation.
+- `ServerPeerId`: authoritative peer receiving reliable RPCs; normally `1`.
+- Detector `ViewOrigin`: camera or aiming transform.
+- Detector `InteractionOrigin`: optional body/reach origin; otherwise the nearest `Node3D` ancestor.
 
-The addon does not resolve configuration from node names, parents, siblings or recursive tree searches. Required references produce editor configuration warnings and are guarded again at runtime. `NodePath` is reserved for network RPC identities; no focus target is represented by an artificial presentation.
+The interactor never samples input. Forward the relevant project actions from local character code:
 
-When the addon is enabled, `editor/InteractionEditorPlugin.cs` registers an Inspector plugin. `InteractionValidator` centralizes the configuration warnings for `InteractiveComponent`, `InteractionInteractor`, `InteractionPresenter` and `TransitionStateInteractionExecutor`; the runtime scripts do not need `[Tool]` for validation.
+```csharp
+foreach (StringName input in _interactor.GetRelevantInputs())
+{
+    if (Input.IsActionJustPressed(input))
+        _interactor.TryStartInteractionInput(input);
+    else if (Input.IsActionJustReleased(input))
+        _interactor.TryEndInteractionInput(input);
+}
+```
 
-The runtime has no Quest, Inventory, Dialog, Character or Network Foundation dependency. The interaction runtime persists nothing at all: a running execution is transient and server-only, and world-state snapshots belong to `StatefulComponent` in `stateful_plugin`. The host owns storage.
+`GetRelevantInputs()` includes presentable actions of the focused target and any input still sustaining a running action.
 
-`integration/stateful/examples/LongActionExample.tscn` is the small duplicable starting point with detection areas, an interaction anchor, default widgets, a `StatefulComponent` and one long action. Its root carries no script: the action is owned entirely by its `TransitionStateInteractionExecutor`, a generic node that applies a running state, lets the target hold the execution for the duration authored on the action, then applies the end state. Replace it with your own executor when the object does more than move between states.
+### 2. Build an interactive target
+
+```text
+Door
+├── InteractionArea          Area3D; required
+│   └── CollisionShape3D
+├── IndicationArea           optional wider Area3D
+│   └── CollisionShape3D
+├── InteractionAnchor        Marker3D
+├── Interactive              InteractiveComponent
+│   └── OpenAction           InteractionAction
+│       └── OpenExecutor     InteractionActionExecutor
+└── StatefulComponent        optional world state
+```
+
+On `InteractiveComponent`, assign `InteractionArea`, `InteractionAnchor`, and every `InteractionAction` explicitly in `Actions`. Nothing is discovered by node name or tree search.
+
+`InteractionAnchor` is the single world point used for distance, focus, LOS, and UI projection. `InteractionArea` is currently required for every target: the area detector consumes its body overlaps, the aim detector casts against its collision shape, and the proximity detector ignores its geometry. Configure collision layers/masks accordingly.
+
+Do not subclass `InteractiveComponent` for gameplay. It has no gameplay hook: compose rules and executors, then use its signals only as notifications. Put target-specific behavior in an executor or an adjacent gameplay node.
+
+### 3. Define an action
+
+An action has two layers:
+
+- `InteractionActionDefinition` is reusable static data: stable `Id`, label, description, input, hold threshold, and release behavior.
+- `InteractionAction` is one occurrence on one target: executor, rules, priority, concurrency group, and optional automatic trigger.
+
+Keep `Id` stable across builds because it crosses the network, and declare `InputActionName` in the project Input Map. `HoldThreshold` only selects between actions sharing an input; it is not execution duration. `CancelOnInputReleased` makes a running execution depend on that input.
+
+Actions sharing a `ConcurrencyGroup` are mutually exclusive on their own target. The default group makes all actions of a target exclusive. `Automatic` actions request themselves when focused and do not appear as input prompts.
+
+## Write a rule
+
+Subclass `InteractionRule` when availability depends on gameplay:
+
+```csharp
+public partial class HasKeyRule : InteractionRule
+{
+    public override InteractionAvailability Evaluate(in InteractionContext context)
+    {
+        return HasKey(context.Interactor)
+            ? new InteractionAllowed()
+            : new InteractionBlocked("A key is required.");
+    }
+}
+```
+
+Add shared rules to `InteractiveComponent.TargetRules`; add action-specific rules to `InteractionAction.Rules`. Target rules run first, then action rules, stopping at the first non-allowed result.
+
+| Member | Comes from | Called on | Rhythm / constraint |
+| --- | --- | --- | --- |
+| `Evaluate(context)` | `InteractionRule` | Owning client and authoritative server | Potentially several times per presented action per frame on the client, then again per command on the server. Must be synchronous, gameplay-pure, and cheap. |
+
+Return:
+
+- `InteractionAllowed`: action may be requested.
+- `InteractionBlocked(reason)`: keep it visible and explain why.
+- `InteractionHidden`: omit it entirely.
+
+Resources may be shared between targets. Never store mutable runtime state in a rule; read nodes or services through `context.Interactor`, `context.Interactive`, and `context.Action`.
+
+### Provided rules
+
+| Rule | Use | Cost / trade-off |
+| --- | --- | --- |
+| `AlwaysBlockedInteractionRule` | Fixed authored refusal | Constant work; mainly an example and content switch |
+| `InteractorGroupInteractionRule` | Require a Godot node group | Constant group lookup; simple but groups are a coarse permission model |
+| `StatefulStateInteractionRule` | Match one `StatefulComponent` against expected states | Resolves a `NodePath` and scans `ExpectedStates` on every evaluation; keep the list short. Supports cross-object state without coupling the core. |
+
+## Write an executor
+
+Subclass `InteractionActionExecutor` for the one object that mutates gameplay:
+
+```csharp
+public partial class OpenDoorExecutor : InteractionActionExecutor
+{
+    public override InteractionExecutionResult Execute(
+        in InteractionExecutionContext context
+    )
+    {
+        OpenDoor();
+        return new InteractionExecutionCompleted();
+    }
+}
+```
+
+| Member | Required | Called on | When |
+| --- | --- | --- | --- |
+| `Execute(context)` | Yes | Authority only | Once, synchronously, after rules pass and the execution is reserved |
+| `ExpectedDuration` | No | Server and owning client | Read when reserving and when starting local progress prediction; `0` means no deadline |
+| `RequiresInteractorPresence` | No | Authority | Read after a running result; default `true` |
+| `OnExecutionCompleted(context)` | No | Authority only | Once when a previously running execution completes |
+| `OnExecutionCancelled(context, reason)` | No | Authority only | Once when a previously running execution is cancelled |
+
+`Execute` returns one of:
+
+- `InteractionExecutionCompleted`: mutation finished now.
+- `InteractionExecutionRunning(duration)`: keep the reservation. A positive returned duration overrides the server clock; zero uses `ExpectedDuration`.
+- `InteractionExecutionRejected(reason)`: nothing started. Use this rarely; ordinary conditions belong in rules.
+- `InteractionExecutionFailed(reason)`: it started but failed, so observers receive started then cancelled.
+
+For an event-driven action such as dialogue, return `InteractionExecutionRunning()`, keep `context.ExecutionId`, and later call `context.Interactive.CompleteExecution(id)` or `CancelExecution(id)` from authoritative gameplay.
+
+A timed running action enables `InteractiveComponent._Process()` on the server until it ends. A presence-bound running action is also revalidated once per server process frame through its detector. Set `RequiresInteractorPresence = false` for work handed to the world; `CancelOnInputReleased` always keeps it presence-bound.
+
+### Provided executors
+
+| Executor | Use | Cost / trade-off |
+| --- | --- | --- |
+| `SetStateInteractionExecutor` | Apply one state instantly | Constant, event-driven work; fails on a no-op, so pair it with a rule that hides or blocks the already-applied state |
+| `TransitionStateInteractionExecutor` | Apply running/completed/cancelled states | No polling when open-ended and world-owned. A positive `Duration` adds one server update per frame; requiring presence adds one detector validation per server frame. Covers state transitions only. |
+
+## Choose or write a detector
+
+A detector is a `Node` because it may own physics children, signals, and frame state. Assign exactly one to each interactor.
+
+| Member | Required | Called on | Rhythm |
+| --- | --- | --- | --- |
+| `Detect(target)` | Yes | Owning client and server | Once per local candidate per process frame; once per server command; once per server process frame for each presence-bound execution |
+| `GetCandidates()` | Yes | Owning client only | Once per process frame; return a reusable, distinct candidate sequence |
+| `Score(target)` | No | Owning client only | Once per interactible candidate with a visible action; greatest score wins |
+| `OnEnteredTargetArea` / `OnExitedTargetArea` | No | Every peer receiving target area overlaps | Event-driven; useful for area-backed sources |
+| `Forget(target)` | No | Every peer | When a target leaves the tree |
+| `_PhysicsProcess(delta)` | Only if needed | Every peer where the detector processes | Call `base._PhysicsProcess(delta)` to keep cached LOS current |
+
+Minimal custom source:
+
+```csharp
+public partial class MyDetector : InteractionDetector
+{
+    private readonly HashSet<InteractiveComponent> _candidates = new();
+
+    public override InteractionDetectionKind Detect(InteractiveComponent target) =>
+        _candidates.Contains(target) && IsWithinRange(target, 3.0f, 30.0f)
+            ? InteractionDetectionKind.Interactible
+            : InteractionDetectionKind.None;
+
+    protected internal override IEnumerable<InteractiveComponent> GetCandidates() =>
+        _candidates;
+
+    protected internal override void OnEnteredTargetArea(
+        InteractiveComponent target,
+        InteractionDetectionKind kind
+    )
+    {
+        if (kind == InteractionDetectionKind.Interactible)
+        {
+            _candidates.Add(target);
+        }
+    }
+
+    protected internal override void OnExitedTargetArea(
+        InteractiveComponent target,
+        InteractionDetectionKind kind
+    )
+    {
+        if (kind == InteractionDetectionKind.Interactible)
+        {
+            _candidates.Remove(target);
+        }
+    }
+}
+```
+
+`Detect` is the shared predicate used by client and server, so keep it tolerant of network transform lag. `GetCandidates` is only a local source; the server never needs to reproduce a client-only cast.
+
+The base class provides `IsWithinRange`, `HasLineOfSight`, and default look-plus-distance scoring. With a non-zero `OcclusionMask`, LOS performs an immediate ray on first use, then one ray per recently evaluated target per physics frame. Set the mask to `0` to disable all LOS rays. Only deliberate occluders should carry the configured layer.
+
+### Provided detectors and performance
+
+| Detector | Candidate source and behavior | Performance trade-off | Best fit |
+| --- | --- | --- | --- |
+| `AreaInteractionDetector` | Target-owned interaction and indication overlaps; authored shapes can express irregular reach. Angle/range still filter focus. | Local scan is **O(overlapped targets)** per process frame. Physics also maintains the target areas and, with LOS enabled, casts up to one ray per recently evaluated overlap per physics frame. Large indication volumes increase both counts. | Production baseline; dense worlds where authored volumes are acceptable |
+| `ProximityInteractionDetector` | Walks the static registry of every `InteractiveComponent` in the scene tree; target radii replace overlap shapes. Indication is omnidirectional. | Local scan is **O(all interactives in the scene tree) per locally controlled interactor, every process frame**. Because LOS is checked before distance, a non-zero mask can also cause up to one ray per registered target per physics frame. This scales badly. | Small scenes and quick authoring spikes only |
+| `AimInteractionDetector` | One forced sphere shapecast from the view, capped by `MaxHits`; its radius is clamped to at least `0.001`. It reports areas, while LOS handles walls. The server validates with the tolerant window instead of replaying the cast. | One shape query per physics frame, then **O(unique hits)** local evaluation and up to one LOS ray per recent hit. The current implementation has no owner guard, so its shapecast runs on every peer instance that still processes, even though only the owning interactor consumes the list. | Precise crosshair interaction with a small, bounded hit set |
+
+`ProximityInteractionDetector` and `AimInteractionDetector` are spikes with smoke coverage, not hardened contracts. Profile them in the real scene before choosing them; disable remote Aim detector processing explicitly if replicated characters keep one.
+
+## Configure input and execution behavior
+
+When several actions share an input:
+
+1. The hold threshold selects the longest threshold reached.
+2. Allowed beats blocked.
+3. Higher `Priority` wins.
+4. The stable action id breaks the final tie.
+
+A tap may therefore select a zero-threshold action while a hold selects another. For “hold while hacking,” normally use a zero selection threshold, a running executor with a duration, and `CancelOnInputReleased = true`. Combining a hold threshold with execution duration creates two consecutive waits.
+
+The reliable client RPC carries only `targetPath + actionId`. The server checks the owning peer, resolves the target and action from its scene, validates `Detect`, evaluates rules, and only then executes. Do not call the RPC methods directly; use `TryStartInteractionInput` and `TryEndInteractionInput`.
+
+## Build presentation
+
+`InteractionPresenter` is optional. Assign its local `Interactor`, `Camera`, and optional `PromptContainerScene`.
+
+The target supplies `ActionPromptScene`, `IndicationScene`, and `BlockedIndicationScene`; leaving one unset simply omits that visual.
+
+- A prompt container implements `IInteractionPromptContainer.Bind(targetPresentation)` and exposes `ActionsContainer`.
+- One action widget implements `IInteractionActionWidget.Bind(actionPresentation)`.
+- A target-level indication implements `IInteractionWidget.Bind(targetPresentation)`.
+
+`Bind` runs locally every presentation frame so hold progress, execution progress, rules, and projection remain current. Keep it allocation-free and side-effect free. The presenter reuses widget instances; it only recreates them when the target, scene, or presented action count changes.
+
+### Provided presentation
+
+| Implementation | Behavior | Cost / trade-off |
+| --- | --- | --- |
+| `InteractionPresenter` | Projects one focused container plus one indication per non-focused detected target | Each local process frame rebuilds snapshots, re-evaluates every action of the focused and indicated targets, binds widgets, and projects them: O(total actions across presented targets). Stable frames use this single refresh path; status events no longer trigger a duplicate refresh, and the stale-indication buffer is reused. |
+| `InteractionPromptWidget` | Target name and action container | Minimal default; no styling or input glyph resolution |
+| `InteractionActionPromptWidget` | Input and label, or blocked reason | Constant bind cost; text-only |
+| `InteractionIndicatorWidget` | Target name | Constant bind cost; allowed/blocked appearance comes from the selected scene |
+
+## Technical reference
+
+### Client/server rhythm
+
+| Work | Owning client | Server |
+| --- | --- | --- |
+| Enumerate and score focus candidates | Every process frame | Never |
+| Evaluate rules for visible UI | Every presentation/focus refresh | Listen host only when it also presents |
+| Validate a request | Prevalidation | Always, authoritatively |
+| Run executor and own reservations | Never | Always |
+| Time running executions | Predicted for UI | Authoritative `InteractiveComponent._Process` |
+| Validate sustained presence | Never | Once per running, presence-bound execution per process frame |
+| Render widgets | Every local presentation frame | Never on a dedicated server |
+
+Offline and listen-server play take the authoritative path directly. Active execution identifiers are transient and server-only; interaction execution state is not replicated. Client progress is a local prediction from `ExpectedDuration`; persistent replicated world state belongs to `StatefulComponent`.
+
+### Notifications
+
+`InteractionActionStarted`, `Completed`, `Cancelled`, and `Rejected` are authoritative notifications on the target. They are never commands. Local interactor signals report focus, presentation invalidation, requests, refusals, and indication changes.
+
+`InteractionStatusChanged` is an event, not a per-frame push: it fires when focus moves, a target enters detection, or gameplay explicitly invalidates its status. A rule changing by itself emits nothing; consumers needing continuous freshness must pull a new presentation snapshot. The provided presenter already does so once per local process frame.
+
+Mutations and reservations are complete before executors or signal listeners run. A started action is followed by exactly one completion or cancellation; a rejected action never emits started.
+
+### Explicit configuration and validation
+
+Required references are never guessed from parents, siblings, names, or recursive searches. Network requests identify targets with `NodePath`; ordinary scene wiring uses explicit Inspector references, except for the deliberately shareable `StatefulStateInteractionRule`. The editor plugin validates interactors, detectors, targets, actions, definitions, presenters, Stateful rules, and provided Stateful executors; runtime guards remain in place.
+
+### Scope and example
+
+The core is namespaced under `QuestWorld.Interaction` and has no Quest, Inventory, Dialog, Character, Stateful, persistence, or transport abstraction dependency. The optional integration depends on the [`stateful_plugin`](../stateful_plugin/README.md), never the reverse.
+
+[`integration/stateful/examples/LongActionExample.tscn`](integration/stateful/examples/LongActionExample.tscn) is the duplicable reference scene: explicit areas and anchor, default widgets, a replicated `StatefulComponent`, pure state rules, and a timed `TransitionStateInteractionExecutor`, with no script on the scene root.
