@@ -1105,15 +1105,25 @@ public partial class InteractiveComponent : Node
         {
             case InteractionExecutionCompleted:
                 EmitSignal(SignalName.InteractionActionStarted, interactor, action);
+                NotifyRequesterStarted(dispatch.Execution, duration: 0.0f);
                 EmitSignal(SignalName.InteractionActionCompleted, interactor, action);
+                NotifyRequesterCompleted(dispatch.Execution);
                 break;
 
-            case InteractionExecutionRunning:
+            case InteractionExecutionRunning running:
                 EmitSignal(SignalName.InteractionActionStarted, interactor, action);
+                // The executor may have taken over the clock, so the owner is told the duration the
+                // target actually kept rather than the estimate the reservation was built with.
+                NotifyRequesterStarted(
+                    dispatch.Execution,
+                    running.Duration > 0.0f ? running.Duration : dispatch.Execution.Duration
+                );
                 break;
 
             case InteractionExecutionRejected rejected:
-                // Nothing ran, so the refusal alone is reported and no status is invalidated.
+                // Nothing ran, so the refusal alone is reported and no status is invalidated. The
+                // requester learns about it through the refusal path of its own interactor, which is
+                // also the one reporting refusals this component never saw.
                 EmitSignal(
                     SignalName.InteractionActionRejected,
                     interactor,
@@ -1124,12 +1134,14 @@ public partial class InteractiveComponent : Node
 
             case InteractionExecutionFailed failed:
                 EmitSignal(SignalName.InteractionActionStarted, interactor, action);
+                NotifyRequesterStarted(dispatch.Execution, duration: 0.0f);
                 EmitSignal(
                     SignalName.InteractionActionCancelled,
                     interactor,
                     action,
                     failed.Reason
                 );
+                NotifyRequesterFailed(dispatch.Execution, failed.Reason);
                 break;
         }
 
@@ -1139,6 +1151,7 @@ public partial class InteractiveComponent : Node
     private void DispatchExecutionCompletion(in InteractionExecution execution)
     {
         EmitSignal(SignalName.InteractionActionCompleted, execution.Interactor, execution.Action);
+        NotifyRequesterCompleted(execution);
         NotifyStatusChanged();
     }
 
@@ -1150,8 +1163,56 @@ public partial class InteractiveComponent : Node
             execution.Action,
             reason
         );
+        NotifyRequesterCancelled(execution, reason);
         NotifyStatusChanged();
     }
+
+    // The peer that asked for the action learns its authoritative lifecycle by a direct call, on the
+    // same principle as the executor callbacks above: nothing is broadcast, so the acknowledgement
+    // stays with its requester instead of telling every client what somebody else is doing.
+    private void NotifyRequesterStarted(in InteractionExecution execution, float duration)
+    {
+        if (IsRequesterUsable(execution))
+        {
+            execution.Interactor.NotifyExecutionStarted(
+                this,
+                execution.Action,
+                execution.Id,
+                duration
+            );
+        }
+    }
+
+    private void NotifyRequesterCompleted(in InteractionExecution execution)
+    {
+        if (IsRequesterUsable(execution))
+        {
+            execution.Interactor.NotifyExecutionCompleted(this, execution.Action);
+        }
+    }
+
+    private void NotifyRequesterCancelled(in InteractionExecution execution, string reason)
+    {
+        if (IsRequesterUsable(execution))
+        {
+            execution.Interactor.NotifyExecutionCancelled(this, execution.Action, reason);
+        }
+    }
+
+    private void NotifyRequesterFailed(in InteractionExecution execution, string reason)
+    {
+        if (IsRequesterUsable(execution))
+        {
+            execution.Interactor.NotifyExecutionFailed(this, execution.Action, reason);
+        }
+    }
+
+    // An interactor that left the tree between the start and the end of its execution has nobody to
+    // acknowledge to, which is an ordinary disconnection rather than an error.
+    private static bool IsRequesterUsable(in InteractionExecution execution) =>
+        execution.Interactor is not null
+        && IsInstanceValid(execution.Interactor)
+        && execution.Action is not null;
 
     internal void NotifyStatusChanged()
     {

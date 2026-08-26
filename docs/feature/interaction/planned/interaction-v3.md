@@ -17,7 +17,7 @@ Décisions acquises :
 
 - Les exécutions restent transitoires et server-only. Un état métier répliqué comme `activating` est le reflet durable de la réservation lorsqu’elle importe aux autres joueurs.
 - Un hold annulé au relâchement exige aussi que le joueur reste présent. Le déplacement libre commence après l’interaction, comme pour une corde devenue objet transporté.
-- Dialogue et Shop possèdent leur session réseau. Interaction leur donne un `ExecutionId`, mais ne devient pas un framework de fenêtres ou de conversations.
+- Un dialogue ou un shop **autoritaire** possède sa session réseau ; Interaction lui donne un `ExecutionId`, mais ne devient pas un framework de fenêtres ou de conversations. Une fenêtre **non bloquante** n’a besoin d’aucune session : l’acquittement autoritaire de sa propre requête suffit à l’ouvrir et à la refermer.
 - Une quête observe de préférence `generator = repaired` plutôt que la seule action `repair`. Le même résultat peut alors provenir d’une interaction, d’un script ou d’une restauration de sauvegarde.
 - Des `CompletionEffects` restent un spike possible si de vraies conséquences liées à l’action se répètent. Ils ne sont pas planifiés avant le système Facts.
 
@@ -65,72 +65,141 @@ Il ne faut pas faire jouer le même feedback cosmétique par l’executor et par
 
 Une animation qui déplace aussi une collision n’est pas purement cosmétique. Elle observe `StateChanged` afin de tourner également sur le dedicated server, mais seul le serveur décide de l’état final. `LeverWall` suit déjà ce modèle.
 
-Ce qui manque encore est un test avec un vrai serveur et deux clients prouvant que chaque transition répliquée déclenche exactement une fois le feedback de chaque peer. Le test unitaire actuel appelle directement le setter répliqué et la scène vérifie seulement la configuration du `MultiplayerSynchronizer`.
+Le harnais qui manquait existe désormais — `InteractionNetworkTest` fait tourner un vrai serveur et deux vrais clients dans un seul process — mais il ne couvre que l’acquittement. Reste à lui ajouter le volet Stateful : prouver qu’une transition répliquée déclenche exactement une fois le feedback de chaque peer. Le test unitaire actuel appelle encore directement le setter répliqué et la scène vérifie seulement la configuration du `MultiplayerSynchronizer`.
 
-## Callbacks Interaction : contrat actuel et manque client
+## Callbacks Interaction : contrat autorité et acquittement client
 
-| Notification | Où aujourd’hui | Sens |
+| Notification | Où | Sens |
 | --- | --- | --- |
 | `InteractionRequested` | Client propriétaire, localement | Intention envoyée, pas acceptation serveur |
-| `InteractionRejected` | Client propriétaire | Prévalidation locale ou rejet renvoyé par le serveur |
 | `InteractionActionStarted` | Autorité seulement | L’executor a accepté la commande |
 | `InteractionActionCompleted` | Autorité seulement | L’action acceptée a terminé |
 | `InteractionActionCancelled` | Autorité seulement | L’action acceptée a été interrompue |
 | `InteractionActionRejected` | Autorité seulement | Le target a refusé avant exécution |
+| `InteractionStarted` | Autorité → propriétaire | Commande acceptée, avec son `ExecutionId` et sa durée |
+| `InteractionCompleted` | Autorité → propriétaire | L’action acquittée a terminé |
+| `InteractionCancelled` | Autorité → propriétaire | L’action acquittée a été interrompue, avec sa raison |
+| `InteractionFailed` | Autorité → propriétaire | L’action acquittée a échoué après acceptation |
+| `InteractionRejected` | Client propriétaire | Prévalidation locale ou refus autoritaire — n’a jamais démarré |
 
-Un signal Godot est local : les quatre notifications de l’`InteractiveComponent` ne traversent pas le réseau. Le client demandeur ne sait donc pas génériquement que le serveur a accepté ou terminé son action. Il ne possède qu’une prédiction, un éventuel state répliqué et un RPC de rejet.
-
-V3 doit fournir au client propriétaire un lifecycle autoritaire corrélé à sa requête :
+Un signal Godot est local : les quatre notifications de l’`InteractiveComponent` ne traversent pas le
+réseau. Le client demandeur n’avait donc génériquement ni acceptation ni fin ; il ne possédait qu’une
+prédiction, un éventuel state répliqué et un RPC de rejet. Les cinq dernières lignes de la table sont
+la réponse, livrée dans la Task 14 de [`interaction.md`](../interaction.md) :
 
 ```text
-Requested(requestId, target, action)
-Started(requestId, executionId, authoritativeDuration)
-Completed(executionId)
-Cancelled(executionId, reason)
-Failed(requestId/executionId, reason)
-Rejected(requestId, reason)
+Requested(target, action)                        local, aucune garantie
+Started(target, action, executionId, duration)   autorité → demandeur
+Completed(target, action)                        autorité → demandeur
+Cancelled(target, action, reason)                autorité → demandeur
+Failed(target, action, reason)                   autorité → demandeur, toujours après Started
+Rejected(target, action, reason)                 autorité → demandeur, jamais après Started
 ```
 
-Ce protocole sert à nettoyer la prédiction, suivre plusieurs groupes simultanés et informer une UI locale. Il ne doit pas diffuser les callbacks à tous les clients : les autres joueurs observent le résultat monde par Stateful ou par le système métier. Cela évite des événements transitoires non late-join-safe et la divulgation d’actions cachées.
+Les invariants qui font tenir le protocole :
+
+- exactement un terminal (`Completed | Cancelled | Failed | Rejected`) par requête acceptée ou refusée ;
+- `Started` précède les trois premiers, jamais `Rejected` — une action instantanée est acquittée
+  `Started` puis `Completed`, miroir exact de l’autorité, donc un seul lifecycle à apprendre ;
+- corrélation par `(target, actionId)` et non par numéro de requête, ce qui est suffisant **parce que**
+  le demandeur ne garde qu’une prédiction et une entrée soutenue par input : au plus une requête d’une
+  paire donnée est en vol. Tolérer plusieurs requêtes concurrentes sur la même paire exigerait d’abord
+  un `RequestId` ;
+- délivré exactement une fois au propriétaire, **listen host inclus**, par appel local direct plutôt que
+  par `CallLocal` ;
+- jamais diffusé : les autres peers observent par Stateful ou par le système métier. C’est late-join-safe
+  là où un acquittement transitoire ne l’est pas, et ça ne divulgue pas une action qui leur est cachée.
+
+L’`ExecutionId` est une donnée utile — adresser une session downstream — pas la clé de corrélation.
+
+### Deux canaux de présentation
+
+La présentation a deux sources, et les confondre est ce qui produit le double feedback :
+
+| Canal | Portée | Late join | Ce qu’il porte |
+| --- | --- | --- | --- |
+| `StatefulComponent` répliqué | tous les peers | sûr | ce qui est vrai dans le monde |
+| Acquittement autoritaire | demandeur seul | non | ce qui n’est vrai que pour lui, son UI locale |
+
+Une UI ouverte par l’acquittement ne doit donc pas l’être aussi par l’état répliqué, exactement comme un
+feedback cosmétique ne doit pas être joué par l’executor **et** par le state.
 
 ### Dialogue et vendeur
 
-Le système downstream reste la source de vérité de son UI :
+Trois voies existent, aucune n’est imposée. Le choix se fait sur ce que le système downstream doit
+posséder, pas sur la taille de la fenêtre.
+
+**Popup non bloquant** — aucun système réseau downstream. L’executor commande côté serveur ; un script de
+présentation local du demandeur s’abonne à l’acquittement.
+
+```text
+Client demande l’interaction
+→ serveur accepte, executor Running() ou Completed()
+→ Started acquitté au seul demandeur
+→ le client ouvre son menu
+→ Completed / Cancelled / Failed le referment
+```
+
+Ce que le menu **engage** reste autoritaire par ailleurs : chaque achat est sa propre commande validée
+par le serveur. La fenêtre n’est qu’un feedback client.
+
+**Dialogue autoritaire bloquant** — le système Dialog possède sa session réseau et ses données.
 
 ```text
 Client demande l’interaction
 → serveur accepte
-→ executor ouvre une session Dialog/Shop pour ce peer
-→ le système envoie SessionStarted au client
+→ Execute appelle le système Dialog serveur, qui valide et ouvre une session pour ce peer
+→ SessionStarted au client, avec ses données
 → le client ouvre son UI
 
 Client choisit ou ferme
-→ requête au serveur du système Dialog/Shop
-→ validation métier
+→ requête au système Dialog serveur → validation métier
 → CompleteExecution / CancelExecution
 → SessionCompleted / SessionCancelled au client
 ```
 
-Ouvrir l’UI sur `InteractionRequested` serait optimiste : le serveur peut encore refuser. Les futurs callbacks Interaction pourront fournir un acknowledgement générique, mais ne remplacent pas les données et résultats propres au dialogue ou au commerce.
+L’acquittement Interaction reste le lifecycle générique et ne remplace pas ces données.
+
+**RPC propre à l’executor** vers le peer demandeur, pour le cas intermédiaire : une fenêtre qui a besoin
+d’un payload sans mériter un système de sessions.
+
+Dans les trois cas, ouvrir l’UI sur `InteractionRequested` serait optimiste : le serveur peut encore
+refuser. C’est précisément ce que l’acquittement remplace.
 
 ## Trous V3 confirmés
 
 ### P0 — protocole et tests réseau
 
-1. **Pas d’acknowledgement autoritaire côté client.** Le serveur ne renvoie que les rejets. Il manque la corrélation request/execution, la durée réellement choisie et les fins `Completed/Cancelled/Failed`.
-2. **Le rejet ne réconcilie pas la prédiction.** `ClientInteractionRejected` émet un signal mais ne nettoie pas `_prediction`, `_sustainedInputs` ni la requête automatique mémorisée.
-3. **`Failed` devient `Rejected` sur le client.** Le serveur notifie `Started` puis `Cancelled`, mais `TryStartInteractionAuthoritatively` retourne `false` et envoie ensuite le RPC de rejet.
-4. **Aucun vrai test Interaction à plusieurs peers.** Les tests doivent lancer un serveur, un client A et un client B avec `LongActionExample`.
+1. ~~**Pas d’acknowledgement autoritaire côté client.**~~ Livré : voir le protocole ci-dessus. La
+   corrélation est `(target, actionId)` et non `request/execution`, ce qui suffit tant qu’une seule
+   requête d’une paire est en vol.
+2. ~~**Le rejet ne réconcilie pas la prédiction.**~~ Livré, avec une correction du point tel qu’il était
+   écrit : nettoyer aussi la requête automatique mémorisée **suffisait à créer un flot**, puisque la
+   frame suivante réémettait la même requête. La paire refusée est donc retenue comme backoff et
+   relâchée dès que la situation change — focus qui bouge, action qui quitte les choix offerts, ou
+   gameplay qui invalide la cible.
+3. ~~**`Failed` devient `Rejected` sur le client.**~~ Livré : `TryStartInteractionAuthoritatively`
+   retourne l’`InteractionExecutionResult` au lieu d’un `bool` + `out string` qui écrasait quatre issues
+   en une. Seul un `Rejected` produit un refus.
+4. **Tests à plusieurs peers : partiellement livré.** `InteractionNetworkTest` monte un vrai serveur et
+   deux vrais clients dans un seul process (une `MultiplayerApi` et un pair ENet par sous-arbre) et
+   couvre le protocole d’acquittement de bout en bout. Ce qui manque encore est le volet **Stateful** :
+   prouver qu’une transition répliquée déclenche exactement une fois le feedback de chaque peer, ce que
+   le harnais rend maintenant faisable. Le montage exige que les chemins réseau soient nommés
+   relativement à `SceneMultiplayer.RootPath` ; voir
+   [`godot-multiplayer-in-process-peers.md`](../../memory/godot-multiplayer-in-process-peers.md).
 
-Scénarios réseau minimaux :
+Scénarios réseau restants :
 
 - A démarre : serveur, A et B voient `activating`; B présente l’action comme busy.
-- B demande après réplication : aucune seconde exécution ne démarre.
-- A et B demandent avant réplication : une seule exécution démarre et le perdant nettoie immédiatement sa prédiction.
 - Completion : chaque peer voit `activated` et joue une seule fois son feedback.
 - Release, sortie de zone ou déconnexion : chaque peer revient à `idle`, puis B peut commencer.
 - Late join pendant `activating` et après `activated` : état et pose visuelle corrects sans rejouer les one-shots passés.
-- Dialogue : l’UI ne s’ouvre qu’après `SessionStarted`, puis sa fermeture termine ou annule la bonne exécution sur le serveur.
+- Dialogue autoritaire : l’UI ne s’ouvre qu’après `SessionStarted`, puis sa fermeture termine ou annule la bonne exécution sur le serveur.
+
+Déjà couverts par `InteractionNetworkTest` : B qui demande pendant que A tient l’action ne démarre aucune
+seconde exécution et l’apprend seul, la commande ne tourne que sur l’autorité, et une défaillance traverse
+le réseau en `started,failed` plutôt qu’en rejet.
 
 La liste `_activeExecutions` n’a pas besoin d’être répliquée pour ces scénarios : `activating` en est déjà la projection métier. Une action longue sans aucun état ou système métier répliqué conserve volontairement une présentation distante optimiste jusqu’au refus serveur.
 
@@ -193,7 +262,8 @@ La progression partagée ne correspond pas non plus à la prédiction locale à 
 | Bouton distant, levier, breaker | Action locale, executor qui change le state d’un autre objet | Complet |
 | Démarrage long d’une machine | `TransitionStateInteractionExecutor`: idle → activating → activated | Complet |
 | Borne multi-actions façon Borderlands | Ouvrir le shop, vendre la camelotte, tout vendre avec hold ; une rule et un executor par commande | Complet, transactions métier à écrire |
-| Dialogue ou vendeur ouvert | Executor `Running()` + session downstream + completion/cancellation par signal serveur | Complet, exemple réseau manquant |
+| Vendeur popup non bloquant | Executor `Running()` + fenêtre locale ouverte et refermée par le seul acquittement | Complet, couvert par un test |
+| Dialogue autoritaire bloquant | Executor `Running()` + session downstream + completion/cancellation par signal serveur | Complet, exemple réseau manquant |
 | Corde transportable | Prendre change state/propriété ; le déplacement est gameplay ; rendre est une seconde action avec rule d’inventaire | Complet avec Inventory |
 | Batterie, fusible ou power cell | Prendre/insérer/retirer ; rules d’inventaire et states de la socket | Complet avec Inventory |
 | Noyau ou réacteur multi-étapes | States `off`, `primed`, `fed`, `unstable`, `detonated`; actions visibles selon la phase | Complet ; script métier au-delà des transitions simples |
@@ -234,7 +304,7 @@ Ce cas valide une frontière importante : Interaction suit qui tient une command
 
 ## Ordre de suite recommandé
 
-1. Ajouter le protocole client autoritaire et les tests serveur + deux clients, y compris les feedbacks Stateful.
+1. ~~Ajouter le protocole client autoritaire~~ et étendre le harnais serveur + deux clients aux feedbacks Stateful, qui restent le volet non couvert.
 2. Corriger les hot paths des détecteurs et garder Area comme baseline de production.
 3. Ajouter des exemples corde, dialogue/vendor, machine multi-actions, noyau multi-états et générateur coop à points multiples.
 4. Réduire le coût d’authoring du coffre/porte minimal avec une scène exemple et, seulement si la duplication apparaît, un presenter d’animation stateful générique.

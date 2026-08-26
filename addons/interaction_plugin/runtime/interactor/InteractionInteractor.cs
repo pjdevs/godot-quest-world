@@ -121,6 +121,88 @@ public partial class InteractionInteractor : Node
         string reason
     );
 
+    /// <summary>Emitted on the requesting peer once the authority accepted and started its command.</summary>
+    /// <remarks>
+    /// This is the acknowledgement a requesting client had no generic way to obtain: a Godot signal is
+    /// local, so the target-level notifications of <see cref="InteractiveComponent"/> never left the
+    /// authority and a client only ever knew about its own prediction and about refusals.
+    /// <para>
+    /// An acknowledgement is correlated by target and action identifier, not by a request number. That
+    /// is sufficient <b>because</b> the requesting peer keeps a single prediction and one sustained
+    /// entry per input, so at most one request of a given pair is ever in flight. A client that starts
+    /// tolerating several concurrent requests on the same pair needs a request identifier first.
+    /// </para>
+    /// <para>
+    /// The acknowledgement is delivered exactly once to the owning peer, the listen host included, and
+    /// is never broadcast. The other players observe the world through replicated state or through the
+    /// downstream gameplay system: that is late-join safe where a transient acknowledgement is not, and
+    /// it does not disclose an action hidden from them.
+    /// </para>
+    /// <para>
+    /// An instant action is acknowledged as started and then completed, exactly as the authority
+    /// notifies it, so a consumer only has one lifecycle to learn.
+    /// </para>
+    /// <para>
+    /// A local window a non-blocking vendor or dialogue opens belongs here rather than on
+    /// <see cref="InteractionRequested"/>, which is only an intention the authority may still refuse.
+    /// </para>
+    /// </remarks>
+    /// <param name="interactive">Target that accepted the command, or null when it cannot be resolved locally.</param>
+    /// <param name="actionId">Identifier of the accepted action, correlating this acknowledgement.</param>
+    /// <param name="executionId">Identifier the authority allocated, addressable by a downstream system.</param>
+    /// <param name="duration">Seconds the authority decided the execution lasts, or zero for no deadline.</param>
+    [Signal]
+    public delegate void InteractionStartedEventHandler(
+        Node interactive,
+        StringName actionId,
+        ulong executionId,
+        float duration
+    );
+
+    /// <summary>Emitted on the requesting peer once its accepted action reached its end.</summary>
+    /// <remarks>Always preceded by <see cref="InteractionStarted"/> for the same target and action.</remarks>
+    /// <param name="interactive">Target whose execution completed, or null when it cannot be resolved locally.</param>
+    /// <param name="actionId">Identifier of the completed action.</param>
+    [Signal]
+    public delegate void InteractionCompletedEventHandler(Node interactive, StringName actionId);
+
+    /// <summary>Emitted on the requesting peer once its accepted action ended without completing.</summary>
+    /// <remarks>
+    /// This covers a released input, an interactor leaving range or the tree, and an explicit gameplay
+    /// cancellation. Always preceded by <see cref="InteractionStarted"/>.
+    /// <para>
+    /// It does not own the local prediction: a release clears the prediction immediately so the bar
+    /// disappears without a round trip, and this acknowledgement is what everything else — a vendor
+    /// window, a local UI — closes on. Receiving it after the prediction is already gone is normal.
+    /// </para>
+    /// </remarks>
+    /// <param name="interactive">Target whose execution ended, or null when it cannot be resolved locally.</param>
+    /// <param name="actionId">Identifier of the cancelled action.</param>
+    /// <param name="reason">Reason describing why the execution did not complete.</param>
+    [Signal]
+    public delegate void InteractionCancelledEventHandler(
+        Node interactive,
+        StringName actionId,
+        string reason
+    );
+
+    /// <summary>Emitted on the requesting peer once its accepted action failed after acceptance.</summary>
+    /// <remarks>
+    /// A failure is not a refusal: the authority accepted the command, notified it as started and only
+    /// then discovered a gameplay or technical error. The client mirrors that exactly — it receives
+    /// <see cref="InteractionStarted"/> and then this — so a window opened on the acknowledgement has
+    /// something to close on, and so <see cref="InteractionRejected"/> keeps meaning "never started".
+    /// </remarks>
+    /// <param name="interactive">Target whose execution failed, or null when it cannot be resolved locally.</param>
+    /// <param name="actionId">Identifier of the failed action.</param>
+    /// <param name="reason">Reason describing the failure.</param>
+    [Signal]
+    public delegate void InteractionFailedEventHandler(
+        Node interactive,
+        StringName actionId,
+        string reason
+    );
+
     /// <summary>Emitted when an interactive enters the optional indication area.</summary>
     /// <param name="interactive">Interactive available for indication presentation.</param>
     [Signal]
@@ -160,6 +242,8 @@ public partial class InteractionInteractor : Node
     private InteractiveComponent? _focusedInteractive;
     private InteractiveComponent? _automaticTarget;
     private StringName? _automaticActionId;
+    private InteractiveComponent? _refusedAutomaticTarget;
+    private StringName? _refusedAutomaticActionId;
     private InteractionGesture? _gesture;
     private PredictedExecution? _prediction;
     private bool _hasKnownLocalControl;
@@ -703,6 +787,10 @@ public partial class InteractionInteractor : Node
         if (
             availability is not InteractionAllowed
             || (_automaticTarget == target && _automaticActionId == action!.Definition!.Id)
+            || (
+                _refusedAutomaticTarget == target
+                && _refusedAutomaticActionId == action!.Definition!.Id
+            )
         )
         {
             return;
@@ -713,10 +801,20 @@ public partial class InteractionInteractor : Node
         TryRequestAction(target, action, inputActionName: null);
     }
 
+    // Leaving the offered choices and moving the focus are both "the situation changed", which is
+    // exactly when a refusal stops being a reason to stay silent: the pair is forgotten with the
+    // request itself, so the next opportunity is a fresh one.
     private void ForgetAutomaticRequest()
     {
         _automaticTarget = null;
         _automaticActionId = null;
+        ClearAutomaticRefusal();
+    }
+
+    private void ClearAutomaticRefusal()
+    {
+        _refusedAutomaticTarget = null;
+        _refusedAutomaticActionId = null;
     }
 
     private bool TryRequestAction(
@@ -741,14 +839,34 @@ public partial class InteractionInteractor : Node
         EmitSignal(SignalName.InteractionRequested, target, actionId);
         if (!IsAuthoritative)
         {
-            RpcId(ServerPeerId, nameof(ServerTryStartInteraction), target.GetPath(), actionId);
+            RpcId(
+                ServerPeerId,
+                nameof(ServerTryStartInteraction),
+                GetNetworkPath(target),
+                actionId
+            );
             RememberSustainedInput(inputActionName, action);
             PredictExecution(target, action);
             return true;
         }
 
-        if (!TryStartInteractionAuthoritatively(target, actionId, OwnerPeerId, out _))
+        InteractionExecutionResult result = TryStartInteractionAuthoritatively(
+            target,
+            actionId,
+            OwnerPeerId
+        );
+        if (result is InteractionExecutionRejected rejected)
         {
+            // The host is a requester like any other: an authoritative refusal reaches it through the
+            // same acknowledgement a remote client receives, exactly once.
+            RejectInteraction(OwnerPeerId, GetNetworkPath(target), actionId, rejected.Reason);
+            return false;
+        }
+
+        if (result is InteractionExecutionFailed)
+        {
+            // Started and failed were already acknowledged by the target, and nothing is left running
+            // to sustain or to predict.
             return false;
         }
 
@@ -787,6 +905,13 @@ public partial class InteractionInteractor : Node
         if (!IsLocallyControlled)
         {
             return;
+        }
+
+        // Gameplay says this target is no longer what the refusal was decided against, so an
+        // automatic action that was refused is allowed to try again.
+        if (interactive == _refusedAutomaticTarget)
+        {
+            ClearAutomaticRefusal();
         }
 
         if (interactive == _focusedInteractive)
@@ -838,8 +963,7 @@ public partial class InteractionInteractor : Node
     public void ServerTryStartInteraction(NodePath targetPath, StringName actionId)
     {
         int senderPeerId = GetRemoteSenderOrOwner();
-        InteractiveComponent? target = GetTree()
-            .Root.GetNodeOrNull<InteractiveComponent>(targetPath);
+        InteractiveComponent? target = ResolveNetworkPath(targetPath) as InteractiveComponent;
         if (target is null)
         {
             RejectInteraction(
@@ -851,9 +975,15 @@ public partial class InteractionInteractor : Node
             return;
         }
 
-        if (!TryStartInteractionAuthoritatively(target, actionId, senderPeerId, out string reason))
+        // Only a refusal is reported here. A failure already reached the owner as started and then
+        // failed, dispatched by the target itself, so reporting it again as a rejection would tell
+        // that owner its command never ran.
+        if (
+            TryStartInteractionAuthoritatively(target, actionId, senderPeerId)
+            is InteractionExecutionRejected rejected
+        )
         {
-            RejectInteraction(senderPeerId, targetPath, actionId, reason);
+            RejectInteraction(senderPeerId, targetPath, actionId, rejected.Reason);
         }
     }
 
@@ -893,41 +1023,328 @@ public partial class InteractionInteractor : Node
     )]
     public void ClientInteractionRejected(NodePath targetPath, StringName actionId, string reason)
     {
-        Node? target = GetTree().Root.GetNodeOrNull(targetPath);
-        EmitSignal(SignalName.InteractionRejected, target, actionId, reason);
+        Node? target = ResolveAcknowledgedTarget(targetPath);
+        ReconcileRefusedRequest(target as InteractiveComponent, actionId);
+        EmitSignal(SignalName.InteractionRejected, target!, actionId, reason);
     }
 
-    private bool TryStartInteractionAuthoritatively(
-        InteractiveComponent target,
+    /// <summary>Reliable server-to-owner RPC acknowledging that the command started.</summary>
+    /// <remarks>Called by Godot RPC dispatch on the owning client, or directly on the listen host.</remarks>
+    /// <param name="targetPath">Path of the target that accepted the command.</param>
+    /// <param name="actionId">Identifier of the accepted action.</param>
+    /// <param name="executionId">Identifier the authority allocated for the execution.</param>
+    /// <param name="duration">Seconds the authority decided the execution lasts, or zero for no deadline.</param>
+    [Rpc(
+        MultiplayerApi.RpcMode.Authority,
+        CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
+    )]
+    public void ClientInteractionStarted(
+        NodePath targetPath,
         StringName actionId,
-        int senderPeerId,
-        out string reason
+        ulong executionId,
+        float duration
     )
     {
-        reason = string.Empty;
-        if (!ValidateSender(senderPeerId, out reason))
+        Node? target = ResolveAcknowledgedTarget(targetPath);
+        EmitSignal(SignalName.InteractionStarted, target!, actionId, executionId, duration);
+    }
+
+    /// <summary>Reliable server-to-owner RPC acknowledging that the accepted action completed.</summary>
+    /// <remarks>Called by Godot RPC dispatch on the owning client, or directly on the listen host.</remarks>
+    /// <param name="targetPath">Path of the target whose execution completed.</param>
+    /// <param name="actionId">Identifier of the completed action.</param>
+    [Rpc(
+        MultiplayerApi.RpcMode.Authority,
+        CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
+    )]
+    public void ClientInteractionCompleted(NodePath targetPath, StringName actionId)
+    {
+        Node? target = ResolveAcknowledgedTarget(targetPath);
+        EmitSignal(SignalName.InteractionCompleted, target!, actionId);
+    }
+
+    /// <summary>Reliable server-to-owner RPC acknowledging that the accepted action was interrupted.</summary>
+    /// <remarks>Called by Godot RPC dispatch on the owning client, or directly on the listen host.</remarks>
+    /// <param name="targetPath">Path of the target whose execution ended.</param>
+    /// <param name="actionId">Identifier of the cancelled action.</param>
+    /// <param name="reason">Reason describing why the execution did not complete.</param>
+    [Rpc(
+        MultiplayerApi.RpcMode.Authority,
+        CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
+    )]
+    public void ClientInteractionCancelled(NodePath targetPath, StringName actionId, string reason)
+    {
+        Node? target = ResolveAcknowledgedTarget(targetPath);
+        EmitSignal(SignalName.InteractionCancelled, target!, actionId, reason);
+    }
+
+    /// <summary>Reliable server-to-owner RPC acknowledging that the accepted action failed.</summary>
+    /// <remarks>Called by Godot RPC dispatch on the owning client, or directly on the listen host.</remarks>
+    /// <param name="targetPath">Path of the target whose execution failed.</param>
+    /// <param name="actionId">Identifier of the failed action.</param>
+    /// <param name="reason">Reason describing the failure.</param>
+    [Rpc(
+        MultiplayerApi.RpcMode.Authority,
+        CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
+    )]
+    public void ClientInteractionFailed(NodePath targetPath, StringName actionId, string reason)
+    {
+        Node? target = ResolveAcknowledgedTarget(targetPath);
+        ReconcileRefusedRequest(target as InteractiveComponent, actionId);
+        EmitSignal(SignalName.InteractionFailed, target!, actionId, reason);
+    }
+
+    /// <summary>Acknowledges to the owning peer that the authority started its command.</summary>
+    /// <remarks>
+    /// Called directly by the authoritative target, never broadcast, exactly like the notification the
+    /// executor owning the mutation receives: an interactor learns about its own executions without
+    /// subscribing to a target-level signal and without filtering out the executions of others.
+    /// </remarks>
+    /// <param name="interactive">Target that accepted the command.</param>
+    /// <param name="action">Action that was accepted.</param>
+    /// <param name="executionId">Identifier allocated for the execution.</param>
+    /// <param name="duration">Authoritative duration of the execution, or zero for no deadline.</param>
+    internal void NotifyExecutionStarted(
+        InteractiveComponent interactive,
+        InteractionAction action,
+        ulong executionId,
+        float duration
+    )
+    {
+        if (!TryBuildAcknowledgement(interactive, action, out NodePath path, out StringName id))
+        {
+            return;
+        }
+
+        if (IsLocallyControlled)
+        {
+            ClientInteractionStarted(path, id, executionId, duration);
+        }
+        else if (OwnerPeerId > 0)
+        {
+            RpcId(OwnerPeerId, nameof(ClientInteractionStarted), path, id, executionId, duration);
+        }
+    }
+
+    /// <summary>Acknowledges to the owning peer that its accepted action completed.</summary>
+    /// <param name="interactive">Target whose execution completed.</param>
+    /// <param name="action">Action that completed.</param>
+    internal void NotifyExecutionCompleted(
+        InteractiveComponent interactive,
+        InteractionAction action
+    )
+    {
+        if (!TryBuildAcknowledgement(interactive, action, out NodePath path, out StringName id))
+        {
+            return;
+        }
+
+        if (IsLocallyControlled)
+        {
+            ClientInteractionCompleted(path, id);
+        }
+        else if (OwnerPeerId > 0)
+        {
+            RpcId(OwnerPeerId, nameof(ClientInteractionCompleted), path, id);
+        }
+    }
+
+    /// <summary>Acknowledges to the owning peer that its accepted action ended without completing.</summary>
+    /// <param name="interactive">Target whose execution ended.</param>
+    /// <param name="action">Action that was cancelled.</param>
+    /// <param name="reason">Reason describing why the execution did not complete.</param>
+    internal void NotifyExecutionCancelled(
+        InteractiveComponent interactive,
+        InteractionAction action,
+        string reason
+    )
+    {
+        if (!TryBuildAcknowledgement(interactive, action, out NodePath path, out StringName id))
+        {
+            return;
+        }
+
+        if (IsLocallyControlled)
+        {
+            ClientInteractionCancelled(path, id, reason);
+        }
+        else if (OwnerPeerId > 0)
+        {
+            RpcId(OwnerPeerId, nameof(ClientInteractionCancelled), path, id, reason);
+        }
+    }
+
+    /// <summary>Acknowledges to the owning peer that its accepted action failed after acceptance.</summary>
+    /// <remarks>
+    /// Reported as its own case rather than as a refusal: the authority already acknowledged the start,
+    /// so reporting a rejection here would tell the owner that nothing ever ran.
+    /// </remarks>
+    /// <param name="interactive">Target whose execution failed.</param>
+    /// <param name="action">Action that failed.</param>
+    /// <param name="reason">Reason describing the failure.</param>
+    internal void NotifyExecutionFailed(
+        InteractiveComponent interactive,
+        InteractionAction action,
+        string reason
+    )
+    {
+        if (!TryBuildAcknowledgement(interactive, action, out NodePath path, out StringName id))
+        {
+            return;
+        }
+
+        if (IsLocallyControlled)
+        {
+            ClientInteractionFailed(path, id, reason);
+        }
+        else if (OwnerPeerId > 0)
+        {
+            RpcId(OwnerPeerId, nameof(ClientInteractionFailed), path, id, reason);
+        }
+    }
+
+    // An acknowledgement names its target by path so the owner resolves it in its own scene, and the
+    // owner may have no scene at all: an interactor outside the tree has a null tree, which is also
+    // how an offline test reaches this path. The acknowledgement is still reported, without a target.
+    private Node? ResolveAcknowledgedTarget(NodePath targetPath) => ResolveNetworkPath(targetPath);
+
+    /// <summary>Gets the node every path crossing the network is named relative to.</summary>
+    /// <remarks>
+    /// Godot routes an RPC by the path of its node relative to the multiplayer root, so a payload
+    /// naming a target must use the same origin or the two peers do not talk about the same object.
+    /// In a normal game that root is the scene root and nothing changes; the two differ when several
+    /// peers share one process, each owning its own subtree, which is what makes a real test with a
+    /// server and two clients possible at all.
+    /// </remarks>
+    private Node? GetNetworkRoot()
+    {
+        SceneTree? tree = GetTree();
+        if (tree is null)
+        {
+            return null;
+        }
+
+        return Multiplayer is SceneMultiplayer scene && !scene.RootPath.IsEmpty
+            ? tree.Root.GetNodeOrNull(scene.RootPath)
+            : tree.Root;
+    }
+
+    // Falls back to the absolute path rather than dropping the payload: a node outside any tree has
+    // no network root, and naming it absolutely is exactly what a single-rooted game would have done.
+    private NodePath GetNetworkPath(Node node)
+    {
+        Node? root = GetNetworkRoot();
+        return root is null ? node.GetPath() : root.GetPathTo(node);
+    }
+
+    private Node? ResolveNetworkPath(NodePath targetPath)
+    {
+        Node? root = GetNetworkRoot();
+        return root is null || targetPath is null || targetPath.IsEmpty
+            ? null
+            : root.GetNodeOrNull(targetPath);
+    }
+
+    // An acknowledgement only exists on the authority and only for a target and action that can still
+    // be named: a peer that is not the authority has nothing to acknowledge, and an execution whose
+    // action lost its definition has no identifier the owner could correlate.
+    private bool TryBuildAcknowledgement(
+        InteractiveComponent interactive,
+        InteractionAction action,
+        out NodePath targetPath,
+        out StringName actionId
+    )
+    {
+        targetPath = new NodePath();
+        actionId = new StringName(string.Empty);
+        if (!IsAuthoritative || !IsUsable(interactive) || action?.Definition is null)
         {
             return false;
         }
 
+        targetPath = GetNetworkPath(interactive);
+        actionId = action.Definition.Id;
+        return true;
+    }
+
+    // A request the authority refused leaves nothing running, so the optimistic bar and the sustained
+    // input it created must go with it. An automatic request is forgotten too, but the refused pair is
+    // remembered: forgetting it alone would re-send the very same request on the very next frame and
+    // turn one refusal into a flood. The pair is released as soon as the situation changes — focus
+    // moving, the action leaving the offered choices, or gameplay invalidating the target.
+    private void ReconcileRefusedRequest(InteractiveComponent? target, StringName actionId)
+    {
+        if (
+            _prediction is PredictedExecution prediction
+            && prediction.Target == target
+            && prediction.ActionId == actionId
+        )
+        {
+            _prediction = null;
+        }
+
+        if (!IsUsable(target) || actionId is null || actionId.IsEmpty)
+        {
+            return;
+        }
+
+        if (_automaticTarget == target && _automaticActionId == actionId)
+        {
+            ForgetAutomaticRequest();
+            _refusedAutomaticTarget = target;
+            _refusedAutomaticActionId = actionId;
+        }
+
+        InteractionActionDefinition? definition = target!.ResolveAction(actionId)?.Definition;
+        if (definition is not null && definition.CancelOnInputReleased)
+        {
+            _sustainedInputs.Remove(definition.InputActionName);
+        }
+    }
+
+    /// <summary>Validates one requested action on the authority and runs it, reporting its outcome.</summary>
+    /// <remarks>
+    /// The outcome is returned rather than collapsed into a boolean because the four cases are not
+    /// interchangeable to the caller. A rejection never ran, so the owner must be told it was refused;
+    /// a failure did run and was already acknowledged as started, so telling the owner it was refused
+    /// would contradict the acknowledgement it just received.
+    /// </remarks>
+    /// <param name="target">Target resolved on the authority, never the one the client holds.</param>
+    /// <param name="actionId">Identifier of the action the requester believes it can start.</param>
+    /// <param name="senderPeerId">Peer the request came from, validated against the owner.</param>
+    /// <returns>The executor outcome, or the refusal that stopped the command before it ran.</returns>
+    private InteractionExecutionResult TryStartInteractionAuthoritatively(
+        InteractiveComponent target,
+        StringName actionId,
+        int senderPeerId
+    )
+    {
+        if (!ValidateSender(senderPeerId, out string reason))
+        {
+            return new InteractionExecutionRejected(reason);
+        }
+
         if (Detector is null || Detector.Detect(target) != InteractionDetectionKind.Interactible)
         {
-            reason = "The interaction target is out of range.";
-            return false;
+            return new InteractionExecutionRejected("The interaction target is out of range.");
         }
 
         InteractionAction? action = target.ResolveAction(actionId);
         if (action is null)
         {
-            reason = InteractionAvailabilityExtensions.UnavailableReason;
-            return false;
+            return new InteractionExecutionRejected(
+                InteractionAvailabilityExtensions.UnavailableReason
+            );
         }
 
         InteractionAvailability availability = target.EvaluateAvailability(this, action);
         if (availability is not InteractionAllowed)
         {
-            reason = availability.DescribeRefusal();
-            return false;
+            return new InteractionExecutionRejected(availability.DescribeRefusal());
         }
 
         InteractionExecutionResult result = target.ExecuteAction(
@@ -935,27 +1352,13 @@ public partial class InteractionInteractor : Node
             action,
             out ulong executionId
         );
-        switch (result)
+        if (result is InteractionExecutionRunning)
         {
-            case InteractionExecutionRunning:
-                // Only a running execution keeps a reservation the interactor may later release.
-                RememberOwnedExecution(target, action, executionId);
-                return true;
-
-            case InteractionExecutionCompleted:
-                return true;
-
-            case InteractionExecutionRejected rejected:
-                reason = rejected.Reason;
-                return false;
-
-            case InteractionExecutionFailed failed:
-                reason = failed.Reason;
-                return false;
+            // Only a running execution keeps a reservation the interactor may later release.
+            RememberOwnedExecution(target, action, executionId);
         }
 
-        reason = InteractionAvailabilityExtensions.UnavailableReason;
-        return false;
+        return result;
     }
 
     private int EndInteractionInputAuthoritatively(int senderPeerId, StringName inputActionName)
