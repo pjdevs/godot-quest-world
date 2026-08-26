@@ -1904,6 +1904,8 @@ Ne pas construire d'arbre de logique custom editor dans cette étape.
 
 ## Task 10 — LOS authoritative validation
 
+Remodelée en « détecteur remplaçable + LOS », spécifiée dans [`interaction-detector.md`](./interaction-detector.md). Le brainstorm a montré que les quatre approches de détection envisagées (area par cible, area sur l'interacteur, registre + distance, cast depuis la vue) sont le même pipeline en trois étages dont seul le premier varie : le LOS n'est donc pas un système, c'est un prédicat partagé de l'étage 2. Le chantier connexe d'exposition de la distance et des progressions dans la présentation vit dans [`presentation-progress-and-distance.md`](./presentation-progress-and-distance.md).
+
 Ajouter l'occlusion au même pipeline spatial que :
 
 ```text
