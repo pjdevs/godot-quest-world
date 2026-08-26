@@ -243,13 +243,21 @@ Un détecteur factice qui retourne un ensemble fixe permet de tester focus, pré
 
 - Le registre : un groupe Godot est l'idiome §25, mais `GetNodesInGroup` alloue à chaque appel. Une liste
   statique interne au plugin est plus honnête et reste portable GDExtension.
+  **Repoussée.** `GetCandidates` est livré `abstract` : un défaut sans consommateur aurait figé ce choix
+  pour rien. Il sera tranché par le détecteur de proximité, et le repasser en virtual sera additif.
 - Qui remplit la `Distance` de la présentation : le détecteur (il la calcule déjà pour son score) ou un
   accesseur public sur l'interacteur ?
+  **Hors périmètre**, elle appartient à [`presentation-progress-and-distance.md`](./presentation-progress-and-distance.md).
+  Ce chantier ne la ferme pas mais l'oriente : les origines vivent maintenant sur le détecteur, donc
+  l'accesseur ne peut plus être sur l'interacteur seul.
 - Une exécution `RequiresInteractorPresence == false` garde-t-elle un lien vers son interacteur ? Elle lui
   survit par définition — le joueur part, et peut aussi se déconnecter ou quitter l'arbre, ce que
   `CancelOwnedExecutions` traite aujourd'hui comme une annulation. La réponse la plus propre est sans doute
   qu'elle devienne possédée par le monde dès son démarrage, ce qui règle du même coup qui prédit sa
   progression : personne.
+  **Tranchée dans ce sens, et de la façon la plus simple possible** : l'interacteur ne l'enregistre pas
+  du tout. Ne pas la suivre *est* ce qui la rend possédée par le monde, et aucune des trois voies
+  d'annulation (fenêtre perdue, input relâché, sortie d'arbre) n'a alors de prise sur elle.
 
 ## Impact roadmap
 
@@ -258,3 +266,37 @@ sujet, il est devenu un prédicat d'un sujet plus gros. Livrer d'abord le joint 
 `AreaInteractionDetector` à comportement identique (zéro migration de scène), puis le LOS comme prédicat.
 Les détecteurs de proximité et d'aim sont des ajouts purs, sans toucher au framework — et c'est
 exactement le test qui prouve que le joint est bien placé.
+
+## État
+
+**Livré**, sauf le LOS et les détecteurs de proximité / de visée. `runtime/detection/` porte
+`InteractionDetector` et `AreaInteractionDetector` ; `InteractionDetectionKind` vit dans
+`InteractionTypes.cs` aux côtés de `InteractionUnavailableKind`. Voir la Task 10 de
+[`interaction.md`](../interaction.md) pour le détail.
+
+Quatre décisions ont été prises pendant l'implémentation, dont deux s'écartent de la lettre de ce
+document.
+
+1. **Le push des overlaps passe par deux virtuels no-op de la classe de base**
+   (`OnEnteredTargetArea` / `OnExitedTargetArea`, plus `Forget`). Les areas appartiennent à la cible,
+   seule capable de les posséder, donc c'est elle qui pousse — sur tous les pairs, ce qui donne au
+   serveur le même overlap qu'au client sans dérouler la boucle. Un type-check sur
+   `AreaInteractionDetector` côté composant aurait gardé la base pure mais n'aurait pas été
+   retranscriptible en GDExtension (§25). `Forget` existe parce qu'une area ne rapporte jamais l'overlap
+   qu'elle perd en étant libérée : c'est déjà pour cette raison que `InteractiveComponent._ExitTree`
+   prévient ses interacteurs, et il prévient maintenant aussi ceux dont seul le détecteur la tient.
+2. **Écart assumé sur `Detect` du détecteur d'area.** Le snippet de ce document renvoie `Indicated` pour
+   une cible dans l'area d'interaction mais hors fenêtre. Livré strict : sans `IndicationArea`, elle
+   renvoie `None`. Sinon un objet n'ayant authoré qu'une area d'interaction gagnait une indication qu'il
+   n'avait jamais eue, ce qui contredit le « zéro migration, comportement identique » de la roadmap.
+3. **Les paliers sont cumulatifs pour l'indication.** `Interactible` implique `Indicated` côté
+   interacteur : deux cibles utilisables et non focusées gardent leur widget. L'enum reste exclusif
+   comme valeur de retour, la cumulativité est dans la lecture qu'en fait l'interacteur.
+4. **`ViewOrigin`, `InteractionOrigin` et `DistanceScoreCoefficient` déménagent sur le détecteur.**
+   C'est la seule façon pour `IsWithinRange` — et demain `HasLineOfSight` — d'être des helpers de la
+   classe de base. L'API de commande de l'interacteur ne change pas, mais ses exports de détection, si :
+   la scène du personnage migre d'une ligne.
+
+La validation continue est livrée avec le joint et non avec la présence, parce qu'elle *remplace* le
+`RemoveInteractive → CancelOwnedExecutions` que le joint supprime. Le second commit n'ajoute donc que
+l'axe de sortie (`RequiresInteractorPresence`).

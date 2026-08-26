@@ -50,8 +50,21 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
     [Export]
     public float Duration { get; set; }
 
+    /// <summary>Gets or sets whether the interactor must stay in range for the transition to finish.</summary>
+    /// <remarks>
+    /// This executor serves both usages, which is exactly why it exposes the choice: keep it set for a
+    /// channel the player holds — a hack, a search — and clear it for a state the world owns once it
+    /// started, the machine that was switched on or the door that finishes opening alone. An action
+    /// whose definition declares <c>CancelOnInputReleased</c> stays presence-bound regardless.
+    /// </remarks>
+    [Export]
+    public bool RequiresPresence { get; set; } = true;
+
     /// <inheritdoc />
     public override float ExpectedDuration => Duration;
+
+    /// <inheritdoc />
+    public override bool RequiresInteractorPresence => RequiresPresence;
 
     /// <summary>Godot callback that reports a missing target or a state outside the schema.</summary>
     public override void _Ready()

@@ -160,6 +160,14 @@ public partial class InteractionInteractor : Node
     /// <summary>Gets the target currently selected by the owning peer.</summary>
     public InteractiveComponent? FocusedInteractive => _focusedInteractive;
 
+    /// <summary>Gets whether this peer runs the authoritative half of the interaction.</summary>
+    /// <remarks>
+    /// Offline counts as authoritative: a peerless game is its own server. Asking the multiplayer API
+    /// for an id it does not have would only push an error and answer no.
+    /// </remarks>
+    private bool IsAuthoritative =>
+        Multiplayer is null || Multiplayer.MultiplayerPeer is null || Multiplayer.IsServer();
+
     /// <summary>Gets whether this peer owns focus calculation, input requests, and presentation.</summary>
     public bool IsLocallyControlled
     {
@@ -206,7 +214,7 @@ public partial class InteractionInteractor : Node
     /// </remarks>
     public override void _Process(double delta)
     {
-        if (Multiplayer.IsServer())
+        if (IsAuthoritative)
         {
             ValidateSustainedExecutions();
         }
@@ -765,7 +773,7 @@ public partial class InteractionInteractor : Node
     /// <summary>Godot callback that releases server reservations and unregisters detected targets.</summary>
     public override void _ExitTree()
     {
-        if (Multiplayer.IsServer())
+        if (IsAuthoritative)
         {
             CancelOwnedExecutions(interactive: null, inputActionName: null, InteractorLostReason);
         }
@@ -933,6 +941,12 @@ public partial class InteractionInteractor : Node
         return CancelOwnedExecutions(interactive: null, inputActionName, ReleasedReason);
     }
 
+    /// <summary>Tracks an execution this interactor stays answerable for while it runs.</summary>
+    /// <remarks>
+    /// An execution the world owns is deliberately never tracked: it survives the interactor by
+    /// definition, so nothing here should be able to end it — not a lost window, not a released input,
+    /// not this node leaving the tree. Not tracking it is what makes it world-owned from its start.
+    /// </remarks>
     private void RememberOwnedExecution(
         InteractiveComponent interactive,
         InteractionAction action,
@@ -940,8 +954,19 @@ public partial class InteractionInteractor : Node
     )
     {
         PruneOwnedExecutions();
+        if (!RequiresInteractorPresence(action))
+        {
+            return;
+        }
+
         _ownedExecutions.Add(new InteractorExecution(interactive, action, executionId));
     }
+
+    // Holding the key that started an action is a way of being present, so a definition that cancels
+    // on release keeps the execution bound to the interactor whatever its executor claims.
+    private static bool RequiresInteractorPresence(InteractionAction action) =>
+        action.Definition?.CancelOnInputReleased == true
+        || action.Executor?.RequiresInteractorPresence != false;
 
     /// <summary>Ends the executions this interactor owns that match an optional target and input.</summary>
     /// <remarks>

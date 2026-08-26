@@ -154,6 +154,9 @@ public sealed partial class InteractionDetectionTest
         await runner.SimulateFrames(4);
 
         AssertThat(detector.Detect(interactive)).IsEqual(InteractionDetectionKind.Interactible);
+        // The overlap may land after the interactor already processed the frame it arrived in, so the
+        // pipeline is run explicitly rather than betting on the physics sampling order.
+        interactor.RecalculateFocus();
         AssertThat(interactor.FocusedInteractive == interactive).IsTrue();
     }
 

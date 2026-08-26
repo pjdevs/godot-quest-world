@@ -744,6 +744,62 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public async Task AWorldOwnedExecutionOutlivesTheInteractorLeavingItsWindow()
+    {
+        TestWorld testWorld = BuildWorld();
+        // A machine that was switched on, not a channel: nobody holds a key for it and the world owns
+        // the transition from the moment it started.
+        testWorld.Action.Definition!.CancelOnInputReleased = false;
+        ActivationExecutorOf(testWorld.Action).RequiresPresence = false;
+        ActivationExecutorOf(testWorld.Action).Duration = 3600.0f;
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Detect(testWorld.Interactive);
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+
+        testWorld.Undetect(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(2);
+
+        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
+        AssertThat(testWorld.Owner.EndCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task AWorldOwnedExecutionOutlivesTheInteractorLeavingTheTree()
+    {
+        TestWorld testWorld = BuildWorld();
+        testWorld.Action.Definition!.CancelOnInputReleased = false;
+        ActivationExecutorOf(testWorld.Action).RequiresPresence = false;
+        ActivationExecutorOf(testWorld.Action).Duration = 3600.0f;
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Detect(testWorld.Interactive);
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+
+        testWorld.Interactor.QueueFree();
+        await testWorld.Runner.SimulateFrames(1);
+
+        AssertThat(testWorld.Interactive.ActiveInteractor != null).IsTrue();
+        AssertThat(testWorld.Owner.EndCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task AnActionCancelledOnInputReleaseStaysBoundToPresenceAnyway()
+    {
+        TestWorld testWorld = BuildWorld();
+        // The definition holds the player's key, so the executor cannot hand this one to the world.
+        ActivationExecutorOf(testWorld.Action).RequiresPresence = false;
+        ActivationExecutorOf(testWorld.Action).Duration = 3600.0f;
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Detect(testWorld.Interactive);
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+
+        testWorld.Undetect(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+
+        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
+        AssertThat(testWorld.Owner.EndCount).IsEqual(1);
+    }
+
+    [TestCase]
     public async Task InteractorNetworkAuthorityRemainsOnServerForRemoteOwner()
     {
         TestWorld testWorld = BuildWorld(ownerPeerId: 2);
@@ -2292,7 +2348,11 @@ public sealed partial class InteractionBehaviorTest
 
         public float Duration { get; set; }
 
+        public bool RequiresPresence { get; set; } = true;
+
         public override float ExpectedDuration => Duration;
+
+        public override bool RequiresInteractorPresence => RequiresPresence;
 
         public override InteractionExecutionResult Execute(
             in InteractionExecutionContext context

@@ -1917,6 +1917,13 @@ Tester localement et côté serveur.
 
 Une action derrière un obstacle doit échouer même si toutes ses gameplay rules passent.
 
+**État**: le joint est livré, le LOS ne l'est pas. `InteractionDetector` / `AreaInteractionDetector`
+existent, la détection a quitté l'interacteur sans migration de scène cible, et la validation continue
+serveur remplace l'annulation par callback d'area — avec, en plus, la sortie
+`RequiresInteractorPresence` qui distingue le channel lié au joueur du processus lié au monde. Le LOS
+reste un prédicat à ajouter sur la classe de base, et les détecteurs de proximité et de visée sont des
+ajouts purs. Détail et écarts assumés dans [`interaction-detector.md`](./interaction-detector.md).
+
 ---
 
 ## Task 11 — Editor polish
