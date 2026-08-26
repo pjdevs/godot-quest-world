@@ -100,10 +100,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.091249, 0.49999976, -2.677
 [node name="Button" parent="Level" unique_id=1874486156 instance=ExtResource("3_kevvi")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 10)
 
-[node name="InteractiveComponent" parent="Level/Button" index="1" unique_id=745842554 node_paths=PackedStringArray("Actions")]
-ActionPromptScene = null
-Actions = []
-
 [node name="RaiseExecutor" parent="Level/Button/InteractiveComponent/RaiseAction" index="0" node_paths=PackedStringArray("Stateful")]
 Stateful = NodePath("../../../../LeverWall/StatefulComponent")
 
