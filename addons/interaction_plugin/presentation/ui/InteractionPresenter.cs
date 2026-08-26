@@ -71,6 +71,7 @@ public partial class InteractionPresenter : CanvasLayer
     private readonly List<Control> _promptActions = new();
     private readonly List<InteractionActionPresentation> _promptedActions = new();
     private readonly Dictionary<InteractiveComponent, Control> _indications = new();
+    private readonly List<InteractiveComponent> _staleIndications = new();
     private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
 
     /// <summary>Godot callback that validates references, connects interactor signals, and refreshes UI.</summary>
@@ -274,12 +275,14 @@ public partial class InteractionPresenter : CanvasLayer
             return;
         }
 
-        List<InteractiveComponent> removed = new();
+        // Reused rather than allocated: this runs every frame, including the frames where there is
+        // nothing indicated at all.
+        _staleIndications.Clear();
         foreach (InteractiveComponent interactive in _indicatedInteractives)
         {
             if (!IsInstanceValid(interactive))
             {
-                removed.Add(interactive);
+                _staleIndications.Add(interactive);
                 continue;
             }
 
@@ -315,7 +318,7 @@ public partial class InteractionPresenter : CanvasLayer
             }
         }
 
-        foreach (InteractiveComponent interactive in removed)
+        foreach (InteractiveComponent interactive in _staleIndications)
         {
             _indicatedInteractives.Remove(interactive);
             RemoveIndication(interactive);

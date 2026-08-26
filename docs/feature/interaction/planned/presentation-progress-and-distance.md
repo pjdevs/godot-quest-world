@@ -110,9 +110,12 @@ seul `RefreshIndications()`. Trois constats de l'implémentation :
 1. **Le problème n°1 était déjà masqué, pas absent.** `RecalculateFocus` émet `InteractionStatusChanged`
    à *chaque* frame focusée — le retry des actions automatiques de la Task 7 en dépend — et le presenter
    rebind sur ce signal : le prompt était donc frais par accident. Le rebind explicite depuis `_Process`
-   rend la fraîcheur indépendante d'un signal qui pourrait être gaté demain, ce que la pain-point
-   « réintroduire `NotifyStatusChanged` ? » envisage explicitement. Le coût, tant que les deux chemins
-   coexistent, est un `GetPresentation` de plus par frame pour la seule cible focus.
+   rend la fraîcheur indépendante de ce signal — et permet du même coup de le **gater**, ce que la
+   pain-point « réintroduire `NotifyStatusChanged` ? » envisageait. Les deux chemins ont d'abord coexisté,
+   ce qui doublait tout : `Refresh()` appelle aussi `RefreshIndications()`, donc c'était 2 × (1 + N)
+   snapshots par frame, pas un de plus. Plutôt que dédupliquer par une garde de frame — un pansement —
+   le push par frame a été supprimé : le signal n'est plus émis que sur un vrai changement, et le
+   presenter ne rafraîchit qu'une fois par frame en régime stable.
 2. **`HoldProgress` est normalisé sur le seuil de chaque action**, et la source n'est donc pas
    `TryGetGestureProgress` mais un nouvel accesseur `TryGetGestureElapsed` sur l'interacteur. La première
    version réutilisait la progression unique du geste, normalisée sur le seuil le plus long de l'input :

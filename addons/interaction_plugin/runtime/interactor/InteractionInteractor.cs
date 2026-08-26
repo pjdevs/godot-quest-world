@@ -82,11 +82,19 @@ public partial class InteractionInteractor : Node
     [Signal]
     public delegate void FocusedInteractiveChangedEventHandler(Node interactive);
 
-    /// <summary>Emitted locally when the presentation of a visible target may have changed.</summary>
+    /// <summary>Emitted locally when a visible target becomes worth looking at again.</summary>
     /// <remarks>
     /// The signal is a notification only. Availability is carried per action, so a consumer reads
     /// the fresh snapshot from <see cref="InteractiveComponent.GetPresentation"/> instead of relying
     /// on a target-wide summary.
+    /// <para>
+    /// It is an <b>event</b>, not a per-frame push: it fires when the focus moves, when a target
+    /// enters detection, and when gameplay invalidates one. Nothing announces a rule that starts
+    /// refusing on its own, because a snapshot is pulled and a consumer that needs continuous
+    /// freshness reads it every frame — which is exactly what
+    /// <see cref="Presentation.UI.InteractionPresenter"/> does. Pushing it every focused frame
+    /// notified nothing new and cost one snapshot per presented target per frame to every subscriber.
+    /// </para>
     /// </remarks>
     /// <param name="interactive">Interactive whose presentation may have changed.</param>
     [Signal]
@@ -428,7 +436,10 @@ public partial class InteractionInteractor : Node
 
         if (result.Current is not null)
         {
-            EmitStatusFor(result.Current);
+            if (result.Changed)
+            {
+                EmitStatusFor(result.Current);
+            }
 
             // Retried on every focused frame, not only when focus moves: an automatic action that
             // becomes allowed while the player already looks at the target must start by itself.
@@ -1116,7 +1127,15 @@ public partial class InteractionInteractor : Node
 
     private void PurgeDetectedInteractives()
     {
-        _detectedInteractives.RemoveWhere(interactive => !IsUsable(interactive));
+        // The guard stays even though a target leaving the tree announces itself: a game may write a
+        // detector whose source the target knows nothing about — the registry and the cast are two —
+        // and then no teardown reaches this set, while the reconcile below would unregister from a
+        // freed instance. The count check is what keeps it free when idle: the predicate closes over
+        // this, so it would allocate a delegate every frame for an empty set.
+        if (_detectedInteractives.Count > 0)
+        {
+            _detectedInteractives.RemoveWhere(interactive => !IsUsable(interactive));
+        }
         if (_focusedInteractive is not null && !IsUsable(_focusedInteractive))
         {
             _focusedInteractive = null;

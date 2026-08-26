@@ -1969,7 +1969,9 @@ N'exposer que des grandeurs physiques nommées, jamais le score brut de la couch
 porte les origines depuis la Task 10 ; l'absence de progression est l'absence de valeur (`float?`), comme
 l'absence de focus l'est déjà ; le rebind par frame part du `_Process` du presenter et n'appelle que
 `Bind`. `HoldProgress` est normalisé sur le seuil de l'action lue et non sur le plus long de l'input,
-sans quoi la plus courte de deux actions n'atteindrait jamais un ; `HoldElapsed` accompagne le ratio. Le §18.1 tient : le hold reste la sélection, l'exécution reste l'action, et les deux champs sont
+sans quoi la plus courte de deux actions n'atteindrait jamais un ; `HoldElapsed` accompagne le ratio.
+Conséquence assumée sur le contrat : le rebind par frame rend `InteractionStatusChanged` inutile comme
+push, donc il redevient un événement et un focus stable n'annonce plus rien. Le §18.1 tient : le hold reste la sélection, l'exécution reste l'action, et les deux champs sont
 distincts jusque dans la présentation.
 
 ---

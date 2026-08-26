@@ -231,7 +231,7 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task UnchangedFocusDispatchEmitsOnlyStatusExactlyOnce()
+    public async Task UnchangedFocusDispatchNotifiesNothingAtAll()
     {
         TestWorld testWorld = BuildWorld(ownerPeerId: 2);
         await testWorld.Runner.SimulateFrames(1);
@@ -250,11 +250,32 @@ public sealed partial class InteractionBehaviorTest
         FocusChangeResult? unchangedResult = testWorld.Interactor.RecalculateFocusCore();
         testWorld.Interactor.DispatchFocusChange(unchangedResult!.Value);
 
+        // A status pushed on every focused frame notified nothing new, and cost every subscriber one
+        // snapshot per presented target per frame. The presentation is pulled: a consumer that needs
+        // continuous freshness reads it each frame, as the presenter does since the frame rebind.
         AssertThat(unchangedResult?.Changed).IsFalse();
         AssertThat(unchangedResult?.Previous == testWorld.Interactive).IsTrue();
         AssertThat(unchangedResult?.Current == testWorld.Interactive).IsTrue();
         AssertThat(focusSignalCount).IsEqual(0);
-        AssertThat(statusSignalCount).IsEqual(1);
+        AssertThat(statusSignalCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task AStableFocusNotifiesOnceAndNotEveryFrame()
+    {
+        TestWorld testWorld = BuildWorld();
+        testWorld.Detect(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+        int statusSignalCount = 0;
+        testWorld.Interactor.InteractionStatusChanged += _ => statusSignalCount++;
+
+        await testWorld.Runner.SimulateFrames(5);
+
+        // The focus never moved, so there is nothing to announce. A consumer that needs to know
+        // whether a rule started refusing pulls the snapshot, which is what the presenter does every
+        // frame — pushing it here would have notified five times to say the same thing.
+        AssertThat(testWorld.Interactor.FocusedInteractive == testWorld.Interactive).IsTrue();
+        AssertThat(statusSignalCount).IsEqual(0);
     }
 
     [TestCase]
