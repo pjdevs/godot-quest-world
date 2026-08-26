@@ -1124,7 +1124,7 @@ public partial class InteractionInteractor : Node
         {
             ClientInteractionStarted(path, id, executionId, duration);
         }
-        else if (OwnerPeerId > 0)
+        else if (CanSendToOwner)
         {
             RpcId(OwnerPeerId, nameof(ClientInteractionStarted), path, id, executionId, duration);
         }
@@ -1147,7 +1147,7 @@ public partial class InteractionInteractor : Node
         {
             ClientInteractionCompleted(path, id);
         }
-        else if (OwnerPeerId > 0)
+        else if (CanSendToOwner)
         {
             RpcId(OwnerPeerId, nameof(ClientInteractionCompleted), path, id);
         }
@@ -1172,7 +1172,7 @@ public partial class InteractionInteractor : Node
         {
             ClientInteractionCancelled(path, id, reason);
         }
-        else if (OwnerPeerId > 0)
+        else if (CanSendToOwner)
         {
             RpcId(OwnerPeerId, nameof(ClientInteractionCancelled), path, id, reason);
         }
@@ -1201,7 +1201,7 @@ public partial class InteractionInteractor : Node
         {
             ClientInteractionFailed(path, id, reason);
         }
-        else if (OwnerPeerId > 0)
+        else if (CanSendToOwner)
         {
             RpcId(OwnerPeerId, nameof(ClientInteractionFailed), path, id, reason);
         }
@@ -1248,6 +1248,12 @@ public partial class InteractionInteractor : Node
             ? null
             : root.GetNodeOrNull(targetPath);
     }
+
+    // An acknowledgement leaving the process needs a session to leave through. The authority cancels
+    // the executions of a departing interactor from its _ExitTree, which is exactly when the node may
+    // already have lost its multiplayer API: there is nobody left to tell, and that is not an error.
+    private bool CanSendToOwner =>
+        OwnerPeerId > 0 && Multiplayer is not null && Multiplayer.MultiplayerPeer is not null;
 
     // An acknowledgement only exists on the authority and only for a target and action that can still
     // be named: a peer that is not the authority has nothing to acknowledge, and an execution whose

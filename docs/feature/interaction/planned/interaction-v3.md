@@ -51,7 +51,7 @@ Chest
 └── ChestFeedback                      StateChangedPresentation
 ```
 
-`ChestFeedback` applique une première fois la pose correspondant à `Stateful.State` dans `_Ready`, puis écoute `StateChangedPresentation(oldState, newState)` pour jouer les transitions. Cela couvre aussi un late join : la pose stable vient de l’état courant, tandis que les sons et autres one-shots ne sont joués que sur une vraie transition reçue.
+`ChestFeedback` applique une première fois la pose correspondant à `Stateful.State` dans `_Ready`, puis écoute `StateChangedPresentation(oldState, newState)` pour jouer les transitions. L’intention est que la pose stable vienne de l’état courant et que les sons et autres one-shots ne soient joués que sur une vraie transition — mais le code ne distingue pas encore une vraie transition de l’arrivée d’un late join, voir « P0 bis » plus bas.
 
 Le chemin est vérifié dans le code :
 
@@ -65,7 +65,7 @@ Il ne faut pas faire jouer le même feedback cosmétique par l’executor et par
 
 Une animation qui déplace aussi une collision n’est pas purement cosmétique. Elle observe `StateChanged` afin de tourner également sur le dedicated server, mais seul le serveur décide de l’état final. `LeverWall` suit déjà ce modèle.
 
-Le harnais qui manquait existe désormais — `InteractionNetworkTest` fait tourner un vrai serveur et deux vrais clients dans un seul process — mais il ne couvre que l’acquittement. Reste à lui ajouter le volet Stateful : prouver qu’une transition répliquée déclenche exactement une fois le feedback de chaque peer. Le test unitaire actuel appelle encore directement le setter répliqué et la scène vérifie seulement la configuration du `MultiplayerSynchronizer`.
+Le test qui manquait existe désormais : `InteractionNetworkTest` fait tourner un vrai serveur et deux vrais clients dans un seul process, avec un `MultiplayerSynchronizer` par branche, et prouve qu’une transition répliquée déclenche exactement une fois le feedback de chaque peer — `StateChanged` et `StateChangedPresentation` partout, `StateChangedAuthority` sur le seul listen host. Il montre aussi la limite qui justifie la règle ci-dessus : deux transitions dans la même frame n’arrivent au client que comme la dernière valeur, une propriété répliquée portant une valeur et non un historique.
 
 ## Callbacks Interaction : contrat autorité et acquittement client
 
@@ -181,27 +181,80 @@ refuser. C’est précisément ce que l’acquittement remplace.
 3. ~~**`Failed` devient `Rejected` sur le client.**~~ Livré : `TryStartInteractionAuthoritatively`
    retourne l’`InteractionExecutionResult` au lieu d’un `bool` + `out string` qui écrasait quatre issues
    en une. Seul un `Rejected` produit un refus.
-4. **Tests à plusieurs peers : partiellement livré.** `InteractionNetworkTest` monte un vrai serveur et
-   deux vrais clients dans un seul process (une `MultiplayerApi` et un pair ENet par sous-arbre) et
-   couvre le protocole d’acquittement de bout en bout. Ce qui manque encore est le volet **Stateful** :
-   prouver qu’une transition répliquée déclenche exactement une fois le feedback de chaque peer, ce que
-   le harnais rend maintenant faisable. Le montage exige que les chemins réseau soient nommés
-   relativement à `SceneMultiplayer.RootPath` ; voir
+4. ~~**Aucun vrai test Interaction à plusieurs peers.**~~ Livré : `InteractionNetworkTest` monte un vrai
+   serveur et deux vrais clients dans un seul process (une `MultiplayerApi` et un pair ENet par
+   sous-arbre, `MultiplayerSynchronizer` compris) et couvre l’acquittement, la concurrence et les
+   feedbacks Stateful. Le montage exige que les chemins réseau soient nommés relativement à
+   `SceneMultiplayer.RootPath` et que chaque branche soit peuplée après l’attachement de son API ; voir
    [`godot-multiplayer-in-process-peers.md`](../../memory/godot-multiplayer-in-process-peers.md).
 
-Scénarios réseau restants :
+Couverts par `InteractionNetworkTest` :
 
-- A démarre : serveur, A et B voient `activating`; B présente l’action comme busy.
-- Completion : chaque peer voit `activated` et joue une seule fois son feedback.
-- Release, sortie de zone ou déconnexion : chaque peer revient à `idle`, puis B peut commencer.
-- Late join pendant `activating` et après `activated` : état et pose visuelle corrects sans rejouer les one-shots passés.
+- A démarre : serveur, A et B voient `activating`, et B présente l’action comme busy par la seule rule
+  d’état, sans avoir reçu le moindre événement d’interaction — pendant que l’acquittement n’est allé qu’à A.
+- B demande pendant que A tient l’action : aucune seconde exécution, et B l’apprend seul.
+- A et B demandent dans la même frame : une seule exécution démarre, un `started` et un `rejected`, et le
+  perdant vide sa prédiction immédiatement pendant que le gagnant continue de dessiner la sienne.
+- Completion, release, perte de la fenêtre autoritaire et départ de l’interacteur : chaque fin acquitte
+  son demandeur seul, et B peut commencer ensuite.
+- Deux cibles distinctes, et deux groupes de concurrence distincts d’une même cible : les deux démarrent.
+- Chaque transition répliquée joue le feedback de chaque peer exactement une fois.
+- Late join pendant `activating` et après `activated` : le nouvel arrivant lit l’état courant, ne voit
+  jamais les états intermédiaires qu’il a manqués, et présente correctement comme busy une action déjà
+  prise. **Mais il reçoit son état d’arrivée comme une vraie transition** — voir le trou ci-dessous.
+
+Reste à couvrir :
+
 - Dialogue autoritaire : l’UI ne s’ouvre qu’après `SessionStarted`, puis sa fermeture termine ou annule la bonne exécution sur le serveur.
 
-Déjà couverts par `InteractionNetworkTest` : B qui demande pendant que A tient l’action ne démarre aucune
-seconde exécution et l’apprend seul, la commande ne tourne que sur l’autorité, et une défaillance traverse
-le réseau en `started,failed` plutôt qu’en rejet.
-
 La liste `_activeExecutions` n’a pas besoin d’être répliquée pour ces scénarios : `activating` en est déjà la projection métier. Une action longue sans aucun état ou système métier répliqué conserve volontairement une présentation distante optimiste jusqu’au refus serveur.
+
+### P0 bis — le late join ne se distingue pas d’une transition
+
+`StatefulComponent` applique son `InitialState` dans `_Ready`, puis la première valeur répliquée arrive
+par le **même setter** que toutes les suivantes. Un peer qui rejoint alors que la machine est déjà
+`activated` reçoit donc `StateChanged(idle, activated)` et `StateChangedPresentation(idle, activated)`,
+exactement comme si la machine venait de s’activer sous ses yeux.
+
+Le pattern recommandé plus haut — pose appliquée dans `_Ready` depuis `Stateful.State`, one-shots joués
+sur `StateChangedPresentation` — **ne tient donc pas au late join** : le son d’activation est joué à un
+joueur qui n’était pas là. La prose du doc décrivait une garantie que le code n’applique pas.
+`InteractionNetworkTest` fige le comportement actuel plutôt qu’une garantie, pour qu’un futur correctif
+casse le test délibérément.
+
+Trois directions, aucune tranchée :
+
+- un marqueur de première synchronisation sur `StatefulComponent`, qui applique la valeur sans émettre de
+  transition et laisse la présentation lire l’état courant ;
+- un quatrième signal `StateSynchronized(state)` distinct des transitions, la présentation choisissant
+  lequel des deux l’intéresse ;
+- ne rien changer et documenter que tout one-shot doit être gardé par la présentation elle-même.
+
+Le premier est le plus proche de l’intention déjà écrite ; le deuxième est le plus explicite ; le
+troisième déplace la charge sur chaque feedback de jeu, ce qui est exactement ce que le framework
+cherchait à éviter.
+
+### P0 ter — une déconnexion brutale fait fuiter la réservation
+
+Une exécution se termine quand l’interacteur quitte l’arbre — ce que fait la couche de spawn du projet
+en dépeuplant un joueur parti. Rien n’écoute la **session** elle-même. Un pair qui tombe sans que
+personne ne retire son nœud garde donc sa réservation indéfiniment, et la cible reste verrouillée pour
+tous les autres : `InteractionNetworkTest` le prouve, B est refusé et le restera.
+
+Ce n’est pas anodin : c’est le seul des scénarios réseau du doc qui laisse le monde durablement cassé
+plutôt que simplement mal présenté. L’interacteur connaît déjà son `OwnerPeerId`; il ne lui manque que
+l’abonnement.
+
+Deux lectures possibles, à trancher :
+
+- **c’est au plugin** : l’interacteur s’abonne à `MultiplayerApi.PeerDisconnected` et annule ses
+  exécutions quand le pair qui part est le sien. Une dizaine de lignes, et le plugin cesse de dépendre
+  d’une couche qu’il ne contrôle pas ;
+- **c’est au projet** : la couche de spawn dépeuple le joueur parti, et le `_ExitTree` existant suffit.
+  C’est le contrat actuel, mais il n’est écrit nulle part et rien ne le vérifie.
+
+La première est la plus sûre, et reste correcte même si le projet dépeuple aussi : l’exécution est déjà
+terminée, et un identifiant n’est jamais réutilisé.
 
 ### P1 — coût des détecteurs et de la présentation
 
@@ -304,7 +357,7 @@ Ce cas valide une frontière importante : Interaction suit qui tient une command
 
 ## Ordre de suite recommandé
 
-1. ~~Ajouter le protocole client autoritaire~~ et étendre le harnais serveur + deux clients aux feedbacks Stateful, qui restent le volet non couvert.
+1. ~~Ajouter le protocole client autoritaire et les tests serveur + deux clients, y compris les feedbacks Stateful et le late join.~~ Livré, et le late join a révélé le P0 bis à trancher. Reste l’exemple de dialogue autoritaire.
 2. Corriger les hot paths des détecteurs et garder Area comme baseline de production.
 3. Ajouter des exemples corde, dialogue/vendor, machine multi-actions, noyau multi-états et générateur coop à points multiples.
 4. Réduire le coût d’authoring du coffre/porte minimal avec une scène exemple et, seulement si la duplication apparaît, un presenter d’animation stateful générique.

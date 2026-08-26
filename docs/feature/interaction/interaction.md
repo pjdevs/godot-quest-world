@@ -469,14 +469,48 @@ invalide sa cible ou que le focus a bougé, et la fenêtre de vendeur qui s'ouvr
 seul acquittement, ne s'ouvre jamais sur une requête refusée, et se referme sur une défaillance.
 
 `InteractionNetworkTest` monte un vrai serveur et deux vrais clients dans un seul process — une
-`MultiplayerApi` et un pair ENet par sous-arbre — et vérifie ce qu'aucun test en arbre unique ne peut
-prouver : que les déclarations RPC, les types de payload et le ciblage sont justes. Il couvre le
-démarrage acquitté au seul demandeur avec sa durée et la copie du target résolue dans sa propre branche,
-la commande exécutée une fois sur l'autorité et nulle part ailleurs, la complétion acquittée au seul
-demandeur, le second client refusé pendant que le premier tient l'action sans que le gagnant entende
-parler d'une requête qui n'est pas la sienne, la défaillance qui traverse le réseau en `started,failed`,
-et le refus qui traverse sans jamais démarrer. Le harnais s'auto-garde : il assert que les trois pairs
-sont bien distincts, sans quoi la suite dégénérerait silencieusement en appels locaux.
+`MultiplayerApi` et un pair ENet par sous-arbre, chaque branche peuplée seulement une fois son API
+attachée — et vérifie ce qu'aucun test en arbre unique ne peut prouver : que les déclarations RPC, les
+types de payload, le ciblage et la réplication `MultiplayerSynchronizer` sont justes.
+
+Acquittement : le démarrage acquitté au seul demandeur avec sa durée et la copie du target résolue dans
+sa propre branche, la commande exécutée une fois sur l'autorité et nulle part ailleurs, la complétion
+acquittée au seul demandeur, la défaillance qui traverse en `started,failed`, et le refus qui traverse
+sans jamais démarrer.
+
+Concurrence : deux clients qui demandent la même action dans la même frame ne démarrent qu'une
+exécution — un `started` et un `rejected`, jamais deux de l'un — le perdant qui vide sa prédiction
+pendant que le gagnant continue de dessiner la sienne, le relâchement qui libère la cible pour l'autre
+client, l'interacteur qui quitte l'arbre côté serveur et libère de même, le joueur que la fenêtre
+autoritaire perd et dont l'exécution est annulée alors que l'autre peut commencer, deux clients sur deux
+cibles distinctes qui démarrent tous les deux sans rien entendre l'un de l'autre, deux clients sur deux
+groupes de concurrence distincts d'une **même** cible qui démarrent tous les deux, et l'action longue
+que le chrono de l'autorité complète toute seule.
+
+Stateful : une transition répliquée qui joue le feedback de chaque peer **exactement une fois** —
+`StateChanged` et `StateChangedPresentation` partout, `StateChangedAuthority` sur le seul listen host —
+un état réécrit à l'identique qui ne réplique rien, deux transitions séparées d'une frame qui arrivent
+dans l'ordre et jouent une fois chacune, et deux transitions dans la **même** frame qui n'arrivent que
+comme la dernière valeur : une propriété répliquée porte une valeur, pas un historique, ce qui est la
+raison pour laquelle une pose s'applique depuis l'état courant et seuls les one-shots suivent les
+transitions. Le scénario complet ferme la boucle des deux canaux : une interaction de A mute l'état, cet
+état atteint le serveur, A et B, B présente l'action comme busy par la seule rule d'état sans avoir reçu
+le moindre événement d'interaction, et pourtant l'acquittement n'est allé qu'à A.
+
+Late join : un quatrième pair qui rejoint la session en cours arrive à l'état courant, ne voit jamais
+les états intermédiaires qu'il a manqués, et présente correctement comme busy une action déjà prise —
+mais il reçoit son état d'arrivée comme la transition `idle > activated`, indiscernable d'une vraie. Le
+test **fige ce comportement plutôt qu'une garantie** : le pattern « pose dans `_Ready`, one-shots sur
+`StateChangedPresentation` » joue donc le son d'activation à un joueur qui n'était pas là. Voir
+« P0 bis » dans [`interaction-v3.md`](planned/interaction-v3.md).
+
+Déconnexion : un pair qui tombe sans que personne ne retire son nœud **garde sa réservation
+indéfiniment** et verrouille la cible pour tous les autres. Le test fige là aussi le comportement actuel :
+seul le départ du nœud interacteur libère une exécution, ce qui fait dépendre le plugin de la couche de
+spawn du projet. Voir « P0 ter » dans [`interaction-v3.md`](planned/interaction-v3.md).
+
+Le harnais s'auto-garde : il assert que les trois pairs sont bien distincts et que l'executor n'a tourné
+que sur l'autorité, sans quoi la suite dégénérerait silencieusement en appels locaux.
 
 ## Assumptions and deferred work
 
