@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 using QuestWorld.Interaction.Runtime.Actions;
+using QuestWorld.Interaction.Runtime.Detection;
 using QuestWorld.Interaction.Runtime.Interactive;
 
 namespace QuestWorld.Interaction.Runtime.Interactor;
@@ -122,40 +123,15 @@ public partial class InteractionInteractor : Node
     [Signal]
     public delegate void InteractiveIndicationRemovedEventHandler(Node interactive);
 
-    /// <summary>Gets or sets the required view transform used for angle and alignment scoring.</summary>
+    /// <summary>Gets or sets the required layer deciding what this interactor detects.</summary>
+    /// <remarks>
+    /// How a game picks the object a player may interact with is the game's decision, so nothing is
+    /// guessed here: an interactor without detector detects nothing and says so, rather than falling
+    /// back on a model nobody chose. See <see cref="InteractionDetector"/>.
+    /// </remarks>
     [ExportGroup("Detection")]
     [Export]
-    public Node3D? ViewOrigin
-    {
-        get => _viewOrigin;
-        set
-        {
-            if (_viewOrigin == value)
-            {
-                return;
-            }
-
-            _viewOrigin = value;
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the optional physical origin used for distance checks. Defaults to the Node3D parent.
-    /// </summary>
-    [Export]
-    public Node3D? InteractionOrigin { get; set; }
-
-    /// <summary>Gets or sets the maximum authoritative interaction distance in world units.</summary>
-    [Export]
-    public float MaxInteractionDistance { get; set; } = 10.0f;
-
-    /// <summary>Gets or sets the maximum view angle accepted for focus and server validation.</summary>
-    [Export(PropertyHint.Range, "0,180,1")]
-    public float MaxInteractionAngleDegrees { get; set; } = 30.0f;
-
-    /// <summary>Gets or sets how strongly distance reduces the focus score relative to alignment.</summary>
-    [Export]
-    public float DistanceScoreCoefficient { get; set; } = 0.5f;
+    public InteractionDetector? Detector { get; set; }
 
     /// <summary>Gets or sets the server peer that receives reliable interaction RPCs.</summary>
     [ExportGroup("Network")]
@@ -166,13 +142,13 @@ public partial class InteractionInteractor : Node
     [Export]
     public int OwnerPeerId { get; set; } = 1;
 
-    private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
-    private readonly HashSet<InteractiveComponent> _interactiveCandidates = new();
+    private readonly HashSet<InteractiveComponent> _detectedInteractives = new();
+    private readonly List<InteractiveComponent> _detectionBuffer = new();
+    private readonly List<InteractiveComponent> _detectionEntered = new();
+    private readonly List<InteractiveComponent> _detectionExited = new();
     private readonly List<InteractorExecution> _ownedExecutions = new();
     private readonly HashSet<StringName> _sustainedInputs = new();
     private readonly List<StringName> _relevantInputs = new();
-    private Node3D? _viewOrigin;
-    private Node3D? _resolvedInteractionOrigin;
     private InteractiveComponent? _focusedInteractive;
     private InteractiveComponent? _automaticTarget;
     private StringName? _automaticActionId;
@@ -203,19 +179,9 @@ public partial class InteractionInteractor : Node
     /// <summary>Godot callback that resolves origins and keeps node authority on the server.</summary>
     public override void _Ready()
     {
-        _resolvedInteractionOrigin = InteractionOrigin ?? GetParent() as Node3D;
-        if (ViewOrigin is null)
+        if (Detector is null)
         {
-            GD.PushError($"{GetPath()}: InteractionInteractor requires a ViewOrigin.");
-            SetProcess(false);
-            return;
-        }
-
-        if (_resolvedInteractionOrigin is null)
-        {
-            GD.PushError(
-                $"{GetPath()}: InteractionInteractor requires an InteractionOrigin or a Node3D parent."
-            );
+            GD.PushError($"{GetPath()}: InteractionInteractor requires a Detector.");
             SetProcess(false);
             return;
         }
@@ -231,9 +197,20 @@ public partial class InteractionInteractor : Node
         SetMultiplayerAuthority(ServerPeerId);
     }
 
-    /// <summary>Godot callback that recalculates focus for the owning peer each frame.</summary>
+    /// <summary>Godot callback running detection for the owner and continued validation for the server.</summary>
+    /// <remarks>
+    /// Two rhythms sharing one detector. The authoritative peer only re-tests the targets of the
+    /// executions it holds for this interactor, so its cost is bounded by the number of sustained
+    /// executions in flight and never by the number of candidates. Walking the candidates is the
+    /// owning client's job alone, which is what lets a detection source exist only there.
+    /// </remarks>
     public override void _Process(double delta)
     {
+        if (Multiplayer.IsServer())
+        {
+            ValidateSustainedExecutions();
+        }
+
         if (!IsLocallyControlled)
         {
             return;
@@ -320,73 +297,29 @@ public partial class InteractionInteractor : Node
                 };
     }
 
-    internal void AddInteractiveIndication(InteractiveComponent interactive)
+    /// <summary>Forgets a target the framework is tearing down, on every peer.</summary>
+    /// <remarks>
+    /// An area never reports an overlap it loses by being freed, so the target itself says so. This
+    /// reaches the detector too, because the reference it holds in its own source is the one that
+    /// would outlive the node.
+    /// </remarks>
+    internal void NotifyInteractiveRemoved(InteractiveComponent interactive)
     {
-        if (!IsUsable(interactive) || !_indicatedInteractives.Add(interactive))
-        {
-            return;
-        }
-
-        interactive.RegisterInteractor(this);
-        EmitSignal(SignalName.InteractiveIndicationAdded, interactive);
-        if (IsLocallyControlled)
-        {
-            EmitStatusFor(interactive);
-        }
-    }
-
-    internal void RemoveInteractiveIndication(InteractiveComponent interactive)
-    {
-        if (!_indicatedInteractives.Remove(interactive))
-        {
-            return;
-        }
-
-        EmitSignal(SignalName.InteractiveIndicationRemoved, interactive);
-        if (!_interactiveCandidates.Contains(interactive))
+        Detector?.Forget(interactive);
+        if (_detectedInteractives.Remove(interactive))
         {
             interactive.UnregisterInteractor(this);
-        }
-    }
-
-    internal void AddInteractive(InteractiveComponent interactive)
-    {
-        if (!IsUsable(interactive) || !_interactiveCandidates.Add(interactive))
-        {
-            return;
+            EmitSignal(SignalName.InteractiveIndicationRemoved, interactive);
         }
 
-        interactive.RegisterInteractor(this);
-        if (IsLocallyControlled)
-        {
-            RecalculateFocus();
-        }
-    }
-
-    internal void RemoveInteractive(InteractiveComponent interactive)
-    {
-        if (!_interactiveCandidates.Remove(interactive))
-        {
-            return;
-        }
-
-        if (Multiplayer.IsServer())
-        {
-            CancelOwnedExecutions(interactive, inputActionName: null, InteractorLostReason);
-        }
-
-        if (!_indicatedInteractives.Contains(interactive))
-        {
-            interactive.UnregisterInteractor(this);
-        }
-
-        if (IsLocallyControlled)
-        {
-            RecalculateFocus();
-        }
-        else if (_focusedInteractive == interactive)
+        if (_focusedInteractive == interactive)
         {
             _focusedInteractive = null;
+        }
+
+        if (IsLocallyControlled)
+        {
+            RecalculateFocus();
         }
     }
 
@@ -398,35 +331,58 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
+        DispatchDetectionChanges();
         DispatchFocusChange(result.Value);
         return result.Value.Changed;
     }
 
+    /// <summary>Runs the whole detection pipeline once and mutates focus, without dispatching.</summary>
+    /// <remarks>
+    /// One loop for every detection model: iterate the candidates the detector offers, ask it for the
+    /// tier of each, and keep the best scored interactible. What entered and left detection since the
+    /// last pass is recorded for <see cref="DispatchDetectionChanges"/> instead of being signalled
+    /// here, because a core mutation never runs external code.
+    /// </remarks>
     internal FocusChangeResult? RecalculateFocusCore()
     {
-        if (ViewOrigin is null || _resolvedInteractionOrigin is null)
+        if (Detector is null)
         {
             return null;
         }
 
-        PurgeInvalidCandidates();
+        PurgeDetectedInteractives();
         InteractiveComponent? previous = _focusedInteractive;
         InteractiveComponent? best = null;
         float bestScore = float.MinValue;
-        foreach (InteractiveComponent candidate in _interactiveCandidates)
+        _detectionBuffer.Clear();
+        foreach (InteractiveComponent candidate in Detector.GetCandidates())
         {
-            if (!IsWithinInteractionRange(candidate) || !candidate.HasVisibleAction(this))
+            if (!IsUsable(candidate) || _detectionBuffer.Contains(candidate))
             {
                 continue;
             }
 
-            float score = CalculateInteractionScore(candidate);
+            InteractionDetectionKind kind = Detector.Detect(candidate);
+            if (kind == InteractionDetectionKind.None)
+            {
+                continue;
+            }
+
+            _detectionBuffer.Add(candidate);
+            if (kind != InteractionDetectionKind.Interactible || !candidate.HasVisibleAction(this))
+            {
+                continue;
+            }
+
+            float score = Detector.Score(candidate);
             if (best is null || score > bestScore)
             {
                 best = candidate;
                 bestScore = score;
             }
         }
+
+        ReconcileDetectedInteractives();
 
         if (_focusedInteractive == best)
         {
@@ -457,50 +413,69 @@ public partial class InteractionInteractor : Node
         }
     }
 
-    internal float CalculateInteractionScore(InteractiveComponent interactive)
+    private void ReconcileDetectedInteractives()
     {
-        if (ViewOrigin is null || _resolvedInteractionOrigin is null)
+        _detectionEntered.Clear();
+        _detectionExited.Clear();
+        foreach (InteractiveComponent detected in _detectionBuffer)
         {
-            return float.MinValue;
+            if (!_detectedInteractives.Contains(detected))
+            {
+                _detectionEntered.Add(detected);
+            }
         }
 
-        Vector3 interactionPosition = interactive.GetInteractionPosition();
-        Vector3 viewOffset = interactionPosition - ViewOrigin.GlobalPosition;
-        float distance = interactionPosition.DistanceTo(_resolvedInteractionOrigin.GlobalPosition);
-        if (distance <= Mathf.Epsilon)
+        foreach (InteractiveComponent tracked in _detectedInteractives)
         {
-            return 1.0f;
+            if (!_detectionBuffer.Contains(tracked))
+            {
+                _detectionExited.Add(tracked);
+            }
         }
 
-        float alignment = Mathf.Max(0.0f, (-ViewOrigin.GlobalBasis.Z).Dot(viewOffset.Normalized()));
-        return alignment / (1.0f + distance * Mathf.Max(DistanceScoreCoefficient, 0.0f));
+        foreach (InteractiveComponent entered in _detectionEntered)
+        {
+            _detectedInteractives.Add(entered);
+            entered.RegisterInteractor(this);
+        }
+
+        foreach (InteractiveComponent exited in _detectionExited)
+        {
+            _detectedInteractives.Remove(exited);
+            if (IsUsable(exited))
+            {
+                exited.UnregisterInteractor(this);
+            }
+        }
     }
 
-    internal bool IsWithinInteractionRange(InteractiveComponent interactive)
+    /// <summary>Signals what entered and left detection during the last core pass.</summary>
+    /// <remarks>
+    /// Indication covers every detected target, focused one included: the tiers are cumulative, and
+    /// hiding the indication of the target that carries the prompt is the presenter's call, not a
+    /// detection decision.
+    /// </remarks>
+    internal void DispatchDetectionChanges()
     {
-        if (ViewOrigin is null || _resolvedInteractionOrigin is null)
+        foreach (InteractiveComponent entered in _detectionEntered)
         {
-            return false;
+            if (!IsUsable(entered))
+            {
+                continue;
+            }
+
+            EmitSignal(SignalName.InteractiveIndicationAdded, entered);
+            EmitStatusFor(entered);
         }
 
-        Vector3 interactionPosition = interactive.GetInteractionPosition();
-        Vector3 viewOffset = interactionPosition - ViewOrigin.GlobalPosition;
-        float distance = interactionPosition.DistanceTo(_resolvedInteractionOrigin.GlobalPosition);
-        if (distance > Mathf.Max(MaxInteractionDistance, 0.0f))
+        _detectionEntered.Clear();
+
+        foreach (InteractiveComponent exited in _detectionExited)
         {
-            return false;
+            EmitSignal(SignalName.InteractiveIndicationRemoved, exited);
         }
 
-        if (distance <= Mathf.Epsilon)
-        {
-            return true;
-        }
-
-        float alignment = (-ViewOrigin.GlobalBasis.Z).Dot(viewOffset.Normalized());
-        float minimumAlignment = Mathf.Cos(
-            Mathf.DegToRad(Mathf.Clamp(MaxInteractionAngleDegrees, 0.0f, 180.0f))
-        );
-        return alignment >= minimumAlignment;
+        _detectionExited.Clear();
     }
 
     /// <summary>Lists the project inputs worth sampling for the owning player right now.</summary>
@@ -795,9 +770,7 @@ public partial class InteractionInteractor : Node
             CancelOwnedExecutions(interactive: null, inputActionName: null, InteractorLostReason);
         }
 
-        HashSet<InteractiveComponent> registered = new(_interactiveCandidates);
-        registered.UnionWith(_indicatedInteractives);
-        foreach (InteractiveComponent interactive in registered)
+        foreach (InteractiveComponent interactive in _detectedInteractives)
         {
             if (IsUsable(interactive))
             {
@@ -805,8 +778,10 @@ public partial class InteractionInteractor : Node
             }
         }
 
-        _interactiveCandidates.Clear();
-        _indicatedInteractives.Clear();
+        _detectedInteractives.Clear();
+        _detectionBuffer.Clear();
+        _detectionEntered.Clear();
+        _detectionExited.Clear();
         _ownedExecutions.Clear();
         _sustainedInputs.Clear();
         _relevantInputs.Clear();
@@ -900,7 +875,7 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
-        if (!_interactiveCandidates.Contains(target) || !IsWithinInteractionRange(target))
+        if (Detector is null || Detector.Detect(target) != InteractionDetectionKind.Interactible)
         {
             reason = "The interaction target is out of range.";
             return false;
@@ -1009,6 +984,36 @@ public partial class InteractionInteractor : Node
         return cancelled;
     }
 
+    /// <summary>Ends the executions whose target stopped being interactible for this interactor.</summary>
+    /// <remarks>
+    /// This is the "sustained by presence" axis, and it is validated with the very same window the
+    /// command was accepted with: walking away or turning away from a channel ends it. An execution
+    /// the world owns is not tracked here at all, so it survives on its own.
+    /// </remarks>
+    private void ValidateSustainedExecutions()
+    {
+        for (int index = _ownedExecutions.Count - 1; index >= 0; index--)
+        {
+            InteractorExecution owned = _ownedExecutions[index];
+            if (!IsUsable(owned.Interactive) || !owned.Interactive.IsExecutionActive(owned.Id))
+            {
+                _ownedExecutions.RemoveAt(index);
+                continue;
+            }
+
+            if (
+                Detector is not null
+                && Detector.Detect(owned.Interactive) == InteractionDetectionKind.Interactible
+            )
+            {
+                continue;
+            }
+
+            _ownedExecutions.RemoveAt(index);
+            owned.Interactive.CancelExecution(owned.Id, InteractorLostReason);
+        }
+    }
+
     private void PruneOwnedExecutions()
     {
         _ownedExecutions.RemoveAll(owned =>
@@ -1068,10 +1073,9 @@ public partial class InteractionInteractor : Node
         return senderPeerId == 0 ? OwnerPeerId : senderPeerId;
     }
 
-    private void PurgeInvalidCandidates()
+    private void PurgeDetectedInteractives()
     {
-        _indicatedInteractives.RemoveWhere(interactive => !IsUsable(interactive));
-        _interactiveCandidates.RemoveWhere(interactive => !IsUsable(interactive));
+        _detectedInteractives.RemoveWhere(interactive => !IsUsable(interactive));
         if (_focusedInteractive is not null && !IsUsable(_focusedInteractive))
         {
             _focusedInteractive = null;

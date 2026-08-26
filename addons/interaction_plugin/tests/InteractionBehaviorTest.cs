@@ -187,7 +187,10 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld(ownerPeerId: 2);
         await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detector.SetDetection(
+            testWorld.Interactive,
+            InteractionDetectionKind.Interactible
+        );
         testWorld.Interactor.OwnerPeerId = 1;
         int focusSignalCount = 0;
         int statusSignalCount = 0;
@@ -210,7 +213,10 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld(ownerPeerId: 2);
         await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detector.SetDetection(
+            testWorld.Interactive,
+            InteractionDetectionKind.Interactible
+        );
         testWorld.Interactor.OwnerPeerId = 1;
         int focusSignalCount = 0;
         int statusSignalCount = 0;
@@ -229,7 +235,10 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld(ownerPeerId: 2);
         await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detector.SetDetection(
+            testWorld.Interactive,
+            InteractionDetectionKind.Interactible
+        );
         testWorld.Interactor.OwnerPeerId = 1;
         FocusChangeResult? initialResult = testWorld.Interactor.RecalculateFocusCore();
         testWorld.Interactor.DispatchFocusChange(initialResult!.Value);
@@ -297,8 +306,8 @@ public sealed partial class InteractionBehaviorTest
         interactive.AddChild(action);
         InteractionInteractor interactor = new();
         Node3D view = new() { Name = "ViewOrigin" };
-        interactor.ViewOrigin = view;
         interactor.AddChild(view);
+        AttachDetector(interactor, view);
         Node3D world = new();
         world.AddChild(owner);
         world.AddChild(interactor);
@@ -388,7 +397,7 @@ public sealed partial class InteractionBehaviorTest
         bool focusChanged = false;
         testWorld.Interactor.FocusedInteractiveChanged += _ => focusChanged = true;
 
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
 
         AssertThat(testWorld.Interactor.FocusedInteractive == testWorld.Interactive).IsTrue();
@@ -404,13 +413,15 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         Node3D secondView = new() { Name = "ViewOrigin" };
-        InteractionInteractor secondInteractor = new() { ViewOrigin = secondView };
+        InteractionInteractor secondInteractor = new();
         secondInteractor.AddChild(secondView);
+        TestInteractionDetector secondDetector = AttachDetector(secondInteractor, secondView);
         testWorld.World.AddChild(secondInteractor);
         await testWorld.Runner.SimulateFrames(1);
 
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
-        secondInteractor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
+        secondDetector.SetDetection(testWorld.Interactive, InteractionDetectionKind.Interactible);
+        secondInteractor.RecalculateFocus();
         AssertThat(
                 testWorld.Interactive.ExecuteAction(
                     testWorld.Interactor,
@@ -605,8 +616,9 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         Node3D secondView = new() { Name = "ViewOrigin" };
-        InteractionInteractor secondInteractor = new() { ViewOrigin = secondView };
+        InteractionInteractor secondInteractor = new();
         secondInteractor.AddChild(secondView);
+        AttachDetector(secondInteractor, secondView);
         testWorld.World.AddChild(secondInteractor);
         await testWorld.Runner.SimulateFrames(1);
         testWorld.Interactive.ExecuteAction(
@@ -670,7 +682,7 @@ public sealed partial class InteractionBehaviorTest
     public async Task OfflineInputUsesAuthoritativeStartAndEndPath()
     {
         TestWorld testWorld = BuildWorld();
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
 
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
@@ -691,7 +703,7 @@ public sealed partial class InteractionBehaviorTest
         );
         bool requestEmitted = false;
         testWorld.Interactor.InteractionRequested += (_, _) => requestEmitted = true;
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
 
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsFalse();
@@ -704,10 +716,13 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld(ownerPeerId: 2);
         await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
-        testWorld.Interactor.RemoveInteractive(testWorld.Interactive);
+        testWorld.Undetect(testWorld.Interactive);
+        // Presence is now validated by the authoritative frame instead of by an overlap callback, so
+        // the release happens on the next one rather than inside the detection change itself.
+        await testWorld.Runner.SimulateFrames(1);
 
         AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
         AssertThat(testWorld.Owner.EndCount).IsEqual(1);
@@ -718,7 +733,7 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld(ownerPeerId: 2);
         await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
         testWorld.Interactor.QueueFree();
@@ -925,7 +940,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        door.Interactor.AddInteractive(door.Interactive);
+        door.Detect(door.Interactive);
         AssertThat(door.Interactor.FocusedInteractive == door.Interactive).IsTrue();
 
         door.State.SetState(new StringName("locked"));
@@ -956,8 +971,8 @@ public sealed partial class InteractionBehaviorTest
         crateInteractive.AddChild(inspect);
         door.World.AddChild(crate);
         await door.Runner.SimulateFrames(1);
-        door.Interactor.AddInteractive(door.Interactive);
-        door.Interactor.AddInteractive(crateInteractive);
+        door.Detect(door.Interactive);
+        door.Detect(crateInteractive);
         AssertThat(door.Interactor.FocusedInteractive == door.Interactive).IsTrue();
 
         door.State.SetState(new StringName("locked"));
@@ -971,7 +986,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        door.Interactor.AddInteractive(door.Interactive);
+        door.Detect(door.Interactive);
         List<string> startedActions = new();
         door.Interactive.InteractionActionStarted += (_, action) =>
             startedActions.Add(action.Definition!.Id.ToString());
@@ -1022,7 +1037,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        door.Interactor.AddInteractive(door.Interactive);
+        door.Detect(door.Interactive);
         int startedCount = 0;
         door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
 
@@ -1036,7 +1051,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        door.Interactor.AddInteractive(door.Interactive);
+        door.Detect(door.Interactive);
         door.Open.Rules.Insert(
             0,
             new AlwaysBlockedInteractionRule { Reason = "Requires a keycard." }
@@ -1067,7 +1082,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        door.Interactor.AddInteractive(door.Interactive);
+        door.Detect(door.Interactive);
         int startedCount = 0;
         door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
         string rejectedReason = string.Empty;
@@ -1088,7 +1103,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        door.Interactor.AddInteractive(door.Interactive);
+        door.Detect(door.Interactive);
         int startedCount = 0;
         int rejectedCount = 0;
         door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
@@ -1111,7 +1126,7 @@ public sealed partial class InteractionBehaviorTest
     public async Task ReleasingAnotherInputKeepsTheActiveInteraction()
     {
         TestWorld testWorld = BuildWorld();
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
@@ -1129,7 +1144,7 @@ public sealed partial class InteractionBehaviorTest
     public async Task ServerKeepsAReservationWhenAnotherInputIsReleased()
     {
         TestWorld testWorld = BuildWorld();
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
@@ -1153,7 +1168,7 @@ public sealed partial class InteractionBehaviorTest
         // really would pick it. Sharing the default group would block it like everything else.
         alternative.ConcurrencyGroup = new StringName("inspection");
         AddAction(testWorld.Interactive, alternative);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
         AssertThat(testWorld.Stateful.State).IsEqual(ActivatingState);
@@ -1176,7 +1191,7 @@ public sealed partial class InteractionBehaviorTest
         testWorld.Action.Automatic = true;
         await testWorld.Runner.SimulateFrames(1);
 
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
 
         AssertThat(testWorld.Owner.StartCount).IsEqual(1);
         AssertThat(testWorld.Stateful.State).IsEqual(ActivatingState);
@@ -1431,7 +1446,7 @@ public sealed partial class InteractionBehaviorTest
         pickup.Automatic = true;
         AddAction(testWorld.Interactive, inspect);
         AddAction(testWorld.Interactive, pickup);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
 
         List<StringName> focused = new(testWorld.Interactor.GetRelevantInputs());
@@ -1443,9 +1458,9 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(focused.Contains(new StringName("inspect"))).IsTrue();
 
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
-        testWorld.Interactor.RemoveInteractive(testWorld.Interactive);
+        testWorld.Undetect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
 
         // Nothing is focused any more, yet the input this interactor believes it is sustaining stays
         // reportable, so a release is still forwarded instead of being silently dropped.
@@ -1459,8 +1474,9 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         Node3D otherView = new() { Name = "ViewOrigin" };
-        InteractionInteractor other = new() { Name = "Other", ViewOrigin = otherView };
+        InteractionInteractor other = new() { Name = "Other" };
         other.AddChild(otherView);
+        AttachDetector(other, otherView);
         door.World.AddChild(other);
         await door.Runner.SimulateFrames(1);
 
@@ -1586,7 +1602,7 @@ public sealed partial class InteractionBehaviorTest
         int rejectedCount = 0;
         testWorld.Interactor.InteractionRejected += (_, _, _) => rejectedCount++;
         await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(3);
 
         AssertThat(testWorld.Owner.StartCount).IsEqual(0);
@@ -1609,16 +1625,14 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         Node3D secondView = new() { Name = "ViewOrigin" };
-        InteractionInteractor secondInteractor = new()
-        {
-            Name = "SecondInteractor",
-            ViewOrigin = secondView,
-        };
+        InteractionInteractor secondInteractor = new() { Name = "SecondInteractor" };
         secondInteractor.AddChild(secondView);
+        TestInteractionDetector secondDetector = AttachDetector(secondInteractor, secondView);
         testWorld.World.AddChild(secondInteractor);
         await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
-        secondInteractor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
+        secondDetector.SetDetection(testWorld.Interactive, InteractionDetectionKind.Interactible);
+        secondInteractor.RecalculateFocus();
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
         AssertThat(secondInteractor.TryEndInteractionInput(InteractInput)).IsFalse();
@@ -1717,7 +1731,7 @@ public sealed partial class InteractionBehaviorTest
         InteractionAction force = CreateAction("force");
         force.Definition!.HoldThreshold = 0.05f;
         AddAction(testWorld.Interactive, force);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
 
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
@@ -1745,7 +1759,7 @@ public sealed partial class InteractionBehaviorTest
         InteractionAction force = CreateAction("force");
         force.Definition!.HoldThreshold = 3600.0f;
         AddAction(testWorld.Interactive, force);
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
@@ -1761,7 +1775,7 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         ActivationExecutorOf(testWorld.Action).Duration = 3600.0f;
-        testWorld.Interactor.AddInteractive(testWorld.Interactive);
+        testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
@@ -1899,8 +1913,9 @@ public sealed partial class InteractionBehaviorTest
         interactive.AddChild(reactivate);
 
         Node3D view = new() { Name = "ViewOrigin" };
-        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = view };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
         interactor.AddChild(view);
+        TestInteractionDetector detector = AttachDetector(interactor, view);
         world.AddChild(reactor);
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
@@ -1913,7 +1928,8 @@ public sealed partial class InteractionBehaviorTest
             activate,
             reactivate,
             key,
-            interactor
+            interactor,
+            detector
         );
     }
 
@@ -1985,17 +2001,33 @@ public sealed partial class InteractionBehaviorTest
         owner.Stateful = stateful;
 
         Node3D view = new() { Name = "ViewOrigin" };
-        InteractionInteractor interactor = new()
-        {
-            Name = "Interactor",
-            ViewOrigin = view,
-            OwnerPeerId = ownerPeerId,
-        };
+        InteractionInteractor interactor = new() { Name = "Interactor", OwnerPeerId = ownerPeerId };
         interactor.AddChild(view);
+        TestInteractionDetector detector = AttachDetector(interactor, view);
         world.AddChild(owner);
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
-        return new TestWorld(world, runner, owner, stateful, interactive, interactor, action);
+        return new TestWorld(
+            world,
+            runner,
+            owner,
+            stateful,
+            interactive,
+            interactor,
+            detector,
+            action
+        );
+    }
+
+    private static TestInteractionDetector AttachDetector(
+        InteractionInteractor interactor,
+        Node3D viewOrigin
+    )
+    {
+        TestInteractionDetector detector = new() { Name = "Detector", ViewOrigin = viewOrigin };
+        interactor.AddChild(detector);
+        interactor.Detector = detector;
+        return detector;
     }
 
     private static void AddAction(InteractiveComponent interactive, InteractionAction action)
@@ -2137,13 +2169,14 @@ public sealed partial class InteractionBehaviorTest
         interactive.AddChild(close);
 
         Node3D view = new() { Name = "ViewOrigin" };
-        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = view };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
         interactor.AddChild(view);
+        TestInteractionDetector detector = AttachDetector(interactor, view);
         world.AddChild(door);
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
 
-        return new DoorWorld(world, runner, state, interactive, open, close, interactor);
+        return new DoorWorld(world, runner, state, interactive, open, close, interactor, detector);
     }
 
     private sealed record DoorWorld(
@@ -2153,8 +2186,17 @@ public sealed partial class InteractionBehaviorTest
         InteractiveComponent Interactive,
         InteractionAction Open,
         InteractionAction Close,
-        InteractionInteractor Interactor
-    );
+        InteractionInteractor Interactor,
+        TestInteractionDetector Detector
+    )
+    {
+        /// <summary>Detects one target as interactible and runs the pipeline once, like a frame would.</summary>
+        public void Detect(InteractiveComponent interactive)
+        {
+            Detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
+            Interactor.RecalculateFocus();
+        }
+    }
 
     private sealed record CoreWorld(
         Node3D World,
@@ -2164,7 +2206,8 @@ public sealed partial class InteractionBehaviorTest
         InteractionAction Activate,
         InteractionAction Reactivate,
         CarriesKeyInteractionRule Key,
-        InteractionInteractor Interactor
+        InteractionInteractor Interactor,
+        TestInteractionDetector Detector
     );
 
     private sealed partial class CarriesKeyInteractionRule : InteractionRule
@@ -2182,8 +2225,24 @@ public sealed partial class InteractionBehaviorTest
         StatefulComponent Stateful,
         InteractiveComponent Interactive,
         InteractionInteractor Interactor,
+        TestInteractionDetector Detector,
         InteractionAction Action
-    );
+    )
+    {
+        /// <summary>Detects one target as interactible and runs the pipeline once, like a frame would.</summary>
+        public void Detect(InteractiveComponent interactive)
+        {
+            Detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
+            Interactor.RecalculateFocus();
+        }
+
+        /// <summary>Stops detecting one target and runs the pipeline once.</summary>
+        public void Undetect(InteractiveComponent interactive)
+        {
+            Detector.ClearDetection(interactive);
+            Interactor.RecalculateFocus();
+        }
+    }
 
     private sealed partial class TestInteractiveActor : Node3D
     {

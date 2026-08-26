@@ -5,6 +5,7 @@ using Godot;
 using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Actions;
+using QuestWorld.Interaction.Runtime.Detection;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 
@@ -17,6 +18,8 @@ public static class InteractionValidator
         None,
         InteractiveComponent,
         InteractionInteractor,
+        InteractionDetector,
+        AreaInteractionDetector,
         InteractionPresenter,
         InteractionAction,
         InteractionActionDefinition,
@@ -35,6 +38,10 @@ public static class InteractionValidator
                 return ValidateInteractive(obj);
             case InspectableType.InteractionInteractor:
                 return ValidateInteractor(obj);
+            case InspectableType.InteractionDetector:
+                return ValidateDetector(obj);
+            case InspectableType.AreaInteractionDetector:
+                return ValidateAreaDetector(obj);
             case InspectableType.InteractionPresenter:
                 return ValidatePresenter(obj);
             case InspectableType.InteractionAction:
@@ -133,8 +140,30 @@ public static class InteractionValidator
 
     private static IEnumerable<string> ValidateInteractor(GodotObject obj)
     {
+        // Guessing a detection model is exactly what the replaceable layer refuses to do, so a
+        // missing detector is a configuration error rather than a silent fallback.
+        if (GetObject(obj, "Detector") is null)
+            yield return "Detector must be assigned.";
+    }
+
+    private static IEnumerable<string> ValidateDetector(GodotObject obj)
+    {
         if (GetObject(obj, "ViewOrigin") is null)
             yield return "ViewOrigin must be assigned.";
+
+        if (GetFloat(obj, "DistanceScoreCoefficient") < 0.0f)
+            yield return "DistanceScoreCoefficient must not be negative.";
+    }
+
+    private static IEnumerable<string> ValidateAreaDetector(GodotObject obj)
+    {
+        foreach (string warning in ValidateDetector(obj))
+        {
+            yield return warning;
+        }
+
+        if (GetFloat(obj, "MaxDistance") < 0.0f)
+            yield return "MaxDistance must not be negative.";
     }
 
     private static IEnumerable<string> ValidatePresenter(GodotObject obj)
@@ -317,6 +346,8 @@ public static class InteractionValidator
         {
             InteractiveComponent => InspectableType.InteractiveComponent,
             InteractionInteractor => InspectableType.InteractionInteractor,
+            AreaInteractionDetector => InspectableType.AreaInteractionDetector,
+            InteractionDetector => InspectableType.InteractionDetector,
             InteractionPresenter => InspectableType.InteractionPresenter,
             InteractionAction => InspectableType.InteractionAction,
             InteractionActionDefinition => InspectableType.InteractionActionDefinition,
@@ -337,6 +368,8 @@ public static class InteractionValidator
         {
             nameof(InteractiveComponent) => InspectableType.InteractiveComponent,
             nameof(InteractionInteractor) => InspectableType.InteractionInteractor,
+            nameof(AreaInteractionDetector) => InspectableType.AreaInteractionDetector,
+            nameof(InteractionDetector) => InspectableType.InteractionDetector,
             nameof(InteractionPresenter) => InspectableType.InteractionPresenter,
             nameof(InteractionAction) => InspectableType.InteractionAction,
             nameof(InteractionActionDefinition) => InspectableType.InteractionActionDefinition,
@@ -356,6 +389,10 @@ public static class InteractionValidator
                 InspectableType.InteractiveComponent,
             "res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" =>
                 InspectableType.InteractionInteractor,
+            "res://addons/interaction_plugin/runtime/detection/AreaInteractionDetector.cs" =>
+                InspectableType.AreaInteractionDetector,
+            "res://addons/interaction_plugin/runtime/detection/InteractionDetector.cs" =>
+                InspectableType.InteractionDetector,
             "res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" =>
                 InspectableType.InteractionPresenter,
             "res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" =>

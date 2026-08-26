@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using QuestWorld.Interaction.Runtime.Actions;
+using QuestWorld.Interaction.Runtime.Detection;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Interaction.Runtime.Rules;
 
@@ -183,6 +184,9 @@ public partial class InteractiveComponent : Node
     private static ulong _nextExecutionId = 1;
 
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
+    private readonly HashSet<InteractionInteractor> _interactionOverlaps = new();
+    private readonly HashSet<InteractionInteractor> _indicationOverlaps = new();
+    private readonly List<InteractionInteractor> _overlapBuffer = new();
     private readonly List<InteractionExecution> _activeExecutions = new();
     private Area3D? _interactionArea;
 
@@ -1046,72 +1050,89 @@ public partial class InteractiveComponent : Node
     {
         _activeExecutions.Clear();
         PurgeInvalidInteractors();
-        foreach (
-            InteractionInteractor interactor in new List<InteractionInteractor>(_presentInteractors)
-        )
+
+        // An area cannot report the overlap it loses by being freed, so every interactor that holds
+        // this target — through its detector or through a registration — is told explicitly.
+        HashSet<InteractionInteractor> holders = new(_presentInteractors);
+        holders.UnionWith(_interactionOverlaps);
+        holders.UnionWith(_indicationOverlaps);
+        foreach (InteractionInteractor interactor in holders)
         {
-            interactor.RemoveInteractive(this);
-            interactor.RemoveInteractiveIndication(this);
+            interactor.NotifyInteractiveRemoved(this);
         }
 
         _presentInteractors.Clear();
+        _interactionOverlaps.Clear();
+        _indicationOverlaps.Clear();
     }
 
-    private void OnInteractionAreaBodyEntered(Node3D body)
-    {
-        FindInteractors(
-            body,
-            static (interactor, component) => interactor.AddInteractive(component),
-            this
-        );
-    }
+    private void OnInteractionAreaBodyEntered(Node3D body) =>
+        NotifyOverlapChanged(body, InteractionDetectionKind.Interactible, entered: true);
 
-    private void OnInteractionAreaBodyExited(Node3D body)
-    {
-        FindInteractors(
-            body,
-            static (interactor, component) => interactor.RemoveInteractive(component),
-            this
-        );
-    }
+    private void OnInteractionAreaBodyExited(Node3D body) =>
+        NotifyOverlapChanged(body, InteractionDetectionKind.Interactible, entered: false);
 
-    private void OnIndicationAreaBodyEntered(Node3D body)
-    {
-        FindInteractors(
-            body,
-            static (interactor, component) => interactor.AddInteractiveIndication(component),
-            this
-        );
-    }
+    private void OnIndicationAreaBodyEntered(Node3D body) =>
+        NotifyOverlapChanged(body, InteractionDetectionKind.Indicated, entered: true);
 
-    private void OnIndicationAreaBodyExited(Node3D body)
-    {
-        FindInteractors(
-            body,
-            static (interactor, component) => interactor.RemoveInteractiveIndication(component),
-            this
-        );
-    }
+    private void OnIndicationAreaBodyExited(Node3D body) =>
+        NotifyOverlapChanged(body, InteractionDetectionKind.Indicated, entered: false);
 
-    private static void FindInteractors(
-        Node node,
-        System.Action<InteractionInteractor, InteractiveComponent> action,
-        InteractiveComponent component
-    )
+    /// <summary>Pushes one overlap change of an area this target owns to the interactors involved.</summary>
+    /// <remarks>
+    /// The areas belong to the target, so the target is the only one able to report them, and it does
+    /// so on every peer: an authoritative validation reads the very same overlap the owning client
+    /// detected with. A detector that has a source of its own simply ignores the call.
+    /// </remarks>
+    private void NotifyOverlapChanged(Node3D body, InteractionDetectionKind kind, bool entered)
     {
-        if (node is InteractionInteractor direct)
+        HashSet<InteractionInteractor> overlaps =
+            kind == InteractionDetectionKind.Interactible
+                ? _interactionOverlaps
+                : _indicationOverlaps;
+
+        _overlapBuffer.Clear();
+        CollectInteractors(body, _overlapBuffer);
+        foreach (InteractionInteractor interactor in _overlapBuffer)
         {
-            action(direct, component);
+            if (entered ? !overlaps.Add(interactor) : !overlaps.Remove(interactor))
+            {
+                continue;
+            }
+
+            if (interactor.Detector is not InteractionDetector detector)
+            {
+                continue;
+            }
+
+            if (entered)
+            {
+                detector.OnEnteredTargetArea(this, kind);
+            }
+            else
+            {
+                detector.OnExitedTargetArea(this, kind);
+            }
+        }
+    }
+
+    private static void CollectInteractors(Node node, List<InteractionInteractor> interactors)
+    {
+        if (node is InteractionInteractor interactor)
+        {
+            interactors.Add(interactor);
         }
 
         foreach (Node child in node.GetChildren())
         {
-            FindInteractors(child, action, component);
+            CollectInteractors(child, interactors);
         }
     }
 
     private void PurgeInvalidInteractors()
     {
         _presentInteractors.RemoveWhere(interactor => !IsInstanceValid(interactor));
+        _interactionOverlaps.RemoveWhere(interactor => !IsInstanceValid(interactor));
+        _indicationOverlaps.RemoveWhere(interactor => !IsInstanceValid(interactor));
     }
 }

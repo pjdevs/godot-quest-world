@@ -8,6 +8,7 @@ using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Actions;
+using QuestWorld.Interaction.Runtime.Detection;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.State;
@@ -64,14 +65,39 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
-    public void InteractorRequiresAnExplicitViewOriginOnly()
+    public void InteractorRequiresAnExplicitDetector()
     {
         InteractionInteractor interactor = new();
 
         string[] warnings = InteractionValidator.Validate(interactor).ToArray();
 
+        AssertThat(warnings.Contains("Detector must be assigned.")).IsTrue();
+    }
+
+    [TestCase]
+    public void DetectorRequiresAnExplicitViewOriginOnly()
+    {
+        AreaInteractionDetector detector = new();
+
+        string[] warnings = InteractionValidator.Validate(detector).ToArray();
+
         AssertThat(warnings.Contains("ViewOrigin must be assigned.")).IsTrue();
         AssertThat(warnings.Any(warning => warning.Contains("InteractionOrigin"))).IsFalse();
+    }
+
+    [TestCase]
+    public void DetectorReportsNegativeRangeAndScoreSettings()
+    {
+        AreaInteractionDetector detector = new()
+        {
+            MaxDistance = -1.0f,
+            DistanceScoreCoefficient = -1.0f,
+        };
+
+        string[] warnings = InteractionValidator.Validate(detector).ToArray();
+
+        AssertThat(warnings.Contains("MaxDistance must not be negative.")).IsTrue();
+        AssertThat(warnings.Contains("DistanceScoreCoefficient must not be negative.")).IsTrue();
     }
 
     [TestCase]

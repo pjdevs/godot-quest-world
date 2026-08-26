@@ -5,6 +5,7 @@
 [ext_resource type="Script" uid="uid://yahimljmakge" path="res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" id="3_interactor"]
 [ext_resource type="Script" uid="uid://drgb3r1muwfvx" path="res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" id="4_presenter"]
 [ext_resource type="PackedScene" uid="uid://m4nr18qimc1s" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="5_prompt_container"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/detection/AreaInteractionDetector.cs" id="6_detector"]
 
 [node name="Character" unique_id=493885237 instance=ExtResource("1_base")]
 script = ExtResource("2_project_character")
@@ -22,9 +23,13 @@ parameters/LandOneShot/request = 0
 ThirdPersonDistance = 2.5
 FirstPersonCameraOffset = Vector3(0, 0, -0.6)
 
-[node name="InteractionInteractor" type="Node" parent="." index="6" unique_id=1688919232 groups=["Player"] node_paths=PackedStringArray("ViewOrigin")]
+[node name="InteractionInteractor" type="Node" parent="." index="6" unique_id=1688919232 groups=["Player"] node_paths=PackedStringArray("Detector")]
 script = ExtResource("3_interactor")
-ViewOrigin = NodePath("../CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")
+Detector = NodePath("AreaInteractionDetector")
+
+[node name="AreaInteractionDetector" type="Node" parent="InteractionInteractor" unique_id=1688919233 node_paths=PackedStringArray("ViewOrigin")]
+script = ExtResource("6_detector")
+ViewOrigin = NodePath("../../CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")
 
 [node name="InteractionPresenter" type="CanvasLayer" parent="." index="7" unique_id=1331596618 node_paths=PackedStringArray("Interactor", "Camera")]
 script = ExtResource("4_presenter")

@@ -82,6 +82,25 @@ public static class InteractionUnavailableKindExtensions
         };
 }
 
+/// <summary>Tier one target reaches for one interactor, decided by its detector.</summary>
+/// <remarks>
+/// The tiers are cumulative: an interactible target is also indicated, because a widget saying "there
+/// is something over there" must not disappear the moment the target becomes usable. A new tier is
+/// only worth adding when the interactor itself behaves differently, which is why "close / medium /
+/// far" is not one: that is visual, it belongs to the widget, and it is fed by data.
+/// </remarks>
+public enum InteractionDetectionKind
+{
+    /// <summary>The target is not detected at all and takes no part in presentation.</summary>
+    None,
+
+    /// <summary>The target is worth pointing at, but no action of it may be requested.</summary>
+    Indicated,
+
+    /// <summary>The target is eligible for focus, for a command, and for continued validation.</summary>
+    Interactible
+}
+
 /// <summary>Read-only inputs supplied to every gameplay interaction rule.</summary>
 /// <param name="Interactor">Interactor requesting the availability evaluation.</param>
 /// <param name="Interactive">Interactive component owning the evaluated action.</param>

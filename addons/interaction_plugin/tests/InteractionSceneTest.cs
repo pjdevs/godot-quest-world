@@ -140,7 +140,8 @@ public sealed partial class InteractionSceneTest
         Node3D world = new();
         Node3D character = new() { Name = "Character" };
         Camera3D camera = new() { Name = "Camera" };
-        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = camera };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
+        TestInteractionDetector detector = AttachDetector(interactor, camera);
         InteractionPresenter presenter = new()
         {
             Name = "Presenter",
@@ -163,7 +164,7 @@ public sealed partial class InteractionSceneTest
         await runner.SimulateFrames(1);
         InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
 
-        interactor.AddInteractive(interactive);
+        detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
         await runner.SimulateFrames(1);
 
         InteractionPromptWidget container = presenter
@@ -186,7 +187,8 @@ public sealed partial class InteractionSceneTest
         Node3D world = new();
         Node3D character = new() { Name = "Character" };
         Camera3D camera = new() { Name = "Camera" };
-        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = camera };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
+        TestInteractionDetector detector = AttachDetector(interactor, camera);
         InteractionPresenter presenter = new()
         {
             Name = "Presenter",
@@ -207,18 +209,18 @@ public sealed partial class InteractionSceneTest
         InteractiveComponent first = firstOwner.GetNode<InteractiveComponent>("Interactive");
         InteractiveComponent second = secondOwner.GetNode<InteractiveComponent>("Interactive");
 
-        interactor.AddInteractiveIndication(first);
-        interactor.AddInteractiveIndication(second);
+        detector.SetDetection(first, InteractionDetectionKind.Indicated);
+        detector.SetDetection(second, InteractionDetectionKind.Indicated);
         await runner.SimulateFrames(1);
         AssertThat(presenter.GetChildren().OfType<InteractionIndicatorWidget>().Count()).IsEqual(2);
 
-        interactor.AddInteractive(first);
+        detector.SetDetection(first, InteractionDetectionKind.Interactible);
         await runner.SimulateFrames(1);
         AssertThat(interactor.FocusedInteractive == first).IsTrue();
         AssertThat(presenter.GetChildren().OfType<InteractionPromptWidget>().Count()).IsEqual(1);
         AssertThat(presenter.GetChildren().OfType<InteractionIndicatorWidget>().Count()).IsEqual(1);
 
-        interactor.RemoveInteractive(first);
+        detector.SetDetection(first, InteractionDetectionKind.Indicated);
         await runner.SimulateFrames(1);
         AssertThat(presenter.GetChildren().OfType<InteractionPromptWidget>().Count()).IsEqual(0);
         AssertThat(presenter.GetChildren().OfType<InteractionIndicatorWidget>().Count()).IsEqual(2);
@@ -230,12 +232,8 @@ public sealed partial class InteractionSceneTest
         Node3D world = new();
         Node3D character = new() { Name = "RemoteCharacter" };
         Camera3D camera = new() { Name = "Camera" };
-        InteractionInteractor interactor = new()
-        {
-            Name = "Interactor",
-            OwnerPeerId = 2,
-            ViewOrigin = camera,
-        };
+        InteractionInteractor interactor = new() { Name = "Interactor", OwnerPeerId = 2 };
+        TestInteractionDetector detector = AttachDetector(interactor, camera);
         InteractionPresenter presenter = new()
         {
             Name = "Presenter",
@@ -252,8 +250,7 @@ public sealed partial class InteractionSceneTest
         await runner.SimulateFrames(1);
         InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
 
-        interactor.AddInteractiveIndication(interactive);
-        interactor.AddInteractive(interactive);
+        detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
         await runner.SimulateFrames(1);
 
         AssertThat(presenter.GetChildCount()).IsEqual(0);
@@ -334,8 +331,9 @@ public sealed partial class InteractionSceneTest
         Node3D world = new();
         Node3D actor = GD.Load<PackedScene>(LongActionScenePath).Instantiate<Node3D>();
         Node3D view = new() { Name = "ViewOrigin" };
-        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = view };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
         interactor.AddChild(view);
+        AttachDetector(interactor, view);
         interactor.AddToGroup("Player");
         world.AddChild(actor);
         world.AddChild(interactor);
@@ -367,7 +365,8 @@ public sealed partial class InteractionSceneTest
         Node3D world = new();
         Node3D character = new() { Name = "Character" };
         Camera3D camera = new() { Name = "Camera" };
-        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = camera };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
+        TestInteractionDetector detector = AttachDetector(interactor, camera);
         InteractionPresenter presenter = new()
         {
             Name = "Presenter",
@@ -391,7 +390,7 @@ public sealed partial class InteractionSceneTest
         await runner.SimulateFrames(1);
         int statusNotifications = 0;
         interactive.InteractiveStatusChanged += () => statusNotifications++;
-        interactor.AddInteractive(interactive);
+        detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
         await runner.SimulateFrames(1);
 
         AssertThat(PromptLabels(presenter)).IsEqual("[interact] talk");
@@ -521,11 +520,12 @@ public sealed partial class InteractionSceneTest
         WireWallControlAction(interactive.Actions[1], wallState, RaisedState, LoweringState);
 
         Node3D view = new() { Name = "ViewOrigin" };
-        InteractionInteractor interactor = new() { Name = "Interactor", ViewOrigin = view };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
         interactor.AddChild(view);
+        TestInteractionDetector detector = AttachDetector(interactor, view);
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
-        interactor.AddInteractive(interactive);
+        detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
 
         return new WallControlWorld(runner, interactive, interactor, wallState);
     }
@@ -563,6 +563,17 @@ public sealed partial class InteractionSceneTest
         InteractionInteractor Interactor,
         StatefulComponent WallState
     );
+
+    private static TestInteractionDetector AttachDetector(
+        InteractionInteractor interactor,
+        Node3D viewOrigin
+    )
+    {
+        TestInteractionDetector detector = new() { Name = "Detector", ViewOrigin = viewOrigin };
+        interactor.AddChild(detector);
+        interactor.Detector = detector;
+        return detector;
+    }
 
     private static TestInteractiveActor CreateInteractiveActor(
         string displayName,
