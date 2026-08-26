@@ -113,7 +113,7 @@ public partial class InteractionPresenter : CanvasLayer
         Interactor.InteractiveIndicationRemoved -= OnInteractiveIndicationRemoved;
     }
 
-    /// <summary>Godot callback that updates local widget selection and screen projection each frame.</summary>
+    /// <summary>Godot callback that rebinds every widget and projects it each frame.</summary>
     public override void _Process(double delta)
     {
         if (Interactor is null || !Interactor.IsLocallyControlled)
@@ -122,7 +122,12 @@ public partial class InteractionPresenter : CanvasLayer
             return;
         }
 
-        RefreshIndications();
+        // The prompt is rebound from the frame loop and not only from the status signal: a field that
+        // varies continuously — a hold or an execution progress — would otherwise be fresh for the
+        // indications and stale for the prompt, which is a field that works depending on the widget
+        // reading it. Rebinding never re-instantiates a widget, so the cost is one snapshot per frame
+        // for the focused target, when one is already paid for every indicated one.
+        Refresh();
         UpdateProjection(_prompt, _promptTarget);
         foreach (KeyValuePair<InteractiveComponent, Control> indication in _indications)
         {

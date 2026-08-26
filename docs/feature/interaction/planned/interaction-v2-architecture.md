@@ -1917,12 +1917,14 @@ Tester localement et côté serveur.
 
 Une action derrière un obstacle doit échouer même si toutes ses gameplay rules passent.
 
-**État**: le joint est livré, le LOS ne l'est pas. `InteractionDetector` / `AreaInteractionDetector`
-existent, la détection a quitté l'interacteur sans migration de scène cible, et la validation continue
-serveur remplace l'annulation par callback d'area — avec, en plus, la sortie
-`RequiresInteractorPresence` qui distingue le channel lié au joueur du processus lié au monde. Le LOS
-reste un prédicat à ajouter sur la classe de base, et les détecteurs de proximité et de visée sont des
-ajouts purs. Détail et écarts assumés dans [`interaction-detector.md`](./interaction-detector.md).
+**État**: livré, LOS compris. `InteractionDetector` / `AreaInteractionDetector` existent, la détection a
+quitté l'interacteur sans migration de scène cible, et la validation continue serveur remplace
+l'annulation par callback d'area — avec, en plus, la sortie `RequiresInteractorPresence` qui distingue le
+channel lié au joueur du processus lié au monde. Le LOS est arrivé comme prévu en prédicat de la classe de
+base (`HasLineOfSight`), donc « une action derrière un obstacle doit échouer même si toutes ses gameplay
+rules passent » vaut aussi bien pour le client que pour le pair autoritaire, qui l'évalue sur une cible
+unique sans jamais rejouer une source. Les détecteurs de proximité et de visée restent des spikes. Détail
+et écarts assumés dans [`interaction-detector.md`](./interaction-detector.md).
 
 ---
 
@@ -1950,6 +1952,25 @@ sans rendre le runtime `[Tool]`.
 Conserver le pattern editor/runtime déjà adopté par le projet.
 
 **État**: livré. `InteractionValidator` valide huit types (les trois composants principaux, `InteractionAction`, `InteractionActionDefinition`, les deux executors d'état et `StatefulStateInteractionRule`) et couvre toute la liste du §26. Deux choix se sont imposés. D'abord les diagnostics croisés — `Id` dupliqué, deux actions partageant le couple (`input`, `HoldThreshold`) — appartiennent à l'`InteractiveComponent` : une action ne connaît pas ses voisines. Ensuite `StatefulPath` n'est résolu que depuis l'`InteractiveComponent` et seulement s'il est dans l'arbre, parce que le path est relatif à l'interactive ; une rule ou une action inspectée seule ne signale que le vide, jamais un faux « ne résout pas ». L'`InputActionName` d'une definition est en plus confronté à l'`InputMap` du projet.
+
+---
+
+## Task 13 — Distance et progressions dans la présentation
+
+Chantier connexe de la Task 10, spécifié dans
+[`presentation-progress-and-distance.md`](./presentation-progress-and-distance.md).
+
+Exposer `Distance` sur la cible, `HoldProgress` et `ExecutionProgress` par action, et rafraîchir le prompt
+par frame comme les indications le sont déjà.
+
+N'exposer que des grandeurs physiques nommées, jamais le score brut de la couche spatiale.
+
+**État**: livré. La distance est mesurée depuis l'`InteractionOrigin` et remplie par le détecteur, qui
+porte les origines depuis la Task 10 ; l'absence de progression est l'absence de valeur (`float?`), comme
+l'absence de focus l'est déjà ; le rebind par frame part du `_Process` du presenter et n'appelle que
+`Bind`. `HoldProgress` est normalisé sur le seuil de l'action lue et non sur le plus long de l'input,
+sans quoi la plus courte de deux actions n'atteindrait jamais un ; `HoldElapsed` accompagne le ratio. Le §18.1 tient : le hold reste la sélection, l'exécution reste l'action, et les deux champs sont
+distincts jusque dans la présentation.
 
 ---
 

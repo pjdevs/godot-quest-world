@@ -6,6 +6,8 @@
 [ext_resource type="PackedScene" uid="uid://bnrv7fcbbhuga" path="res://quest_world/interactibles/button/Button.tscn" id="3_kevvi"]
 [ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/NetworkSession.cs" id="3_network_session"]
 [ext_resource type="PackedScene" uid="uid://ccfh2n8mfm2gn" path="res://addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn" id="4_2dls1"]
+[ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_rule"]
+[ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_staterule"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_edcox"]
 ground_color = Color(0.160784, 0.815686, 0.905882, 1)
@@ -40,6 +42,34 @@ roughness = 0.5
 uv1_triplanar = true
 uv1_triplanar_sharpness = 0.000850145
 
+[sub_resource type="Resource" id="Resource_raise_phase"]
+script = ExtResource("6_staterule")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
+ExpectedStates = Array[StringName]([&"lowered", &"raising"])
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
+[sub_resource type="Resource" id="Resource_raise_ready"]
+script = ExtResource("6_staterule")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
+ExpectedStates = Array[StringName]([&"lowered"])
+MismatchAvailability = 1
+BlockReason = "The wall is moving."
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
+[sub_resource type="Resource" id="Resource_lower_phase"]
+script = ExtResource("6_staterule")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
+ExpectedStates = Array[StringName]([&"raised", &"lowering"])
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
+[sub_resource type="Resource" id="Resource_lower_ready"]
+script = ExtResource("6_staterule")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
+ExpectedStates = Array[StringName]([&"raised"])
+MismatchAvailability = 1
+BlockReason = "The wall is moving."
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
 [node name="test_world" type="Node3D" unique_id=1604557493]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=291661268]
@@ -55,36 +85,42 @@ shadow_enabled = true
 [node name="CSGBox3D" type="CSGBox3D" parent="Level" unique_id=1133026826]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, -0.5, 10)
 use_collision = true
+collision_layer = 3
 size = Vector3(30, 1, 30)
 material = SubResource("StandardMaterial3D_gomnb")
 
 [node name="CSGBox3D2" type="CSGBox3D" parent="Level" unique_id=1417504755]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, -10)
 use_collision = true
+collision_layer = 3
 size = Vector3(10, 1, 10)
 material = SubResource("StandardMaterial3D_gomnb")
 
 [node name="CSGBox3D3" type="CSGBox3D" parent="Level" unique_id=404655208]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 1.8, -13)
 use_collision = true
+collision_layer = 3
 size = Vector3(4, 0.5, 4)
 material = SubResource("StandardMaterial3D_gomnb")
 
 [node name="CSGBox3D4" type="CSGBox3D" parent="Level" unique_id=79436812]
 transform = Transform3D(0.939693, 0.34202, 0, -0.34202, 0.939693, 0, 0, 0, 1, -9.5, 1.2, -10)
 use_collision = true
+collision_layer = 3
 size = Vector3(10, 1, 10)
 material = SubResource("StandardMaterial3D_u0sbk")
 
 [node name="CSGBox3D5" type="CSGBox3D" parent="Level" unique_id=528296241]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.5, 3, -15.5)
 use_collision = true
+collision_layer = 3
 size = Vector3(19, 8, 1)
 material = SubResource("StandardMaterial3D_7j4uu")
 
 [node name="CSGBox3D6" type="CSGBox3D" parent="Level" unique_id=588888171]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 1, -0.3322296)
 use_collision = true
+collision_layer = 3
 size = Vector3(3, 2, 0.25)
 material = SubResource("StandardMaterial3D_7j4uu")
 
@@ -100,8 +136,14 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.091249, 0.49999976, -2.677
 [node name="Button" parent="Level" unique_id=1874486156 instance=ExtResource("3_kevvi")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 10)
 
+[node name="RaiseAction" parent="Level/Button/InteractiveComponent" index="0"]
+Rules = Array[ExtResource("5_rule")]([SubResource("Resource_raise_phase"), SubResource("Resource_raise_ready")])
+
 [node name="RaiseExecutor" parent="Level/Button/InteractiveComponent/RaiseAction" index="0" node_paths=PackedStringArray("Stateful")]
 Stateful = NodePath("../../../../LeverWall/StatefulComponent")
+
+[node name="LowerAction" parent="Level/Button/InteractiveComponent" index="1"]
+Rules = Array[ExtResource("5_rule")]([SubResource("Resource_lower_phase"), SubResource("Resource_lower_ready")])
 
 [node name="LowerExecutor" parent="Level/Button/InteractiveComponent/LowerAction" index="0" node_paths=PackedStringArray("Stateful")]
 Stateful = NodePath("../../../../LeverWall/StatefulComponent")

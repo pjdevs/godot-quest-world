@@ -183,13 +183,26 @@ public readonly record struct InteractionExecutionContext(
 /// <param name="InputActionName">Project input action requesting this action.</param>
 /// <param name="Availability">Availability of this action, either allowed or blocked.</param>
 /// <param name="IsAutomatic">Whether local focus requests this action without any player input.</param>
+/// <param name="HoldProgress">
+/// How far the hold selecting this action has progressed towards <b>its own</b> threshold, or null when
+/// none is in progress.
+/// </param>
+/// <param name="HoldElapsed">
+/// Seconds that hold has lasted, or null when none is in progress.
+/// </param>
+/// <param name="ExecutionProgress">
+/// How far the running execution of this action has progressed, or null when none is running.
+/// </param>
 public readonly record struct InteractionActionPresentation(
     StringName ActionId,
     string Label,
     string Description,
     StringName InputActionName,
     InteractionAvailability Availability,
-    bool IsAutomatic = false
+    bool IsAutomatic = false,
+    float? HoldProgress = null,
+    float? HoldElapsed = null,
+    float? ExecutionProgress = null
 )
 {
     /// <summary>Gets whether this action can currently be requested.</summary>
@@ -215,18 +228,28 @@ public readonly record struct InteractionActionPresentation(
 /// <remarks>
 /// Hidden actions are absent from <paramref name="Actions"/>; blocked ones stay present so a prompt
 /// can explain them. A target offering no presentable action is neither focused nor indicated.
+/// <para>
+/// Only named physical quantities are exposed here, never the raw score of the detection layer: the
+/// score of an aim detector is an angle and that of a proximity detector a ratio, so a widget reading
+/// it would break the day the detector changes. <paramref name="Distance"/> means the same thing
+/// everywhere.
+/// </para>
 /// </remarks>
 /// <param name="Interactive">Interactive component represented by the snapshot.</param>
 /// <param name="DisplayName">Name of the target shown to the player.</param>
 /// <param name="Description">Optional descriptive text supplied by the interactive.</param>
 /// <param name="Actions">Presentable actions, in target declaration order.</param>
 /// <param name="IsFocused">Whether this interactive is the current focus target.</param>
+/// <param name="Distance">
+/// World units between the interactor's interaction origin and this target's anchor.
+/// </param>
 public readonly record struct InteractionTargetPresentation(
     InteractiveComponent Interactive,
     string DisplayName,
     string Description,
     IReadOnlyList<InteractionActionPresentation> Actions,
-    bool IsFocused
+    bool IsFocused,
+    float Distance = 0.0f
 )
 {
     /// <summary>Gets whether at least one presented action can currently be requested.</summary>

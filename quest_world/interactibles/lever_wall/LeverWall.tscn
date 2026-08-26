@@ -58,4 +58,5 @@ metadata/_custom_type_script = "uid://cpbt7qansaxqx"
 
 [node name="LeverWallMesh" type="CSGBox3D" parent="Animated" unique_id=1292781680]
 use_collision = true
+collision_layer = 3
 size = Vector3(30, 10, 1)

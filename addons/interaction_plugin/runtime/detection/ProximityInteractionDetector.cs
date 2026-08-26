@@ -36,10 +36,14 @@ public partial class ProximityInteractionDetector : InteractionDetector
     /// <remarks>
     /// The indication tier is deliberately omnidirectional: knowing something is around you does not
     /// require looking at it, and losing the window must cost the focus rather than the indication.
+    /// <para>
+    /// The line of sight is what makes this model usable at all: without it a radius reaches straight
+    /// through a wall, and the difference between range and <i>useful</i> range is the predicate.
+    /// </para>
     /// </remarks>
     public override InteractionDetectionKind Detect(InteractiveComponent interactive)
     {
-        if (interactive is null || !IsInstanceValid(interactive))
+        if (interactive is null || !IsInstanceValid(interactive) || !HasLineOfSight(interactive))
         {
             return InteractionDetectionKind.None;
         }

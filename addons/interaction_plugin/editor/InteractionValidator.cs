@@ -153,6 +153,9 @@ public static class InteractionValidator
 
         if (GetFloat(obj, "DistanceScoreCoefficient") < 0.0f)
             yield return "DistanceScoreCoefficient must not be negative.";
+
+        if (GetFloat(obj, "LineOfSightLossGrace") < 0.0f)
+            yield return "LineOfSightLossGrace must not be negative.";
     }
 
     private static IEnumerable<string> ValidateAreaDetector(GodotObject obj)

@@ -33,7 +33,8 @@ La distinction porte sur la portée de la donnée, pas sur sa nature.
 | Donnée | Où | Source |
 | --- | --- | --- |
 | `Distance` (unités monde) | `InteractionTargetPresentation` | couche spatiale / détecteur |
-| `HoldProgress` (0..1) | `InteractionActionPresentation` | `TryGetGestureProgress` |
+| `HoldProgress` (0..1) | `InteractionActionPresentation` | `TryGetGestureElapsed` / seuil de l'action |
+| `HoldElapsed` (secondes) | `InteractionActionPresentation` | `TryGetGestureElapsed` |
 | `ExecutionProgress` (0..1) | `InteractionActionPresentation` | `TryGetExecutionProgress` |
 
 Les deux progressions sont **par action** et pas par cible : un hold vise le seuil d'une action précise,
@@ -86,11 +87,41 @@ jour où quelqu'un en aura besoin. Pas de sac de métriques génériques.
 - Aucun changement du contrat réseau : les trois champs sont dérivés d'états déjà locaux ou déjà répliqués.
 - Le rythme d'update des indications ne change pas, il est déjà par frame.
 
-## Questions ouvertes
+## Questions tranchées
 
-- `Distance` mesurée depuis quoi : l'`InteractionOrigin` (physique, cohérent avec la validation de portée)
-  ou le `ViewOrigin` (perceptuel, cohérent avec ce que le joueur voit) ? Les deux divergent sur un
-  personnage à la troisième personne.
-- Une action ni tenue ni en cours rapporte-t-elle `0.0f` ou faut-il un booléen d'accompagnement ? Zéro est
-  ambigu avec « vient de commencer » pour une barre qui s'anime.
-- Le rebind par frame du prompt est-il fait dans cette task ou est-il un prérequis livré séparément ?
+- **`Distance` est mesurée depuis l'`InteractionOrigin`**, le corps. C'est la grandeur que `IsWithinRange`
+  applique déjà, donc un widget qui s'anime dessus est d'accord avec le moment où l'interaction devient
+  réellement possible ; la mesurer depuis la caméra ferait annoncer 4 m à un widget là où la portée en
+  compte 2,5. Elle est remplie par le détecteur (`GetInteractionDistance`), seul porteur des origines
+  depuis la Task 10 : l'interacteur ne gagne aucun accesseur.
+- **L'absence est représentée par l'absence de valeur** : `float?` pour les deux progressions, comme
+  `GetInteractionPresentation()` retourne déjà `InteractionTargetPresentation?` pour l'absence de focus.
+  Zéro veut donc dire zéro, et une barre qui s'anime distingue « pas de barre » de « vient de commencer »
+  sans champ d'accompagnement.
+- **Le rebind par frame est livré ici**, pas séparément : c'est lui qui rend `HoldProgress` observable, et
+  le livrer à part aurait posé un prérequis sans consommateur.
+
+## État
+
+**Livré.** `InteractionTargetPresentation` porte `Distance`, `InteractionActionPresentation` porte
+`HoldProgress` et `ExecutionProgress`, et `InteractionPresenter._Process` appelle `Refresh()` au lieu du
+seul `RefreshIndications()`. Trois constats de l'implémentation :
+
+1. **Le problème n°1 était déjà masqué, pas absent.** `RecalculateFocus` émet `InteractionStatusChanged`
+   à *chaque* frame focusée — le retry des actions automatiques de la Task 7 en dépend — et le presenter
+   rebind sur ce signal : le prompt était donc frais par accident. Le rebind explicite depuis `_Process`
+   rend la fraîcheur indépendante d'un signal qui pourrait être gaté demain, ce que la pain-point
+   « réintroduire `NotifyStatusChanged` ? » envisage explicitement. Le coût, tant que les deux chemins
+   coexistent, est un `GetPresentation` de plus par frame pour la seule cible focus.
+2. **`HoldProgress` est normalisé sur le seuil de chaque action**, et la source n'est donc pas
+   `TryGetGestureProgress` mais un nouvel accesseur `TryGetGestureElapsed` sur l'interacteur. La première
+   version réutilisait la progression unique du geste, normalisée sur le seuil le plus long de l'input :
+   une barre dessinée autour de la touche n'atteignait alors jamais un sur la plus courte de deux actions,
+   ce qui ne tient pas pour l'UI. Exposer l'elapsed brut était le prix, et il est petit. `HoldElapsed`
+   descend aussi dans la présentation, parce qu'un widget qui veut afficher des secondes ne peut pas les
+   reconstruire depuis le ratio : le seuil qu'il faudrait multiplier n'y est pas. Une action sans seuil ne
+   rapporte toujours rien, ce qui est la phrase de ce document : « une action seule sur son input a un
+   seuil de zéro et donc jamais de progression ».
+3. **Les widgets par défaut n'affichent aucune des trois valeurs.** Les champs sont exposés et testés, le
+   rendu appartient au widget de jeu — dessiner une barre est une décision visuelle, pas une décision de
+   contrat.

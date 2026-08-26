@@ -8,8 +8,9 @@ namespace QuestWorld.Interaction.Runtime.Detection;
 /// <remarks>
 /// This is the model the framework started from, the forgiving one: the designer draws the volume in
 /// which an object may be interacted with, the window below only decides where the player must look.
-/// An area cut by hand is also a legitimate authored visibility volume — it can allow an interaction
-/// through a grate — which no automatic occlusion test can express.
+/// An area cut by hand is also a legitimate authored visibility volume, which no automatic occlusion
+/// test can express: a grate one may interact through is simply kept off the occlusion layer, and the
+/// authored volume is then the only word on visibility.
 /// <para>
 /// The detector owns its source: overlap events push targets in and out of two sets, and it has no
 /// opinion at all about an object it never saw enter. Because those events are pushed on every peer,
@@ -39,6 +40,11 @@ public partial class AreaInteractionDetector : InteractionDetector
     /// <see cref="InteractionDetectionKind.Indicated"/> and never to
     /// <see cref="InteractionDetectionKind.None"/>: the focused object one turns away from is still
     /// there, and its indication must stay where it was instead of blinking out.
+    /// <para>
+    /// Occlusion is the one thing that does remove a target: losing the window means the player looks
+    /// elsewhere, while losing the line of sight means there is nothing to look at. A wall therefore
+    /// takes the indication away too, which is exactly what the predicate is for.
+    /// </para>
     /// </remarks>
     public override InteractionDetectionKind Detect(InteractiveComponent interactive)
     {
@@ -50,6 +56,11 @@ public partial class AreaInteractionDetector : InteractionDetector
                 && !_indicationOverlaps.Contains(interactive)
             )
         )
+        {
+            return InteractionDetectionKind.None;
+        }
+
+        if (!HasLineOfSight(interactive))
         {
             return InteractionDetectionKind.None;
         }
@@ -105,6 +116,7 @@ public partial class AreaInteractionDetector : InteractionDetector
     /// <inheritdoc />
     protected internal override void Forget(InteractiveComponent interactive)
     {
+        base.Forget(interactive);
         _interactionOverlaps.Remove(interactive);
         _indicationOverlaps.Remove(interactive);
     }

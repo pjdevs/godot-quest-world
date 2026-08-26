@@ -49,6 +49,9 @@ internal sealed partial class TestInteractionDetector : InteractionDetector
     }
 
     /// <inheritdoc />
-    protected internal override void Forget(InteractiveComponent interactive) =>
+    protected internal override void Forget(InteractiveComponent interactive)
+    {
+        base.Forget(interactive);
         _detected.Remove(interactive);
+    }
 }

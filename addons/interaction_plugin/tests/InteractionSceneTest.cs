@@ -182,6 +182,60 @@ public sealed partial class InteractionSceneTest
     }
 
     [TestCase]
+    public async Task RebindingThePromptEveryFrameNeverRecreatesItsActionWidgets()
+    {
+        Node3D world = new();
+        Node3D character = new() { Name = "Character" };
+        Camera3D camera = new() { Name = "Camera" };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
+        TestInteractionDetector detector = AttachDetector(interactor, camera);
+        InteractionPresenter presenter = new()
+        {
+            Name = "Presenter",
+            Interactor = interactor,
+            Camera = camera,
+            PromptContainerScene = GD.Load<PackedScene>(PromptScenePath),
+        };
+        character.AddChild(interactor);
+        character.AddChild(camera);
+        character.AddChild(presenter);
+        world.AddChild(character);
+        TestInteractiveActor owner = CreateInteractiveActor(
+            "Terminal",
+            new Vector3(0, 0, -2),
+            "open",
+            "force"
+        );
+        world.AddChild(owner);
+        ISceneRunner runner = ISceneRunner.Load(world);
+        await runner.SimulateFrames(1);
+        InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
+        interactive.Actions[1].Definition!.HoldThreshold = 3600.0f;
+
+        detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
+        await runner.SimulateFrames(1);
+        AssertThat(interactor.TryStartInteractionInput(new StringName("interact"))).IsTrue();
+        InteractionPromptWidget container = presenter
+            .GetChildren()
+            .OfType<InteractionPromptWidget>()
+            .Single();
+        string before = WidgetIdentities(container);
+
+        await runner.SimulateFrames(3);
+
+        // The prompt is rebound from the frame loop so a hold can fill it, which makes the rebind path
+        // a hot one: it must only call Bind. Rebuilding the list would restart the animation of every
+        // widget on every frame, and the bar would never move.
+        AssertThat(WidgetIdentities(container)).IsEqual(before);
+        AssertThat(
+                presenter.GetChildren().OfType<InteractionPromptWidget>().Single().GetInstanceId()
+            )
+            .IsEqual(container.GetInstanceId());
+        AssertThat(interactor.TryGetGestureProgress(out _, out float progress)).IsTrue();
+        AssertThat(progress > 0.0f).IsTrue();
+    }
+
+    [TestCase]
     public async Task PresenterKeepsAllIndicationsExceptFocusedInteractive()
     {
         Node3D world = new();
@@ -415,6 +469,12 @@ public sealed partial class InteractionSceneTest
             InteractionBlocked blocked => blocked.Reason,
             InteractionHidden => "hidden",
         };
+
+    private static string WidgetIdentities(InteractionPromptWidget container) =>
+        string.Join(
+            ",",
+            container.ActionsContainer.GetChildren().Select(child => child.GetInstanceId())
+        );
 
     private static string PromptLabels(InteractionPresenter presenter)
     {

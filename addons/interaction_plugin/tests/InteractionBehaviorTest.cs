@@ -1887,6 +1887,92 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public async Task PresentationMeasuresTheDistanceFromTheBodyAndNotFromTheView()
+    {
+        TestWorld testWorld = BuildWorld();
+        Node3D body = new() { Name = "Body" };
+        testWorld.World.AddChild(body);
+        testWorld.Detector.InteractionOrigin = body;
+        testWorld.Detector.ViewOrigin!.Position = new Vector3(0, 0, 1);
+        testWorld.Detect(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+
+        InteractionTargetPresentation presentation = testWorld.Interactive.GetPresentation(
+            testWorld.Interactor,
+            true
+        );
+
+        // The target sits two units from the body and three from the camera behind it. The presented
+        // distance is the one the range window applies, so a widget animating on it agrees with the
+        // moment the interaction becomes possible.
+        AssertThat(Mathf.IsEqualApprox(presentation.Distance, 2.0f)).IsTrue();
+    }
+
+    [TestCase]
+    public async Task EveryHeldActionFillsOnItsOwnThreshold()
+    {
+        TestWorld testWorld = BuildWorld();
+        InteractionAction force = CreateAction("force");
+        force.Definition!.HoldThreshold = 3600.0f;
+        InteractionAction pry = CreateAction("pry");
+        pry.Definition!.HoldThreshold = 0.001f;
+        AddAction(testWorld.Interactive, force);
+        AddAction(testWorld.Interactive, pry);
+        testWorld.Detect(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+
+        await testWorld.Runner.SimulateFrames(2);
+        InteractionTargetPresentation presentation = testWorld.Interactive.GetPresentation(
+            testWorld.Interactor,
+            true
+        );
+
+        // Normalised on the threshold of each action and not on the longest one of the input: a bar
+        // drawn around the key reaches one when the action it belongs to becomes selectable, which the
+        // shorter of two actions sharing an input would otherwise never do.
+        AssertThat(PresentedAction(presentation, "pry").HoldProgress!.Value).IsEqual(1.0f);
+        AssertThat(PresentedAction(presentation, "force").HoldProgress!.Value > 0.0f).IsTrue();
+        AssertThat(PresentedAction(presentation, "force").HoldProgress!.Value < 1.0f).IsTrue();
+
+        // The raw seconds come along because a widget cannot rebuild them from the ratio: the
+        // threshold it would multiply by is not part of the presentation.
+        AssertThat(PresentedAction(presentation, "pry").HoldElapsed!.Value)
+            .IsEqual(PresentedAction(presentation, "force").HoldElapsed!.Value);
+        AssertThat(PresentedAction(presentation, "pry").HoldElapsed!.Value > 0.0f).IsTrue();
+
+        // The hold is a selection between the actions sharing an input, so the one asking for no
+        // threshold reports nothing: its bar would promise a hold that selects it, and none does.
+        AssertThat(PresentedAction(presentation, "activate").HoldProgress.HasValue).IsFalse();
+        AssertThat(PresentedAction(presentation, "activate").HoldElapsed.HasValue).IsFalse();
+        AssertThat(PresentedAction(presentation, "force").ExecutionProgress.HasValue).IsFalse();
+    }
+
+    [TestCase]
+    public async Task ExecutionProgressIsCarriedByItsOwnActionAlone()
+    {
+        TestWorld testWorld = BuildWorld();
+        ActivationExecutorOf(testWorld.Action).Duration = 3600.0f;
+        AddAction(testWorld.Interactive, CreateAction("inspect"));
+        testWorld.Detect(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+        AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+
+        await testWorld.Runner.SimulateFrames(2);
+        InteractionTargetPresentation presentation = testWorld.Interactive.GetPresentation(
+            testWorld.Interactor,
+            true
+        );
+
+        // Per action and not per target: a widget reads its own progress without filtering by
+        // identifier, and the neighbour blocked by the same execution shows no bar at all.
+        AssertThat(PresentedAction(presentation, "activate").ExecutionProgress.HasValue).IsTrue();
+        AssertThat(PresentedAction(presentation, "activate").ExecutionProgress!.Value > 0.0f)
+            .IsTrue();
+        AssertThat(PresentedAction(presentation, "inspect").ExecutionProgress.HasValue).IsFalse();
+    }
+
+    [TestCase]
     public async Task AMultiPhaseObjectIsBuiltFromAuthoredPartsWithoutABespokeExecutor()
     {
         CoreWorld core = BuildCoreWorld();
@@ -2139,6 +2225,22 @@ public sealed partial class InteractionBehaviorTest
         action.AddChild(executor);
         action.Executor = executor;
         return action;
+    }
+
+    private static InteractionActionPresentation PresentedAction(
+        in InteractionTargetPresentation presentation,
+        string actionId
+    )
+    {
+        foreach (InteractionActionPresentation action in presentation.Actions)
+        {
+            if (action.ActionId.ToString() == actionId)
+            {
+                return action;
+            }
+        }
+
+        throw new InvalidOperationException($"{actionId} is not presented.");
     }
 
     private static InteractionAction CreateAction(string id, params InteractionRule[] rules)

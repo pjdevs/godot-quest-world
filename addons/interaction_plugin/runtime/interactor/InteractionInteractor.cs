@@ -245,6 +245,22 @@ public partial class InteractionInteractor : Node
         return _gesture is not null;
     }
 
+    /// <summary>Reads how long the input has been held, in seconds.</summary>
+    /// <remarks>
+    /// The raw duration, so a consumer can normalise it on the threshold of the action it draws.
+    /// <see cref="TryGetGestureProgress"/> normalises on the longest threshold of the input, which is
+    /// the one the gesture is heading for, and therefore never reaches one on a shorter action.
+    /// </remarks>
+    /// <param name="inputActionName">Input being held, or an empty name when none is.</param>
+    /// <param name="seconds">Seconds the input has been held.</param>
+    /// <returns><see langword="true"/> while an input is being held towards a threshold.</returns>
+    public bool TryGetGestureElapsed(out StringName inputActionName, out float seconds)
+    {
+        inputActionName = _gesture?.Input ?? new StringName(string.Empty);
+        seconds = _gesture?.Elapsed ?? 0.0f;
+        return _gesture is not null;
+    }
+
     /// <summary>Reads how far the action requested by the owning player has progressed.</summary>
     /// <remarks>
     /// Predicted from the duration authored in the scene, so it works the same on a client and on a

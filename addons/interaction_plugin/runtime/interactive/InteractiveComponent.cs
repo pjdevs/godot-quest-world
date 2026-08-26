@@ -33,6 +33,59 @@ internal readonly record struct InteractionExecution(
 }
 
 /// <summary>Notification payload built once an execution result has been applied.</summary>
+/// <summary>The two progressions the interactor reports, read once per presentation snapshot.</summary>
+/// <remarks>
+/// They are attributed per action rather than per target so a widget never has to filter by action
+/// identifier — and because they answer two different questions the §18.1 forbids confusing: the hold
+/// is a local <b>selection</b> between actions sharing an input, the execution is the action itself.
+/// </remarks>
+/// <param name="HeldInput">Input being held, or null when no hold is in progress.</param>
+/// <param name="HoldElapsed">Seconds that input has been held.</param>
+/// <param name="RunningActionId">Action whose execution is predicted, or null when none is.</param>
+/// <param name="ExecutionProgress">Progress of that execution.</param>
+internal readonly record struct InteractionProgress(
+    StringName? HeldInput,
+    float HoldElapsed,
+    StringName? RunningActionId,
+    float ExecutionProgress
+)
+{
+    /// <summary>Gets the hold progress one action should show, or null when it shows none.</summary>
+    /// <remarks>
+    /// Normalised on the threshold of <b>that</b> action and not on the longest one of the input, so a
+    /// bar drawn around the key reaches one when the action it belongs to becomes selectable — the
+    /// shorter of two actions sharing an input would otherwise never fill.
+    /// <para>
+    /// An action that asks for no hold never reports progress, whatever the player is holding: it is
+    /// selected by the press or by the release, and a bar filling towards a threshold it does not have
+    /// would promise something else.
+    /// </para>
+    /// </remarks>
+    public float? HoldOf(InteractionActionDefinition definition) =>
+        Holds(definition) ? Mathf.Clamp(HoldElapsed / definition.HoldThreshold, 0.0f, 1.0f) : null;
+
+    /// <summary>Gets the seconds one action has been held for, or null when it is not being held.</summary>
+    /// <remarks>
+    /// The raw duration next to the normalised one, because a widget showing a countdown cannot rebuild
+    /// it: the threshold it would divide by is not part of the presentation.
+    /// </remarks>
+    public float? HoldElapsedOf(InteractionActionDefinition definition) =>
+        Holds(definition) ? HoldElapsed : null;
+
+    /// <summary>Gets the execution progress one action should show, or null when it shows none.</summary>
+    /// <remarks>
+    /// Predicted locally for the action this player requested, so another player's execution on the
+    /// same target reports nothing here — that progress is not replicated.
+    /// </remarks>
+    public float? ExecutionOf(InteractionActionDefinition definition) =>
+        RunningActionId is not null && definition.Id == RunningActionId ? ExecutionProgress : null;
+
+    private bool Holds(InteractionActionDefinition definition) =>
+        HeldInput is not null
+        && definition.HoldThreshold > 0.0f
+        && definition.InputActionName == HeldInput;
+}
+
 internal readonly record struct InteractionExecutionDispatch(
     InteractionExecution Execution,
     InteractionExecutionResult Result
@@ -606,6 +659,19 @@ public partial class InteractiveComponent : Node
         bool isFocused
     )
     {
+        // Read once for the whole snapshot: the interactor holds one hold and one predicted execution
+        // at a time, and every action of this target reads the same two answers.
+        InteractionProgress progress = new(
+            interactor.TryGetGestureElapsed(out StringName heldInput, out float holdElapsed)
+                ? heldInput
+                : null,
+            holdElapsed,
+            interactor.TryGetExecutionProgress(out StringName runningId, out float runningProgress)
+                ? runningId
+                : null,
+            runningProgress
+        );
+
         List<InteractionActionPresentation> presentedActions = new();
         foreach (InteractionAction action in Actions)
         {
@@ -613,7 +679,8 @@ public partial class InteractiveComponent : Node
                 TryGetActionPresentation(
                     interactor,
                     action,
-                    out InteractionActionPresentation presentation
+                    out InteractionActionPresentation presentation,
+                    progress
                 )
             )
             {
@@ -626,7 +693,8 @@ public partial class InteractiveComponent : Node
             DisplayName,
             Description,
             presentedActions,
-            isFocused
+            isFocused,
+            interactor.Detector?.GetInteractionDistance(this) ?? 0.0f
         );
     }
 
@@ -653,7 +721,8 @@ public partial class InteractiveComponent : Node
     private bool TryGetActionPresentation(
         InteractionInteractor interactor,
         InteractionAction? action,
-        out InteractionActionPresentation presentation
+        out InteractionActionPresentation presentation,
+        in InteractionProgress progress = default
     )
     {
         presentation = default;
@@ -674,7 +743,10 @@ public partial class InteractiveComponent : Node
             action.Definition.Description,
             action.Definition.InputActionName,
             availability,
-            action.Automatic
+            action.Automatic,
+            progress.HoldOf(action.Definition),
+            progress.HoldElapsedOf(action.Definition),
+            progress.ExecutionOf(action.Definition)
         );
         return true;
     }
@@ -1106,6 +1178,26 @@ public partial class InteractiveComponent : Node
     public Vector3 GetInteractionPosition()
     {
         return InteractionAnchor?.GlobalPosition ?? Vector3.Zero;
+    }
+
+    /// <summary>Tells whether one collider reported by a query belongs to this target itself.</summary>
+    /// <remarks>
+    /// This is what "excluding the target's colliders" means for the line of sight ray: a target does
+    /// not occlude itself, and an anchor authored inside the mesh that carries it must still be
+    /// visible. The whole scene of the target counts, because the geometry and the anchor are siblings
+    /// under it.
+    /// </remarks>
+    /// <param name="collider">Collider a physics query reported.</param>
+    /// <returns>Whether the collider is part of this target.</returns>
+    internal bool OwnsCollider(GodotObject? collider)
+    {
+        if (collider is not Node node)
+        {
+            return false;
+        }
+
+        Node root = GetParent() ?? this;
+        return root == node || root.IsAncestorOf(node);
     }
 
     /// <summary>Godot callback that disconnects state and interactor registrations.</summary>

@@ -271,10 +271,10 @@ exactement le test qui prouve que le joint est bien placé.
 
 ## État
 
-**Livré**, sauf le LOS et les détecteurs de proximité / de visée. `runtime/detection/` porte
-`InteractionDetector` et `AreaInteractionDetector` ; `InteractionDetectionKind` vit dans
-`InteractionTypes.cs` aux côtés de `InteractionUnavailableKind`. Voir la Task 10 de
-[`interaction.md`](../interaction.md) pour le détail.
+**Livré, LOS compris**, sauf les détecteurs de proximité / de visée qui restent des spikes.
+`runtime/detection/` porte `InteractionDetector` et `AreaInteractionDetector` ;
+`InteractionDetectionKind` vit dans `InteractionTypes.cs` aux côtés de `InteractionUnavailableKind`.
+Voir la Task 10 de [`interaction.md`](../interaction.md) pour le détail.
 
 Quatre décisions ont été prises pendant l'implémentation, dont une s'écarte de la lettre de ce
 document.
@@ -314,3 +314,47 @@ la vérification que ce document annonçait pour le placement du joint. Deux poi
 - Chez D, l'ensemble **indiqué** vient du cast élargi et non du registre. Le doc supposait qu'il aurait
   besoin du LOS pour ne pas indiquer un objet derrière un mur ; avec un cast comme source, ce que le cast
   arrête est déjà exclu, et le LOS ne redevient nécessaire que si la source s'élargit au registre.
+  **Faux, corrigé en livrant le LOS** : le `ShapeCast3D` de D a `CollideWithBodies = false` — il ne
+  rapporte que des areas, donc un mur ne l'arrête pas du tout et D visait à travers. Le snippet du doc
+  (« fenêtre + LOS ») était le bon ; c'est la note du spike qui se trompait.
+
+### LOS — livré comme prédicat
+
+Cinq décisions, dont aucune ne s'écarte du doc.
+
+1. **Le ray vit dans la frame de physique, la réponse pas forcément.** Le cache porte le résultat rapporté
+   et se rafraîchit en `_PhysicsProcess` pour toute cible interrogée depuis le dernier passage (rétention
+   0,5 s, pour que la boucle survive à un framerate de rendu inférieur au tick physique). Une cible
+   **encore inconnue** est castée sur le champ : le pair autoritaire valide une commande one-shot hors de
+   toute frame de physique, et répondre « occlus jusqu'à la prochaine » refuserait une commande légitime
+   pour une raison invisible — exactement ce que la règle « fenêtre, jamais test de collision » interdit.
+   Le coût courant reste un lookup de dictionnaire par candidat par frame.
+2. **L'hystérésis est à sens unique.** Regagner la vue est immédiat, la perdre demande
+   `LineOfSightLossGrace` (0,15 s) de perte continue. Symétrique, elle aurait fait réapparaître un objet
+   150 ms trop tard ; asymétrique, elle supprime le clignotement derrière un poteau *et* absorbe le ping
+   comme le fait la fenêtre d'angle.
+3. **Perdre le LOS renvoie `None`, pas `Indicated`.** C'est l'asymétrie assumée avec la fenêtre de visée :
+   perdre la fenêtre veut dire qu'on regarde ailleurs et l'objet est toujours là ; perdre le LOS veut dire
+   qu'il n'y a rien à regarder. Le mur retire donc aussi l'indication, ce que ce document demandait
+   explicitement pour l'objet indiqué à gauche derrière un mur.
+4. **Un seul mask, sur le détecteur : c'est l'occluder qui décide.** `OcclusionMask` (défaut layer 2,
+   nommée « Occluder » dans `project.godot`) est le réglage de projet, et rien n'est authoré sur la cible.
+   Une première version donnait à `InteractiveComponent` un override de mask et un `IgnoreOcclusion`, au
+   motif que le prédicat retirait à l'area découpée à la main sa promesse d'autoriser l'interaction à
+   travers une grille. C'était le mauvais endroit : occluder est une propriété de la **géométrie**, pas de
+   la cible. Un mur porte la layer, une grille qu'on veut traverser ne la porte pas, et aucun objet n'a
+   d'exemption à déclarer — deux exports de moins sur chaque interactible, et l'intention lisible là où
+   elle se voit, dans la scène de niveau. Le seul cas que l'override achetait — la même vitre qui occlut
+   la cible A mais pas la cible B — n'a pas de client aujourd'hui, et le rajouter serait additif. Un mask
+   à zéro désactive le prédicat, ce qui rend le comportement d'avant le chantier disponible sans branche
+   de code.
+5. **La cible n'est jamais son propre occluder.** Plutôt qu'énumérer les RID de ses colliders, le ray
+   regarde à qui appartient ce qu'il a touché (`InteractiveComponent.OwnsCollider`) : s'arrêter sur la
+   géométrie de la cible, c'est l'avoir atteinte. Même effet, robuste à une ancre authorée dans le mesh
+   qui la porte. Le corps de l'interacteur, lui, est exclu par RID — c'est le premier ancêtre
+   `CollisionObject3D` du détecteur, et il est posé sur le ray qu'il tire.
+
+Côté scène, la géométrie de niveau de `test_world` (et le mur mobile du `LeverWall`, qui est
+précisément l'occluder dynamique que ce document invoquait) passe en `collision_layer = 1|2`.
+`facility_blockout` n'est pas migré : c'est un blockout, ses murs n'occluent rien tant qu'ils ne portent
+pas la layer.

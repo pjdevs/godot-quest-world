@@ -188,6 +188,133 @@ public sealed partial class InteractionDetectionTest
         interactor.QueueFree();
     }
 
+    [TestCase]
+    public async Task AWallBetweenTheViewAndTheTargetRemovesItFromDetectionEntirely()
+    {
+        DetectionWorld world = BuildWorld(new Vector3(0, 0, -2));
+        AddOccluder(world.Target.GetParent(), new Vector3(0, 0, -1), 2);
+        int added = 0;
+        world.Interactor.InteractiveIndicationAdded += _ => added++;
+        await world.Runner.SimulateFrames(4);
+
+        world.Detector.OnEnteredTargetArea(
+            world.Interactive,
+            InteractionDetectionKind.Interactible
+        );
+        await world.Runner.SimulateFrames(2);
+
+        // Losing the window costs the focus; losing the line of sight costs the existence. An object
+        // one turns away from is still there, an object behind a wall is not there to indicate.
+        AssertThat(world.Detector.Detect(world.Interactive))
+            .IsEqual(InteractionDetectionKind.None);
+        AssertThat(world.Interactor.FocusedInteractive == null).IsTrue();
+        AssertThat(added).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task AnUnknownTargetIsCastForOnTheSpotRatherThanAssumedVisible()
+    {
+        DetectionWorld world = BuildWorld(new Vector3(0, 0, -2));
+        AddOccluder(world.Target.GetParent(), new Vector3(0, 0, -1), 2);
+        await world.Runner.SimulateFrames(4);
+
+        // The authoritative peer validates a one-shot command outside any physics frame, and this is
+        // the first time its detector hears about the target: no loop has run for it, and no refresh
+        // is waited for. Answering "occluded until the next physics frame" would refuse a legitimate
+        // command for a reason no player could see.
+        world.Detector.OnEnteredTargetArea(
+            world.Interactive,
+            InteractionDetectionKind.Interactible
+        );
+
+        AssertThat(world.Detector.Detect(world.Interactive)).IsEqual(InteractionDetectionKind.None);
+    }
+
+    [TestCase]
+    public async Task LosingSightWaitsOutTheGraceWhileRegainingItIsImmediate()
+    {
+        DetectionWorld world = BuildWorld(new Vector3(0, 0, -2));
+        AddOccluder(world.Target.GetParent(), new Vector3(0, 0, -1), 2);
+        world.Detector.LineOfSightLossGrace = 0.2f;
+        await world.Runner.SimulateFrames(4);
+        world.Detector.OnEnteredTargetArea(
+            world.Interactive,
+            InteractionDetectionKind.Interactible
+        );
+
+        // Aiming the mask at an empty layer is what makes the wall stop counting, and aiming it back is
+        // what a pole crossing the view does — without moving a body mid-frame.
+        world.Detector.OcclusionMask = 4;
+        AssertThat(world.Detector.Detect(world.Interactive))
+            .IsEqual(InteractionDetectionKind.Interactible);
+
+        world.Detector.OcclusionMask = 2;
+        world.Detector._PhysicsProcess(0.1);
+        AssertThat(world.Detector.Detect(world.Interactive))
+            .IsEqual(InteractionDetectionKind.Interactible);
+
+        world.Detector._PhysicsProcess(0.1);
+        AssertThat(world.Detector.Detect(world.Interactive)).IsEqual(InteractionDetectionKind.None);
+
+        world.Detector.OcclusionMask = 4;
+        world.Detector._PhysicsProcess(0.1);
+        AssertThat(world.Detector.Detect(world.Interactive))
+            .IsEqual(InteractionDetectionKind.Interactible);
+    }
+
+    [TestCase]
+    public async Task AGrateKeptOffTheOcclusionLayerLetsTheInteractionThrough()
+    {
+        DetectionWorld world = BuildWorld(new Vector3(0, 0, -2));
+        AddOccluder(world.Target.GetParent(), new Vector3(0, 0, -1), 4);
+        await world.Runner.SimulateFrames(4);
+
+        world.Detector.OnEnteredTargetArea(
+            world.Interactive,
+            InteractionDetectionKind.Interactible
+        );
+
+        // Occluding is a property of the occluder: the grate stops bodies like any wall and simply does
+        // not carry the occlusion layer, so no target has to declare an exemption for it.
+        AssertThat(world.Detector.Detect(world.Interactive))
+            .IsEqual(InteractionDetectionKind.Interactible);
+    }
+
+    [TestCase]
+    public async Task ADetectorWithoutOcclusionLayerNeverRefusesOnSight()
+    {
+        DetectionWorld world = BuildWorld(new Vector3(0, 0, -2));
+        AddOccluder(world.Target.GetParent(), new Vector3(0, 0, -1), 2);
+        world.Detector.OcclusionMask = 0;
+        await world.Runner.SimulateFrames(4);
+
+        world.Detector.OnEnteredTargetArea(
+            world.Interactive,
+            InteractionDetectionKind.Interactible
+        );
+
+        AssertThat(world.Detector.Detect(world.Interactive))
+            .IsEqual(InteractionDetectionKind.Interactible);
+    }
+
+    [TestCase]
+    public async Task ATargetIsNeverOccludedByItsOwnGeometry()
+    {
+        DetectionWorld world = BuildWorld(new Vector3(0, 0, -2));
+        AddOccluder(world.Target, Vector3.Zero, 2);
+        await world.Runner.SimulateFrames(4);
+
+        world.Detector.OnEnteredTargetArea(
+            world.Interactive,
+            InteractionDetectionKind.Interactible
+        );
+
+        // Stopping on the target itself is reaching it, which is what makes an anchor authored inside
+        // the mesh that carries it usable at all.
+        AssertThat(world.Detector.Detect(world.Interactive))
+            .IsEqual(InteractionDetectionKind.Interactible);
+    }
+
     // Smoke checks for the two spike detectors: they prove the model runs at all, nothing more, and
     // they are meant to be deleted along with their detector if the spike is dropped.
 
@@ -279,6 +406,21 @@ public sealed partial class InteractionDetectionTest
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
         return new DetectionWorld(runner, target, interactive, interactor, detector);
+    }
+
+    private static StaticBody3D AddOccluder(Node parent, Vector3 position, uint layer)
+    {
+        StaticBody3D occluder = new()
+        {
+            Name = "Occluder",
+            Position = position,
+            CollisionLayer = layer,
+        };
+        occluder.AddChild(
+            new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(4, 4, 0.2f) } }
+        );
+        parent.AddChild(occluder);
+        return occluder;
     }
 
     private static InteractiveComponent BuildInteractive(Node3D target, Area3D area)

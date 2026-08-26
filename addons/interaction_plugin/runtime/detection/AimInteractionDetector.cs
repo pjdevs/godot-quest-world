@@ -23,6 +23,10 @@ namespace QuestWorld.Interaction.Runtime.Detection;
 /// is a single precise ray, and widening it sweeps a cylinder that reports several objects around the
 /// crosshair — the ones the window then demotes to merely indicated.
 /// </para>
+/// <para>
+/// The cast reports areas and <b>not</b> bodies, so a wall does not stop it: the line of sight predicate
+/// is what keeps this model from aiming through one, for the focus as much as for the indicated set.
+/// </para>
 /// </remarks>
 [GlobalClass]
 public partial class AimInteractionDetector : InteractionDetector
@@ -72,10 +76,14 @@ public partial class AimInteractionDetector : InteractionDetector
     }
 
     /// <inheritdoc />
-    /// <remarks>A window, never the cast: the authoritative peer must be able to answer this too.</remarks>
+    /// <remarks>
+    /// A window, never the cast: the authoritative peer must be able to answer this too. The line of
+    /// sight belongs here rather than to the source for the same reason — the server evaluates the
+    /// predicate itself, while it never replays the cast.
+    /// </remarks>
     public override InteractionDetectionKind Detect(InteractiveComponent interactive)
     {
-        if (interactive is null || !IsInstanceValid(interactive))
+        if (interactive is null || !IsInstanceValid(interactive) || !HasLineOfSight(interactive))
         {
             return InteractionDetectionKind.None;
         }
@@ -113,6 +121,7 @@ public partial class AimInteractionDetector : InteractionDetector
     /// </remarks>
     public override void _PhysicsProcess(double delta)
     {
+        base._PhysicsProcess(delta);
         _hits.Clear();
         if (_cast is null || ViewOrigin is null)
         {
