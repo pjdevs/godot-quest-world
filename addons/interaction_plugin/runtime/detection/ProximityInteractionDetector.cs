@@ -40,10 +40,16 @@ public partial class ProximityInteractionDetector : InteractionDetector
     /// The line of sight is what makes this model usable at all: without it a radius reaches straight
     /// through a wall, and the difference between range and <i>useful</i> range is the predicate.
     /// </para>
+    /// <para>
+    /// The windows are evaluated before it, though, and that ordering is what makes this detector
+    /// affordable: its source is the whole registry, so asking for the sight of every target would
+    /// keep a ray alive per registered object however far away — the cache follows what is asked
+    /// about. Distance is pure arithmetic; a ray is a physics query.
+    /// </para>
     /// </remarks>
     public override InteractionDetectionKind Detect(InteractiveComponent interactive)
     {
-        if (interactive is null || !IsInstanceValid(interactive) || !HasLineOfSight(interactive))
+        if (interactive is null || !IsInstanceValid(interactive))
         {
             return InteractionDetectionKind.None;
         }
@@ -52,18 +58,22 @@ public partial class ProximityInteractionDetector : InteractionDetector
             interactive.InteractionRadius > 0.0f
                 ? interactive.InteractionRadius
                 : DefaultInteractionRadius;
-        if (IsWithinRange(interactive, interactionRadius, MaxAngleDegrees))
-        {
-            return InteractionDetectionKind.Interactible;
-        }
-
         float indicationRadius =
             interactive.IndicationRadius > 0.0f
                 ? interactive.IndicationRadius
                 : DefaultIndicationRadius;
-        return IsWithinRange(interactive, indicationRadius, 180.0f)
-            ? InteractionDetectionKind.Indicated
-            : InteractionDetectionKind.None;
+
+        // Both windows rather than the widest one: a target may author an interaction reach longer
+        // than its indication reach, and out of both is the only case worth no ray at all.
+        bool withinInteraction = IsWithinRange(interactive, interactionRadius, MaxAngleDegrees);
+        if (!withinInteraction && !IsWithinRange(interactive, indicationRadius, 180.0f))
+        {
+            return InteractionDetectionKind.None;
+        }
+
+        return !HasLineOfSight(interactive) ? InteractionDetectionKind.None
+            : withinInteraction ? InteractionDetectionKind.Interactible
+            : InteractionDetectionKind.Indicated;
     }
 
     /// <inheritdoc />

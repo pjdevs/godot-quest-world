@@ -91,7 +91,10 @@ public partial class LeverWall : Node3D
             ? (float)AnimationPlayer.GetAnimation(RaiseAnimationName).Length
             : 0.0f;
 
-    private void OnStateChanged(StringName oldState, StringName newState)
+    // The animation carries the collision, so it runs on a synchronization too: a player joining a
+    // level whose wall is already raised must find it raised. The flag is ignored on purpose — this
+    // wall plays no one-shot that would fire for an event its player never witnessed.
+    private void OnStateChanged(StringName oldState, StringName newState, bool isSynchronization)
     {
         ApplyStateAnimation(newState);
         ScheduleTransition(newState);

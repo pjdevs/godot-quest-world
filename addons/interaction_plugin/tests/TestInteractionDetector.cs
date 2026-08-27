@@ -29,6 +29,9 @@ internal sealed partial class TestInteractionDetector : InteractionDetector
         _detected[interactive] = kind;
     }
 
+    /// <summary>Reads what the owning interactor told this detector about its candidate source.</summary>
+    public bool SourceActive => IsCandidateSourceActive;
+
     /// <summary>Stops detecting one target at all.</summary>
     public void ClearDetection(InteractiveComponent interactive) => _detected.Remove(interactive);
 

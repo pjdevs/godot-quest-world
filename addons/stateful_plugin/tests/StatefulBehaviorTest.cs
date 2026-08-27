@@ -1,6 +1,7 @@
 namespace QuestWorld.Tests;
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
@@ -85,6 +86,10 @@ public sealed partial class StatefulBehaviorTest
         AssertThat(counts.Universal).IsEqual(1);
         AssertThat(counts.Authority).IsEqual(1);
         AssertThat(counts.Presentation).IsEqual(1);
+        // A lived change is never a synchronization, whichever channel observes it.
+        AssertThat(counts.UniversalSynchronizations).IsEqual(new List<bool> { false });
+        AssertThat(counts.AuthoritySynchronizations).IsEqual(new List<bool> { false });
+        AssertThat(counts.PresentationSynchronizations).IsEqual(new List<bool> { false });
     }
 
     [TestCase]
@@ -204,6 +209,11 @@ public sealed partial class StatefulBehaviorTest
         AssertThat(counts.Universal).IsEqual(1);
         AssertThat(counts.Authority).IsEqual(1);
         AssertThat(counts.Presentation).IsEqual(1);
+        // A restoration is a catch-up on all three channels: the world already was in this state, so a
+        // presentation that plays confetti on a lived change must be able to stay silent here.
+        AssertThat(counts.UniversalSynchronizations).IsEqual(new List<bool> { true });
+        AssertThat(counts.AuthoritySynchronizations).IsEqual(new List<bool> { true });
+        AssertThat(counts.PresentationSynchronizations).IsEqual(new List<bool> { true });
     }
 
     [TestCase]
@@ -295,9 +305,21 @@ public sealed partial class StatefulBehaviorTest
     private static StatefulSignalCounts Observe(StatefulComponent stateful)
     {
         StatefulSignalCounts counts = new();
-        stateful.StateChanged += (_, _) => counts.Universal++;
-        stateful.StateChangedAuthority += (_, _) => counts.Authority++;
-        stateful.StateChangedPresentation += (_, _) => counts.Presentation++;
+        stateful.StateChanged += (_, _, isSynchronization) =>
+        {
+            counts.Universal++;
+            counts.UniversalSynchronizations.Add(isSynchronization);
+        };
+        stateful.StateChangedAuthority += (_, _, isSynchronization) =>
+        {
+            counts.Authority++;
+            counts.AuthoritySynchronizations.Add(isSynchronization);
+        };
+        stateful.StateChangedPresentation += (_, _, isSynchronization) =>
+        {
+            counts.Presentation++;
+            counts.PresentationSynchronizations.Add(isSynchronization);
+        };
 
         return counts;
     }
@@ -307,5 +329,8 @@ public sealed partial class StatefulBehaviorTest
         public int Universal { get; set; }
         public int Authority { get; set; }
         public int Presentation { get; set; }
+        public List<bool> UniversalSynchronizations { get; } = new();
+        public List<bool> AuthoritySynchronizations { get; } = new();
+        public List<bool> PresentationSynchronizations { get; } = new();
     }
 }

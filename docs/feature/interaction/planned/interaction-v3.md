@@ -35,7 +35,7 @@ Le modèle Godot actuel est le même, décomposé en pièces génériques :
 | --- | --- |
 | `BP_Interact` / `OnStartInteractionInput` | `InteractionActionExecutor.Execute` sur l’autorité |
 | `State`, `ReplicatedUsing=OnRep_State` | `StatefulComponent` + `MultiplayerSynchronizer` sur `.:ReplicatedState` |
-| `BP_DoFeedback` / `OnStateChangedClient` | abonnement à `StateChangedPresentation` |
+| `BP_DoFeedback` / `OnStateChangedClient` | abonnement à `StateChangedPresentation`, `isSynchronization` distinguant le rattrapage |
 | logique serveur sur changement d’état | abonnement à `StateChangedAuthority` |
 | logique identique sur tous les peers | abonnement à `StateChanged` |
 
@@ -51,7 +51,7 @@ Chest
 └── ChestFeedback                      StateChangedPresentation
 ```
 
-`ChestFeedback` applique une première fois la pose correspondant à `Stateful.State` dans `_Ready`, puis écoute `StateChangedPresentation(oldState, newState)` pour jouer les transitions. L’intention est que la pose stable vienne de l’état courant et que les sons et autres one-shots ne soient joués que sur une vraie transition — mais le code ne distingue pas encore une vraie transition de l’arrivée d’un late join, voir « P0 bis » plus bas.
+`ChestFeedback` applique une première fois la pose correspondant à `Stateful.State` dans `_Ready`, puis écoute `StateChangedPresentation(oldState, newState, isSynchronization)` pour jouer les transitions. La pose vient de l’état courant, y compris à l’arrivée d’un late join, qui reçoit son état comme une transition depuis `InitialState` avec `isSynchronization = true` : le feedback applique alors la pose et garde ses one-shots pour un changement vécu. Voir « P0 bis » plus bas.
 
 Le chemin est vérifié dans le code :
 
@@ -201,7 +201,8 @@ Couverts par `InteractionNetworkTest` :
 - Chaque transition répliquée joue le feedback de chaque peer exactement une fois.
 - Late join pendant `activating` et après `activated` : le nouvel arrivant lit l’état courant, ne voit
   jamais les états intermédiaires qu’il a manqués, et présente correctement comme busy une action déjà
-  prise. **Mais il reçoit son état d’arrivée comme une vraie transition** — voir le trou ci-dessous.
+  prise. Il reçoit son état d’arrivée comme une transition depuis `InitialState` marquée
+  `isSynchronization`, ce qui est le contrat retenu en P0 bis.
 
 Reste à couvrir :
 
@@ -209,59 +210,94 @@ Reste à couvrir :
 
 La liste `_activeExecutions` n’a pas besoin d’être répliquée pour ces scénarios : `activating` en est déjà la projection métier. Une action longue sans aucun état ou système métier répliqué conserve volontairement une présentation distante optimiste jusqu’au refus serveur.
 
-### P0 bis — le late join ne se distingue pas d’une transition
+### P0 bis — ~~le late join ne se distingue pas d’une transition~~
 
-`StatefulComponent` applique son `InitialState` dans `_Ready`, puis la première valeur répliquée arrive
-par le **même setter** que toutes les suivantes. Un peer qui rejoint alors que la machine est déjà
-`activated` reçoit donc `StateChanged(idle, activated)` et `StateChangedPresentation(idle, activated)`,
-exactement comme si la machine venait de s’activer sous ses yeux.
+Livré, et tranché autrement que les trois directions proposées ici : **le framework donne l’information,
+la présentation décide**. Les trois signaux de `StatefulComponent` portent désormais
+`(oldState, newState, isSynchronization)`, de signature identique pour qu’un même handler puisse être
+branché sur plusieurs canaux.
 
-Le pattern recommandé plus haut — pose appliquée dans `_Ready` depuis `Stateful.State`, one-shots joués
-sur `StateChangedPresentation` — **ne tient donc pas au late join** : le son d’activation est joué à un
-joueur qui n’était pas là. La prose du doc décrivait une garantie que le code n’applique pas.
-`InteractionNetworkTest` fige le comportement actuel plutôt qu’une garantie, pour qu’un futur correctif
-casse le test délibérément.
+`isSynchronization` est vrai quand ce peer **rattrape une vérité établie ailleurs** — première valeur
+répliquée reçue (late join) ou restauration de sauvegarde — et faux pour tout changement vécu. La
+transition est émise dans les deux cas, délibérément : c’est elle qui fait jouer son ouverture à une
+porte trouvée déjà ouverte, donc qui amène la pose *et la collision* à la bonne valeur. Ce qu’un feedback
+garde pour lui, c’est le one-shot :
 
-Trois directions, aucune tranchée :
+```cs
+private void OnStateChangedPresentation(StringName old, StringName @new, bool isSynchronization)
+{
+    if (isSynchronization) { ApplyPose(@new); return; }   // porte déjà ouverte : pose seule
+    PlayTransition(old, @new);                            // ouverture vécue : anim + confettis
+}
+```
 
-- un marqueur de première synchronisation sur `StatefulComponent`, qui applique la valeur sans émettre de
-  transition et laisse la présentation lire l’état courant ;
-- un quatrième signal `StateSynchronized(state)` distinct des transitions, la présentation choisissant
-  lequel des deux l’intéresse ;
-- ne rien changer et documenter que tout one-shot doit être gardé par la présentation elle-même.
+Pourquoi pas les autres directions : ne rien émettre à la première synchro laisse la porte fermée chez
+l’arrivant, ou oblige chaque feedback à savoir appliquer une pose sans animation ; un quatrième signal
+`StateSynchronized` force le consommateur courant — qui veut réagir aux **deux** — à deux abonnements et
+deux handlers là où le flag coûte un `if` ; une propriété lue dans le handler sort l’information de la
+signature et devient fausse dès qu’un script rappelle son handler depuis `_Ready`.
 
-Le premier est le plus proche de l’intention déjà écrite ; le deuxième est le plus explicite ; le
-troisième déplace la charge sur chaque feedback de jeu, ce qui est exactement ce que le framework
-cherchait à éviter.
+La restauration de sauvegarde est traitée comme une synchronisation par le même critère : restaurer une
+save où le coffre est ouvert, c’est rattraper une vérité, pas ouvrir le coffre.
 
-### P0 ter — une déconnexion brutale fait fuiter la réservation
+Le contrat résiduel, à connaître : `oldState` sur une synchronisation est l’`InitialState` et non l’état
+réellement précédent — un arrivant reçoit `idle → activated` là où le monde a fait
+`idle → activating → activated`. Un feedback ne suppose donc pas que la paire reçue est une arête de la
+machine, seulement que `newState` est vrai.
 
-Une exécution se termine quand l’interacteur quitte l’arbre — ce que fait la couche de spawn du projet
-en dépeuplant un joueur parti. Rien n’écoute la **session** elle-même. Un pair qui tombe sans que
-personne ne retire son nœud garde donc sa réservation indéfiniment, et la cible reste verrouillée pour
-tous les autres : `InteractionNetworkTest` le prouve, B est refusé et le restera.
+Deux tests réseau tiennent les deux sens : l’arrivant sur une cible déjà `activated` reçoit
+`idle > activated` avec le flag vrai ; l’arrivant sur une cible intacte ne reçoit rien à l’arrivée — le
+full sync porte une valeur égale — puis vit sa première vraie transition avec le flag faux. Le détail qui
+rend ce second cas correct est que l’arrivée est **dépensée par ce full sync silencieux** ; le marqueur
+est par ailleurs remis à zéro dans `_Ready`, parce que `ReplicatedState` est un `[Export]` que le
+chargement de scène écrit avant l’entrée dans l’arbre.
 
-Ce n’est pas anodin : c’est le seul des scénarios réseau du doc qui laisse le monde durablement cassé
-plutôt que simplement mal présenté. L’interacteur connaît déjà son `OwnerPeerId`; il ne lui manque que
-l’abonnement.
+### P0 ter — ~~une déconnexion brutale fait fuiter la réservation~~
 
-Deux lectures possibles, à trancher :
+Livré, du côté plugin. `InteractionInteractor` s’abonne à `MultiplayerApi.PeerDisconnected` dans son
+`_Ready` et annule ses exécutions quand le pair qui part est son `OwnerPeerId`. Le plugin ne dépend plus
+d’une couche de spawn qu’il ne contrôle pas, et reste correct si le projet dépeuple aussi : l’exécution
+est déjà terminée et un identifiant n’est jamais réutilisé.
 
-- **c’est au plugin** : l’interacteur s’abonne à `MultiplayerApi.PeerDisconnected` et annule ses
-  exécutions quand le pair qui part est le sien. Une dizaine de lignes, et le plugin cesse de dépendre
-  d’une couche qu’il ne contrôle pas ;
-- **c’est au projet** : la couche de spawn dépeuple le joueur parti, et le `_ExitTree` existant suffit.
-  C’est le contrat actuel, mais il n’est écrit nulle part et rien ne le vérifie.
+Une conséquence a été traitée avec : un acquittement ne part plus vers un pair perdu. `CanSendToOwner`
+retient le départ, sinon la cancellation elle-même aurait nommé un pair inconnu comme cible de RPC.
+L’état du monde est corrigé pour tous ; seul le destinataire disparu n’est plus adressé.
 
-La première est la plus sûre, et reste correcte même si le projet dépeuple aussi : l’exécution est déjà
-terminée, et un identifiant n’est jamais réutilisé.
+`ADroppedPeerReleasesItsExecutionOnTheAuthority` prouve maintenant la garantie là où il figeait le trou :
+le pair A tombe, personne ne retire son nœud, et B démarre.
 
-### P1 — coût des détecteurs et de la présentation
+### P1 — ~~coût des détecteurs et de la présentation~~
 
-1. Le pipeline commun déduplique puis réconcilie encore avec des `List.Contains`, soit un pire cas quadratique dans le nombre de candidats.
-2. `ProximityInteractionDetector` parcourt tout le registre et appelle le LOS avant d’éliminer les objets hors de la distance d’indication. Avec le masque par défaut, il entretient donc un raycast par objet récemment demandé, même lointain.
-3. `AimInteractionDetector` force un shapecast sur chaque copie distante, puis résout chaque hit avec `FindByArea`, qui parcourt actuellement tous les interactives. Ses paramètres de cast ne sont copiés qu’au `_Ready`.
-4. Le presenter pull chaque frame mais plusieurs de ses callbacks événementiels appellent aussi `Refresh()` immédiatement. Ils devraient seulement marquer la présentation dirty ou être supprimés si le pull reste la stratégie retenue.
+Les quatre points sont livrés, sans changement de comportement observable : c’est le coût qui bouge, pas
+le contrat.
+
+1. **Pipeline commun.** `_detectionBuffer` est un `HashSet` comme l’ensemble suivi en face. Les deux
+   côtés du reconcile posent une question d’appartenance, une fois par candidat puis une fois par cible
+   suivie ; en listes cela restait quadratique dans le nombre de candidats, qui vaut *tout le registre*
+   pour un détecteur dont la source est le registre.
+2. **Proximity.** Les fenêtres de distance sont évaluées **avant** la ligne de vue, et les deux plutôt
+   que la plus large — une cible peut déclarer une portée d’interaction supérieure à sa portée
+   d’indication, et hors des deux est le seul cas qui ne mérite aucun rayon. Un objet lointain ne
+   demande donc plus de LOS, donc n’entretient plus d’échantillon : le cache suit ce qu’on lui demande.
+   Sémantique inchangée, y compris « occulté ⇒ `None` » pour les deux tiers.
+3. **Aim.** Trois corrections. `InteractiveComponent` maintient un index `area → propriétaire`
+   (`_areaOwners`, clé = instance id), donc `FindByArea` ne parcourt plus le registre à chaque hit ;
+   l’index est rempli à l’enregistrement, comme les signaux que la cible connecte à ces mêmes areas —
+   échanger une area à chaud était déjà hors contrat. Les paramètres de cast (`AimRadius`,
+   `CollisionMask`, `MaxHits`) sont poussés depuis leurs setters, donc réglables sur une scène qui
+   tourne ; `MaxDistance` l’était déjà, étant la longueur du sweep. Et le shapecast ne part plus sur les
+   copies distantes : `InteractionDetector.IsCandidateSourceActive` est renseigné par l’interacteur —
+   la propriété de l’ownership lui appartient, pas au détecteur — et vaut faux jusqu’à sa première
+   frame, ce qui fait sauter une frame à un personnage qui vient d’apparaître plutôt que d’ouvrir une
+   race. Prouvé par `OnlyTheOwningPeerIsToldToRunItsCandidateSource`.
+4. **Presenter.** Le pull reste la stratégie, donc les abonnements à `FocusedInteractiveChanged` et
+   `InteractionStatusChanged` sont **supprimés** : la frame rebindait déjà, et refaire toute la
+   présentation sur le signal la faisait tourner deux fois sur les frames où quelque chose changeait
+   vraiment. Restent les deux signaux d’indication, pour ce qu’eux seuls portent — l’ensemble des cibles
+   indiquées. `InteractiveIndicationRemoved` libère toujours son widget sur le champ : la cible sort de
+   l’ensemble que la frame parcourt, donc plus rien ne reviendrait vers elle.
+
+Ce qui reste, et n’a pas été fait ici : les diagnostics de layers/masks/areas et un profil dense réel.
 
 `AreaInteractionDetector` reste le détecteur de production : ses overlaps sont event-driven et stockés dans des `HashSet`. Avec le LOS actif, le vrai coût principal est un raycast par cible récemment évaluée et par frame physique ; les appels `Detect` lisent ensuite le cache. Le polish attendu porte sur les structures du pipeline, les diagnostics de layers/masks/areas et un profil dense réel, pas sur un nouveau modèle de détection.
 
@@ -357,8 +393,9 @@ Ce cas valide une frontière importante : Interaction suit qui tient une command
 
 ## Ordre de suite recommandé
 
-1. ~~Ajouter le protocole client autoritaire et les tests serveur + deux clients, y compris les feedbacks Stateful et le late join.~~ Livré, et le late join a révélé le P0 bis à trancher. Reste l’exemple de dialogue autoritaire.
-2. Corriger les hot paths des détecteurs et garder Area comme baseline de production.
+1. ~~Ajouter le protocole client autoritaire et les tests serveur + deux clients, y compris les feedbacks Stateful et le late join.~~ Livré, P0 bis et P0 ter compris : le late join est distingué par `isSynchronization` et une déconnexion
+   ne fuite plus de réservation. Reste l’exemple de dialogue autoritaire.
+2. ~~Corriger les hot paths des détecteurs et garder Area comme baseline de production.~~ Livré (P1) ; Area reste la baseline. Restent les diagnostics de layers/masks/areas et un profil dense réel.
 3. Ajouter des exemples corde, dialogue/vendor, machine multi-actions, noyau multi-états et générateur coop à points multiples.
 4. Réduire le coût d’authoring du coffre/porte minimal avec une scène exemple et, seulement si la duplication apparaît, un presenter d’animation stateful générique.
 5. Évaluer Effects, Proximity/Aim stabilisés et concurrence multi-contributeurs uniquement à partir d’un besoin de jeu réel.

@@ -42,7 +42,15 @@ public partial class AimInteractionDetector : InteractionDetector
     /// and the score, both measured on the anchor.
     /// </remarks>
     [Export]
-    public float AimRadius { get; set; } = 0.35f;
+    public float AimRadius
+    {
+        get => _aimRadius;
+        set
+        {
+            _aimRadius = value;
+            ApplyCastParameters();
+        }
+    }
 
     /// <summary>Gets or sets the widest view angle accepted for the interactible tier.</summary>
     [Export(PropertyHint.Range, "0,180,1")]
@@ -50,13 +58,32 @@ public partial class AimInteractionDetector : InteractionDetector
 
     /// <summary>Gets or sets the physics layers the cast reports.</summary>
     [Export(PropertyHint.Layers3DPhysics)]
-    public uint CollisionMask { get; set; } = 1;
+    public uint CollisionMask
+    {
+        get => _collisionMask;
+        set
+        {
+            _collisionMask = value;
+            ApplyCastParameters();
+        }
+    }
 
     /// <summary>Gets or sets how many hits one cast may report.</summary>
     [Export]
-    public int MaxHits { get; set; } = 8;
+    public int MaxHits
+    {
+        get => _maxHits;
+        set
+        {
+            _maxHits = value;
+            ApplyCastParameters();
+        }
+    }
 
     private readonly List<InteractiveComponent> _hits = new();
+    private float _aimRadius = 0.35f;
+    private uint _collisionMask = 1;
+    private int _maxHits = 8;
     private ShapeCast3D? _cast;
 
     /// <summary>Godot callback that builds the cast this detector sweeps with.</summary>
@@ -70,14 +97,32 @@ public partial class AimInteractionDetector : InteractionDetector
         _cast = new ShapeCast3D
         {
             Name = "AimCast",
-            Shape = new SphereShape3D { Radius = Mathf.Max(AimRadius, 0.001f) },
+            Shape = new SphereShape3D(),
             CollideWithAreas = true,
             CollideWithBodies = false,
-            CollisionMask = CollisionMask,
-            MaxResults = Mathf.Max(MaxHits, 1),
             Enabled = true,
         };
+        ApplyCastParameters();
         AddChild(_cast);
+    }
+
+    // The parameters live in the setters and not only here: they are the feel of this detector, and
+    // tuning a radius or a mask on a running scene is how one finds the right value. MaxDistance is
+    // already re-read every frame, being the length of the sweep itself.
+    private void ApplyCastParameters()
+    {
+        if (_cast is null)
+        {
+            return;
+        }
+
+        if (_cast.Shape is SphereShape3D sphere)
+        {
+            sphere.Radius = Mathf.Max(AimRadius, 0.001f);
+        }
+
+        _cast.CollisionMask = CollisionMask;
+        _cast.MaxResults = Mathf.Max(MaxHits, 1);
     }
 
     /// <inheritdoc />
@@ -128,7 +173,10 @@ public partial class AimInteractionDetector : InteractionDetector
     {
         base._PhysicsProcess(delta);
         _hits.Clear();
-        if (_cast is null || ViewOrigin is null)
+
+        // A cast is a physics query, and this character exists on every peer while only its owner
+        // reads what the cast reports.
+        if (_cast is null || ViewOrigin is null || !IsCandidateSourceActive)
         {
             return;
         }

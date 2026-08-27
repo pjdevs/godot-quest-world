@@ -31,7 +31,7 @@ public sealed partial class InteractionBehaviorTest
         await testWorld.Runner.SimulateFrames(1);
         int stateSignalCount = 0;
         int startedCount = 0;
-        testWorld.Stateful.StateChanged += (_, _) => stateSignalCount++;
+        testWorld.Stateful.StateChanged += (_, _, _) => stateSignalCount++;
         testWorld.Interactive.InteractionActionStarted += (_, _) => startedCount++;
 
         InteractionExecution? reservation = testWorld.Interactive.ReserveExecutionCore(
@@ -1472,7 +1472,7 @@ public sealed partial class InteractionBehaviorTest
         BindSetStateExecutor(door.Open, door.State, "open");
         BindSetStateExecutor(door.Close, door.State, "closed");
         int stateChanges = 0;
-        door.State.StateChanged += (_, _) => stateChanges++;
+        door.State.StateChanged += (_, _, _) => stateChanges++;
 
         InteractionAction? first = door.Interactive.ResolveActionForInput(
             door.Interactor,
@@ -1999,7 +1999,7 @@ public sealed partial class InteractionBehaviorTest
         CoreWorld core = BuildCoreWorld();
         await core.Runner.SimulateFrames(1);
         int doorsOpened = 0;
-        core.State.StateChanged += (_, newState) =>
+        core.State.StateChanged += (_, newState, _) =>
         {
             if (newState == ActivatedState)
             {
@@ -2487,12 +2487,20 @@ public sealed partial class InteractionBehaviorTest
             string reason
         ) => EndCount++;
 
-        public void OnStateChangedAuthority(StringName oldState, StringName newState)
+        public void OnStateChangedAuthority(
+            StringName oldState,
+            StringName newState,
+            bool isSynchronization
+        )
         {
             AuthorityStateChanges++;
         }
 
-        public void OnStateChangedPresentation(StringName oldState, StringName newState)
+        public void OnStateChangedPresentation(
+            StringName oldState,
+            StringName newState,
+            bool isSynchronization
+        )
         {
             PresentationStateChanges++;
         }

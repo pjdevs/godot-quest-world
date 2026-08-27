@@ -76,6 +76,7 @@ public partial class InteractionInteractor : Node
 {
     private const string ReleasedReason = "The interaction input was released.";
     private const string InteractorLostReason = "The interactor left the interaction.";
+    private const string InteractorPeerLostReason = "The interactor's peer left the session.";
 
     /// <summary>Emitted locally when the best target changes.</summary>
     /// <param name="interactive">New focused interactive, or null when focus is cleared.</param>
@@ -233,12 +234,19 @@ public partial class InteractionInteractor : Node
     public int OwnerPeerId { get; set; } = 1;
 
     private readonly HashSet<InteractiveComponent> _detectedInteractives = new();
-    private readonly List<InteractiveComponent> _detectionBuffer = new();
+
+    // A set on both sides of the reconcile, because both sides are membership questions: the pass
+    // asks "have I already kept this candidate", then asks it once per tracked target and once per
+    // detected one. With lists that is quadratic in the number of candidates, and the number of
+    // candidates is the whole registry for a detector whose source is the registry.
+    private readonly HashSet<InteractiveComponent> _detectionBuffer = new();
     private readonly List<InteractiveComponent> _detectionEntered = new();
     private readonly List<InteractiveComponent> _detectionExited = new();
     private readonly List<InteractorExecution> _ownedExecutions = new();
     private readonly HashSet<StringName> _sustainedInputs = new();
     private readonly List<StringName> _relevantInputs = new();
+    private MultiplayerApi? _watchedMultiplayer;
+    private bool _ownerPeerLost;
     private InteractiveComponent? _focusedInteractive;
     private InteractiveComponent? _automaticTarget;
     private StringName? _automaticActionId;
@@ -295,6 +303,7 @@ public partial class InteractionInteractor : Node
         }
 
         SetMultiplayerAuthority(ServerPeerId);
+        SubscribeToPeerDisconnected();
     }
 
     /// <summary>Godot callback running detection for the owner and continued validation for the server.</summary>
@@ -311,7 +320,11 @@ public partial class InteractionInteractor : Node
             ValidateSustainedExecutions();
         }
 
-        if (!IsLocallyControlled)
+        // The detector is told, and not asked to guess: a source that costs something must be able to
+        // stop paying for it on the copies of this character that nobody controls.
+        bool locallyControlled = IsLocallyControlled;
+        Detector?.SetCandidateSourceActive(locallyControlled);
+        if (!locallyControlled)
         {
             return;
         }
@@ -925,6 +938,7 @@ public partial class InteractionInteractor : Node
     /// <summary>Godot callback that releases server reservations and unregisters detected targets.</summary>
     public override void _ExitTree()
     {
+        UnsubscribeFromPeerDisconnected();
         if (IsAuthoritative)
         {
             CancelOwnedExecutions(interactive: null, inputActionName: null, InteractorLostReason);
@@ -1249,11 +1263,64 @@ public partial class InteractionInteractor : Node
             : root.GetNodeOrNull(targetPath);
     }
 
+    // A reservation must not outlive the session that asked for it. Ending an execution when the
+    // interactor leaves the tree covers the project despawning a departed player, but that is a
+    // contract the plugin does not own: a peer that simply drops while its node stays would keep the
+    // target locked for everybody else. Listening to the session itself is what makes the plugin
+    // correct on its own, and it stays correct when the project despawns too — the execution is
+    // already over and an identifier is never reused.
+    private void SubscribeToPeerDisconnected()
+    {
+        if (Multiplayer is null || _watchedMultiplayer is not null)
+        {
+            return;
+        }
+
+        _watchedMultiplayer = Multiplayer;
+        _watchedMultiplayer.PeerDisconnected += OnPeerDisconnected;
+    }
+
+    private void UnsubscribeFromPeerDisconnected()
+    {
+        if (_watchedMultiplayer is null)
+        {
+            return;
+        }
+
+        _watchedMultiplayer.PeerDisconnected -= OnPeerDisconnected;
+        _watchedMultiplayer = null;
+    }
+
+    // Only the peer this interactor belongs to matters: every other departure is somebody else's
+    // interactor. The flag is one-way because a peer identifier is never handed out twice.
+    private void OnPeerDisconnected(long peerId)
+    {
+        if ((int)peerId != OwnerPeerId)
+        {
+            return;
+        }
+
+        _ownerPeerLost = true;
+        if (IsAuthoritative)
+        {
+            CancelOwnedExecutions(
+                interactive: null,
+                inputActionName: null,
+                InteractorPeerLostReason
+            );
+        }
+    }
+
     // An acknowledgement leaving the process needs a session to leave through. The authority cancels
     // the executions of a departing interactor from its _ExitTree, which is exactly when the node may
     // already have lost its multiplayer API: there is nobody left to tell, and that is not an error.
+    // A peer that dropped is the same situation seen from the other side: its cancellation is still
+    // worth applying to the world, but naming it as an RPC target would only raise an unknown peer.
     private bool CanSendToOwner =>
-        OwnerPeerId > 0 && Multiplayer is not null && Multiplayer.MultiplayerPeer is not null;
+        OwnerPeerId > 0
+        && !_ownerPeerLost
+        && Multiplayer is not null
+        && Multiplayer.MultiplayerPeer is not null;
 
     // An acknowledgement only exists on the authority and only for a target and action that can still
     // be named: a peer that is not the authority has nothing to acknowledge, and an execution whose

@@ -93,8 +93,11 @@ public partial class InteractionPresenter : CanvasLayer
             return;
         }
 
-        Interactor.FocusedInteractiveChanged += OnFocusedInteractiveChanged;
-        Interactor.InteractionStatusChanged += OnInteractionStatusChanged;
+        // Focus and status are pulled, not listened to: the frame loop rebinds them anyway because a
+        // hold or an execution progress varies continuously, and a refresh on the signal too would run
+        // the whole presentation twice on the frames where something actually changed. What stays
+        // event-driven is the two indication signals, and only for what they alone carry — the set of
+        // indicated targets, which is bookkeeping rather than a refresh.
         Interactor.InteractiveIndicationAdded += OnInteractiveIndicationAdded;
         Interactor.InteractiveIndicationRemoved += OnInteractiveIndicationRemoved;
         Refresh();
@@ -108,8 +111,6 @@ public partial class InteractionPresenter : CanvasLayer
             return;
         }
 
-        Interactor.FocusedInteractiveChanged -= OnFocusedInteractiveChanged;
-        Interactor.InteractionStatusChanged -= OnInteractionStatusChanged;
         Interactor.InteractiveIndicationAdded -= OnInteractiveIndicationAdded;
         Interactor.InteractiveIndicationRemoved -= OnInteractiveIndicationRemoved;
     }
@@ -123,8 +124,8 @@ public partial class InteractionPresenter : CanvasLayer
             return;
         }
 
-        // The prompt is rebound from the frame loop and not only from the status signal: a field that
-        // varies continuously — a hold or an execution progress — would otherwise be fresh for the
+        // The prompt is rebound from the frame loop and never from a signal: a field that varies
+        // continuously — a hold or an execution progress — would otherwise be fresh for the
         // indications and stale for the prompt, which is a field that works depending on the widget
         // reading it. Rebinding never re-instantiates a widget, so the cost is one snapshot per frame
         // for the focused target, when one is already paid for every indicated one.
@@ -136,19 +137,16 @@ public partial class InteractionPresenter : CanvasLayer
         }
     }
 
-    private void OnFocusedInteractiveChanged(Node interactive) => Refresh();
-
-    private void OnInteractionStatusChanged(Node interactive) => Refresh();
-
     private void OnInteractiveIndicationAdded(Node interactive)
     {
         if (interactive is InteractiveComponent component)
         {
             _indicatedInteractives.Add(component);
-            RefreshIndications();
         }
     }
 
+    // The widget is freed here rather than left to the next frame: the target is out of the set the
+    // frame loop walks, so nothing would ever come back to it and it would stay on screen forever.
     private void OnInteractiveIndicationRemoved(Node interactive)
     {
         if (interactive is InteractiveComponent component)

@@ -257,6 +257,13 @@ public partial class InteractiveComponent : Node
     // plugin trivially is.
     private static readonly List<InteractiveComponent> _registered = new();
 
+    // The reverse of the two area properties, because a physics query answers with a collider and a
+    // cast detector resolves every hit it reports, every frame. Keyed by instance id rather than by
+    // the object so a freed area still resolves to a removable entry, and filled at registration
+    // like the signals the target connects to those very areas: swapping one at runtime is already
+    // outside the contract.
+    private static readonly Dictionary<ulong, InteractiveComponent> _areaOwners = new();
+
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
     private readonly HashSet<InteractionInteractor> _interactionOverlaps = new();
     private readonly HashSet<InteractionInteractor> _indicationOverlaps = new();
@@ -289,20 +296,12 @@ public partial class InteractiveComponent : Node
     /// <returns>The owning target, or null when the area belongs to something else.</returns>
     internal static InteractiveComponent? FindByArea(GodotObject? area)
     {
-        if (area is null)
-        {
-            return null;
-        }
-
-        foreach (InteractiveComponent candidate in _registered)
-        {
-            if (candidate.InteractionArea == area || candidate.IndicationArea == area)
-            {
-                return candidate;
-            }
-        }
-
-        return null;
+        return
+            area is not null
+            && _areaOwners.TryGetValue(area.GetInstanceId(), out InteractiveComponent? owner)
+            && IsInstanceValid(owner)
+            ? owner
+            : null;
     }
 
     /// <summary>Godot callback that joins the registry the sourceless detectors read.</summary>
@@ -311,6 +310,8 @@ public partial class InteractiveComponent : Node
         if (!_registered.Contains(this))
         {
             _registered.Add(this);
+            IndexArea(InteractionArea);
+            IndexArea(IndicationArea);
         }
     }
 
@@ -1261,10 +1262,34 @@ public partial class InteractiveComponent : Node
         return root == node || root.IsAncestorOf(node);
     }
 
+    // Two targets sharing one area is a configuration error rather than a model, so the first
+    // registration wins, exactly like the walk this replaces did.
+    private void IndexArea(Area3D? area)
+    {
+        if (area is not null)
+        {
+            _areaOwners.TryAdd(area.GetInstanceId(), this);
+        }
+    }
+
+    private void ForgetArea(Area3D? area)
+    {
+        if (
+            area is not null
+            && _areaOwners.TryGetValue(area.GetInstanceId(), out InteractiveComponent? owner)
+            && owner == this
+        )
+        {
+            _areaOwners.Remove(area.GetInstanceId());
+        }
+    }
+
     /// <summary>Godot callback that disconnects state and interactor registrations.</summary>
     public override void _ExitTree()
     {
         _registered.Remove(this);
+        ForgetArea(InteractionArea);
+        ForgetArea(IndicationArea);
         _activeExecutions.Clear();
         PurgeInvalidInteractors();
 

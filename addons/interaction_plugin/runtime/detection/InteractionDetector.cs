@@ -71,6 +71,8 @@ public abstract partial class InteractionDetector : Node
 
     private const float LineOfSightRetention = 0.5f;
 
+    private bool _candidateSourceActive;
+
     private readonly Dictionary<InteractiveComponent, LineOfSightSample> _lineOfSight = new();
     private readonly List<InteractiveComponent> _forgottenLineOfSight = new();
     private Godot.Collections.Array<Rid>? _occlusionExclusions;
@@ -131,6 +133,21 @@ public abstract partial class InteractionDetector : Node
     /// </remarks>
     /// <returns>Distinct candidates, in no particular order.</returns>
     protected internal abstract IEnumerable<InteractiveComponent> GetCandidates();
+
+    /// <summary>Gets whether an interactor is actually reading the candidates of this detector.</summary>
+    /// <remarks>
+    /// Only the owning client walks the candidates, and a character exists on every peer: a source
+    /// that costs something — a cast is the case — would otherwise run once per remote copy for
+    /// nobody. A source fed by events, or one that is a plain read of a registry, may ignore this.
+    /// <para>
+    /// It is the interactor that answers, because ownership is its notion, not the detector's. It
+    /// stays false until the interactor has processed one frame, so a source that skips a frame on a
+    /// character that just spawned is the intended behaviour rather than a race.
+    /// </para>
+    /// </remarks>
+    protected bool IsCandidateSourceActive => _candidateSourceActive;
+
+    internal void SetCandidateSourceActive(bool active) => _candidateSourceActive = active;
 
     /// <summary>Ranks one eligible target so the interactor can pick a single focus.</summary>
     /// <remarks>

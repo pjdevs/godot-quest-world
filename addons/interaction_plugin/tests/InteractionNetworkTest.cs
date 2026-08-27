@@ -393,6 +393,9 @@ public sealed partial class InteractionNetworkTest
             {
                 AssertThat(log.Changed).IsEqual(new List<string> { "activating" });
                 AssertThat(log.Presentation).IsEqual(new List<string> { "activating" });
+                // Lived by everybody: the clients were already connected, so their arrival was spent on
+                // the full sync of an untouched object. Nobody here is catching up.
+                AssertThat(log.Synchronizations).IsEqual(new List<bool> { false });
             }
 
             // The server of this harness is a listen host: it is the only peer with authority, and
@@ -558,14 +561,13 @@ public sealed partial class InteractionNetworkTest
     }
 
     [TestCase]
-    public async Task ALateJoinerCannotTellItsArrivalFromARealTransition()
+    public async Task ALateJoinerReceivesItsArrivalAsASynchronizedTransition()
     {
-        // Freezes a confirmed hole rather than a guarantee. The component applies the initial state in
-        // _Ready, then the first replicated value arrives through the very same setter as any later
-        // one, so it is dispatched as `idle > activated`. A presentation that plays a one-shot on
-        // StateChangedPresentation — the pattern the docs recommend — therefore plays the "activated"
-        // sound to a player who was not there when it happened. Distinguishing the two would take a
-        // first-sync marker the framework does not have yet.
+        // The retained contract. The component applies the initial state in _Ready, then the first
+        // replicated value arrives through the very same setter as any later one, so it is dispatched as
+        // `idle > activated`: that is what makes a door found already open play its opening and land on
+        // the right pose and collision. What tells the two apart is the flag, so a presentation can
+        // apply the pose in both cases and keep its one-shots for a change its player actually lived.
         Session session = await Connect();
         try
         {
@@ -577,6 +579,35 @@ public sealed partial class InteractionNetworkTest
             AssertThat(late.Log.Transitions).IsEqual(new List<string> { "idle>activated" });
             AssertThat(late.Log.Presentation).IsEqual(new List<string> { "activated" });
             AssertThat(late.Log.Authority).IsEmpty();
+            AssertThat(late.Log.Synchronizations).IsEqual(new List<bool> { true });
+            AssertThat(late.Log.PresentationSynchronizations).IsEqual(new List<bool> { true });
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
+    public async Task AJoinerOnAnUntouchedTargetLivesItsFirstTransition()
+    {
+        // The other half of the contract, and the one that makes the flag trustworthy: joining an object
+        // nobody touched replicates a value equal to the initial state, which dispatches nothing at all.
+        // The arrival is still spent, so the first real transition afterwards is reported as lived — a
+        // chest opened under the eyes of a player who joined before it did gets its confetti.
+        Session session = await Connect();
+        try
+        {
+            LatePeer late = await session.JoinLate("ClientC");
+
+            AssertThat(late.Log.Transitions).IsEmpty();
+
+            session.Server.Stateful.SetState(ActivatedState);
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(late.Log.Transitions).IsEqual(new List<string> { "idle>activated" });
+            AssertThat(late.Log.Synchronizations).IsEqual(new List<bool> { false });
+            AssertThat(late.Log.PresentationSynchronizations).IsEqual(new List<bool> { false });
         }
         finally
         {
@@ -614,13 +645,11 @@ public sealed partial class InteractionNetworkTest
     }
 
     [TestCase]
-    public async Task ADroppedPeerLeavesItsExecutionReservedOnTheAuthority()
+    public async Task ADroppedPeerReleasesItsExecutionOnTheAuthority()
     {
-        // Freezes a confirmed hole rather than a guarantee. The plugin ends an execution when the
-        // interactor node leaves the tree, which is what a project spawn layer does when it despawns a
-        // departed player. Nothing listens to the session itself, so a peer that simply drops — and
-        // whose node nobody removes — keeps its reservation forever and locks the target for everybody
-        // else. The interactor already knows its OwnerPeerId; only the subscription is missing.
+        // The node departure is not the only way out. Here nobody despawns the dropped player, so only
+        // the interactor's own subscription to the session frees the target — without it the
+        // reservation lasted forever and locked the target for everybody else.
         Session session = await Connect();
         try
         {
@@ -635,9 +664,9 @@ public sealed partial class InteractionNetworkTest
             session.ClientB.InteractorB.TryStartInteractionInput(InteractInput);
             await session.Pump(RoundTripFrames);
 
-            AssertThat(session.Server.Interactive.IsExecutionActive(reserved)).IsTrue();
-            AssertThat(session.KindsB()).IsEqual(new List<string> { "rejected" });
-            AssertThat(session.Server.Executor.ExecuteCount).IsEqual(1);
+            AssertThat(session.Server.Interactive.IsExecutionActive(reserved)).IsFalse();
+            AssertThat(session.KindsB()).IsEqual(new List<string> { "started" });
+            AssertThat(session.Server.Executor.ExecuteCount).IsEqual(2);
         }
         finally
         {
@@ -924,17 +953,24 @@ public sealed partial class InteractionNetworkTest
     {
         public StateLog(StatefulComponent stateful)
         {
-            stateful.StateChanged += (oldState, newState) =>
+            stateful.StateChanged += (oldState, newState, isSynchronization) =>
             {
                 Changed.Add(newState.ToString());
                 Transitions.Add($"{oldState}>{newState}");
+                Synchronizations.Add(isSynchronization);
             };
-            stateful.StateChangedAuthority += (_, newState) => Authority.Add(newState.ToString());
-            stateful.StateChangedPresentation += (_, newState) =>
+            stateful.StateChangedAuthority += (_, newState, _) =>
+                Authority.Add(newState.ToString());
+            stateful.StateChangedPresentation += (_, newState, isSynchronization) =>
+            {
                 Presentation.Add(newState.ToString());
+                PresentationSynchronizations.Add(isSynchronization);
+            };
         }
 
         public List<string> Changed { get; } = new();
+        public List<bool> Synchronizations { get; } = new();
+        public List<bool> PresentationSynchronizations { get; } = new();
 
         public List<string> Transitions { get; } = new();
 

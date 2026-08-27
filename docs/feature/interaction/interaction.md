@@ -224,7 +224,9 @@ Restaient volontairement absents de cette étape : l'`ExecutionId`, `Concurrency
   unique, pour valider une commande et pour continuer à valider une exécution en vol. La divergence
   client/serveur devient impossible par construction, et c'est pour ça que `Detect` doit rester une
   **fenêtre tolérante** : le serveur voit une transform vieille d'un ping. Un cast, qui est binaire,
-  appartiendrait à `GetCandidates`.
+  appartiendrait à `GetCandidates`. Comme la source n'est lue que par le client propriétaire,
+  l'interacteur le dit à son détecteur (`IsCandidateSourceActive`) : une source qui coûte une requête
+  physique cesse de la payer sur toutes les copies distantes du personnage.
 - `AreaInteractionDetector` reproduit le comportement actuel **sans aucune migration de scène cible** :
   les areas restent sur la cible, seule capable de les posséder, et l'`InteractiveComponent` pousse ses
   overlaps vers le détecteur de chaque interacteur concerné, sur tous les pairs. Le serveur valide donc
@@ -336,7 +338,10 @@ placement du joint. Seul l'ajout du registre et des rayons par cible touche du c
   l'étaient déjà. Il l'était en réalité déjà par accident, parce que l'interacteur émet
   `InteractionStatusChanged` à chaque frame focusée ; la fraîcheur ne dépend plus de ce signal. Le
   rebind ne fait qu'appeler `Bind` : les widgets d'action ne sont recréés que si leur nombre ou leur
-  scène change, sans quoi une barre repartirait de zéro à chaque frame.
+  scène change, sans quoi une barre repartirait de zéro à chaque frame. Le presenter ne s'abonne plus
+  du tout à `FocusedInteractiveChanged` ni à `InteractionStatusChanged` (P1) : le pull étant la
+  stratégie, s'abonner faisait tourner toute la présentation deux fois sur les frames où quelque chose
+  changeait vraiment.
 - Les widgets par défaut n'affichent aucune des trois valeurs : le contrat les expose, le rendu
   appartient au widget de jeu.
 - **`InteractionStatusChanged` redevient un événement.** Il était émis inconditionnellement à chaque
@@ -426,7 +431,7 @@ l'état répliqué, sinon le host la joue deux fois.
 
 Les composants principaux (`InteractiveComponent`, `InteractionInteractor` et `InteractionPresenter`) sont des classes globales Godot. Le plugin editor `InteractionEditorPlugin` enregistre `InteractionInspectorPlugin`, qui délègue toutes les validations à `InteractionValidator` (`InteractionArea`/`InteractionAnchor`, `Detector` sur l'interacteur, `ViewOrigin`, portées et temporisation de perte de vue non négatives sur le détecteur, `Interactor`/`Camera`, et les diagnostics d'actions, de definitions, d'executors d'état et de rules d'état listés en Task 11). `InteractionAnchor` est obligatoire pour tout `InteractiveComponent`. `TransitionStateInteractionExecutor` impose séparément sa référence `Stateful`. La validation de `StatefulComponent` et de `StateSchema` appartient au `StatefulValidator` de son propre addon. Les scripts runtime ne sont plus marqués `[Tool]` pour exposer ces warnings ; leurs gardes et erreurs runtime restent locales, et aucun booléen `IsConfigurationValid` n’est maintenu.
 
-`InteractionInteractor.GetInteractionPresentation()` retourne `InteractionTargetPresentation?`; l’absence de focus est donc représentée par l’absence de valeur. Le Presenter maintient sa propre liste d’indications à partir des signaux `InteractiveIndicationAdded` et `InteractiveIndicationRemoved`, sans lire les collections privées de détection — celles-ci vivent maintenant dans le détecteur, pas dans l'interacteur.
+`InteractionInteractor.GetInteractionPresentation()` retourne `InteractionTargetPresentation?`; l’absence de focus est donc représentée par l’absence de valeur. Le Presenter maintient sa propre liste d’indications à partir des signaux `InteractiveIndicationAdded` et `InteractiveIndicationRemoved` — ses deux seuls abonnements — sans lire les collections privées de détection : celles-ci vivent maintenant dans le détecteur, pas dans l'interacteur. Le focus et le statut sont tirés par frame, jamais écoutés.
 
 Les warnings sont compilés sous `TOOLS` dans les scripts du plugin editor et affichés directement dans l’Inspector. `plugin.cfg` charge `editor/InteractionEditorPlugin.cs`, qui couvre les huit types validés. L’Inspector identifie les scripts par leur classe globale ou leur chemin et lit leurs propriétés exportées via l’API Godot, afin de fonctionner avec les placeholders editor sans rendre les composants runtime `[Tool]`. `TransitionStateInteractionExecutor` signale séparément l’absence de sa référence `Stateful`.
 
@@ -493,21 +498,27 @@ un état réécrit à l'identique qui ne réplique rien, deux transitions sépar
 dans l'ordre et jouent une fois chacune, et deux transitions dans la **même** frame qui n'arrivent que
 comme la dernière valeur : une propriété répliquée porte une valeur, pas un historique, ce qui est la
 raison pour laquelle une pose s'applique depuis l'état courant et seuls les one-shots suivent les
-transitions. Le scénario complet ferme la boucle des deux canaux : une interaction de A mute l'état, cet
+transitions vécues. Le scénario complet ferme la boucle des deux canaux : une interaction de A mute l'état, cet
 état atteint le serveur, A et B, B présente l'action comme busy par la seule rule d'état sans avoir reçu
 le moindre événement d'interaction, et pourtant l'acquittement n'est allé qu'à A.
 
 Late join : un quatrième pair qui rejoint la session en cours arrive à l'état courant, ne voit jamais
 les états intermédiaires qu'il a manqués, et présente correctement comme busy une action déjà prise —
-mais il reçoit son état d'arrivée comme la transition `idle > activated`, indiscernable d'une vraie. Le
-test **fige ce comportement plutôt qu'une garantie** : le pattern « pose dans `_Ready`, one-shots sur
-`StateChangedPresentation` » joue donc le son d'activation à un joueur qui n'était pas là. Voir
-« P0 bis » dans [`interaction-v3.md`](planned/interaction-v3.md).
+et il reçoit son état d'arrivée comme la transition `idle > activated`, **marquée
+`isSynchronization = true`**. La transition est émise délibérément — c'est elle qui fait jouer son
+ouverture à une porte trouvée déjà ouverte, donc qui amène la pose et la collision à la bonne valeur — et
+le flag est ce qui permet à un feedback de garder ses one-shots pour un changement vécu. Un second test
+tient l'autre sens : un arrivant sur une cible intacte ne reçoit rien à l'arrivée, puis vit sa première
+vraie transition avec le flag à faux. `oldState` reste l'état initial et non l'état réellement précédent.
+Voir « P0 bis » dans [`interaction-v3.md`](planned/interaction-v3.md) et
+[`stateful.md`](../state/stateful.md).
 
-Déconnexion : un pair qui tombe sans que personne ne retire son nœud **garde sa réservation
-indéfiniment** et verrouille la cible pour tous les autres. Le test fige là aussi le comportement actuel :
-seul le départ du nœud interacteur libère une exécution, ce qui fait dépendre le plugin de la couche de
-spawn du projet. Voir « P0 ter » dans [`interaction-v3.md`](planned/interaction-v3.md).
+Déconnexion : un pair qui tombe sans que personne ne retire son nœud **libère quand même sa
+réservation**. `InteractionInteractor` s'abonne à `MultiplayerApi.PeerDisconnected` et annule ses
+exécutions quand le pair qui part est son `OwnerPeerId` : le plugin ne dépend plus de la couche de spawn
+du projet, et reste correct si celle-ci dépeuple aussi le joueur, l'exécution étant déjà terminée et un
+identifiant n'étant jamais réutilisé. L'acquittement de cette annulation n'est pas envoyé, faute de
+destinataire encore joignable. Voir « P0 ter » dans [`interaction-v3.md`](planned/interaction-v3.md).
 
 Le harnais s'auto-garde : il assert que les trois pairs sont bien distincts et que l'executor n'a tourné
 que sur l'autorité, sans quoi la suite dégénérerait silencieusement en appels locaux.
@@ -519,7 +530,7 @@ que sur l'autorité, sans quoi la suite dégénérerait silencieusement en appel
 - La synchronisation est portée par `MultiplayerSynchronizer` sur la propriété technique privée `ReplicatedState`. Elle reste enregistrée auprès de Godot pour le chemin `.:ReplicatedState` et reste visible dans l’inspecteur — un `[Export]` privé garde son flag `Editor`, voir [`godot-private-export-inspector-visibility.md`](../../memory/godot-private-export-inspector-visibility.md) ; le contrat est comportemental, le gameplay passe exclusivement par `SetState`. Les exécutions actives d'un `InteractiveComponent` restent transitoires et server-only : leur identifiant n'est jamais répliqué, et la progression affichée par un client est une prédiction locale bâtie sur l'`ExpectedDuration` lue dans la scène.
 - Godot 4.7.1 Mono charge les assemblies avec .NET 10. Le projet cible donc `net10.0`, conserve `LangVersion=preview` et fournit un shim minimal `IUnion`/`UnionAttribute` pour utiliser le contrat union C# preview sans référence runtime .NET 11. Voir [`godot-dotnet-runtime-target.md`](../memory/godot-dotnet-runtime-target.md).
 - Le LOS ne voit que ce qui porte une layer d'occlusion. `test_world` et le mur mobile du `LeverWall` sont passés en `collision_layer = 1|2` ; `facility_blockout` ne l'est pas — c'est un blockout, ses 175 volumes n'occluent donc rien tant qu'ils ne portent pas la layer. Une layer dédiée plutôt que « tout le physique » est un choix : sinon une caisse d'un tas de loot occlut l'ancre de sa voisine, ce qui est physiquement correct et faux en gameplay.
-- Les détecteurs de proximité et de visée sont des **spikes** : un smoke test chacun, aucune validation editor spécifique (ils héritent des diagnostics de la classe de base), et le registre statique qu'ils introduisent est un choix provisoire. Les garder demandera de trancher le registre pour de bon et de leur donner une vraie couverture.
+- Les détecteurs de proximité et de visée sont des **spikes** : un smoke test chacun, aucune validation editor spécifique (ils héritent des diagnostics de la classe de base), et le registre statique qu'ils introduisent est un choix provisoire. Le registre est désormais doublé d'un index `area → propriétaire` pour que `FindByArea` ne le parcoure plus, et un détecteur dont la source coûte une requête physique lit `IsCandidateSourceActive` pour ne pas la payer sur les copies distantes du personnage. Les garder demandera de trancher le registre pour de bon et de leur donner une vraie couverture.
 - La persistance réelle, les intégrations Quest/Dialog/Inventory, les combinateurs de règles, l'occlusion, les widgets 3D cliquables et les transports hors `SceneMultiplayer` restent hors V1.
 - Le Character projet n'a plus de nom d'input codé en dur : il itère `InteractionInteractor.GetRelevantInputs()` et échantillonne ce que la cible focusée déclare. Les noms d'input viennent donc des `InteractionActionDefinition` des scènes, `interact` (touche `E`) étant simplement celui des définitions actuelles.
 - L'addon Character générique reste sous `QuestWorld.Character` et ne référence pas `QuestWorld.Interaction`; seule la sous-classe globale du projet compose les deux systèmes.

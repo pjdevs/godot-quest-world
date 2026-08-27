@@ -21,6 +21,34 @@ Cet addon répond uniquement à la question **« qu'est-ce qui est vrai dans le 
 - La réplication passe par la propriété technique privée `ReplicatedState`. Un `MultiplayerSynchronizer` enfant du composant réplique le chemin `.:ReplicatedState`. Le gameplay n'assigne jamais cette propriété directement.
 - Le setter répliqué applique la valeur autoritaire du serveur **sans** revalider le schema : le serveur fait autorité et un schema divergent entre builds ne doit pas désynchroniser un client.
 - Trois signaux séparent les scopes consommateurs : `StateChanged` partout, `StateChangedAuthority` uniquement avec autorité (offline, listen host, dedicated server), `StateChangedPresentation` partout sauf sur un dedicated server.
+- Les trois portent la **même signature** `(oldState, newState, isSynchronization)`, ce qui permet de brancher un même handler sur plusieurs canaux.
+
+### `isSynchronization` — rattrapage ou événement vécu
+
+`isSynchronization` répond à la seule question qu'une transition seule ne peut pas trancher : cet état **devient-il** vrai ici et maintenant, ou ce peer rattrape-t-il une vérité déjà établie ailleurs ?
+
+| Origine | `isSynchronization` |
+| --- | --- |
+| `SetState()` autoritaire | `false` |
+| Valeur répliquée reçue après la première | `false` |
+| **Première** valeur répliquée reçue par un peer (late join) | `true` |
+| **`LoadState()`** (restauration de sauvegarde) | `true` |
+
+La transition est émise dans les deux cas, délibérément : une pose ou une animation pilotée par l'état converge ainsi sans rien savoir, et une porte trouvée déjà ouverte joue son ouverture donc finit avec la bonne collision. Ce que le flag permet, c'est de garder les **one-shots** — son, confettis, caméra, notification — pour un changement que le joueur a réellement vécu. Le pattern d'un feedback :
+
+```cs
+private void OnStateChangedPresentation(StringName old, StringName @new, bool isSynchronization)
+{
+    if (isSynchronization) { ApplyPose(@new); return; }
+    PlayTransition(old, @new);
+}
+```
+
+Trois points qui font tenir le contrat :
+
+- le marqueur « première réplication reçue » est remis à zéro dans `_Ready`, parce que `ReplicatedState` est un `[Export]` que le chargement de scène écrit avant l'entrée dans l'arbre et qui le consommerait ;
+- il est consommé même par une valeur **égale** à l'état courant. C'est le cas d'un peer qui rejoint un objet que personne n'a touché : le full sync du `MultiplayerSynchronizer` n'émet aucune transition, mais l'arrivée est dépensée, donc la première vraie transition suivante est bien rapportée comme vécue. Un test réseau le prouve dans les deux sens.
+- `oldState` sur une synchronisation est l'`InitialState`, pas l'état réellement précédent : un arrivant peut recevoir `idle → activated` là où le monde a fait `idle → activating → activated`. Un consommateur ne doit donc pas supposer que la paire reçue est une arête de la machine, seulement que `newState` est vrai.
 
 ## Mutation and dispatch boundary
 
@@ -31,7 +59,7 @@ SetState / LoadState / replication
   ↓ validation
 ApplyStateCore   → mutate only, returns StateTransition?
   ↓ mutation complete
-DispatchStateTransition
+DispatchStateTransition(transition, isSynchronization)
   ├─ StateChanged
   ├─ StateChangedAuthority
   └─ StateChangedPresentation
@@ -48,7 +76,7 @@ DispatchStateTransition
 
 ## Persistence boundary
 
-`StatefulSavedState` contient uniquement une version (`1`) et un `StringName`. `LoadState` réutilise le chemin commun de changement d'état et rejoue les signaux même lorsque la valeur restaurée est identique à la valeur courante. Aucun fichier, service global ou backend n'est créé.
+`StatefulSavedState` contient uniquement une version (`1`) et un `StringName`. `LoadState` réutilise le chemin commun de changement d'état et rejoue les signaux même lorsque la valeur restaurée est identique à la valeur courante, avec `isSynchronization = true` : le monde était déjà dans cet état avant que ce process existe, donc rien ne vient de se produire. Aucun fichier, service global ou backend n'est créé.
 
 ## Explicit configuration and validation
 
@@ -71,7 +99,7 @@ dotnet build
 GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot dotnet test
 ```
 
-Les tests couvrent la mutation core sans signal, le dispatch de chaque scope exactement une fois, l'application de `InitialState` sans signal au `_Ready`, l'application autoritaire, l'absence de changement pour une valeur identique, la valeur libre sans schema, le refus d'une valeur hors schema, la conservation d'un `InitialState` hors schema, l'application d'une valeur répliquée sans validation de schema, le snapshot/restauration y compris pour une valeur identique, le refus d'une version inconnue et d'un état hors schema, la query pure du schema, l'application autoritaire hors arbre sans peer multijoueur, et l'ensemble des warnings du validator.
+Les tests couvrent la mutation core sans signal, le dispatch de chaque scope exactement une fois, l'application de `InitialState` sans signal au `_Ready`, l'application autoritaire, l'absence de changement pour une valeur identique, la valeur libre sans schema, le refus d'une valeur hors schema, la conservation d'un `InitialState` hors schema, l'application d'une valeur répliquée sans validation de schema, le snapshot/restauration y compris pour une valeur identique et son dispatch en synchronisation sur les trois canaux, le flag à `false` pour un changement autoritaire vécu, le refus d'une version inconnue et d'un état hors schema, la query pure du schema, l'application autoritaire hors arbre sans peer multijoueur, et l'ensemble des warnings du validator.
 
 ## Assumptions and deferred work
 

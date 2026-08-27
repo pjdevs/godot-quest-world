@@ -189,6 +189,23 @@ public sealed partial class InteractionDetectionTest
     }
 
     [TestCase]
+    public async Task OnlyTheOwningPeerIsToldToRunItsCandidateSource()
+    {
+        Node3D world = new();
+        TestInteractionDetector local = AttachInteractor(world, "Local", ownerPeerId: 1);
+        TestInteractionDetector remote = AttachInteractor(world, "Remote", ownerPeerId: 2);
+        ISceneRunner runner = ISceneRunner.Load(world);
+
+        await runner.SimulateFrames(1);
+
+        // A source may cost a physics query, and a character exists on every peer while only its
+        // owner walks the candidates. The detector does not guess whose copy it is in: the interactor,
+        // which owns the notion of ownership, tells it.
+        AssertThat(local.SourceActive).IsTrue();
+        AssertThat(remote.SourceActive).IsFalse();
+    }
+
+    [TestCase]
     public async Task AWallBetweenTheViewAndTheTargetRemovesItFromDetectionEntirely()
     {
         DetectionWorld world = BuildWorld(new Vector3(0, 0, -2));
@@ -406,6 +423,24 @@ public sealed partial class InteractionDetectionTest
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
         return new DetectionWorld(runner, target, interactive, interactor, detector);
+    }
+
+    private static TestInteractionDetector AttachInteractor(
+        Node3D world,
+        string name,
+        int ownerPeerId
+    )
+    {
+        Node3D character = new() { Name = name };
+        Node3D view = new() { Name = "ViewOrigin" };
+        InteractionInteractor interactor = new() { Name = "Interactor", OwnerPeerId = ownerPeerId };
+        TestInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
+        interactor.AddChild(view);
+        interactor.AddChild(detector);
+        interactor.Detector = detector;
+        character.AddChild(interactor);
+        world.AddChild(character);
+        return detector;
     }
 
     private static StaticBody3D AddOccluder(Node parent, Vector3 position, uint layer)
