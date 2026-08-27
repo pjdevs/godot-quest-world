@@ -124,15 +124,11 @@ public sealed record InteractionExecutionCompleted();
 /// <c>InteractiveComponent.CompleteExecution</c> or <c>InteractiveComponent.CancelExecution</c> with
 /// the identifier carried by <see cref="InteractionExecutionContext.ExecutionId"/>.
 /// <para>
-/// This is the only place a duration enters the system. Nothing declares one next to the executor for
-/// the core to read, because a declared value and the value the code returns can disagree, and the one
-/// that runs is this one: an executor that wants its length authored exports it on itself and returns
-/// it here. It stays the target's clock either way, so the progress a player watches is authoritative.
-/// </para>
-/// <para>
-/// Return it through <c>RunningFor(seconds)</c> or <c>RunningUntilCompleted()</c> on
-/// <see cref="InteractionActionExecutor"/> rather than through this constructor: a bare zero at a
-/// return site does not say whether its author meant "no deadline" or forgot to compute one.
+/// The number is never authored next to the outcome: it comes from
+/// <see cref="InteractionActionExecutor.ComputeInteractionDuration"/>, the one query every peer may
+/// run, so the owning client predicts exactly what the authority is about to reserve. Return this
+/// through <c>RunningForDuration(context)</c> or <c>RunningUntilCompleted()</c> rather than through
+/// this constructor, which exists for the two of them and for the core that reads them.
 /// </para>
 /// </remarks>
 public sealed record InteractionExecutionRunning(float Duration = 0.0f);

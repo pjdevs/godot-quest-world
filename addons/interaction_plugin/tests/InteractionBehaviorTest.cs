@@ -2488,6 +2488,8 @@ public sealed partial class InteractionBehaviorTest
 
         public override bool RequiresInteractorPresence => RequiresPresence;
 
+        public override float ComputeInteractionDuration(in InteractionContext context) => Duration;
+
         public override InteractionExecutionResult Execute(in InteractionExecutionContext context)
         {
             if (Actor is null)
@@ -2496,9 +2498,9 @@ public sealed partial class InteractionBehaviorTest
             }
 
             // The actor decides the outcome, this executor decides how long a running one lasts:
-            // a duration now reaches the core only through what an executor returns.
+            // a deadline now comes only from the query every peer may run.
             InteractionExecutionResult result = Actor.BeginActivation();
-            return result is InteractionExecutionRunning ? RunningFor(Duration) : result;
+            return result is InteractionExecutionRunning ? RunningForDuration(context) : result;
         }
     }
 
@@ -2508,6 +2510,8 @@ public sealed partial class InteractionBehaviorTest
             new InteractionExecutionCompleted();
 
         public float Duration { get; set; }
+
+        public override float ComputeInteractionDuration(in InteractionContext context) => Duration;
 
         public int ExecuteCount { get; private set; }
 
@@ -2532,7 +2536,7 @@ public sealed partial class InteractionBehaviorTest
             LastAction = context.Action;
             LastExecutionId = context.ExecutionId;
             ReservedInteractorDuringExecute = context.Interactive.ActiveInteractor;
-            return Result is InteractionExecutionRunning ? RunningFor(Duration) : Result;
+            return Result is InteractionExecutionRunning ? RunningForDuration(context) : Result;
         }
 
         protected internal override void OnExecutionCompleted(

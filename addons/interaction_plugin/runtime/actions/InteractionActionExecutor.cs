@@ -67,28 +67,46 @@ public abstract partial class InteractionActionExecutor : Node
         string reason
     ) { }
 
-    // A duration enters the system here and nowhere else. There is no declared value next to this
-    // executor for the core to read: authored data and returned code can disagree, and only one of
-    // them runs. An executor whose length belongs in the Inspector exports it on itself and hands it
-    // to RunningFor, which keeps a single source for the clock the target counts down.
+    /// <summary>Computes how long an execution this executor starts should last.</summary>
+    /// <remarks>
+    /// This is the single source of every deadline in the system, and it is a query rather than a
+    /// declared value so that nothing can author one number and run another. Zero means no deadline:
+    /// the reservation is then held until gameplay ends it.
+    /// <para>
+    /// It is called on the authority through <see cref="RunningForDuration"/>, and on the owning client
+    /// alone to predict its progress bar without waiting for the acknowledgement. Both peers therefore
+    /// run the same code on the same target, which is why it must stay a pure read: no mutation, no
+    /// side effect, no dependency on the outcome of an execution that has not started.
+    /// </para>
+    /// <para>
+    /// Reading state a client does not have — a server-only roll, an unreplicated inventory — is not
+    /// forbidden, it is simply a deliberate incoherence: the bar is then wrong for one round trip until
+    /// the acknowledgement recalibrates it. A duration important enough to change is usually built from
+    /// data every peer already has, so this is a note for the implementer, not a rule of the core.
+    /// </para>
+    /// </remarks>
+    /// <param name="context">Interactor, interactive, and action the duration is computed for.</param>
+    /// <returns>Seconds the execution should last, or zero for no deadline.</returns>
+    public virtual float ComputeInteractionDuration(in InteractionContext context) => 0.0f;
 
-    /// <summary>Keeps the execution reserved for a duration this executor decides now.</summary>
+    // Two ways to stay reserved, and neither carries a number of its own: an executor that wants a
+    // deadline puts it in ComputeInteractionDuration, where the owning client can read it too. A
+    // duration passed straight through here would be one no peer could predict — and one that could
+    // silently disagree with what the same executor answers when asked.
+
+    /// <summary>Keeps the execution reserved for the duration this executor computes.</summary>
     /// <remarks>
     /// The target owns the clock and completes the execution itself once the duration elapses, by the
     /// same path a gameplay completion takes, so the progress a player watches cannot be forged by
-    /// holding an input longer. The requesting owner is acknowledged with this value and predicts its
-    /// progress bar from it, which is why nothing draws until the authority has answered.
-    /// <para>
-    /// A duration of zero or less is an execution with no deadline, exactly like
-    /// <see cref="RunningUntilCompleted"/>: a computed length that came out empty is not a reason to
-    /// invent one.
-    /// </para>
+    /// holding an input longer. A computed zero is an execution with no deadline, exactly like
+    /// <see cref="RunningUntilCompleted"/>.
     /// </remarks>
-    /// <param name="seconds">Seconds this execution should last.</param>
-    /// <returns>A running outcome carrying its deadline.</returns>
-    protected static InteractionExecutionResult RunningFor(float seconds)
+    /// <param name="context">Context of the execution being started.</param>
+    /// <returns>A running outcome carrying the computed deadline.</returns>
+    protected InteractionExecutionResult RunningForDuration(in InteractionExecutionContext context)
     {
-        return new InteractionExecutionRunning(Mathf.Max(seconds, 0.0f));
+        InteractionContext query = new(context.Interactor, context.Interactive, context.Action);
+        return new InteractionExecutionRunning(Mathf.Max(ComputeInteractionDuration(query), 0.0f));
     }
 
     /// <summary>Keeps the execution reserved until gameplay ends it, with no deadline.</summary>
@@ -96,7 +114,8 @@ public abstract partial class InteractionActionExecutor : Node
     /// Nothing but <c>InteractiveComponent.CompleteExecution</c> or <c>CancelExecution</c> — or the
     /// player leaving, for an execution that requires presence — ends this one. An animation reporting
     /// its own end, a dialogue closing, a machine that finished: the executor holds the identifier it
-    /// received and calls back when the world says so.
+    /// received and calls back when the world says so. This is also where a length known only once the
+    /// action started belongs, being a length no peer could have predicted.
     /// </remarks>
     /// <returns>A running outcome with no deadline.</returns>
     protected static InteractionExecutionResult RunningUntilCompleted()

@@ -48,8 +48,8 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
     /// is what an object driving its own animation wants.
     /// <para>
     /// The export lives on this executor and not on the core, which reads no declared duration at all:
-    /// the value is handed to <c>RunningFor</c> by the code below, so what the Inspector says and what
-    /// the target counts down cannot drift apart.
+    /// it is answered by <see cref="ComputeInteractionDuration"/> below, the one query the authority and
+    /// the owning client both run, so the Inspector, the clock and the progress bar cannot drift apart.
     /// </para>
     /// </remarks>
     [Export]
@@ -67,6 +67,9 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
 
     /// <inheritdoc />
     public override bool RequiresInteractorPresence => RequiresPresence;
+
+    /// <inheritdoc />
+    public override float ComputeInteractionDuration(in InteractionContext context) => Duration;
 
     /// <summary>Godot callback that reports a missing target or a state outside the schema.</summary>
     public override void _Ready()
@@ -110,7 +113,7 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
         }
 
         return Stateful.SetState(RunningState)
-            ? RunningFor(Duration)
+            ? RunningForDuration(context)
             : new InteractionExecutionFailed("This cannot start.");
     }
 

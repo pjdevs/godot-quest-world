@@ -197,11 +197,11 @@ public sealed partial class InteractionNetworkTest
     }
 
     [TestCase]
-    public async Task ARemoteClientDrawsNoBarUntilTheAuthorityAnswers()
+    public async Task ARemoteClientDrawsItsBarBeforeTheAuthorityAnswers()
     {
-        // The deadline is decided by code running on the authority, so no peer can know it before the
-        // acknowledgement. That is the price of having exactly one source for it: a bar one round trip
-        // late instead of a bar built on a value the Inspector declares and the code may contradict.
+        // The duration is a query every peer may run, so the requester runs it on its own copy of the
+        // executor and draws at once. Interacting has no "starting" state: the player pressed, the bar
+        // is there, and the acknowledgement only has the last word on its length.
         Session session = await Connect();
         try
         {
@@ -209,10 +209,6 @@ public sealed partial class InteractionNetworkTest
             session.Focus();
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
-
-            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsFalse();
-
-            await session.Pump(RoundTripFrames);
 
             AssertThat(
                     session.ClientA.InteractorA.TryGetExecutionProgress(
@@ -223,6 +219,10 @@ public sealed partial class InteractionNetworkTest
                 .IsTrue();
             AssertThat(actionId.ToString()).IsEqual("activate");
             AssertThat(progress < 1.0f).IsTrue();
+
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsTrue();
         }
         finally
         {
@@ -231,7 +231,62 @@ public sealed partial class InteractionNetworkTest
     }
 
     [TestCase]
-    public async Task TheClientThatLostTheRaceNeverDrawsABar()
+    public async Task TheAcknowledgementArmsABarTheClientCouldNotPredict()
+    {
+        // The two copies of the executor answer differently, which is what reading state a client does
+        // not have looks like from here: this one declines to draw, and the authority hands it a
+        // deadline one round trip later.
+        Session session = await Connect();
+        try
+        {
+            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.ClientA.Executor.Duration = 0.0f;
+            session.Focus();
+
+            session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
+
+            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsFalse();
+
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsTrue();
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
+    public async Task TheAcknowledgementClearsABarTheClientInvented()
+    {
+        // The mirror case, and the one that proves who has the last word: the client predicts an hour
+        // where the authority reserved no deadline at all. Nothing completes here, so only the started
+        // acknowledgement can take that bar away.
+        Session session = await Connect();
+        try
+        {
+            session.Arm(new InteractionExecutionRunning(), duration: 0.0f);
+            session.ClientA.Executor.Duration = 3600.0f;
+            session.Focus();
+
+            session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
+
+            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsTrue();
+
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(session.KindsA()).IsEqual(new List<string> { "started" });
+            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsFalse();
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
+    public async Task TheClientThatLostTheRaceClearsItsPredictionAtOnce()
     {
         Session session = await Connect();
         try
@@ -245,8 +300,8 @@ public sealed partial class InteractionNetworkTest
             await session.Pump(RoundTripFrames);
 
             AssertThat(session.KindsB()).IsEqual(new List<string> { "rejected" });
-            // The loser never had a bar to clear: nothing is drawn before the authority answers, and
-            // its answer is a refusal.
+            // The loser drew a bar at its own press, like the winner did, and the refusal takes it
+            // away: an unacknowledged prediction is exactly what a refusal invalidates.
             AssertThat(session.ClientB.InteractorB.TryGetExecutionProgress(out _, out _))
                 .IsFalse();
             // The winner keeps drawing its own bar.
