@@ -1787,34 +1787,6 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task AnExecutorMayTakeOverTheClockItKnowsBetterThanTheScene()
-    {
-        TestWorld testWorld = BuildWorld();
-        await testWorld.Runner.SimulateFrames(1);
-        InteractionAction hack = CreateAction("hack");
-        ExecutorOf(hack).Duration = 3600.0f;
-        AddAction(testWorld.Interactive, hack);
-
-        // The scene authored an hour; the executor knows the animation it just started is shorter.
-        ExecutorOf(hack).Result = new InteractionExecutionRunning(0.05f);
-        testWorld.Interactive.ExecuteAction(testWorld.Interactor, hack, out ulong executionId);
-
-        AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsTrue();
-
-        for (
-            int frame = 0;
-            frame < 300 && testWorld.Interactive.IsExecutionActive(executionId);
-            frame++
-        )
-        {
-            await testWorld.Runner.SimulateFrames(1);
-        }
-
-        AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsFalse();
-        AssertThat(ExecutorOf(hack).CompletedCount).IsEqual(1);
-    }
-
-    [TestCase]
     public async Task AnExecutorWithoutDurationWaitsForAnExternalEvent()
     {
         TestWorld testWorld = BuildWorld();
@@ -2514,13 +2486,20 @@ public sealed partial class InteractionBehaviorTest
 
         public bool RequiresPresence { get; set; } = true;
 
-        public override float ExpectedDuration => Duration;
-
         public override bool RequiresInteractorPresence => RequiresPresence;
 
-        public override InteractionExecutionResult Execute(
-            in InteractionExecutionContext context
-        ) => Actor is null ? new InteractionExecutionFailed("No actor.") : Actor.BeginActivation();
+        public override InteractionExecutionResult Execute(in InteractionExecutionContext context)
+        {
+            if (Actor is null)
+            {
+                return new InteractionExecutionFailed("No actor.");
+            }
+
+            // The actor decides the outcome, this executor decides how long a running one lasts:
+            // a duration now reaches the core only through what an executor returns.
+            InteractionExecutionResult result = Actor.BeginActivation();
+            return result is InteractionExecutionRunning ? RunningFor(Duration) : result;
+        }
     }
 
     private sealed partial class RecordingInteractionExecutor : InteractionActionExecutor
@@ -2529,8 +2508,6 @@ public sealed partial class InteractionBehaviorTest
             new InteractionExecutionCompleted();
 
         public float Duration { get; set; }
-
-        public override float ExpectedDuration => Duration;
 
         public int ExecuteCount { get; private set; }
 
@@ -2555,7 +2532,7 @@ public sealed partial class InteractionBehaviorTest
             LastAction = context.Action;
             LastExecutionId = context.ExecutionId;
             ReservedInteractorDuringExecute = context.Interactive.ActiveInteractor;
-            return Result;
+            return Result is InteractionExecutionRunning ? RunningFor(Duration) : Result;
         }
 
         protected internal override void OnExecutionCompleted(

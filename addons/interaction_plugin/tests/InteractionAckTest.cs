@@ -51,7 +51,7 @@ public sealed partial class InteractionAckTest
     }
 
     [TestCase]
-    public async Task ARunningActionAcknowledgesTheDurationTheExecutorDeclared()
+    public async Task ARunningActionAcknowledgesTheDurationItsExecutorDecided()
     {
         AckWorld world = BuildWorld();
         world.Executor.Duration = 2.0f;
@@ -63,22 +63,6 @@ public sealed partial class InteractionAckTest
 
         AssertThat(world.Kinds()).IsEqual(new List<string> { "started" });
         AssertThat(world.Acks[0].Duration).IsEqual(2.0f);
-    }
-
-    [TestCase]
-    public async Task ARunningActionAcknowledgesTheClockItsExecutorTookOver()
-    {
-        // The executor knows the length of the clip it just played, so the owner must be told that
-        // value rather than the estimate the reservation was built with.
-        AckWorld world = BuildWorld();
-        world.Executor.Duration = 2.0f;
-        world.Executor.Result = new InteractionExecutionRunning(5.0f);
-        await world.Runner.SimulateFrames(1);
-        world.Focus();
-
-        world.Interactor.TryStartInteractionInput(InteractInput);
-
-        AssertThat(world.Acks[0].Duration).IsEqual(5.0f);
     }
 
     [TestCase]
@@ -195,8 +179,11 @@ public sealed partial class InteractionAckTest
     }
 
     [TestCase]
-    public async Task ARejectionLeavesThePredictionOfAnotherActionAlone()
+    public async Task ARejectionLeavesTheBarOfARunningExecutionAlone()
     {
+        // The bar belongs to an acknowledged execution and not to the last request, so a refusal on
+        // the very action already running — a player pressing again mid-hack — must not erase it. The
+        // rejection is played on the same identifier on purpose: that is the pair that used to match.
         AckWorld world = BuildWorld();
         world.Executor.Duration = 2.0f;
         world.Executor.Result = new InteractionExecutionRunning();
@@ -206,11 +193,30 @@ public sealed partial class InteractionAckTest
 
         world.Interactor.ClientInteractionRejected(
             world.Interactive.GetPath(),
-            new StringName("somethingElse"),
-            "The till is closed."
+            world.Definition.Id,
+            "This is already in use."
         );
 
         AssertThat(world.Interactor.TryGetExecutionProgress(out _, out _)).IsTrue();
+    }
+
+    [TestCase]
+    public async Task AnExecutionEndedBeforeItsDeadlineTakesItsBarWithIt()
+    {
+        // Nothing local ends here: the input was never sustained, so only the terminal acknowledgement
+        // can say the execution stopped short. Without it the bar would draw down to a deadline that
+        // no longer exists.
+        AckWorld world = BuildWorld();
+        world.Executor.Duration = 3600.0f;
+        world.Executor.Result = new InteractionExecutionRunning();
+        await world.Runner.SimulateFrames(1);
+        world.Focus();
+        world.Interactor.TryStartInteractionInput(InteractInput);
+        AssertThat(world.Interactor.TryGetExecutionProgress(out _, out _)).IsTrue();
+
+        world.Interactive.CancelExecution(world.Executor.LastExecutionId, "The reactor tripped.");
+
+        AssertThat(world.Interactor.TryGetExecutionProgress(out _, out _)).IsFalse();
     }
 
     [TestCase]

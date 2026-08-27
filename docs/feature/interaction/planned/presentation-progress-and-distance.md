@@ -57,7 +57,8 @@ côte à côte la rend facile à commettre.
   progression.
 - **`ExecutionProgress`** est l'**action** : le hack, la fouille, l'activation longue. Le chrono est
   autoritaire et vit sur le target ; ce que le client dessine est une prédiction bâtie sur
-  l'`ExpectedDuration` lue dans la scène.
+  l'échéance portée par l'acquittement `InteractionStarted` (`ExpectedDuration` est supprimée par P2.1 de
+  [interaction-v3](interaction-v3.md)).
 
 Empiler les deux est légal (tenir pour choisir, puis tenir pendant que ça s'exécute) et produit deux
 barres successives. Un widget qui n'en veut qu'une doit choisir laquelle, pas les additionner.

@@ -46,6 +46,11 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
     /// <remarks>
     /// Left at zero, the running state is held until something else completes the execution, which
     /// is what an object driving its own animation wants.
+    /// <para>
+    /// The export lives on this executor and not on the core, which reads no declared duration at all:
+    /// the value is handed to <c>RunningFor</c> by the code below, so what the Inspector says and what
+    /// the target counts down cannot drift apart.
+    /// </para>
     /// </remarks>
     [Export]
     public float Duration { get; set; }
@@ -59,9 +64,6 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
     /// </remarks>
     [Export]
     public bool RequiresPresence { get; set; } = true;
-
-    /// <inheritdoc />
-    public override float ExpectedDuration => Duration;
 
     /// <inheritdoc />
     public override bool RequiresInteractorPresence => RequiresPresence;
@@ -108,7 +110,7 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
         }
 
         return Stateful.SetState(RunningState)
-            ? new InteractionExecutionRunning()
+            ? RunningFor(Duration)
             : new InteractionExecutionFailed("This cannot start.");
     }
 

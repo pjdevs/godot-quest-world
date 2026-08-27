@@ -332,6 +332,28 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
+    public void InteractiveAcceptsTwoActionsOnOneTriggerSeparatedByPriority()
+    {
+        // Sharing an input and a threshold is how "open" and "unlock" alternate on one key: the
+        // resolver separates them by availability, then by priority. Only a tie the author did not
+        // break is worth reporting, because below priority the identifier order decides.
+        InteractionAction open = NewAction(new InteractionActionDefinition { Id = "open" });
+        InteractionAction unlock = NewAction(new InteractionActionDefinition { Id = "unlock" });
+        unlock.Priority = 10;
+        InteractiveComponent interactive = new()
+        {
+            InteractionArea = new Area3D(),
+            InteractionAnchor = new Node3D(),
+            Actions = new() { open, unlock },
+        };
+
+        string[] warnings = InteractionValidator.Validate(interactive).ToArray();
+
+        AssertThat(warnings.Any(warning => warning.Contains("share the input 'interact'")))
+            .IsFalse();
+    }
+
+    [TestCase]
     public void ActionRequiresADefinitionAndAnExecutor()
     {
         InteractionAction action = new();

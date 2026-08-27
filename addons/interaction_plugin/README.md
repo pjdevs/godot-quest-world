@@ -135,7 +135,6 @@ public partial class OpenDoorExecutor : InteractionActionExecutor
 | Member | Required | Called on | When |
 | --- | --- | --- | --- |
 | `Execute(context)` | Yes | Authority only | Once, synchronously, after rules pass and the execution is reserved |
-| `ExpectedDuration` | No | Server and owning client | Read when reserving and when starting local progress prediction; `0` means no deadline |
 | `RequiresInteractorPresence` | No | Authority | Read after a running result; default `true` |
 | `OnExecutionCompleted(context)` | No | Authority only | Once when a previously running execution completes |
 | `OnExecutionCancelled(context, reason)` | No | Authority only | Once when a previously running execution is cancelled |
@@ -143,11 +142,11 @@ public partial class OpenDoorExecutor : InteractionActionExecutor
 `Execute` returns one of:
 
 - `InteractionExecutionCompleted`: mutation finished now.
-- `InteractionExecutionRunning(duration)`: keep the reservation. A positive returned duration overrides the server clock; zero uses `ExpectedDuration`.
+- `InteractionExecutionRunning(duration)`: keep the reservation. Return it through `RunningFor(seconds)` or `RunningUntilCompleted()`, the two protected factories, rather than through the constructor. This is the only place a duration enters the system: nothing is declared next to the executor for the core to read, so an executor whose length belongs in the Inspector exports it on itself and hands it to `RunningFor`.
 - `InteractionExecutionRejected(reason)`: nothing started. Use this rarely; ordinary conditions belong in rules.
 - `InteractionExecutionFailed(reason)`: it started but failed, so observers receive started then cancelled.
 
-For an event-driven action such as dialogue, return `InteractionExecutionRunning()`, keep `context.ExecutionId`, and later call `context.Interactive.CompleteExecution(id)` or `CancelExecution(id)` from authoritative gameplay.
+For an event-driven action such as dialogue, return `RunningUntilCompleted()`, keep `context.ExecutionId`, and later call `context.Interactive.CompleteExecution(id)` or `CancelExecution(id)` from authoritative gameplay.
 
 A timed running action enables `InteractiveComponent._Process()` on the server until it ends. A presence-bound running action is also revalidated once per server process frame through its detector. Set `RequiresInteractorPresence = false` for work handed to the world; `CancelOnInputReleased` always keeps it presence-bound.
 
@@ -272,7 +271,7 @@ The target supplies `ActionPromptScene`, `IndicationScene`, and `BlockedIndicati
 | Validate sustained presence | Never | Once per running, presence-bound execution per process frame |
 | Render widgets | Every local presentation frame | Never on a dedicated server |
 
-Offline and listen-server play take the authoritative path directly. Active execution identifiers are transient and server-only; interaction execution state is not replicated. Client progress is a local prediction from `ExpectedDuration`; persistent replicated world state belongs to `StatefulComponent`.
+Offline and listen-server play take the authoritative path directly. Active execution identifiers are transient and server-only; interaction execution state is not replicated. Client progress is a local prediction armed by the `InteractionStarted` acknowledgement, which carries the deadline the executor decided — so a remote client draws nothing for one round trip, and never draws a deadline the authority contradicts; persistent replicated world state belongs to `StatefulComponent`.
 
 ### Notifications
 

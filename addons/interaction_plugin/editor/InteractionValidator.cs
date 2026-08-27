@@ -109,11 +109,17 @@ public static class InteractionValidator
                 continue;
             }
 
-            string trigger = $"{input}|{GetFloat(definition, "HoldThreshold")}";
+            // Sharing an input and a threshold is legitimate: the resolver separates such actions by
+            // availability first, and a rule is what makes "open" and "unlock" alternate on one key.
+            // Priority is the last discriminator an author can express, so it belongs to the key —
+            // below it the resolver falls back on identifier order, which nobody authored on purpose.
+            string trigger =
+                $"{input}|{GetFloat(definition, "HoldThreshold")}|{GetInt(action, "Priority")}";
             if (inputs.TryGetValue(trigger, out string? other))
             {
-                yield return $"Actions '{other}' and '{id}' share the input '{input}' with the "
-                    + "same hold threshold and cannot be told apart.";
+                yield return $"Actions '{other}' and '{id}' share the input '{input}', the same hold "
+                    + "threshold and the same priority: whenever both are available, the identifier "
+                    + "order decides. Give one a higher Priority, or a rule that hides it.";
             }
             else
             {
@@ -425,6 +431,9 @@ public static class InteractionValidator
 
     private static bool GetBool(GodotObject obj, StringName propertyName) =>
         obj.Get(propertyName).AsBool();
+
+    private static int GetInt(GodotObject obj, StringName propertyName) =>
+        obj.Get(propertyName).AsInt32();
 
     private static float GetFloat(GodotObject obj, StringName propertyName) =>
         (float)obj.Get(propertyName).AsDouble();

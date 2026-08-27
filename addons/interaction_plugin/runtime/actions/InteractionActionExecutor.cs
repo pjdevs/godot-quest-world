@@ -24,34 +24,6 @@ public abstract partial class InteractionActionExecutor : Node
     /// <returns>The outcome deciding whether the target keeps the execution reserved.</returns>
     public abstract InteractionExecutionResult Execute(in InteractionExecutionContext context);
 
-    /// <summary>Gets how long an execution started by this executor is expected to last.</summary>
-    /// <remarks>
-    /// The duration belongs here rather than to the action, because only the executor knows whether
-    /// it runs long at all: a duration declared next to an executor that completes instantly would be
-    /// a setting that silently does nothing.
-    /// <para>
-    /// Zero means no deadline rather than instant. An executor that returns
-    /// <see cref="InteractionExecutionRunning"/> with no duration keeps its execution reserved until
-    /// something ends it: an animation finishing, a dialogue closing, a machine reporting done. The
-    /// player walking out of range or releasing a sustained input also ends it, unless the executor
-    /// declared that it does not need the interactor present — an open-ended execution the world owns
-    /// reserves its target until gameplay completes it by identifier, and nothing else will.
-    /// </para>
-    /// <para>
-    /// The authoritative target reads this when the executor returns
-    /// <see cref="InteractionExecutionRunning"/> without a duration of its own, and completes the
-    /// execution itself once it elapses. The owning client reads the same value straight from the
-    /// scene to draw a progress bar, which is why it must be readable without running anything.
-    /// </para>
-    /// <para>
-    /// Override it with a computed value when the length is known before the action starts. When it
-    /// is only known once the action has started — the clip an executor just played — return
-    /// <c>new InteractionExecutionRunning(seconds)</c> instead; the target then follows that value,
-    /// and this one remains the estimate a client draws with.
-    /// </para>
-    /// </remarks>
-    public virtual float ExpectedDuration => 0.0f;
-
     /// <summary>Gets whether an execution of this executor ends when the interactor stops being there.</summary>
     /// <remarks>
     /// Two independent axes were confused until now. An execution can be sustained by the input —
@@ -94,4 +66,41 @@ public abstract partial class InteractionActionExecutor : Node
         in InteractionExecutionContext context,
         string reason
     ) { }
+
+    // A duration enters the system here and nowhere else. There is no declared value next to this
+    // executor for the core to read: authored data and returned code can disagree, and only one of
+    // them runs. An executor whose length belongs in the Inspector exports it on itself and hands it
+    // to RunningFor, which keeps a single source for the clock the target counts down.
+
+    /// <summary>Keeps the execution reserved for a duration this executor decides now.</summary>
+    /// <remarks>
+    /// The target owns the clock and completes the execution itself once the duration elapses, by the
+    /// same path a gameplay completion takes, so the progress a player watches cannot be forged by
+    /// holding an input longer. The requesting owner is acknowledged with this value and predicts its
+    /// progress bar from it, which is why nothing draws until the authority has answered.
+    /// <para>
+    /// A duration of zero or less is an execution with no deadline, exactly like
+    /// <see cref="RunningUntilCompleted"/>: a computed length that came out empty is not a reason to
+    /// invent one.
+    /// </para>
+    /// </remarks>
+    /// <param name="seconds">Seconds this execution should last.</param>
+    /// <returns>A running outcome carrying its deadline.</returns>
+    protected static InteractionExecutionResult RunningFor(float seconds)
+    {
+        return new InteractionExecutionRunning(Mathf.Max(seconds, 0.0f));
+    }
+
+    /// <summary>Keeps the execution reserved until gameplay ends it, with no deadline.</summary>
+    /// <remarks>
+    /// Nothing but <c>InteractiveComponent.CompleteExecution</c> or <c>CancelExecution</c> — or the
+    /// player leaving, for an execution that requires presence — ends this one. An animation reporting
+    /// its own end, a dialogue closing, a machine that finished: the executor holds the identifier it
+    /// received and calls back when the world says so.
+    /// </remarks>
+    /// <returns>A running outcome with no deadline.</returns>
+    protected static InteractionExecutionResult RunningUntilCompleted()
+    {
+        return new InteractionExecutionRunning();
+    }
 }

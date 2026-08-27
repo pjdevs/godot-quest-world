@@ -40,9 +40,9 @@ public partial class InteractionActionDefinition : Resource
     /// entirely on the client and never reaches the authoritative command, which still carries only
     /// a target and an action identifier. An action alone on its input keeps a threshold of zero.
     /// <para>
-    /// Do not confuse it with <see cref="InteractionAction.Duration"/>: "hold to hack" is a
-    /// threshold of zero with a running execution the server times, so the bar the player watches is
-    /// authoritative. Stacking both simply adds the two waits.
+    /// Do not confuse it with the duration an executor returns, which is not authored on an action at
+    /// all: "hold to hack" is a threshold of zero with a running execution the server times, so the bar
+    /// the player watches is authoritative. Stacking both simply adds the two waits.
     /// </para>
     /// </remarks>
     [Export]

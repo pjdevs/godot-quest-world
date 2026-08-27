@@ -197,7 +197,41 @@ public sealed partial class InteractionNetworkTest
     }
 
     [TestCase]
-    public async Task TheClientThatLostTheRaceClearsItsPredictionAtOnce()
+    public async Task ARemoteClientDrawsNoBarUntilTheAuthorityAnswers()
+    {
+        // The deadline is decided by code running on the authority, so no peer can know it before the
+        // acknowledgement. That is the price of having exactly one source for it: a bar one round trip
+        // late instead of a bar built on a value the Inspector declares and the code may contradict.
+        Session session = await Connect();
+        try
+        {
+            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.Focus();
+
+            session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
+
+            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsFalse();
+
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(
+                    session.ClientA.InteractorA.TryGetExecutionProgress(
+                        out StringName actionId,
+                        out float progress
+                    )
+                )
+                .IsTrue();
+            AssertThat(actionId.ToString()).IsEqual("activate");
+            AssertThat(progress < 1.0f).IsTrue();
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
+    public async Task TheClientThatLostTheRaceNeverDrawsABar()
     {
         Session session = await Connect();
         try
@@ -211,7 +245,10 @@ public sealed partial class InteractionNetworkTest
             await session.Pump(RoundTripFrames);
 
             AssertThat(session.KindsB()).IsEqual(new List<string> { "rejected" });
-            AssertThat(session.ClientB.InteractorB.TryGetExecutionProgress(out _, out _)).IsFalse();
+            // The loser never had a bar to clear: nothing is drawn before the authority answers, and
+            // its answer is a refusal.
+            AssertThat(session.ClientB.InteractorB.TryGetExecutionProgress(out _, out _))
+                .IsFalse();
             // The winner keeps drawing its own bar.
             AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsTrue();
         }

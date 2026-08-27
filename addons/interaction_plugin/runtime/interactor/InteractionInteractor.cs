@@ -45,14 +45,15 @@ internal readonly record struct InteractionGesture(
 
 /// <summary>Local prediction of the running execution the owning player requested.</summary>
 /// <remarks>
-/// Built from the duration authored in the scene the client already has, so a progress bar needs no
-/// replication and no acknowledgement. It is feedback only: what actually runs is the authoritative
-/// execution, and a prediction that drifts is corrected by the world state it is waiting for.
+/// Armed by the acknowledgement of the authority, which carries the deadline its executor decided, so
+/// a bar still needs no replication but does need one answer. It is feedback only: what actually runs
+/// is the authoritative execution, and a prediction that drifts is corrected by the world state it is
+/// waiting for.
 /// </remarks>
 /// <param name="Target">Target the action was requested on.</param>
 /// <param name="ActionId">Identifier of the requested action.</param>
-/// <param name="Duration">Duration authored for that action.</param>
-/// <param name="Elapsed">Seconds since the request was sent.</param>
+/// <param name="Duration">Deadline the authority acknowledged for that execution.</param>
+/// <param name="Elapsed">Seconds since the acknowledgement arrived.</param>
 internal readonly record struct PredictedExecution(
     InteractiveComponent Target,
     StringName ActionId,
@@ -368,8 +369,15 @@ public partial class InteractionInteractor : Node
 
     /// <summary>Reads how far the action requested by the owning player has progressed.</summary>
     /// <remarks>
-    /// Predicted from the duration authored in the scene, so it works the same on a client and on a
-    /// host. The authoritative clock stays on the target: this only decides what the bar draws.
+    /// Predicted from the deadline the authority acknowledged, so it works the same on a client and on
+    /// a host — a host simply learns it in the same frame it asked. The authoritative clock stays on
+    /// the target: this only decides what the bar draws.
+    /// <para>
+    /// Nothing is drawn between the command and its acknowledgement, which is a round trip on a remote
+    /// client. That is deliberate: a duration lives in the code of an executor, so no peer can predict
+    /// it without asking, and a bar drawn from an authored guess would be one the authority contradicts
+    /// as soon as the code disagrees with the Inspector.
+    /// </para>
     /// </remarks>
     /// <param name="actionId">Running action, or an empty name when none is.</param>
     /// <param name="progress">Progress between zero and one.</param>
@@ -859,7 +867,6 @@ public partial class InteractionInteractor : Node
                 actionId
             );
             RememberSustainedInput(inputActionName, action);
-            PredictExecution(target, action);
             return true;
         }
 
@@ -883,8 +890,9 @@ public partial class InteractionInteractor : Node
             return false;
         }
 
+        // The host is acknowledged by the same path a client is, and synchronously: its bar was armed
+        // during the authoritative call above, so there is nothing to predict here.
         RememberSustainedInput(inputActionName, action);
-        PredictExecution(target, action);
         return true;
     }
 
@@ -900,17 +908,6 @@ public partial class InteractionInteractor : Node
         {
             _sustainedInputs.Add(inputActionName);
         }
-    }
-
-    private void PredictExecution(InteractiveComponent target, InteractionAction action)
-    {
-        // Read straight from the scene the client already has, so a bar needs no replication and no
-        // acknowledgement. An executor that declares no duration simply has nothing to draw.
-        float duration = action.Executor?.ExpectedDuration ?? 0.0f;
-        _prediction =
-            duration > 0.0f
-                ? new PredictedExecution(target, action.Definition!.Id, duration, 0.0f)
-                : null;
     }
 
     internal void NotifyInteractiveStatusChanged(InteractiveComponent interactive)
@@ -1061,6 +1058,14 @@ public partial class InteractionInteractor : Node
     )
     {
         Node? target = ResolveAcknowledgedTarget(targetPath);
+
+        // The bar is armed here and nowhere else, because this is the first moment this peer knows the
+        // deadline: it was decided by code running on the authority. An execution acknowledged without
+        // one draws nothing, and supersedes whatever the previous command left on screen.
+        _prediction =
+            duration > 0.0f && target is InteractiveComponent interactive
+                ? new PredictedExecution(interactive, actionId, duration, 0.0f)
+                : null;
         EmitSignal(SignalName.InteractionStarted, target!, actionId, executionId, duration);
     }
 
@@ -1076,6 +1081,7 @@ public partial class InteractionInteractor : Node
     public void ClientInteractionCompleted(NodePath targetPath, StringName actionId)
     {
         Node? target = ResolveAcknowledgedTarget(targetPath);
+        ClearPredictionOf(target, actionId);
         EmitSignal(SignalName.InteractionCompleted, target!, actionId);
     }
 
@@ -1092,6 +1098,7 @@ public partial class InteractionInteractor : Node
     public void ClientInteractionCancelled(NodePath targetPath, StringName actionId, string reason)
     {
         Node? target = ResolveAcknowledgedTarget(targetPath);
+        ClearPredictionOf(target, actionId);
         EmitSignal(SignalName.InteractionCancelled, target!, actionId, reason);
     }
 
@@ -1344,12 +1351,20 @@ public partial class InteractionInteractor : Node
         return true;
     }
 
-    // A request the authority refused leaves nothing running, so the optimistic bar and the sustained
-    // input it created must go with it. An automatic request is forgotten too, but the refused pair is
-    // remembered: forgetting it alone would re-send the very same request on the very next frame and
-    // turn one refusal into a flood. The pair is released as soon as the situation changes — focus
-    // moving, the action leaving the offered choices, or gameplay invalidating the target.
-    private void ReconcileRefusedRequest(InteractiveComponent? target, StringName actionId)
+    // A request the authority refused leaves nothing running, so the sustained input it created must go
+    // with it. The bar is not touched: it is armed by an acknowledged execution and no longer by the
+    // last request, so a refusal — pressing again on the very action one is already running — would
+    // otherwise erase the bar of an execution that is still running. An automatic request is forgotten
+    // too, but the refused pair is remembered: forgetting it alone would re-send the very same request
+    // on the very next frame and turn one refusal into a flood. The pair is released as soon as the
+    // situation changes — focus moving, the action leaving the offered choices, or gameplay
+    // invalidating the target.
+    // The bar exists exactly while the authority says its execution runs, now that the authority is
+    // what armed it: an execution ended before its deadline — gameplay completing it early, presence
+    // lost, a cancel nobody asked for — takes its bar with it instead of drawing down to an end that
+    // already happened. Matched on the pair, so a terminal acknowledgement arriving late never erases
+    // the bar of a newer execution.
+    private void ClearPredictionOf(Node? target, StringName actionId)
     {
         if (
             _prediction is PredictedExecution prediction
@@ -1359,7 +1374,10 @@ public partial class InteractionInteractor : Node
         {
             _prediction = null;
         }
+    }
 
+    private void ReconcileRefusedRequest(InteractiveComponent? target, StringName actionId)
+    {
         if (!IsUsable(target) || actionId is null || actionId.IsEmpty)
         {
             return;

@@ -873,15 +873,20 @@ public partial class InteractiveComponent : Node
         return index >= 0;
     }
 
+    // Zero is a valid answer and not a "leave it alone": it is what an execution only gameplay ends
+    // reports, and the reservation was built with no deadline anyway.
     private void ApplyRunningDurationCore(ulong executionId, float duration)
     {
-        int index = duration > 0.0f ? IndexOfExecution(executionId) : -1;
+        int index = IndexOfExecution(executionId);
         if (index < 0)
         {
             return;
         }
 
-        _activeExecutions[index] = _activeExecutions[index] with { Duration = duration };
+        _activeExecutions[index] = _activeExecutions[index] with
+        {
+            Duration = Mathf.Max(duration, 0.0f),
+        };
         UpdateExecutionProcessing();
     }
 
@@ -926,12 +931,15 @@ public partial class InteractiveComponent : Node
             return null;
         }
 
+        // Reserved without a deadline, because only the executor about to run knows whether there is
+        // one: the reservation exists so the executor may call back into a coherent target, and the
+        // clock is written right after, from the outcome it returned.
         InteractionExecution execution = new(
             _nextExecutionId++,
             interactor,
             action,
             action.GetConcurrencyGroup(),
-            Mathf.Max(action.Executor.ExpectedDuration, 0.0f),
+            0.0f,
             0.0f
         );
         _activeExecutions.Add(execution);
@@ -1113,12 +1121,9 @@ public partial class InteractiveComponent : Node
 
             case InteractionExecutionRunning running:
                 EmitSignal(SignalName.InteractionActionStarted, interactor, action);
-                // The executor may have taken over the clock, so the owner is told the duration the
-                // target actually kept rather than the estimate the reservation was built with.
-                NotifyRequesterStarted(
-                    dispatch.Execution,
-                    running.Duration > 0.0f ? running.Duration : dispatch.Execution.Duration
-                );
+                // The owner is told the deadline its command actually got, which is the first moment
+                // any peer knows it: the duration is a decision of the executor, taken here.
+                NotifyRequesterStarted(dispatch.Execution, Mathf.Max(running.Duration, 0.0f));
                 break;
 
             case InteractionExecutionRejected rejected:

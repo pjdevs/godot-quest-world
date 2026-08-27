@@ -14,18 +14,20 @@ internal sealed partial class TestScriptedExecutor : InteractionActionExecutor
 {
     public InteractionExecutionResult Result { get; set; } = new InteractionExecutionCompleted();
 
+    /// <summary>Seconds a scripted running outcome lasts, handed to <c>RunningFor</c> on execution.</summary>
     public float Duration { get; set; }
 
     public ulong LastExecutionId { get; private set; }
 
     public int ExecuteCount { get; private set; }
 
-    public override float ExpectedDuration => Duration;
-
     public override InteractionExecutionResult Execute(in InteractionExecutionContext context)
     {
         ExecuteCount++;
         LastExecutionId = context.ExecutionId;
-        return Result;
+
+        // A duration reaches the core only through the outcome, so a scripted running result is handed
+        // the scripted duration here — which is what any executor with an authored length now does.
+        return Result is InteractionExecutionRunning ? RunningFor(Duration) : Result;
     }
 }

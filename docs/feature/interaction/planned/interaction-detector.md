@@ -134,7 +134,7 @@ moitié ouverte revient à son état annulé si le joueur s'éloigne. C'est le c
 `LongActionExample`. Ce chantier ne fait donc pas qu'ajouter le LOS, il change ce comportement.
 
 Décidé : une propriété virtuelle `RequiresInteractorPresence` sur `InteractionActionExecutor`, dans la
-même veine qu'`ExpectedDuration` — seul l'executor sait si son exécution est un channel lié au joueur ou
+même veine que la durée retournée par `RunningFor` — seul l'executor sait si son exécution est un channel lié au joueur ou
 un processus lié au monde. Une action dont la Definition déclare `CancelOnInputReleased` l'implique
 d'office.
 

@@ -117,16 +117,22 @@ public sealed record InteractionExecutionCompleted();
 
 /// <summary>Indicates that the executor started an action that finishes later.</summary>
 /// <param name="Duration">
-/// Seconds the execution should last, or zero to keep the duration authored on the action.
+/// Seconds this execution should last, or zero to hold the reservation until gameplay ends it.
 /// </param>
 /// <remarks>
 /// The target keeps the execution reserved until its duration elapses, or until gameplay calls
 /// <c>InteractiveComponent.CompleteExecution</c> or <c>InteractiveComponent.CancelExecution</c> with
 /// the identifier carried by <see cref="InteractionExecutionContext.ExecutionId"/>.
 /// <para>
-/// Supplying a duration is how an executor that knows better than the scene takes over the clock:
-/// the length of the animation it just started, or a delay a skill shortened. It stays the target's
-/// clock either way, so the progress a player watches remains authoritative.
+/// This is the only place a duration enters the system. Nothing declares one next to the executor for
+/// the core to read, because a declared value and the value the code returns can disagree, and the one
+/// that runs is this one: an executor that wants its length authored exports it on itself and returns
+/// it here. It stays the target's clock either way, so the progress a player watches is authoritative.
+/// </para>
+/// <para>
+/// Return it through <c>RunningFor(seconds)</c> or <c>RunningUntilCompleted()</c> on
+/// <see cref="InteractionActionExecutor"/> rather than through this constructor: a bare zero at a
+/// return site does not say whether its author meant "no deadline" or forgot to compute one.
 /// </para>
 /// </remarks>
 public sealed record InteractionExecutionRunning(float Duration = 0.0f);

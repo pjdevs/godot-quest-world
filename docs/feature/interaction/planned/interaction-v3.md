@@ -303,9 +303,14 @@ Ce qui reste, et n’a pas été fait ici : les diagnostics de layers/masks/area
 
 ### P2 — cohérence d’API et packaging
 
-1. `InteractionExecutionRunning(0)` signifie « reprendre `ExpectedDuration` », tandis que `ExpectedDuration == 0` signifie « aucune deadline ». Des factories `RunningUntilCompleted()` et `RunningFor(seconds)` rendraient le contrat explicite.
-2. Des commentaires référencent encore une durée portée par l’action alors qu’elle appartient à l’executor.
-3. Le validator interdit deux actions partageant input et seuil alors que le resolver sait les départager par disponibilité, priorité puis identifiant.
+Les trois premiers points sont livrés ; le quatrième reste ouvert et n’a pas été demandé.
+
+1. ~~`InteractionExecutionRunning(0)` signifie « reprendre `ExpectedDuration` », tandis que `ExpectedDuration == 0` signifie « aucune deadline ».~~ Corrigé plus profondément que par des factories : `ExpectedDuration` est **supprimée**. Nommer les cas sans supprimer la double exposition laissait un nom qui mentait — `RunningUntilCompleted()` n’attend rien du tout dès qu’une estimation est déclarée — et surtout laissait la vraie faute en place : on peut author une valeur et retourner l’inverse, donc la prédiction client ne valait rien. La durée n’entre plus que par ce que l’executor retourne, `RunningFor(seconds)` ou `RunningUntilCompleted()`, `protected static` là où on écrit `return`, avec un seul sens pour le nombre. Une longueur réglable est un `[Export]` de l’executor passé à `RunningFor` — ce que `TransitionStateInteractionExecutor` fait déjà.
+
+   Coût assumé : la barre d’un client distant démarre sur l’acquittement `InteractionStarted`, qui portait déjà l’échéance sans que personne ne s’en serve, soit un RTT après la pression. Offline et listen host ne bougent pas. Deux corollaires tombent du fait que la barre appartient à une exécution acquittée et non à la dernière requête : un refus ne l’efface plus (rappuyer sur son propre hack en cours) et un acquittement terminal l’efface (annulation avant l’échéance). Prouvé par `ARemoteClientDrawsNoBarUntilTheAuthorityAnswers`, `ARejectionLeavesTheBarOfARunningExecutionAlone` et `AnExecutionEndedBeforeItsDeadlineTakesItsBarWithIt`. Quatre tests disparaissent avec la donnée qu’ils décrivaient : « l’executor reprend le chrono à la scène » n’est plus un cas, c’est le seul chemin.
+
+2. ~~Des commentaires référencent encore une durée portée par l’action alors qu’elle appartient à l’executor.~~ Deux occurrences : le paramètre `Duration` d’`InteractionExecutionRunning` (« la durée écrite sur l’action ») et un `cref` vers `InteractionAction.Duration`, membre supprimé depuis la V2 — qui ne cassait pas la génération, la doc XML n’étant pas produite. Le reste des mentions de durée désigne bien l’executor.
+3. ~~Le validator interdit deux actions partageant input et seuil alors que le resolver sait les départager par disponibilité, priorité puis identifiant.~~ La clé devient le triplet (input, seuil, `Priority`) : la disponibilité n’est pas connue à l’authoring, donc la priorité est le dernier discriminant qu’un auteur peut exprimer, et en dessous le resolver retombe sur l’ordre des identifiants, que personne n’a choisi. Le warning ne signale plus qu’un ex æquo complet, et dit quoi faire. Deux actions séparées par priorité sont désormais silencieuses — `InteractiveAcceptsTwoActionsOnOneTriggerSeparatedByPriority` ; le cas ex æquo garde son test.
 4. Le dossier `interaction_plugin` compile directement son bridge Stateful et dépend d’un shim union situé dans le projet. Si l’addon doit être distribué seul, ces dépendances doivent rejoindre leurs packages ou une intégration séparée.
 
 `SetState` retournant un booléen pauvre, le schéma permissif sur les valeurs reçues du serveur et les callbacks de fin sans résultat restent des angles à surveiller, mais pas des travaux V3 sans consommateur concret démontrant un échec.
@@ -396,8 +401,9 @@ Ce cas valide une frontière importante : Interaction suit qui tient une command
 1. ~~Ajouter le protocole client autoritaire et les tests serveur + deux clients, y compris les feedbacks Stateful et le late join.~~ Livré, P0 bis et P0 ter compris : le late join est distingué par `isSynchronization` et une déconnexion
    ne fuite plus de réservation. Reste l’exemple de dialogue autoritaire.
 2. ~~Corriger les hot paths des détecteurs et garder Area comme baseline de production.~~ Livré (P1) ; Area reste la baseline. Restent les diagnostics de layers/masks/areas et un profil dense réel.
-3. Ajouter des exemples corde, dialogue/vendor, machine multi-actions, noyau multi-états et générateur coop à points multiples.
-4. Réduire le coût d’authoring du coffre/porte minimal avec une scène exemple et, seulement si la duplication apparaît, un presenter d’animation stateful générique.
-5. Évaluer Effects, Proximity/Aim stabilisés et concurrence multi-contributeurs uniquement à partir d’un besoin de jeu réel.
+3. ~~Rendre explicites les trois intentions d’une exécution longue, les commentaires de durée et le faux positif du validator (P2.1 à P2.3).~~ Livré. Reste P2.4, le packaging de l’addon seul, non demandé.
+4. Ajouter des exemples corde, dialogue/vendor, machine multi-actions, noyau multi-états et générateur coop à points multiples.
+5. Réduire le coût d’authoring du coffre/porte minimal avec une scène exemple et, seulement si la duplication apparaît, un presenter d’animation stateful générique.
+6. Évaluer Effects, Proximity/Aim stabilisés et concurrence multi-contributeurs uniquement à partir d’un besoin de jeu réel.
 
 V3 est réussie si un coffre basique reste aussi direct que `commande serveur + feedback OnRep`, si le client demandeur connaît son lifecycle autoritaire, et si deux joueurs peuvent observer et disputer une action longue sans désynchronisation ni feedback dupliqué.
