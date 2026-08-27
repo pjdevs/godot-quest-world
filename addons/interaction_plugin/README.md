@@ -272,7 +272,7 @@ The target supplies `ActionPromptScene`, `IndicationScene`, and `BlockedIndicati
 | Validate sustained presence | Never | Once per running, presence-bound execution per process frame |
 | Render widgets | Every local presentation frame | Never on a dedicated server |
 
-Offline and listen-server play take the authoritative path directly. Active execution identifiers are transient and server-only; interaction execution state is not replicated. Client progress is a local prediction computed from `ComputeInteractionDuration` at the press and then recalibrated by the `InteractionStarted` acknowledgement, which carries the deadline the authority reserved — so the bar is immediate, and the authority still has the last word; persistent replicated world state belongs to `StatefulComponent`.
+Offline and listen-server play take the authoritative path directly. Active execution identifiers are transient and server-only; interaction execution state is not replicated. Client progress is a local prediction computed from `ComputeInteractionDuration` at the press and then recalibrated by the `InteractionStarted` acknowledgement, which carries the deadline the authority reserved and pushes it by the round trip the prediction measured — so the bar is immediate, ends when the completion actually arrives, and the authority still has the last word; persistent replicated world state belongs to `StatefulComponent`.
 
 ### Notifications
 

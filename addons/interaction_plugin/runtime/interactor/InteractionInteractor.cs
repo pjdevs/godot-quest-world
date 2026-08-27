@@ -1085,7 +1085,15 @@ public partial class InteractionInteractor : Node
         // The authority has the last word on the deadline, so this recalibrates the bar the client
         // predicted at the press: armed if the prediction declined to draw one, retimed if the query
         // answered something else on this peer, cleared when the execution turns out to have no
-        // deadline at all. Elapsed is kept, because the round trip did happen.
+        // deadline at all.
+        //
+        // Retiming also pushes the deadline by the time this acknowledgement took to arrive, which the
+        // prediction has been measuring since the press. Without it the bar would fill a whole round
+        // trip before anything happens — the authority started its own clock half a trip after the
+        // press, and its completion needs the other half to come back — so the player would watch a
+        // bar finish, vanish, and only then the door open. The compensation is free and self-tuning: it
+        // is the latency actually suffered, so a host adds nothing and a bad link adds what it costs.
+        // The bar therefore understates the real progress slightly in the middle, and ends on time.
         if (duration <= 0.0f)
         {
             _prediction = null;
@@ -1096,7 +1104,11 @@ public partial class InteractionInteractor : Node
             && predicted.ActionId == actionId
         )
         {
-            _prediction = predicted with { Duration = duration, ExecutionId = executionId };
+            _prediction = predicted with
+            {
+                Duration = duration + predicted.Elapsed,
+                ExecutionId = executionId,
+            };
         }
         else if (target is InteractiveComponent interactive)
         {

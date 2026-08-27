@@ -201,6 +201,40 @@ public sealed partial class InteractionAckTest
     }
 
     [TestCase]
+    public async Task ADelayedAcknowledgementPushesTheDeadlineByTheRoundTripItMeasured()
+    {
+        // The authority starts its clock half a round trip after the press and its completion needs the
+        // other half to come back, so a bar that ran from the press would finish a full trip early. The
+        // acknowledgement is replayed here after half a second to stand for a slow link: the prediction
+        // has been counting since the press, and that is exactly the delay to add.
+        AckWorld world = BuildWorld();
+        world.Executor.Duration = 1.0f;
+        world.Executor.Result = new InteractionExecutionRunning();
+        await world.Runner.SimulateFrames(1);
+        world.Focus();
+        world.Interactor.TryStartInteractionInput(InteractInput);
+        await world.Runner.SimulateFrames(30);
+
+        AssertThat(world.Interactor.TryGetExecutionProgress(out _, out float uncompensated))
+            .IsTrue();
+
+        world.Interactor.ClientInteractionStarted(
+            world.Interactive.GetPath(),
+            world.Definition.Id,
+            world.Executor.LastExecutionId,
+            1.0f
+        );
+
+        AssertThat(world.Interactor.TryGetExecutionProgress(out _, out float compensated)).IsTrue();
+        // No frame ran between the two reads, so the whole difference is the deadline moving out — by
+        // exactly the elapsed time the prediction had measured. With a predicted deadline of one
+        // second the elapsed time *is* the progress, so the compensated progress must be e / (1 + e),
+        // an identity that depends on no frame rate at all.
+        AssertThat(compensated < uncompensated).IsTrue();
+        AssertThat(compensated).IsEqualApprox(uncompensated / (1.0f + uncompensated), 0.0005f);
+    }
+
+    [TestCase]
     public async Task AnExecutionEndedBeforeItsDeadlineTakesItsBarWithIt()
     {
         // Nothing local ends here: the input was never sustained, so only the terminal acknowledgement
