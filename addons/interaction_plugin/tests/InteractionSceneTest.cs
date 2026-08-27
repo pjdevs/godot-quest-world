@@ -598,7 +598,7 @@ public sealed partial class InteractionSceneTest
     )
     {
         ((SetStateInteractionExecutor)action.Executor!).Stateful = wallState;
-        NodePath statefulPath = new("../../LeverWall/StatefulComponent");
+        NodePath statefulPath = new("../../../LeverWall/StatefulComponent");
         action.Rules.Add(
             new StatefulStateInteractionRule
             {

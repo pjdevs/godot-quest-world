@@ -545,6 +545,22 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public async Task StatefulRuleResolvesItsPathRelativeToTheOwningAction()
+    {
+        DoorWorld door = BuildDoorWorld();
+        StatefulStateInteractionRule rule = (StatefulStateInteractionRule)door.Open.Rules[0];
+        rule.StatefulPath = new NodePath("../../StatefulComponent");
+        await door.Runner.SimulateFrames(1);
+
+        InteractionAvailability availability = door.Interactive.EvaluateAvailability(
+            door.Interactor,
+            door.Open
+        );
+
+        AssertThat(availability is InteractionAllowed).IsTrue();
+    }
+
+    [TestCase]
     public async Task ARunningExecutionRefusesTheSameInteractorWithItsOwnReason()
     {
         TestWorld testWorld = BuildWorld();
@@ -1341,7 +1357,7 @@ public sealed partial class InteractionBehaviorTest
         door.Open.Rules.Add(
             new StatefulStateInteractionRule
             {
-                StatefulPath = new NodePath("../StatefulComponent"),
+                StatefulPath = new NodePath("../../StatefulComponent"),
                 ExpectedStates = States("closed", "opening"),
             }
         );
@@ -1369,7 +1385,7 @@ public sealed partial class InteractionBehaviorTest
         door.Open.Rules.Add(
             new StatefulStateInteractionRule
             {
-                StatefulPath = new NodePath("../StatefulComponent"),
+                StatefulPath = new NodePath("../../StatefulComponent"),
                 ExpectedStates = States("closed"),
                 MismatchAvailability = InteractionUnavailableKind.Blocked,
                 BlockReason = "The door is moving.",
@@ -1393,7 +1409,7 @@ public sealed partial class InteractionBehaviorTest
         door.Open.Rules.Add(
             new StatefulStateInteractionRule
             {
-                StatefulPath = new NodePath("../StatefulComponent"),
+                StatefulPath = new NodePath("../../StatefulComponent"),
                 ExpectedStates = States("jammed"),
                 Invert = true,
             }
@@ -1420,12 +1436,12 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
             .IsEqual("Interaction is not configured.");
 
-        rule.StatefulPath = new NodePath("../MissingStateful");
+        rule.StatefulPath = new NodePath("../../MissingStateful");
 
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
             .IsEqual("Interaction is not configured.");
 
-        rule.StatefulPath = new NodePath("../StatefulComponent");
+        rule.StatefulPath = new NodePath("../../StatefulComponent");
         rule.ExpectedStates.Clear();
 
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
@@ -1449,7 +1465,7 @@ public sealed partial class InteractionBehaviorTest
         door.Open.Rules.Add(
             new StatefulStateInteractionRule
             {
-                StatefulPath = new NodePath("../../LeverWall/StatefulComponent"),
+                StatefulPath = new NodePath("../../../LeverWall/StatefulComponent"),
                 ExpectedStates = States("lowered"),
             }
         );
@@ -2299,7 +2315,7 @@ public sealed partial class InteractionBehaviorTest
     {
         StatefulStateInteractionRule rule = new()
         {
-            StatefulPath = new NodePath("../StatefulComponent"),
+            StatefulPath = new NodePath("../../StatefulComponent"),
             MismatchAvailability = InteractionUnavailableKind.Blocked,
             BlockReason = blockReason,
         };
@@ -2314,7 +2330,7 @@ public sealed partial class InteractionBehaviorTest
     private static StatefulStateInteractionRule DoorStateRule(string expectedState) =>
         new()
         {
-            StatefulPath = new NodePath("../StatefulComponent"),
+            StatefulPath = new NodePath("../../StatefulComponent"),
             ExpectedStates = { new StringName(expectedState) },
         };
 

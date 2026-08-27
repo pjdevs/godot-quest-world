@@ -1,0 +1,219 @@
+[gd_scene format=3 uid="uid://biblv21jbgvwk"]
+
+[ext_resource type="Script" uid="uid://1pl03uoo7gne" path="res://quest_world/interactibles/door/Door.cs" id="1_6xdtw"]
+[ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="1_vodtj"]
+[ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn" id="2_wx55h"]
+[ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="3_llf4b"]
+[ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="4_adxal"]
+[ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_adxal"]
+[ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_bhqfo"]
+[ext_resource type="Script" uid="uid://cpbt7qansaxqx" path="res://addons/stateful_plugin/runtime/StatefulComponent.cs" id="7_bhqfo"]
+[ext_resource type="Script" uid="uid://bw02qn7pyxpy4" path="res://addons/interaction_plugin/integration/stateful/SetStateInteractionExecutor.cs" id="7_wx55h"]
+[ext_resource type="Script" uid="uid://bncq4bgetbnu7" path="res://addons/stateful_plugin/runtime/StateSchema.cs" id="8_j1fib"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_mokd0"]
+size = Vector3(1, 1.9, 0.1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ii2gm"]
+albedo_color = Color(0.67299354, 0.35568476, 0.16579637, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_gfqkc"]
+size = Vector3(0.2, 0.1, 0.15)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1i5vy"]
+albedo_color = Color(1, 1, 0.43529412, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_qo4o4"]
+size = Vector3(1.2, 2, 0.2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_vodtj"]
+size = Vector3(1, 2, 0.2)
+
+[sub_resource type="Animation" id="Animation_qkbub"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Pivot:rotation")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector3(0, 0, 0)]
+}
+
+[sub_resource type="Animation" id="Animation_6xdtw"]
+resource_name = "close"
+length = 0.5
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Pivot:rotation")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.5),
+"transitions": PackedFloat32Array(0.3186403, 2.5491211),
+"update": 0,
+"values": [Vector3(0, -1.2217305, 0), Vector3(0, 0, 0)]
+}
+
+[sub_resource type="Animation" id="Animation_wx55h"]
+resource_name = "open"
+length = 0.5
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Pivot:rotation")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.5),
+"transitions": PackedFloat32Array(0.25, 1),
+"update": 0,
+"values": [Vector3(0, 0, 0), Vector3(0, -1.2217305, 0)]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_6xdtw"]
+_data = {
+&"RESET": SubResource("Animation_qkbub"),
+&"close": SubResource("Animation_6xdtw"),
+&"open": SubResource("Animation_wx55h")
+}
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_mokd0"]
+size = Vector3(4, 2, 4)
+
+[sub_resource type="Resource" id="Resource_mokd0"]
+script = ExtResource("4_adxal")
+Id = &"open"
+Label = "Open"
+Description = "Open"
+metadata/_custom_type_script = "uid://bqs31n67gwjq1"
+
+[sub_resource type="Resource" id="Resource_ii2gm"]
+script = ExtResource("6_bhqfo")
+StatefulPath = NodePath("../../StatefulComponent")
+ExpectedStates = Array[StringName]([&"closed"])
+BlockReason = ""
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
+[sub_resource type="Resource" id="Resource_wx55h"]
+script = ExtResource("4_adxal")
+Id = &"close"
+Label = "Close"
+Description = "Close"
+metadata/_custom_type_script = "uid://bqs31n67gwjq1"
+
+[sub_resource type="Resource" id="Resource_6xdtw"]
+script = ExtResource("6_bhqfo")
+StatefulPath = NodePath("../../StatefulComponent")
+ExpectedStates = Array[StringName]([&"opened"])
+BlockReason = ""
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
+[sub_resource type="Resource" id="Resource_j1fib"]
+script = ExtResource("8_j1fib")
+States = Array[StringName]([&"opened", &"closed"])
+metadata/_custom_type_script = "uid://bncq4bgetbnu7"
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_6xdtw"]
+properties/0/path = NodePath(".:ReplicatedState")
+properties/0/spawn = true
+properties/0/replication_mode = 2
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_6xdtw"]
+size = Vector3(1.2, 2, 0.2)
+
+[node name="Door" type="Node3D" unique_id=54710487 node_paths=PackedStringArray("StatefulComponent", "AnimationPlayer", "Collision")]
+script = ExtResource("1_6xdtw")
+StatefulComponent = NodePath("Interaction/StatefulComponent")
+AnimationPlayer = NodePath("Visual/AnimationPlayer")
+Collision = NodePath("Collision/CollisionShape")
+
+[node name="Visual" type="Node3D" parent="." unique_id=1194112790]
+
+[node name="Pivot" type="Node3D" parent="Visual" unique_id=1620712636]
+transform = Transform3D(0.99999994, 0, 0, 0, 1, 0, 0, 0, 0.99999994, 0.5, 0, 0)
+
+[node name="DoorMesh" type="CSGMesh3D" parent="Visual/Pivot" unique_id=763517561]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0.95, 0)
+mesh = SubResource("BoxMesh_mokd0")
+material = SubResource("StandardMaterial3D_ii2gm")
+
+[node name="HandleMesh" type="CSGMesh3D" parent="Visual/Pivot/DoorMesh" unique_id=208728172]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.24409503, 0.028143167, 0)
+mesh = SubResource("BoxMesh_gfqkc")
+material = SubResource("StandardMaterial3D_1i5vy")
+
+[node name="DialMesh" type="CSGMesh3D" parent="Visual" unique_id=1292967751]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+mesh = SubResource("BoxMesh_qo4o4")
+
+[node name="DialMesh" type="CSGMesh3D" parent="Visual/DialMesh" unique_id=1282417457]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+operation = 2
+mesh = SubResource("BoxMesh_vodtj")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Visual" unique_id=1520693444]
+libraries/ = SubResource("AnimationLibrary_6xdtw")
+
+[node name="Interaction" type="Node3D" parent="." unique_id=1276253519]
+
+[node name="InteractionArea" type="Area3D" parent="Interaction" unique_id=1163350443]
+
+[node name="InteractionAreaShape" type="CollisionShape3D" parent="Interaction/InteractionArea" unique_id=1310880081]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+shape = SubResource("BoxShape3D_mokd0")
+
+[node name="InteractiveComponent" type="Node" parent="Interaction" unique_id=1375300189 node_paths=PackedStringArray("InteractionArea", "InteractionAnchor", "Actions")]
+script = ExtResource("1_vodtj")
+InteractionArea = NodePath("../InteractionArea")
+InteractionAnchor = NodePath("../../Visual/Pivot/DoorMesh/HandleMesh")
+DisplayName = "Door"
+ActionPromptScene = ExtResource("2_wx55h")
+Actions = [NodePath("OpenAction"), NodePath("CloseAction")]
+metadata/_custom_type_script = "uid://dip8gc8uyuju"
+
+[node name="OpenAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=395259595 node_paths=PackedStringArray("Executor")]
+script = ExtResource("3_llf4b")
+Definition = SubResource("Resource_mokd0")
+Executor = NodePath("OpenExecutor")
+Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_ii2gm")])
+metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+
+[node name="OpenExecutor" type="Node" parent="Interaction/InteractiveComponent/OpenAction" unique_id=1352586469 node_paths=PackedStringArray("Stateful")]
+script = ExtResource("7_wx55h")
+Stateful = NodePath("../../../StatefulComponent")
+TargetState = &"opened"
+metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
+
+[node name="CloseAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=1558009407 node_paths=PackedStringArray("Executor")]
+script = ExtResource("3_llf4b")
+Definition = SubResource("Resource_wx55h")
+Executor = NodePath("CloseExecutor")
+Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_6xdtw")])
+metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+
+[node name="CloseExecutor" type="Node" parent="Interaction/InteractiveComponent/CloseAction" unique_id=1929747493 node_paths=PackedStringArray("Stateful")]
+script = ExtResource("7_wx55h")
+Stateful = NodePath("../../../StatefulComponent")
+TargetState = &"closed"
+metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
+
+[node name="StatefulComponent" type="Node" parent="Interaction" unique_id=957633712]
+script = ExtResource("7_bhqfo")
+Schema = SubResource("Resource_j1fib")
+InitialState = &"closed"
+metadata/_custom_type_script = "uid://cpbt7qansaxqx"
+
+[node name="StateSynchronizer" type="MultiplayerSynchronizer" parent="Interaction/StatefulComponent" unique_id=1268824207]
+replication_config = SubResource("SceneReplicationConfig_6xdtw")
+
+[node name="Collision" type="StaticBody3D" parent="." unique_id=483769844]
+
+[node name="CollisionShape" type="CollisionShape3D" parent="Collision" unique_id=1393553198]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+shape = SubResource("BoxShape3D_6xdtw")

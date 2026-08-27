@@ -1,6 +1,7 @@
 namespace QuestWorld.Tests;
 
 using System.Linq;
+using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
 using InteractionPlugin.Editor;
@@ -225,7 +226,7 @@ public sealed partial class InteractionConfigurationTest
         StatefulStateInteractionRule ready = rules[1].As<StatefulStateInteractionRule>();
 
         AssertThat(rules.Count).IsEqual(2);
-        AssertThat(phase.StatefulPath.ToString()).IsEqual("../../LeverWall/StatefulComponent");
+        AssertThat(phase.StatefulPath.ToString()).IsEqual("../../../LeverWall/StatefulComponent");
         AssertThat(phase.ExpectedStates.Count).IsEqual(2);
         AssertThat(phase.MismatchAvailability).IsEqual(InteractionUnavailableKind.Hidden);
         AssertThat(ready.ExpectedStates.Count).IsEqual(1);
@@ -292,6 +293,41 @@ public sealed partial class InteractionConfigurationTest
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
         AssertThat(warnings.Contains("Actions[0] has no Definition.")).IsTrue();
+    }
+
+    [TestCase]
+    public async Task InteractiveValidatorResolvesActionStateRulesFromTheirAction()
+    {
+        Node3D root = new();
+        Node3D owner = new();
+        Area3D area = new() { Name = "InteractionArea" };
+        StatefulComponent stateful = new() { Name = "StatefulComponent" };
+        InteractiveComponent interactive = new()
+        {
+            Name = "Interactive",
+            InteractionArea = area,
+            InteractionAnchor = owner,
+        };
+        InteractionAction action = NewAction(new InteractionActionDefinition { Id = "open" });
+        action.Rules.Add(
+            new StatefulStateInteractionRule
+            {
+                StatefulPath = new NodePath("../../StatefulComponent"),
+                ExpectedStates = { new StringName("closed") },
+            }
+        );
+        interactive.Actions.Add(action);
+        owner.AddChild(area);
+        owner.AddChild(stateful);
+        owner.AddChild(interactive);
+        interactive.AddChild(action);
+        root.AddChild(owner);
+        ISceneRunner runner = ISceneRunner.Load(root);
+        await runner.SimulateFrames(1);
+
+        string[] warnings = InteractionValidator.Validate(interactive).ToArray();
+
+        AssertThat(warnings.Any(warning => warning.Contains("does not resolve"))).IsFalse();
     }
 
     [TestCase]

@@ -6,6 +6,12 @@ Addon Godot C# réutilisable pour les interactions offline et multiplayer high-l
 
 Le code runtime et ses contrats sont dans le namespace `QuestWorld.Interaction`.
 
+### NodePath des rules d'etat
+
+`StatefulPath` est resolu relativement a l'`InteractionAction` proprietaire de la rule. Le selecteur
+de noeud Godot et le runtime utilisent ainsi le meme point de depart ; un chemin choisi depuis l'action
+peut etre conserve tel quel dans la scene.
+
 ## Delivered V1
 
 L’addon autonome est sous [`addons/interaction_plugin`](../../addons/interaction_plugin) et ne crée ni autoload ni action Input Map.
@@ -153,7 +159,7 @@ Le monde et l'interaction se rejoignent par deux primitives génériques, sans q
 - Les deux primitives vivent dans [`addons/interaction_plugin/integration/stateful`](../../../addons/interaction_plugin/integration/stateful), seul endroit du plugin qui référence `stateful_plugin`. La dépendance est à sens unique et localisée : `StatefulComponent` reste sans aucune notion d'interaction (§4), et supprimer ce dossier suffit à retirer l'intégration.
 - `InteractionUnavailableKind` (`Hidden | Blocked`) est ajouté au core parce qu'une union n'est pas exportable dans l'Inspector : une rule qui laisse choisir son refus expose cet enum, et `ToAvailability(reason)` le convertit en `InteractionAvailability`. L'enum ne déclare volontairement pas `Allowed` — une rule qui choisirait « autorisé » en cas de mismatch n'a pas de condition.
 - `StatefulStateInteractionRule` (`Resource`) lit un `StatefulComponent` et n'écrit jamais. `ExpectedStates` est une **liste** : plusieurs valeurs décrivent une *phase* et non un instant (`closed` + `opening` = « ouvrir est encore le choix pertinent »). `Invert` inverse la condition, `MismatchAvailability` choisit `Hidden` ou `Blocked`, et `BlockReason` porte la raison affichée.
-- `StatefulPath` est résolu **relativement à l'`InteractiveComponent`**, ce qui permet aussi de lire l'état d'un autre objet. Un path vide, non résolvable ou une liste `ExpectedStates` vide sont des erreurs de configuration : la rule renvoie `Blocked("Interaction is not configured.")`, jamais `Allowed`. Le diagnostic editor correspondant arrive en Task 11.
+- `StatefulPath` est résolu **relativement à l'`InteractionAction` qui possède la rule**, ce qui aligne le runtime sur le contexte du sélecteur NodePath de l'Inspector et permet aussi de lire l'état d'un autre objet. Un path vide, non résolvable ou une liste `ExpectedStates` vide sont des erreurs de configuration : la rule renvoie `Blocked("Interaction is not configured.")`, jamais `Allowed`. Le diagnostic editor correspondant arrive en Task 11.
 - Deux rules ordonnées décrivent complètement une action, et c'est ce qui rend la liste `ExpectedStates` nécessaire :
 
   ```text
@@ -208,11 +214,12 @@ Restaient volontairement absents de cette étape : l'`ExecutionId`, `Concurrency
   input, `ConcurrencyGroup` vide, `StatefulPath` vide ou non résolvable, `ExpectedStates` vide, état
   absent du `StateSchema` assigné (rules et executors d'état), et `Duration`/`HoldThreshold` négatifs.
   `InputActionName` est aussi confronté à l'`InputMap` du projet.
-- Le `StatefulPath` d'une `StatefulStateInteractionRule` est **résolu depuis l'`InteractiveComponent`**,
-  jamais depuis l'action ni depuis la rule inspectée seule : le path est relatif à l'interactive (§Task 8),
-  donc l'interactive est le seul objet capable de dire qu'il ne pointe sur rien. Inspecter la rule ou
-  l'action isolée ne signale que ce qui est vérifiable sans arbre (path vide, liste vide). La résolution
-  est également gardée par `IsInsideTree()`, ce qui évite un faux positif hors scène éditée.
+- Le `StatefulPath` d'une `StatefulStateInteractionRule` est **résolu depuis l'`InteractionAction` qui
+  possède la rule**, jamais depuis l'interactive ni depuis la rule inspectée seule : le path est relatif
+  à l'action (§Task 8), donc l'action est le seul objet capable de dire qu'il ne pointe sur rien.
+  Inspecter la rule ou l'action isolée ne signale que ce qui est vérifiable sans arbre (path vide, liste
+  vide). La résolution est également gardée par `IsInsideTree()`, ce qui évite un faux positif hors scène
+  éditée.
 - Les diagnostics croisés (id dupliqué, conflit d'input) vivent sur l'`InteractiveComponent` parce
   qu'une action seule ne connaît pas ses voisines. Une action dont la `Definition` est absente est
   signalée puis ignorée pour ces croisements, afin de ne pas produire une cascade de warnings dérivés.

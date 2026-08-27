@@ -987,7 +987,7 @@ public sealed partial class InteractionNetworkTest
         action.Rules.Add(
             new StatefulStateInteractionRule
             {
-                StatefulPath = new NodePath("../StatefulComponent"),
+                StatefulPath = new NodePath("../../StatefulComponent"),
                 ExpectedStates = new Godot.Collections.Array<StringName> { IdleState },
                 MismatchAvailability = InteractionUnavailableKind.Blocked,
                 BlockReason = "Somebody is already using this.",

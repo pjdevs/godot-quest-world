@@ -13,10 +13,10 @@ namespace QuestWorld.Interaction.Integration.Stateful;
 /// completely, for example a first rule hiding <c>Open</c> outside the closed and opening phases, and
 /// a second one blocking it with a reason while the door is still opening.
 /// <para>
-/// <see cref="StatefulPath"/> is resolved relative to the <c>InteractiveComponent</c> owning the
-/// action, so a rule may also read the state of another object. Because rules are shareable
-/// resources, a path crossing scene boundaries belongs to the level that wires both objects
-/// together, exactly like the node reference of an executor.
+/// <see cref="StatefulPath"/> is resolved relative to the <c>InteractionAction</c> owning the rule,
+/// so a rule may also read the state of another object. Because rules are shareable resources, a
+/// path crossing scene boundaries belongs to the level that wires both objects together, exactly
+/// like the node reference of an executor.
 /// </para>
 /// </remarks>
 [GlobalClass]
@@ -24,7 +24,7 @@ public partial class StatefulStateInteractionRule : InteractionRule
 {
     private const string NotConfiguredReason = "Interaction is not configured.";
 
-    /// <summary>Gets or sets the path to the observed component, relative to the interactive.</summary>
+    /// <summary>Gets or sets the path to the observed component, relative to the owning action.</summary>
     [Export]
     public NodePath StatefulPath { get; set; } = new();
 
@@ -73,11 +73,11 @@ public partial class StatefulStateInteractionRule : InteractionRule
 
     private StatefulComponent? ResolveStateful(in InteractionContext context)
     {
-        if (StatefulPath.IsEmpty || context.Interactive is null)
+        if (StatefulPath.IsEmpty || context.Action is null)
         {
             return null;
         }
 
-        return context.Interactive.GetNodeOrNull<StatefulComponent>(StatefulPath);
+        return context.Action.GetNodeOrNull<StatefulComponent>(StatefulPath);
     }
 }

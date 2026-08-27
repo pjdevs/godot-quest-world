@@ -137,7 +137,7 @@ public static class InteractionValidator
             if (actions[index].AsGodotObject() is not GodotObject action)
                 continue;
 
-            foreach (string warning in ValidateRules(action, obj, "Rules"))
+            foreach (string warning in ValidateRules(action, action, "Rules"))
             {
                 yield return $"Actions[{index}]: {warning}";
             }
@@ -195,7 +195,7 @@ public static class InteractionValidator
         if (GetName(obj, "ConcurrencyGroup").Length == 0)
             yield return "ConcurrencyGroup must not be empty.";
 
-        // The rule paths are relative to the interactive, which only that one can resolve.
+        // The rule paths are relative to the owning action, which only that one can resolve.
         foreach (string warning in ValidateRules(obj, null, "Rules"))
         {
             yield return warning;
@@ -273,10 +273,10 @@ public static class InteractionValidator
             yield return "ExpectedStates must declare at least one state.";
     }
 
-    /// <summary>Validates a rule array of <paramref name="owner"/> against the interactive scene.</summary>
+    /// <summary>Validates a rule array of <paramref name="owner"/> against its resolution root.</summary>
     private static IEnumerable<string> ValidateRules(
         GodotObject owner,
-        GodotObject? interactive,
+        GodotObject? resolutionRoot,
         StringName propertyName
     )
     {
@@ -307,8 +307,8 @@ public static class InteractionValidator
             if (expected.Count == 0)
                 yield return $"{prefix}: ExpectedStates must declare at least one state.";
 
-            // Only the interactive resolves the path; a rule inspected alone cannot.
-            if (interactive is not Node node || !node.IsInsideTree())
+            // Only the owning node resolves the path; a rule inspected alone cannot.
+            if (resolutionRoot is not Node node || !node.IsInsideTree())
                 continue;
 
             Node? target = node.GetNodeOrNull(path);
