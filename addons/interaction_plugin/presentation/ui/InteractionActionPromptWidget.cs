@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 
 namespace QuestWorld.Interaction.Presentation.UI;
@@ -5,27 +6,56 @@ namespace QuestWorld.Interaction.Presentation.UI;
 /// <summary>Default prompt of one action, showing its input when allowed or its reason when blocked.</summary>
 public partial class InteractionActionPromptWidget : PanelContainer, IInteractionActionWidget
 {
-    private Label? _label;
+    [Export]
+    public Label? ActionNameLabel { get; set; }
 
-    /// <summary>Godot callback that resolves or creates the child label used by the default widget.</summary>
-    public override void _Ready()
-    {
-        _label = GetNodeOrNull<Label>("Label");
-        if (_label is null)
-        {
-            _label = new Label { Name = "Label" };
-            AddChild(_label);
-        }
-    }
+    [Export]
+    public Label? ActionKeyLabel { get; set; }
+
+    [Export]
+    public ProgressBar? ActionProgress { get; set; }
+
+    public override void _Ready() { }
 
     /// <inheritdoc />
     public void Bind(in InteractionActionPresentation presentation)
     {
-        if (_label is not null)
+        string actionKey =
+            InputMap.ActionGetEvents(presentation.InputActionName).FirstOrDefault()?.AsText()
+            ?? "???";
+        ActionKeyLabel?.SetText($"{actionKey}");
+
+        if (presentation.IsAllowed)
         {
-            _label.Text = presentation.IsAllowed
-                ? $"[{presentation.InputActionName}] {presentation.Label}"
-                : $"{presentation.Label}: {presentation.BlockReason}";
+            ActionNameLabel?.SetText($"{presentation.Label}");
+            ActionNameLabel?.RemoveThemeColorOverride("font_color");
+            ActionKeyLabel?.RemoveThemeColorOverride("font_color");
+
+            if (presentation.HoldProgress.HasValue)
+            {
+                ActionProgress?.Visible = true;
+                ActionProgress?.SetValue(presentation.HoldProgress.Value);
+            }
+            else
+            {
+                ActionProgress?.Visible = false;
+            }
+        }
+        else
+        {
+            ActionNameLabel?.SetText($"{presentation.Label}: {presentation.BlockReason}");
+            ActionNameLabel?.AddThemeColorOverride("font_color", Colors.Red);
+            ActionKeyLabel?.AddThemeColorOverride("font_color", Colors.Red);
+
+            if (presentation.HoldProgress.HasValue)
+            {
+                ActionProgress?.Visible = true;
+                ActionProgress?.SetValue(presentation.HoldProgress.Value);
+            }
+            else
+            {
+                ActionProgress?.Visible = false;
+            }
         }
     }
 }

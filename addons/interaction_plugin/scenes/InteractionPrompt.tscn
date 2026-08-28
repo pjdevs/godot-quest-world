@@ -2,18 +2,33 @@
 
 [ext_resource type="Script" uid="uid://divw6smasctp7" path="res://addons/interaction_plugin/presentation/ui/InteractionPromptWidget.cs" id="1_prompt"]
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kjfq5"]
+content_margin_left = 5.0
+content_margin_top = 5.0
+content_margin_right = 5.0
+content_margin_bottom = 5.0
+bg_color = Color(0, 0, 0, 0.3137255)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.43137255, 0.6039216, 0.8784314, 1)
+
 [node name="InteractionPrompt" type="PanelContainer" unique_id=1048885657]
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_kjfq5")
 script = ExtResource("1_prompt")
-mouse_filter = 2
 
-[node name="Content" type="VBoxContainer" parent="."]
+[node name="Content" type="VBoxContainer" parent="." unique_id=72152271]
 layout_mode = 2
 mouse_filter = 2
 
-[node name="Label" type="Label" parent="Content"]
+[node name="Label" type="Label" parent="Content" unique_id=1998039079]
 layout_mode = 2
-text = "Sample object name"
+text = "Door"
 
-[node name="Actions" type="VBoxContainer" parent="Content"]
+[node name="Actions" type="VBoxContainer" parent="Content" unique_id=1757120460]
 layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 0
 mouse_filter = 2
