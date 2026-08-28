@@ -539,6 +539,14 @@ destinataire encore joignable. Voir « P0 ter » dans [`interaction-v3.md`](plan
 Le harnais s'auto-garde : il assert que les trois pairs sont bien distincts et que l'executor n'a tourné
 que sur l'autorité, sans quoi la suite dégénérerait silencieusement en appels locaux.
 
+## Placement des ancres et LOS
+
+`InteractionAnchor` doit rester au-dessus du sol et hors de toute géométrie portant la layer
+d’occlusion. Le raycast LOS part de la vue vers cette ancre ; une ancre légèrement enterrée peut donc
+faire classer une cible `None`, avant toute création de widget. En cas d’absence complète d’UI, le
+diagnostic doit suivre la chaîne `Area3D → candidat → LOS → tier → signal → widget`. Voir aussi la
+[mémoire dédiée au placement des ancres](../../memory/interaction-los-anchor-must-clear-ground.md).
+
 ## Assumptions and deferred work
 
 - Lorsqu'une session réseau se termine, `InteractionInteractor.IsLocallyControlled` réutilise son dernier résultat connu lorsque `MultiplayerPeer` devient nul ; le mode offline conserve ainsi le contrôle local sans appeler `GetUniqueId()` hors réseau.
