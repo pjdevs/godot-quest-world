@@ -33,6 +33,9 @@ size = Vector3(10, 10, 10)
 
 [node name="Button" type="Node3D" unique_id=1874486156]
 
+[node name="InteractionAnchor" type="Node3D" parent="." unique_id=1959836575]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14235857, 0)
+
 [node name="ButtonModel" type="MeshInstance3D" parent="." unique_id=684315169]
 mesh = SubResource("BoxMesh_mokd0")
 surface_material_override/0 = SubResource("StandardMaterial3D_f0qss")
@@ -41,7 +44,7 @@ surface_material_override/0 = SubResource("StandardMaterial3D_f0qss")
 script = ExtResource("1_lq42h")
 InteractionArea = NodePath("../InteractionArea")
 IndicationArea = NodePath("../IndicationArea")
-InteractionAnchor = NodePath("../ButtonModel")
+InteractionAnchor = NodePath("../InteractionAnchor")
 DisplayName = "Wall control"
 ActionPromptScene = ExtResource("2_2ck07")
 IndicationScene = ExtResource("3_6nsmd")

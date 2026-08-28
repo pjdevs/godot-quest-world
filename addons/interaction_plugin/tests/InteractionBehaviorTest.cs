@@ -1118,6 +1118,7 @@ public sealed partial class InteractionBehaviorTest
             startedActions.Add(action.Definition!.Id.ToString());
 
         AssertThat(door.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+        AssertThat(door.Interactor.TryEndInteractionInput(InteractInput)).IsTrue();
         door.State.SetState(new StringName("open"));
         AssertThat(door.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
@@ -1851,6 +1852,39 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public async Task AConsumedUnlockHoldCannotOpenTheDoorBeforeRelease()
+    {
+        DoorWorld door = BuildDoorWorld();
+        AssertThat(door.State.SetState(new StringName("locked"))).IsTrue();
+        InteractionAction unlock = CreateAction("unlock", DoorStateRule("locked"));
+        unlock.Definition!.HoldThreshold = 0.001f;
+        BindSetStateExecutor(unlock, door.State, "closed");
+        AddAction(door.Interactive, unlock);
+        await door.Runner.SimulateFrames(1);
+        door.Detect(door.Interactive);
+
+        AssertThat(door.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+        for (int frame = 0; frame < 10 && door.State.State.ToString() != "closed"; frame++)
+        {
+            await door.Runner.SimulateFrames(1);
+        }
+
+        AssertThat(door.State.State.ToString()).IsEqual("closed");
+        door.Detector.ClearDetection(door.Interactive);
+        door.Interactor.RecalculateFocus();
+        AssertThat(new List<StringName>(door.Interactor.GetRelevantInputs()).Contains(InteractInput))
+            .IsTrue();
+        door.Detect(door.Interactive);
+
+        AssertThat(door.Interactor.TryStartInteractionInput(InteractInput)).IsFalse();
+        AssertThat(ExecutorOf(door.Open).ExecuteCount).IsEqual(0);
+
+        AssertThat(door.Interactor.TryEndInteractionInput(InteractInput)).IsTrue();
+        AssertThat(door.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
+        AssertThat(ExecutorOf(door.Open).ExecuteCount).IsEqual(1);
+    }
+
+    [TestCase]
     public async Task ReleasingBeforeTheThresholdSelectsTheActionThatAsksForNoHold()
     {
         TestWorld testWorld = BuildWorld();
@@ -1955,6 +1989,32 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(PresentedAction(presentation, "activate").HoldProgress.HasValue).IsFalse();
         AssertThat(PresentedAction(presentation, "activate").HoldElapsed.HasValue).IsFalse();
         AssertThat(PresentedAction(presentation, "force").ExecutionProgress.HasValue).IsFalse();
+    }
+
+    [TestCase]
+    public async Task IdlePresentationDescribesHoldAndTimedExecutionCapabilities()
+    {
+        TestWorld testWorld = BuildWorld();
+        testWorld.Action.Definition!.HoldThreshold = 2.0f;
+        ActivationExecutorOf(testWorld.Action).Duration = 3.0f;
+        InteractionAction inspect = CreateAction("inspect");
+        AddAction(testWorld.Interactive, inspect);
+        testWorld.Detect(testWorld.Interactive);
+        await testWorld.Runner.SimulateFrames(1);
+
+        InteractionTargetPresentation presentation = testWorld.Interactive.GetPresentation(
+            testWorld.Interactor,
+            true
+        );
+        InteractionActionPresentation activation = PresentedAction(presentation, "activate");
+        InteractionActionPresentation inspection = PresentedAction(presentation, "inspect");
+
+        AssertThat(activation.IsHoldable).IsTrue();
+        AssertThat(activation.HoldProgress.HasValue).IsFalse();
+        AssertThat(activation.HasTimedExecution).IsTrue();
+        AssertThat(activation.ExecutionProgress.HasValue).IsFalse();
+        AssertThat(inspection.IsHoldable).IsFalse();
+        AssertThat(inspection.HasTimedExecution).IsFalse();
     }
 
     [TestCase]

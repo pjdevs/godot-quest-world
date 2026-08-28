@@ -82,34 +82,78 @@ public sealed partial class InteractionSceneTest
     [TestCase]
     public async Task DefaultActionPromptWidgetShowsInputWhenAllowedAndReasonWhenBlocked()
     {
-        InteractionActionPromptWidget widget = new();
+        InteractionActionPromptWidget widget = GD.Load<PackedScene>(ActionPromptScenePath)
+            .Instantiate<InteractionActionPromptWidget>();
         ISceneRunner runner = ISceneRunner.Load(widget);
         await runner.SimulateFrames(1);
-        Label label = widget.GetNode<Label>("Label");
 
         widget.Bind(
             new InteractionActionPresentation(
                 "open",
                 "Open",
                 "Open it",
-                "use",
+                "interact",
                 new InteractionAllowed()
             )
         );
 
-        AssertThat(label.Text).IsEqual("[use] Open");
+        AssertThat(widget.ActionKeyLabel!.Text).IsNotEqual("???");
+        AssertThat(widget.ActionNameLabel!.Text).IsEqual("Open");
 
         widget.Bind(
             new InteractionActionPresentation(
                 "open",
                 "Open",
                 "Open it",
-                "use",
+                "interact",
                 new InteractionBlocked("Locked")
             )
         );
 
-        AssertThat(label.Text).IsEqual("Open: Locked");
+        AssertThat(widget.ActionNameLabel.Text).IsEqual("Open: Locked");
+    }
+
+    [TestCase]
+    public async Task DefaultActionPromptKeepsAnIdleHoldBarVisibleAtZero()
+    {
+        InteractionActionPromptWidget widget = new();
+        Label actionName = new();
+        Label actionKey = new();
+        ProgressBar progress = new();
+        widget.AddChild(actionName);
+        widget.AddChild(actionKey);
+        widget.AddChild(progress);
+        widget.ActionNameLabel = actionName;
+        widget.ActionKeyLabel = actionKey;
+        widget.ActionProgress = progress;
+        ISceneRunner runner = ISceneRunner.Load(widget);
+        await runner.SimulateFrames(1);
+
+        widget.Bind(
+            new InteractionActionPresentation(
+                "unlock",
+                "Unlock",
+                "Unlock it",
+                "interact",
+                new InteractionAllowed(),
+                IsHoldable: true
+            )
+        );
+
+        AssertThat(progress.Visible).IsTrue();
+        AssertThat(progress.Value).IsEqual(0.0);
+
+        widget.Bind(
+            new InteractionActionPresentation(
+                "open",
+                "Open",
+                "Open it",
+                "interact",
+                new InteractionAllowed()
+            )
+        );
+
+        AssertThat(progress.Visible).IsFalse();
     }
 
     [TestCase]
@@ -177,8 +221,8 @@ public sealed partial class InteractionSceneTest
             .OfType<InteractionActionPromptWidget>()
             .ToArray();
         AssertThat(actions.Length).IsEqual(2);
-        AssertThat(actions[0].GetNode<Label>("Label").Text).IsEqual("[interact] open");
-        AssertThat(actions[1].GetNode<Label>("Label").Text).IsEqual("[interact] close");
+        AssertThat(actions[0].ActionNameLabel!.Text).IsEqual("open");
+        AssertThat(actions[1].ActionNameLabel!.Text).IsEqual("close");
     }
 
     [TestCase]
@@ -447,7 +491,7 @@ public sealed partial class InteractionSceneTest
         detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
         await runner.SimulateFrames(1);
 
-        AssertThat(PromptLabels(presenter)).IsEqual("[interact] talk");
+        AssertThat(PromptLabels(presenter)).IsEqual("talk");
 
         // No state component, no signal, no explicit invalidation: only the gameplay condition moved.
         owner.DialogRunning = true;
@@ -458,7 +502,7 @@ public sealed partial class InteractionSceneTest
         owner.DialogRunning = false;
         await runner.SimulateFrames(1);
 
-        AssertThat(PromptLabels(presenter)).IsEqual("[interact] talk");
+        AssertThat(PromptLabels(presenter)).IsEqual("talk");
         AssertThat(statusNotifications).IsEqual(0);
     }
 
@@ -487,7 +531,7 @@ public sealed partial class InteractionSceneTest
             container
                 .ActionsContainer.GetChildren()
                 .OfType<InteractionActionPromptWidget>()
-                .Select(widget => widget.GetNode<Label>("Label").Text)
+                .Select(widget => widget.ActionNameLabel!.Text)
         );
     }
 

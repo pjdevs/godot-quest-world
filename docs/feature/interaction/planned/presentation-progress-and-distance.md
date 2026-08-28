@@ -33,6 +33,8 @@ La distinction porte sur la portée de la donnée, pas sur sa nature.
 | Donnée | Où | Source |
 | --- | --- | --- |
 | `Distance` (unités monde) | `InteractionTargetPresentation` | couche spatiale / détecteur |
+| `IsHoldable` | `InteractionActionPresentation` | `HoldThreshold > 0` |
+| `HasTimedExecution` | `InteractionActionPresentation` | `ComputeInteractionDuration(context) > 0` |
 | `HoldProgress` (0..1) | `InteractionActionPresentation` | `TryGetGestureElapsed` / seuil de l'action |
 | `HoldElapsed` (secondes) | `InteractionActionPresentation` | `TryGetGestureElapsed` |
 | `ExecutionProgress` (0..1) | `InteractionActionPresentation` | `TryGetExecutionProgress` |
@@ -98,7 +100,7 @@ jour où quelqu'un en aura besoin. Pas de sac de métriques génériques.
 - **L'absence est représentée par l'absence de valeur** : `float?` pour les deux progressions, comme
   `GetInteractionPresentation()` retourne déjà `InteractionTargetPresentation?` pour l'absence de focus.
   Zéro veut donc dire zéro, et une barre qui s'anime distingue « pas de barre » de « vient de commencer »
-  sans champ d'accompagnement.
+  grâce aux capacités `IsHoldable` et `HasTimedExecution`, disponibles même au repos.
 - **Le rebind par frame est livré ici**, pas séparément : c'est lui qui rend `HoldProgress` observable, et
   le livrer à part aurait posé un prérequis sans consommateur.
 
@@ -126,6 +128,6 @@ seul `RefreshIndications()`. Trois constats de l'implémentation :
    reconstruire depuis le ratio : le seuil qu'il faudrait multiplier n'y est pas. Une action sans seuil ne
    rapporte toujours rien, ce qui est la phrase de ce document : « une action seule sur son input a un
    seuil de zéro et donc jamais de progression ».
-3. **Les widgets par défaut n'affichent aucune des trois valeurs.** Les champs sont exposés et testés, le
-   rendu appartient au widget de jeu — dessiner une barre est une décision visuelle, pas une décision de
-   contrat.
+3. **Le prompt d'action par défaut affiche le hold.** Sa barre est visible dès que `IsHoldable` est vrai,
+   avec `HoldProgress ?? 0`; l'exécution reste exposée pour les widgets de jeu via `HasTimedExecution` et
+   `ExecutionProgress`, sans rendu imposé par le plugin.

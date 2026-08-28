@@ -185,6 +185,10 @@ public readonly record struct InteractionExecutionContext(
 /// <param name="InputActionName">Project input action requesting this action.</param>
 /// <param name="Availability">Availability of this action, either allowed or blocked.</param>
 /// <param name="IsAutomatic">Whether local focus requests this action without any player input.</param>
+/// <param name="IsHoldable">Whether selecting this action requires holding its input.</param>
+/// <param name="HasTimedExecution">
+/// Whether this action currently declares a positive execution duration.
+/// </param>
 /// <param name="HoldProgress">
 /// How far the hold selecting this action has progressed towards <b>its own</b> threshold, or null when
 /// none is in progress.
@@ -202,6 +206,8 @@ public readonly record struct InteractionActionPresentation(
     StringName InputActionName,
     InteractionAvailability Availability,
     bool IsAutomatic = false,
+    bool IsHoldable = false,
+    bool HasTimedExecution = false,
     float? HoldProgress = null,
     float? HoldElapsed = null,
     float? ExecutionProgress = null

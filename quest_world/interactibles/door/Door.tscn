@@ -94,7 +94,6 @@ size = Vector3(4, 2, 4)
 script = ExtResource("4_adxal")
 Id = &"open"
 Label = "Open"
-Description = "Open"
 metadata/_custom_type_script = "uid://bqs31n67gwjq1"
 
 [sub_resource type="Resource" id="Resource_ii2gm"]
@@ -108,7 +107,6 @@ metadata/_custom_type_script = "uid://cvrhmun38iql5"
 script = ExtResource("4_adxal")
 Id = &"close"
 Label = "Close"
-Description = "Close"
 metadata/_custom_type_script = "uid://bqs31n67gwjq1"
 
 [sub_resource type="Resource" id="Resource_6xdtw"]
@@ -118,9 +116,23 @@ ExpectedStates = Array[StringName]([&"opened"])
 BlockReason = ""
 metadata/_custom_type_script = "uid://cvrhmun38iql5"
 
+[sub_resource type="Resource" id="Resource_qkbub"]
+script = ExtResource("4_adxal")
+Id = &"unlock"
+Label = "Unlock"
+HoldThreshold = 2.0
+metadata/_custom_type_script = "uid://bqs31n67gwjq1"
+
+[sub_resource type="Resource" id="Resource_c4v56"]
+script = ExtResource("6_bhqfo")
+StatefulPath = NodePath("../../StatefulComponent")
+ExpectedStates = Array[StringName]([&"locked"])
+BlockReason = ""
+metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
 [sub_resource type="Resource" id="Resource_j1fib"]
 script = ExtResource("8_j1fib")
-States = Array[StringName]([&"opened", &"closed"])
+States = Array[StringName]([&"opened", &"closed", &"locked"])
 metadata/_custom_type_script = "uid://bncq4bgetbnu7"
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_6xdtw"]
@@ -187,7 +199,7 @@ InteractionAnchor = NodePath("../../Visual/Pivot/DoorMesh/HandleMesh")
 DisplayName = "Door"
 ActionPromptScene = ExtResource("2_wx55h")
 IndicationScene = ExtResource("4_qkbub")
-Actions = [NodePath("OpenAction"), NodePath("CloseAction")]
+Actions = [NodePath("OpenAction"), NodePath("CloseAction"), NodePath("UnlockAction")]
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
 
 [node name="OpenAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=395259595 node_paths=PackedStringArray("Executor")]
@@ -208,6 +220,7 @@ script = ExtResource("3_llf4b")
 Definition = SubResource("Resource_wx55h")
 Executor = NodePath("CloseExecutor")
 Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_6xdtw")])
+Priority = 1
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
 [node name="CloseExecutor" type="Node" parent="Interaction/InteractiveComponent/CloseAction" unique_id=1929747493 node_paths=PackedStringArray("Stateful")]
@@ -216,10 +229,24 @@ Stateful = NodePath("../../../StatefulComponent")
 TargetState = &"closed"
 metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
 
+[node name="UnlockAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=37820192 node_paths=PackedStringArray("Executor")]
+script = ExtResource("3_llf4b")
+Definition = SubResource("Resource_qkbub")
+Executor = NodePath("UnlockExecutor")
+Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_c4v56")])
+Priority = 2
+metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+
+[node name="UnlockExecutor" type="Node" parent="Interaction/InteractiveComponent/UnlockAction" unique_id=491570712 node_paths=PackedStringArray("Stateful")]
+script = ExtResource("7_wx55h")
+Stateful = NodePath("../../../StatefulComponent")
+TargetState = &"closed"
+metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
+
 [node name="StatefulComponent" type="Node" parent="Interaction" unique_id=957633712]
 script = ExtResource("7_bhqfo")
 Schema = SubResource("Resource_j1fib")
-InitialState = &"closed"
+InitialState = &"locked"
 metadata/_custom_type_script = "uid://cpbt7qansaxqx"
 
 [node name="StateSynchronizer" type="MultiplayerSynchronizer" parent="Interaction/StatefulComponent" unique_id=1268824207]

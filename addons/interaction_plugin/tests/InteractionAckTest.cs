@@ -156,10 +156,11 @@ public sealed partial class InteractionAckTest
     }
 
     [TestCase]
-    public async Task ARejectionClearsTheSustainedInputItsRequestCreated()
+    public async Task ARejectionClearsSustainedExecutionButReleaseStillConsumesThePress()
     {
-        // A refused request left nothing running, so the release that follows must find nothing to
-        // report rather than send the server an end for an execution that never existed.
+        // A refused request leaves nothing running, so release sends no server end for an execution
+        // that never existed. The local press stays consumed until that release, however, and the
+        // input boundary therefore reports that it handled the completed press cycle.
         AckWorld world = BuildWorld();
         world.Definition.CancelOnInputReleased = true;
         world.Executor.Duration = 2.0f;
@@ -175,7 +176,7 @@ public sealed partial class InteractionAckTest
 
         bool reported = world.Interactor.TryEndInteractionInput(InteractInput);
 
-        AssertThat(reported).IsFalse();
+        AssertThat(reported).IsTrue();
     }
 
     [TestCase]

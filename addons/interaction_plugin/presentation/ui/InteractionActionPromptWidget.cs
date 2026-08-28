@@ -30,32 +30,18 @@ public partial class InteractionActionPromptWidget : PanelContainer, IInteractio
             ActionNameLabel?.SetText($"{presentation.Label}");
             ActionNameLabel?.RemoveThemeColorOverride("font_color");
             ActionKeyLabel?.RemoveThemeColorOverride("font_color");
-
-            if (presentation.HoldProgress.HasValue)
-            {
-                ActionProgress?.Visible = true;
-                ActionProgress?.SetValue(presentation.HoldProgress.Value);
-            }
-            else
-            {
-                ActionProgress?.Visible = false;
-            }
         }
         else
         {
             ActionNameLabel?.SetText($"{presentation.Label}: {presentation.BlockReason}");
             ActionNameLabel?.AddThemeColorOverride("font_color", Colors.Red);
             ActionKeyLabel?.AddThemeColorOverride("font_color", Colors.Red);
+        }
 
-            if (presentation.HoldProgress.HasValue)
-            {
-                ActionProgress?.Visible = true;
-                ActionProgress?.SetValue(presentation.HoldProgress.Value);
-            }
-            else
-            {
-                ActionProgress?.Visible = false;
-            }
+        if (ActionProgress is not null)
+        {
+            ActionProgress.Visible = presentation.IsHoldable;
+            ActionProgress.SetValue(presentation.HoldProgress ?? 0.0f);
         }
     }
 }

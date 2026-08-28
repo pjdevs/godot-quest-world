@@ -250,6 +250,7 @@ public partial class InteractionInteractor : Node
     private readonly List<InteractiveComponent> _detectionEntered = new();
     private readonly List<InteractiveComponent> _detectionExited = new();
     private readonly List<InteractorExecution> _ownedExecutions = new();
+    private readonly HashSet<StringName> _consumedInputs = new();
     private readonly HashSet<StringName> _sustainedInputs = new();
     private readonly List<StringName> _relevantInputs = new();
     private MultiplayerApi? _watchedMultiplayer;
@@ -632,10 +633,10 @@ public partial class InteractionInteractor : Node
     /// same key stays the game's call, because the interactor never samples input itself.
     /// <para>
     /// The list holds the inputs of the focused target's presentable actions, automatic ones
-    /// excluded since no key requests them, plus every input this interactor believes it is
-    /// currently sustaining. That second half matters: without it, looking away from a target while
-    /// holding its key would drop the release, and the execution would run on until the player
-    /// walked out of range.
+    /// excluded since no key requests them, plus every input this interactor has consumed or believes
+    /// it is currently sustaining. That second half matters: without it, looking away from a target
+    /// while holding its key would drop the release, leaving a consumed press latched or letting a
+    /// sustained execution run until the player walked out of range.
     /// </para>
     /// <para>
     /// The returned list is reused between calls and is only valid until the next one. Copy it
@@ -673,6 +674,11 @@ public partial class InteractionInteractor : Node
             AddRelevantInput(sustained);
         }
 
+        foreach (StringName consumed in _consumedInputs)
+        {
+            AddRelevantInput(consumed);
+        }
+
         return _relevantInputs;
     }
 
@@ -706,19 +712,36 @@ public partial class InteractionInteractor : Node
     /// <returns>Whether a locally valid request was dispatched, or a hold towards one started.</returns>
     public bool TryStartInteractionInput(StringName inputActionName)
     {
-        RecalculateFocus();
-        InteractiveComponent? target = _focusedInteractive;
-        if (target is null || inputActionName is null || inputActionName.IsEmpty)
+        if (
+            inputActionName is null
+            || inputActionName.IsEmpty
+            || _consumedInputs.Contains(inputActionName)
+        )
         {
             return false;
         }
+
+        RecalculateFocus();
+        InteractiveComponent? target = _focusedInteractive;
+        if (target is null)
+        {
+            return false;
+        }
+
+        _consumedInputs.Add(inputActionName);
 
         // A threshold only exists to tell apart several actions sharing one input, so pressing an
         // input nobody asks to hold still selects immediately.
         float threshold = target.GetLongestHoldThreshold(this, inputActionName);
         if (threshold <= 0.0f)
         {
-            return RequestResolvedAction(target, inputActionName, heldSeconds: 0.0f);
+            bool requested = RequestResolvedAction(target, inputActionName, heldSeconds: 0.0f);
+            if (!requested)
+            {
+                _consumedInputs.Remove(inputActionName);
+            }
+
+            return requested;
         }
 
         _gesture = new InteractionGesture(target, inputActionName, threshold, 0.0f);
@@ -752,13 +775,18 @@ public partial class InteractionInteractor : Node
     /// is ended this way, so an instant or self-sustaining action ignores the release entirely.
     /// </remarks>
     /// <param name="inputActionName">Project input action released by the player.</param>
-    /// <returns>Whether a release was reported to the authoritative peer or applied by the host.</returns>
+    /// <returns>
+    /// Whether the interaction consumed this press, reported its release to the authoritative peer,
+    /// or applied it on the host.
+    /// </returns>
     public bool TryEndInteractionInput(StringName inputActionName)
     {
         if (inputActionName is null || inputActionName.IsEmpty)
         {
             return false;
         }
+
+        bool consumed = _consumedInputs.Remove(inputActionName);
 
         // Releasing before the threshold selects the action that asked for no hold, which is how
         // "tap to open, hold to force" resolves without the two ever competing.
@@ -774,7 +802,7 @@ public partial class InteractionInteractor : Node
 
         if (!_sustainedInputs.Remove(inputActionName))
         {
-            return handled;
+            return handled || consumed;
         }
 
         _prediction = null;
@@ -785,7 +813,7 @@ public partial class InteractionInteractor : Node
             return true;
         }
 
-        return EndInteractionInputAuthoritatively(OwnerPeerId, inputActionName) > 0;
+        return EndInteractionInputAuthoritatively(OwnerPeerId, inputActionName) > 0 || consumed;
     }
 
     private void TryStartAutomaticInteraction(InteractiveComponent target)
@@ -977,6 +1005,7 @@ public partial class InteractionInteractor : Node
         _detectionEntered.Clear();
         _detectionExited.Clear();
         _ownedExecutions.Clear();
+        _consumedInputs.Clear();
         _sustainedInputs.Clear();
         _relevantInputs.Clear();
         _focusedInteractive = null;

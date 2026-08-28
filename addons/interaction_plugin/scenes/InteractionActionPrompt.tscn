@@ -51,7 +51,9 @@ size_flags_vertical = 3
 size_flags_stretch_ratio = 0.1
 theme_override_styles/background = SubResource("StyleBoxFlat_8rywm")
 theme_override_styles/fill = SubResource("StyleBoxFlat_72247")
-value = 50.0
+max_value = 1.0
+step = 0.001
+value = 0.5
 show_percentage = false
 
 [node name="ActionLabel" type="Label" parent="ActionPromptLayout" unique_id=2111660497]

@@ -738,6 +738,7 @@ public partial class InteractiveComponent : Node
             return false;
         }
 
+        InteractionContext context = new(interactor, this, action);
         presentation = new InteractionActionPresentation(
             action.Definition.Id,
             action.Definition.Label,
@@ -745,6 +746,8 @@ public partial class InteractiveComponent : Node
             action.Definition.InputActionName,
             availability,
             action.Automatic,
+            action.Definition.HoldThreshold > 0.0f,
+            action.Executor?.ComputeInteractionDuration(context) > 0.0f,
             progress.HoldOf(action.Definition),
             progress.HoldElapsedOf(action.Definition),
             progress.ExecutionOf(action.Definition)
