@@ -9,14 +9,17 @@ namespace QuestWorld.Interaction.Presentation.UI;
 /// </remarks>
 public partial class InteractionIndicatorWidget : PanelContainer, IInteractionWidget
 {
-    private Label? _label;
+    [Export]
+    public TextureRect? Indicator { get; set; }
 
     /// <inheritdoc />
     public void Bind(in InteractionTargetPresentation presentation)
     {
-        if (_label is not null)
+        if (Indicator is not null)
         {
-            _label.Text = presentation.DisplayName;
+            Indicator.Modulate = presentation.HasAllowedAction
+                ? Colors.White
+                : Colors.Red;
         }
     }
 }

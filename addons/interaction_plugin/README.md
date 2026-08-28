@@ -241,7 +241,7 @@ The reliable client RPC carries only `targetPath + actionId`. The server checks 
 
 `InteractionPresenter` is optional. Assign its local `Interactor`, `Camera`, and optional `PromptContainerScene`.
 
-The target supplies `ActionPromptScene`, `IndicationScene`, and `BlockedIndicationScene`; leaving one unset simply omits that visual.
+The target supplies `ActionPromptScene` and `IndicationScene`; leaving one unset simply omits that visual.
 
 - A prompt container implements `IInteractionPromptContainer.Bind(targetPresentation)` and exposes `ActionsContainer`.
 - One action widget implements `IInteractionActionWidget.Bind(actionPresentation)`.

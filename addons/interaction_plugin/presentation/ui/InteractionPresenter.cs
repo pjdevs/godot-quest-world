@@ -300,12 +300,8 @@ public partial class InteractionPresenter : CanvasLayer
                 continue;
             }
 
-            PackedScene? scene = presentation.HasAllowedAction
-                ? interactive.IndicationScene
-                : interactive.BlockedIndicationScene;
-
             _indications.TryGetValue(interactive, out Control? widget);
-            ReplaceWidget(ref widget, scene, presentation);
+            ReplaceWidget(ref widget, interactive.IndicationScene, presentation);
             if (widget is null)
             {
                 _indications.Remove(interactive);

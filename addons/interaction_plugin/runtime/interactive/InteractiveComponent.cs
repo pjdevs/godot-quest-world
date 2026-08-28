@@ -222,10 +222,6 @@ public partial class InteractiveComponent : Node
     [Export]
     public PackedScene? IndicationScene { get; set; }
 
-    /// <summary>Gets or sets the optional indication scene shown when this target is blocked.</summary>
-    [Export]
-    public PackedScene? BlockedIndicationScene { get; set; }
-
     /// <summary>
     /// Gets or sets the explicit actions offered by this target, evaluated in declaration order.
     /// </summary>
