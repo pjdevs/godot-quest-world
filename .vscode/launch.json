@@ -6,7 +6,7 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
-            "program": "${env:GODOT4}",
+            "program": "godot",
             "args": [],
             "cwd": "${workspaceFolder}",
             "stopAtEntry": false,

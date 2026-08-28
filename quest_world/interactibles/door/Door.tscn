@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn" id="2_wx55h"]
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="3_llf4b"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="4_adxal"]
+[ext_resource type="PackedScene" uid="uid://mknaynw5h20v" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="4_qkbub"]
 [ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_adxal"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_bhqfo"]
 [ext_resource type="Script" uid="uid://cpbt7qansaxqx" path="res://addons/stateful_plugin/runtime/StatefulComponent.cs" id="7_bhqfo"]
@@ -82,6 +83,9 @@ _data = {
 &"close": SubResource("Animation_6xdtw"),
 &"open": SubResource("Animation_wx55h")
 }
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_qkbub"]
+size = Vector3(10, 10, 10)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_mokd0"]
 size = Vector3(4, 2, 4)
@@ -162,18 +166,27 @@ libraries/ = SubResource("AnimationLibrary_6xdtw")
 
 [node name="Interaction" type="Node3D" parent="." unique_id=1276253519]
 
+[node name="IndicationArea" type="Area3D" parent="Interaction" unique_id=1133866117]
+
+[node name="IndicationAreaShape" type="CollisionShape3D" parent="Interaction/IndicationArea" unique_id=1073881630]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+shape = SubResource("BoxShape3D_qkbub")
+debug_color = Color(0.8980768, 0.22753963, 0.5545721, 0.41960785)
+
 [node name="InteractionArea" type="Area3D" parent="Interaction" unique_id=1163350443]
 
 [node name="InteractionAreaShape" type="CollisionShape3D" parent="Interaction/InteractionArea" unique_id=1310880081]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 shape = SubResource("BoxShape3D_mokd0")
 
-[node name="InteractiveComponent" type="Node" parent="Interaction" unique_id=1375300189 node_paths=PackedStringArray("InteractionArea", "InteractionAnchor", "Actions")]
+[node name="InteractiveComponent" type="Node" parent="Interaction" unique_id=1375300189 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Actions")]
 script = ExtResource("1_vodtj")
 InteractionArea = NodePath("../InteractionArea")
+IndicationArea = NodePath("../IndicationArea")
 InteractionAnchor = NodePath("../../Visual/Pivot/DoorMesh/HandleMesh")
 DisplayName = "Door"
 ActionPromptScene = ExtResource("2_wx55h")
+IndicationScene = ExtResource("4_qkbub")
 Actions = [NodePath("OpenAction"), NodePath("CloseAction")]
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
 

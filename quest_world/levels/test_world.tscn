@@ -135,18 +135,18 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.193058, 0.49999994, -1.267
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.091249, 0.49999976, -2.677222)
 
 [node name="Button" parent="Level" unique_id=1874486156 instance=ExtResource("3_kevvi")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 10)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0.21263361, 10)
 
-[node name="RaiseAction" parent="Level/Button/InteractiveComponent" parent_id_path=PackedInt32Array(1874486156, 745842554) index="0"]
+[node name="RaiseAction" parent="Level/Button/InteractiveComponent" parent_id_path=PackedInt32Array(1874486156, 745842554) index="0" unique_id=1667473628]
 Rules = Array[ExtResource("5_rule")]([SubResource("Resource_raise_phase"), SubResource("Resource_raise_ready")])
 
-[node name="RaiseExecutor" parent="Level/Button/InteractiveComponent/RaiseAction" index="0" node_paths=PackedStringArray("Stateful")]
+[node name="RaiseExecutor" parent="Level/Button/InteractiveComponent/RaiseAction" index="0" unique_id=1426697339 node_paths=PackedStringArray("Stateful")]
 Stateful = NodePath("../../../../LeverWall/StatefulComponent")
 
-[node name="LowerAction" parent="Level/Button/InteractiveComponent" parent_id_path=PackedInt32Array(1874486156, 745842554) index="1"]
+[node name="LowerAction" parent="Level/Button/InteractiveComponent" parent_id_path=PackedInt32Array(1874486156, 745842554) index="1" unique_id=1721581751]
 Rules = Array[ExtResource("5_rule")]([SubResource("Resource_lower_phase"), SubResource("Resource_lower_ready")])
 
-[node name="LowerExecutor" parent="Level/Button/InteractiveComponent/LowerAction" index="0" node_paths=PackedStringArray("Stateful")]
+[node name="LowerExecutor" parent="Level/Button/InteractiveComponent/LowerAction" index="0" unique_id=913228593 node_paths=PackedStringArray("Stateful")]
 Stateful = NodePath("../../../../LeverWall/StatefulComponent")
 
 [node name="Door" parent="Level" unique_id=54710487 instance=ExtResource("6_onb8u")]
