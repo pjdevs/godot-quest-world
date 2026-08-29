@@ -243,8 +243,8 @@ public partial class InteractionPresenter : CanvasLayer
                     action.ActionId,
                     out InteractionExecutionPresentation currentExecution
                 )
-                ? currentExecution
-                : null;
+                    ? currentExecution
+                    : null;
             (_promptActions[index] as IInteractionActionWidget)?.Bind(action, execution);
         }
     }

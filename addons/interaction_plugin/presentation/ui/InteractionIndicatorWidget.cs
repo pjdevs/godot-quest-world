@@ -17,9 +17,7 @@ public partial class InteractionIndicatorWidget : PanelContainer, IInteractionWi
     {
         if (Indicator is not null)
         {
-            Indicator.Modulate = presentation.HasAllowedAction
-                ? Colors.White
-                : Colors.Red;
+            Indicator.Modulate = presentation.HasAllowedAction ? Colors.White : Colors.Red;
         }
     }
 }
