@@ -495,6 +495,274 @@ public sealed partial class InteractionConfigurationTest
             .IsTrue();
     }
 
+    [TestCase]
+    public void InteractiveResolvesItsDirectComposedChildrenWithoutOverrides()
+    {
+        Node3D owner = new();
+        InteractiveComponent interactive = new() { Name = "Interactive" };
+        InteractionArea3D interactionArea = new() { Name = "InteractionArea3D" };
+        IndicationArea3D indicationArea = new() { Name = "IndicationArea3D" };
+        InteractionAnchor3D anchor = new() { Name = "InteractionAnchor3D" };
+        InteractionAction action = new()
+        {
+            Name = "OpenAction",
+            Definition = new InteractionActionDefinition { Id = "open" },
+        };
+        NoopInteractionExecutor executor = new() { Name = "Executor" };
+
+        try
+        {
+            owner.AddChild(interactive);
+            interactive.AddChild(interactionArea);
+            interactive.AddChild(indicationArea);
+            interactive.AddChild(anchor);
+            interactive.AddChild(action);
+            action.AddChild(executor);
+
+            AssertThat(interactive.ResolveInteractionArea() == interactionArea).IsTrue();
+            AssertThat(interactive.ResolveIndicationArea() == indicationArea).IsTrue();
+            AssertThat(interactive.ResolveInteractionAnchor() == anchor).IsTrue();
+            AssertThat(interactive.ResolveActions().Count).IsEqual(1);
+            AssertThat(action.ResolveExecutor() == executor).IsTrue();
+        }
+        finally
+        {
+            owner.Free();
+        }
+    }
+
+    [TestCase]
+    public void ExplicitReferencesOverrideComposedChildren()
+    {
+        Node3D owner = new();
+        InteractiveComponent interactive = new() { Name = "Interactive" };
+        InteractionArea3D composedArea = new();
+        Area3D overrideArea = new();
+        InteractionAnchor3D composedAnchor = new();
+        Node3D overrideAnchor = new();
+        InteractionAction composedAction = NewAction(
+            new InteractionActionDefinition { Id = "composed" }
+        );
+        InteractionAction overrideAction = NewAction(
+            new InteractionActionDefinition { Id = "override" }
+        );
+        InteractionActionExecutor composedExecutor = new NoopInteractionExecutor();
+        InteractionActionExecutor overrideExecutor = new NoopInteractionExecutor();
+
+        try
+        {
+            owner.AddChild(interactive);
+            interactive.AddChild(composedArea);
+            interactive.AddChild(composedAnchor);
+            interactive.AddChild(composedAction);
+            composedAction.AddChild(composedExecutor);
+            interactive.InteractionArea = overrideArea;
+            interactive.InteractionAnchor = overrideAnchor;
+            interactive.Actions = new() { overrideAction };
+            composedAction.Executor = overrideExecutor;
+
+            AssertThat(interactive.ResolveInteractionArea() == overrideArea).IsTrue();
+            AssertThat(interactive.ResolveInteractionAnchor() == overrideAnchor).IsTrue();
+            AssertThat(interactive.ResolveActions()[0] == overrideAction).IsTrue();
+            AssertThat(composedAction.ResolveExecutor() == overrideExecutor).IsTrue();
+        }
+        finally
+        {
+            owner.Free();
+            overrideArea.Free();
+            overrideAnchor.Free();
+            overrideAction.Free();
+            overrideExecutor.Free();
+        }
+    }
+
+    [TestCase]
+    public void CompositionRejectsRecursiveAndAmbiguousCandidates()
+    {
+        InteractiveComponent interactive = new();
+        Node3D nested = new();
+        InteractionArea3D nestedArea = new();
+        InteractionArea3D firstArea = new();
+        InteractionArea3D secondArea = new();
+
+        try
+        {
+            interactive.AddChild(nested);
+            nested.AddChild(nestedArea);
+
+            AssertThat(interactive.ResolveInteractionArea() == null).IsTrue();
+
+            interactive.AddChild(firstArea);
+            interactive.AddChild(secondArea);
+
+            AssertThat(interactive.ResolveInteractionArea() == null).IsTrue();
+            string[] warnings = InteractionValidator.Validate(interactive).ToArray();
+            AssertThat(warnings.Any(warning => warning.Contains("ambiguous"))).IsTrue();
+        }
+        finally
+        {
+            interactive.Free();
+        }
+    }
+
+    [TestCase]
+    public void InteractiveValidatorRecognizesComposedStatefulActions()
+    {
+        Node3D owner = new();
+        Area3D area = new();
+        StatefulComponent stateful = new()
+        {
+            Schema = new StateSchema
+            {
+                States = new() { "closed", "opened" },
+            },
+        };
+        InteractiveComponent interactive = new()
+        {
+            InteractionArea = area,
+            InteractionAnchor = owner,
+        };
+        StatefulTransitionAction action = new()
+        {
+            Definition = new InteractionActionDefinition { Id = "open" },
+            From = new() { new StringName("closed") },
+            To = new StringName("opened"),
+            Automatic = true,
+        };
+
+        try
+        {
+            owner.AddChild(stateful);
+            owner.AddChild(interactive);
+            interactive.AddChild(action);
+
+            string[] warnings = InteractionValidator.Validate(interactive).ToArray();
+
+            AssertThat(warnings.Contains("Actions must declare at least one action.")).IsFalse();
+            AssertThat(warnings.Contains("Actions[0] has no Executor.")).IsFalse();
+            AssertThat(warnings.Contains("Stateful must be assigned.")).IsFalse();
+        }
+        finally
+        {
+            owner.Free();
+            area.Free();
+        }
+    }
+
+    [TestCase]
+    public async Task StatefulIntegrationResolvesTheUniqueLocalComponent()
+    {
+        Node3D scope = new();
+        StatefulComponent stateful = new()
+        {
+            Name = "StatefulComponent",
+            InitialState = new StringName("closed"),
+            Schema = new StateSchema
+            {
+                States = new() { "closed", "opened" },
+            },
+        };
+        InteractiveComponent interactive = new() { Name = "Interactive" };
+        InteractionArea3D interactionArea = new();
+        InteractionAnchor3D anchor = new();
+        InteractionAction action = new()
+        {
+            Name = "OpenAction",
+            Definition = new InteractionActionDefinition { Id = "open" },
+        };
+        StatefulStateInteractionRule rule = new() { ExpectedStates = { new StringName("closed") } };
+        SetStateInteractionExecutor executor = new() { TargetState = new StringName("opened") };
+        InteractionInteractor interactor = new();
+
+        scope.AddChild(stateful);
+        scope.AddChild(interactive);
+        interactive.AddChild(interactionArea);
+        interactive.AddChild(anchor);
+        interactive.AddChild(action);
+        action.AddChild(executor);
+        action.Rules.Add(rule);
+        scope.AddChild(interactor);
+        ISceneRunner runner = ISceneRunner.Load(scope);
+        await runner.SimulateFrames(1);
+
+        try
+        {
+            InteractionAvailability availability = interactive.EvaluateAvailability(
+                interactor,
+                action
+            );
+            AssertThat(availability is InteractionAllowed).IsTrue();
+            AssertThat(
+                    executor.Execute(
+                        new InteractionExecutionContext(1, interactor, interactive, action)
+                    ) is InteractionExecutionCompleted
+                )
+                .IsTrue();
+            AssertThat(stateful.State).IsEqual(new StringName("opened"));
+        }
+        finally
+        {
+            scope.Free();
+        }
+    }
+
+    [TestCase]
+    public void StatefulTransitionActionComposesTheExistingPrimitives()
+    {
+        StatefulTransitionAction action = new()
+        {
+            From = new() { new StringName("closed") },
+            To = new StringName("opened"),
+        };
+
+        try
+        {
+            AssertThat(action.ResolveExecutor() is SetStateInteractionExecutor).IsTrue();
+            AssertThat(action.ResolveRules().Single() is StatefulStateInteractionRule).IsTrue();
+            AssertThat(((SetStateInteractionExecutor)action.ResolveExecutor()!).TargetState)
+                .IsEqual(new StringName("opened"));
+            AssertThat(
+                    ((StatefulStateInteractionRule)action.ResolveRules().Single()).ExpectedStates[0]
+                )
+                .IsEqual(new StringName("closed"));
+        }
+        finally
+        {
+            action.Free();
+        }
+    }
+
+    [TestCase]
+    public void StatefulRunningTransitionDefaultsToExternalCompletion()
+    {
+        StatefulRunningTransitionAction action = new()
+        {
+            From = new() { new StringName("closed") },
+            Running = new StringName("opening"),
+            Completed = new StringName("opened"),
+            Cancelled = new StringName("closed"),
+        };
+
+        try
+        {
+            AssertThat(action.ResolveExecutor() is TransitionStateInteractionExecutor).IsTrue();
+            AssertThat(action.ResolveExecutor() is TimedTransitionStateInteractionExecutor)
+                .IsFalse();
+            AssertThat(action.ResolveRules().Single() is StatefulStateInteractionRule).IsTrue();
+        }
+        finally
+        {
+            action.Free();
+        }
+    }
+
+    private sealed partial class NoopInteractionExecutor : InteractionActionExecutor
+    {
+        public override InteractionExecutionResult Execute(
+            in InteractionExecutionContext context
+        ) => new InteractionExecutionCompleted();
+    }
+
     private static InteractiveComponent NewConfiguredInteractive()
     {
         return new()

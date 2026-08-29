@@ -17,6 +17,8 @@ namespace QuestWorld.Interaction.Integration.Stateful;
 /// so a rule may also read the state of another object. Because rules are shareable resources, a
 /// path crossing scene boundaries belongs to the level that wires both objects together, exactly
 /// like the node reference of an executor.
+/// When the path is empty, the rule resolves the unique local <see cref="StatefulComponent"/> beside
+/// the owning <c>InteractiveComponent</c>.
 /// </para>
 /// </remarks>
 [GlobalClass]
@@ -24,7 +26,13 @@ public partial class StatefulStateInteractionRule : InteractionRule
 {
     private const string NotConfiguredReason = "Interaction is not configured.";
 
-    /// <summary>Gets or sets the path to the observed component, relative to the owning action.</summary>
+    /// <summary>Gets or sets the runtime override supplied by a composed Stateful action.</summary>
+    internal StatefulComponent? StatefulOverride { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional path to the observed component, relative to the owning action.
+    /// </summary>
+    [ExportGroup("Overrides")]
     [Export]
     public NodePath StatefulPath { get; set; } = new();
 
@@ -73,11 +81,21 @@ public partial class StatefulStateInteractionRule : InteractionRule
 
     private StatefulComponent? ResolveStateful(in InteractionContext context)
     {
-        if (StatefulPath.IsEmpty || context.Action is null)
+        if (StatefulOverride is not null)
+        {
+            return StatefulOverride;
+        }
+
+        if (context.Action is null)
         {
             return null;
         }
 
-        return context.Action.GetNodeOrNull<StatefulComponent>(StatefulPath);
+        if (!StatefulPath.IsEmpty)
+        {
+            return context.Action.GetNodeOrNull<StatefulComponent>(StatefulPath);
+        }
+
+        return StatefulComposition.ResolveLocal(context.Interactive);
     }
 }

@@ -6,6 +6,9 @@
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="3_action"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="4_actiondef"]
 [ext_resource type="Script" uid="uid://bw02qn7pyxpy4" path="res://addons/interaction_plugin/integration/stateful/SetStateInteractionExecutor.cs" id="5_setstate"]
+[ext_resource type="Script" uid="uid://c2kgrci3tb873" path="res://addons/interaction_plugin/runtime/interactive/InteractionArea3D.cs" id="6_interaction_area"]
+[ext_resource type="Script" uid="uid://c5d10ub023v1a" path="res://addons/interaction_plugin/runtime/interactive/IndicationArea3D.cs" id="7_indication_area"]
+[ext_resource type="Script" uid="uid://df8wm6fw7tmob" path="res://addons/interaction_plugin/runtime/interactive/InteractionAnchor3D.cs" id="8_interaction_anchor"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_mokd0"]
 size = Vector3(0.25, 0.25, 0.25)
@@ -33,28 +36,37 @@ size = Vector3(10, 10, 10)
 
 [node name="Button" type="Node3D" unique_id=1874486156]
 
-[node name="InteractionAnchor" type="Node3D" parent="." unique_id=1959836575]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14235857, 0)
-
 [node name="ButtonModel" type="MeshInstance3D" parent="." unique_id=684315169]
 mesh = SubResource("BoxMesh_mokd0")
 surface_material_override/0 = SubResource("StandardMaterial3D_f0qss")
 
-[node name="InteractiveComponent" type="Node" parent="." unique_id=745842554 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Actions")]
+[node name="InteractiveComponent" type="Node3D" parent="." unique_id=745842554]
 script = ExtResource("1_lq42h")
-InteractionArea = NodePath("../InteractionArea")
-IndicationArea = NodePath("../IndicationArea")
-InteractionAnchor = NodePath("../InteractionAnchor")
 DisplayName = "Wall control"
 ActionPromptScene = ExtResource("2_2ck07")
 IndicationScene = ExtResource("3_6nsmd")
-Actions = [NodePath("RaiseAction"), NodePath("LowerAction")]
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
 
-[node name="RaiseAction" type="Node" parent="InteractiveComponent" unique_id=1667473628 node_paths=PackedStringArray("Executor")]
+[node name="InteractionAnchor3D" type="Marker3D" parent="InteractiveComponent" unique_id=1959836575]
+script = ExtResource("8_interaction_anchor")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14235857, 0)
+
+[node name="InteractionArea3D" type="Area3D" parent="InteractiveComponent" unique_id=2064253587]
+script = ExtResource("6_interaction_area")
+
+[node name="InteractionBox" type="CollisionShape3D" parent="InteractiveComponent/InteractionArea3D" unique_id=433662249]
+shape = SubResource("BoxShape3D_mokd0")
+
+[node name="IndicationArea3D" type="Area3D" parent="InteractiveComponent" unique_id=88871711]
+script = ExtResource("7_indication_area")
+
+[node name="IndicationBox" type="CollisionShape3D" parent="InteractiveComponent/IndicationArea3D" unique_id=1123854193]
+shape = SubResource("BoxShape3D_4badl")
+debug_color = Color(0.96168846, 1.540184e-06, 0.51167804, 0.41960785)
+
+[node name="RaiseAction" type="Node" parent="InteractiveComponent" unique_id=1667473628]
 script = ExtResource("3_action")
 Definition = SubResource("Resource_raise_definition")
-Executor = NodePath("RaiseExecutor")
 Priority = 1
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
@@ -63,24 +75,12 @@ script = ExtResource("5_setstate")
 TargetState = &"raising"
 metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
 
-[node name="LowerAction" type="Node" parent="InteractiveComponent" unique_id=1721581751 node_paths=PackedStringArray("Executor")]
+[node name="LowerAction" type="Node" parent="InteractiveComponent" unique_id=1721581751]
 script = ExtResource("3_action")
 Definition = SubResource("Resource_lower_definition")
-Executor = NodePath("LowerExecutor")
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
 [node name="LowerExecutor" type="Node" parent="InteractiveComponent/LowerAction" unique_id=913228593]
 script = ExtResource("5_setstate")
 TargetState = &"lowering"
 metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
-
-[node name="InteractionArea" type="Area3D" parent="." unique_id=2064253587]
-
-[node name="InteractionBox" type="CollisionShape3D" parent="InteractionArea" unique_id=433662249]
-shape = SubResource("BoxShape3D_mokd0")
-
-[node name="IndicationArea" type="Area3D" parent="." unique_id=88871711]
-
-[node name="IndicationBox" type="CollisionShape3D" parent="IndicationArea" unique_id=1123854193]
-shape = SubResource("BoxShape3D_4badl")
-debug_color = Color(0.96168846, 1.540184e-06, 0.51167804, 0.41960785)

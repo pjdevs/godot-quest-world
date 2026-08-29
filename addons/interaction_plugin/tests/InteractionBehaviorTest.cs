@@ -742,6 +742,7 @@ public sealed partial class InteractionBehaviorTest
         await door.Runner.SimulateFrames(1);
         InteractionActionExecutor executor = door.Open.Executor!;
         door.Open.Executor = null;
+        door.Open.RemoveChild(executor);
         int rejectedCount = 0;
         int startedCount = 0;
         door.Interactive.InteractionActionRejected += (_, _, _) => rejectedCount++;
@@ -762,6 +763,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(rejectedCount).IsEqual(1);
         AssertThat(startedCount).IsEqual(0);
         AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
+        executor.Free();
     }
 
     [TestCase]
@@ -1513,17 +1515,21 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        StatefulStateInteractionRule rule = new() { ExpectedStates = States("closed") };
+        StatefulStateInteractionRule rule = new()
+        {
+            StatefulPath = new NodePath("../../MissingStateful"),
+            ExpectedStates = States("closed"),
+        };
         door.Open.Rules.Clear();
         door.Open.Rules.Add(rule);
 
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
             .IsEqual("Interaction is not configured.");
 
-        rule.StatefulPath = new NodePath("../../MissingStateful");
+        rule.StatefulPath = new NodePath("../../StatefulComponent");
 
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
-            .IsEqual("Interaction is not configured.");
+            .IsEqual("allowed");
 
         rule.StatefulPath = new NodePath("../../StatefulComponent");
         rule.ExpectedStates.Clear();
@@ -1629,7 +1635,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        SetStateInteractionExecutor orphan = new() { TargetState = new StringName("open") };
+        SetStateInteractionExecutor orphan = new() { TargetState = new StringName("melted") };
         door.State.Schema = new StateSchema { States = States("closed", "open") };
         SetStateInteractionExecutor undeclared = new()
         {

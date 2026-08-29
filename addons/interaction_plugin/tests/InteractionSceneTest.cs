@@ -61,15 +61,14 @@ public sealed partial class InteractionSceneTest
             .IsTrue();
         AssertThat(action.Definition?.Id.ToString()).IsEqual("activate");
         AssertThat(action.Definition?.InputActionName.ToString()).IsEqual("interact");
-        AssertThat(action.Executor != null).IsTrue();
-        AssertThat(
-                action.Executor
-                    == actor.GetNode<InteractionActionExecutor>(
-                        "Interactive/ActivateAction/ActivateExecutor"
-                    )
-            )
-            .IsTrue();
-        AssertThat(action.Rules.Count).IsEqual(2);
+        AssertThat(action.ResolveExecutor() is TimedTransitionStateInteractionExecutor).IsTrue();
+        AssertThat(action.ResolveRules().Count()).IsEqual(1);
+        StatefulAvailabilityInteractionRule availabilityRule = action
+            .ResolveRules()
+            .OfType<StatefulAvailabilityInteractionRule>()
+            .Single();
+        AssertThat(availabilityRule.AvailableStates).Contains(new StringName("idle"));
+        AssertThat(availabilityRule.BlockedStates).Contains(new StringName("activating"));
         AssertThat(interactive.TargetRules.Count).IsEqual(1);
         AssertThat(interactive.ActionPromptScene != null).IsTrue();
         MultiplayerSynchronizer synchronizer = actor.GetNode<MultiplayerSynchronizer>(
@@ -78,7 +77,6 @@ public sealed partial class InteractionSceneTest
         AssertThat(synchronizer != null).IsTrue();
         AssertThat(synchronizer!.ReplicationConfig != null).IsTrue();
         AssertThat(actor.GetScript().AsGodotObject() == null).IsTrue();
-        AssertThat(action.Executor is TimedTransitionStateInteractionExecutor).IsTrue();
         AssertThat(action.ExecutionVisibility).IsEqual(InteractionExecutionVisibility.Replicated);
         InteractionExecutionSynchronizer executionSynchronizer =
             actor.GetNode<InteractionExecutionSynchronizer>(
@@ -87,6 +85,21 @@ public sealed partial class InteractionSceneTest
         AssertThat(executionSynchronizer.Interactive == interactive).IsTrue();
         AssertThat(executionSynchronizer.RootPath).IsEqual(new NodePath("."));
         AssertThat(executionSynchronizer.ReplicationConfig != null).IsTrue();
+    }
+
+    [TestCase]
+    public async Task ComposedSpatialPartsInheritTheInteractiveOwnerTransform()
+    {
+        Node3D actor = GD.Load<PackedScene>(LongActionScenePath).Instantiate<Node3D>();
+        actor.Position = new Vector3(7.0f, 2.0f, -3.0f);
+        ISceneRunner runner = ISceneRunner.Load(actor);
+        await runner.SimulateFrames(1);
+
+        InteractiveComponent interactive = actor.GetNode<InteractiveComponent>("Interactive");
+
+        AssertThat(interactive.GlobalPosition).IsEqual(actor.GlobalPosition);
+        AssertThat(interactive.InteractionArea!.GlobalPosition).IsEqual(actor.GlobalPosition);
+        AssertThat(interactive.InteractionAnchor!.GlobalPosition).IsEqual(actor.GlobalPosition);
     }
 
     [TestCase]
@@ -428,7 +441,7 @@ public sealed partial class InteractionSceneTest
         world.State.SetState(new StringName("activated"));
 
         AssertThat(Describe(world.Interactive.EvaluateAvailability(world.Interactor, world.Action)))
-            .IsEqual("This is already activated.");
+            .IsEqual("hidden");
     }
 
     [TestCase]
@@ -677,8 +690,9 @@ public sealed partial class InteractionSceneTest
         InteractiveComponent interactive = button.GetNode<InteractiveComponent>(
             "InteractiveComponent"
         );
-        WireWallControlAction(interactive.Actions[0], wallState, LoweredState, RaisingState);
-        WireWallControlAction(interactive.Actions[1], wallState, RaisedState, LoweringState);
+        IReadOnlyList<InteractionAction> actions = interactive.ResolveActions();
+        WireWallControlAction(actions[0], wallState, LoweredState, RaisingState);
+        WireWallControlAction(actions[1], wallState, RaisedState, LoweringState);
 
         Node3D view = new() { Name = "ViewOrigin" };
         InteractionInteractor interactor = new() { Name = "Interactor" };
@@ -698,7 +712,7 @@ public sealed partial class InteractionSceneTest
         StringName movingState
     )
     {
-        ((SetStateInteractionExecutor)action.Executor!).Stateful = wallState;
+        ((SetStateInteractionExecutor)action.ResolveExecutor()!).Stateful = wallState;
         NodePath statefulPath = new("../../../LeverWall/StatefulComponent");
         action.Rules.Add(
             new StatefulStateInteractionRule

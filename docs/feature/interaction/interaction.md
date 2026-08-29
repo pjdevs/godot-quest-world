@@ -515,6 +515,34 @@ requester-only car leurs actions sont instantanées et leur état monde est déj
 Le Door traite une synchronisation comme une pose silencieuse : il seek l'animation correspondant à
 l'état sans rejouer l'audio one-shot.
 
+## Interaction authoring polish
+
+Le chemin courant d'authoring est maintenant composition-first. Un `InteractiveComponent` (`Node3D`)
+utilise ses enfants directs `InteractionArea3D`, `IndicationArea3D`, `InteractionAnchor3D` et `InteractionAction`
+lorsque les overrides correspondants sont vides. Une `InteractionAction` utilise son unique enfant
+direct `InteractionActionExecutor`. La resolution ne descend jamais recursivement et ne depend jamais
+du nom d'un noeud ; zero candidat requis ou plusieurs candidats ambigus produisent un diagnostic.
+
+Les anciennes references restent des overrides, regroupes sous `Overrides` dans l'Inspector :
+`InteractionArea`, `IndicationArea`, `InteractionAnchor`, `Actions`, `Executor`, `Interactive` du
+synchronizer et `Stateful` des executors. La resolution suit `override explicite ?? composition locale`,
+ce qui permet de relier sans magie un objet d'un autre niveau ou d'un autre prefab. La composition est
+inspectee une seule fois pendant `_Ready()` puis conservee dans les references runtime ; les methodes
+`Resolve...` restent destinees a l'inspection et aux branchements prepares avant l'entree dans l'arbre.
+
+L'integration Stateful resout par defaut l'unique `StatefulComponent` frere de l'`InteractiveComponent`.
+Les rules et executors peuvent toujours porter un `StatefulPath` ou une reference explicite pour piloter
+un autre objet. `StatefulTransitionAction` compose une rule d'etat et un `SetStateInteractionExecutor`;
+`StatefulRunningTransitionAction` compose la variante longue a terminaison externe, et
+`StatefulTimedTransitionAction` ajoute la policy `TimedExecution`. Les transitions longues peuvent
+declarer `BlockedStates` et `BlockReason` ; les autres etats restent hidden.
+
+Les scenes [Door](../../../quest_world/interactibles/door/Door.tscn),
+[Button](../../../quest_world/interactibles/button/Button.tscn) et
+[LongActionExample](../../../addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn)
+illustrent le chemin compose. La porte n'a plus d'array `Actions`, de `Executor` NodePath ni de chemin
+Stateful repete dans son authoring normal.
+
 ## Integration
 
 1. Pour le Character du projet, `quest_world/character/Character.tscn` dérive de `addons/dummy_character_plugin/Character.tscn` et ajoute `InteractionInteractor` (distance calculée depuis le player propriétaire, direction calculée depuis la caméra) ainsi que `InteractionPresenter`. Le script global `quest_world/character/Character.cs` échantillonne l'action `interact` (`E` par défaut) et appelle les deux points d'entrée de l'interactor.

@@ -24,7 +24,8 @@ namespace QuestWorld.Interaction.Integration.Stateful;
 [GlobalClass]
 public partial class TransitionStateInteractionExecutor : InteractionActionExecutor
 {
-    /// <summary>Gets or sets the required component holding the state this action drives.</summary>
+    /// <summary>Gets or sets the optional component override holding the state this action drives.</summary>
+    [ExportGroup("Overrides")]
     [Export]
     public StatefulComponent? Stateful { get; set; }
 
@@ -57,6 +58,7 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
     /// <summary>Godot callback that reports a missing target or a state outside the schema.</summary>
     public override void _Ready()
     {
+        Stateful ??= StatefulComposition.ResolveLocalFrom(this);
         if (Stateful is null)
         {
             GD.PushError($"{GetPath()}: TransitionStateInteractionExecutor requires a Stateful.");

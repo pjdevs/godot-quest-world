@@ -7,11 +7,12 @@
 [ext_resource type="PackedScene" uid="uid://mknaynw5h20v" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="5_indicator"]
 [ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_ll77h"]
 [ext_resource type="Script" uid="uid://c2ca7cnp0rpau" path="res://addons/interaction_plugin/examples/rules/InteractorGroupInteractionRule.cs" id="6_ueomp"]
-[ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="7_action"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="8_actiondef"]
-[ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="9_staterule"]
-[ext_resource type="Script" path="res://addons/interaction_plugin/integration/stateful/TimedTransitionStateInteractionExecutor.cs" id="10_executor"]
 [ext_resource type="Script" uid="uid://bh3lpwhoij01g" path="res://addons/interaction_plugin/runtime/interactive/InteractionExecutionSynchronizer.cs" id="11_execution_sync"]
+[ext_resource type="Script" uid="uid://gjfegsmylme0" path="res://addons/interaction_plugin/integration/stateful/StatefulTimedTransitionAction.cs" id="12_transition_action"]
+[ext_resource type="Script" uid="uid://c2kgrci3tb873" path="res://addons/interaction_plugin/runtime/interactive/InteractionArea3D.cs" id="13_interaction_area"]
+[ext_resource type="Script" uid="uid://c5d10ub023v1a" path="res://addons/interaction_plugin/runtime/interactive/IndicationArea3D.cs" id="14_indication_area"]
+[ext_resource type="Script" uid="uid://df8wm6fw7tmob" path="res://addons/interaction_plugin/runtime/interactive/InteractionAnchor3D.cs" id="15_interaction_anchor"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
 
@@ -39,22 +40,6 @@ InputActionName = &"interact"
 CancelOnInputReleased = true
 metadata/_custom_type_script = "uid://bqs31n67gwjq1"
 
-[sub_resource type="Resource" id="Resource_activate_phase_rule"]
-script = ExtResource("9_staterule")
-StatefulPath = NodePath("../../StatefulComponent")
-ExpectedStates = Array[StringName]([&"idle", &"activating"])
-MismatchAvailability = 1
-BlockReason = "This is already activated."
-metadata/_custom_type_script = "uid://cvrhmun38iql5"
-
-[sub_resource type="Resource" id="Resource_activate_ready_rule"]
-script = ExtResource("9_staterule")
-StatefulPath = NodePath("../../StatefulComponent")
-ExpectedStates = Array[StringName]([&"idle"])
-MismatchAvailability = 1
-BlockReason = "This is busy."
-metadata/_custom_type_script = "uid://cvrhmun38iql5"
-
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_state"]
 properties/0/path = NodePath(".:ReplicatedState")
 properties/0/spawn = true
@@ -66,52 +51,46 @@ properties/0/replication_mode = 2
 mesh = SubResource("BoxMesh_vq8ek")
 surface_material_override/0 = SubResource("StandardMaterial3D_a6s0s")
 
-[node name="InteractionArea" type="Area3D" parent="." unique_id=546578910]
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractionArea" unique_id=391565705]
-shape = SubResource("SphereShape_interaction")
-debug_color = Color(0.9807802, 0, 0.3496692, 0.41960785)
-
-[node name="IndicationArea" type="Area3D" parent="." unique_id=881001018]
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="IndicationArea" unique_id=1113992481]
-shape = SubResource("SphereShape3D_p8fn5")
-debug_color = Color(0, 0.56349266, 0.8623485, 0.41960785)
-
-[node name="InteractionAnchor" type="Marker3D" parent="." unique_id=818464048]
-
-[node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Actions")]
+[node name="Interactive" type="Node3D" parent="." unique_id=1343342868]
 script = ExtResource("2_interactive")
-InteractionArea = NodePath("../InteractionArea")
-IndicationArea = NodePath("../IndicationArea")
-InteractionAnchor = NodePath("../InteractionAnchor")
 DisplayName = "Super Interactive"
 Description = "Interact"
 ActionPromptScene = ExtResource("4_prompt")
 IndicationScene = ExtResource("5_indicator")
-Actions = [NodePath("ActivateAction")]
 TargetRules = Array[ExtResource("5_ll77h")]([SubResource("Resource_ll77h")])
 
-[node name="ActivateAction" type="Node" parent="Interactive" node_paths=PackedStringArray("Executor")]
-script = ExtResource("7_action")
+[node name="InteractionArea3D" type="Area3D" parent="Interactive" unique_id=546578910]
+script = ExtResource("13_interaction_area")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Interactive/InteractionArea3D" unique_id=391565705]
+shape = SubResource("SphereShape_interaction")
+debug_color = Color(0.9807802, 0, 0.3496692, 0.41960785)
+
+[node name="IndicationArea3D" type="Area3D" parent="Interactive" unique_id=881001018]
+script = ExtResource("14_indication_area")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Interactive/IndicationArea3D" unique_id=1113992481]
+shape = SubResource("SphereShape3D_p8fn5")
+debug_color = Color(0, 0.56349266, 0.8623485, 0.41960785)
+
+[node name="InteractionAnchor3D" type="Marker3D" parent="Interactive" unique_id=818464048]
+script = ExtResource("15_interaction_anchor")
+
+[node name="ActivateAction" type="Node" parent="Interactive"]
+script = ExtResource("12_transition_action")
 Definition = SubResource("Resource_activate_definition")
-Executor = NodePath("ActivateExecutor")
-Rules = Array[ExtResource("5_ll77h")]([SubResource("Resource_activate_phase_rule"), SubResource("Resource_activate_ready_rule")])
-ExecutionVisibility = 1
-metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
-
-[node name="ActivateExecutor" type="Node" parent="Interactive/ActivateAction" node_paths=PackedStringArray("Stateful")]
-script = ExtResource("10_executor")
-Stateful = NodePath("../../../StatefulComponent")
-RunningState = &"activating"
-CompletedState = &"activated"
-CancelledState = &"idle"
+From = Array[StringName]([&"idle"])
+Running = &"activating"
+Completed = &"activated"
+Cancelled = &"idle"
+BlockedStates = Array[StringName]([&"activating"])
+BlockReason = "This is busy."
 Duration = 1.5
-metadata/_custom_type_script = "uid://dafaivn8exu7s"
+ExecutionVisibility = 1
+metadata/_custom_type_script = "uid://gjfegsmylme0"
 
-[node name="InteractionExecutionSynchronizer" type="MultiplayerSynchronizer" parent="Interactive" node_paths=PackedStringArray("Interactive")]
+[node name="InteractionExecutionSynchronizer" type="MultiplayerSynchronizer" parent="Interactive"]
 script = ExtResource("11_execution_sync")
-Interactive = NodePath("..")
 metadata/_custom_type_script = "uid://bh3lpwhoij01g"
 
 [node name="StatefulComponent" type="Node" parent="." unique_id=239787997]

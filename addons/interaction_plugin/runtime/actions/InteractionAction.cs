@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using Godot;
+using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Rules;
 
 namespace QuestWorld.Interaction.Runtime.Actions;
@@ -7,9 +9,9 @@ namespace QuestWorld.Interaction.Runtime.Actions;
 /// Binds one reusable action definition to a single target and owns the choices of that occurrence.
 /// </summary>
 /// <remarks>
-/// Add this node under the target and reference it explicitly from
-/// <c>InteractiveComponent.Actions</c>. Availability is evaluated by the interactive component; this
-/// node never mutates gameplay and never evaluates itself.
+/// Add this node under the target. A target composes direct action children when its action-list
+/// override is empty. Availability is evaluated by the interactive component; this node never mutates
+/// gameplay and never evaluates itself.
 /// </remarks>
 [GlobalClass]
 public partial class InteractionAction : Node
@@ -21,12 +23,13 @@ public partial class InteractionAction : Node
     [Export]
     public InteractionActionDefinition? Definition { get; set; }
 
-    /// <summary>Gets or sets the required single owner of the gameplay mutation of this action.</summary>
+    /// <summary>Gets or sets the optional executor override for this action.</summary>
     /// <remarks>
-    /// Add the executor node to the target scene, conventionally as a child of this action, and
-    /// reference it here. An action without executor is a configuration error and stays blocked: the
-    /// core never falls back to a signal that some subscriber might handle.
+    /// Leave it empty to compose the unique direct executor child, or assign an executor that lives
+    /// elsewhere in the tree. An action without executor is a configuration error and stays blocked:
+    /// the core never falls back to a signal that some subscriber might handle.
     /// </remarks>
+    [ExportGroup("Overrides")]
     [Export]
     public InteractionActionExecutor? Executor { get; set; }
 
@@ -73,6 +76,27 @@ public partial class InteractionAction : Node
     [Export]
     public bool Automatic { get; set; }
 
+    /// <summary>
+    /// Resolves the executor override or the unique direct executor child.
+    /// </summary>
+    /// <remarks>
+    /// A missing or ambiguous composition returns null. The owning interactive reports that as a
+    /// configuration error; no recursive or name-based fallback is attempted.
+    /// </remarks>
+    public virtual InteractionActionExecutor? ResolveExecutor()
+    {
+        if (Executor is not null)
+        {
+            return Executor;
+        }
+
+        return InteractionComposition.FindUniqueDirectChild<InteractionActionExecutor>(this);
+    }
+
+    /// <summary>Gets the authored rules for this action.</summary>
+    /// <remarks>Authoring helpers may append their primitive rules to this sequence.</remarks>
+    public virtual IEnumerable<InteractionRule> ResolveRules() => Rules;
+
     /// <summary>Gets the group this action is exclusive with, falling back to the default group.</summary>
     /// <returns>The authored group, or <see cref="DefaultConcurrencyGroup"/> when none is set.</returns>
     public StringName GetConcurrencyGroup() =>
@@ -88,9 +112,27 @@ public partial class InteractionAction : Node
             GD.PushError($"{GetPath()}: InteractionAction requires a Definition.");
         }
 
-        if (Executor is null)
+        InteractionActionExecutor? executor = ResolveExecutor();
+        if (Executor is null && executor is not null)
         {
-            GD.PushError($"{GetPath()}: InteractionAction requires an Executor.");
+            Executor = executor;
+        }
+
+        if (executor is null)
+        {
+            int composedCount = InteractionComposition
+                .FindDirectChildren<InteractionActionExecutor>(this)
+                .Count;
+            if (composedCount > 1)
+            {
+                GD.PushError(
+                    $"{GetPath()}: Executor composition is ambiguous: expected exactly one direct InteractionActionExecutor child."
+                );
+            }
+            else
+            {
+                GD.PushError($"{GetPath()}: InteractionAction requires an Executor.");
+            }
         }
     }
 }

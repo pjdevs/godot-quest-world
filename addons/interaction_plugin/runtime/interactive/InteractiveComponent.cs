@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Detection;
@@ -88,12 +89,13 @@ internal readonly record struct InteractionExecutionDispatch(
 /// Defines an interactable target, evaluates its rules, and owns the execution of its actions.
 /// </summary>
 /// <remarks>
-/// Add this node beside its gameplay node and assign explicit scene references in the Inspector.
-/// Availability evaluation is pure and runs anywhere; reserving, executing, completing, and
-/// cancelling run on the server or offline host.
+/// Add this node beside its gameplay node. Direct marker children compose the usual areas, anchor, and
+/// actions; the Inspector references remain available as overrides for objects elsewhere in the tree.
+/// Availability evaluation is pure and runs anywhere; reserving, executing, completing, and cancelling
+/// run on the server or offline host.
 /// </remarks>
 [GlobalClass]
-public partial class InteractiveComponent : Node
+public partial class InteractiveComponent : Node3D
 {
     /// <summary>Emitted on the authoritative instance once an executor has accepted an action.</summary>
     /// <remarks>
@@ -174,31 +176,20 @@ public partial class InteractiveComponent : Node
     [Signal]
     public delegate void ExecutionPresentationChangedEventHandler(StringName actionId);
 
-    /// <summary>Gets or sets the required area that registers interactors in interaction range.</summary>
-    [ExportGroup("Interaction")]
+    /// <summary>Gets or sets the optional interaction-area override.</summary>
+    [ExportGroup("Overrides")]
     [Export]
-    public Area3D? InteractionArea
-    {
-        get => _interactionArea;
-        set
-        {
-            if (_interactionArea == value)
-            {
-                return;
-            }
+    public Area3D? InteractionArea { get; set; }
 
-            _interactionArea = value;
-        }
-    }
-
-    /// <summary>Gets or sets the optional wider area used to show interaction indications.</summary>
+    /// <summary>Gets or sets the optional indication-area override.</summary>
     [Export]
     public Area3D? IndicationArea { get; set; }
 
-    /// <summary>Gets or sets the required world-space point used for range, focus, and projection.</summary>
+    /// <summary>Gets or sets the optional interaction-anchor override.</summary>
     [Export]
     public Node3D? InteractionAnchor { get; set; }
 
+    [ExportGroup("Interaction")]
     /// <summary>Gets or sets the distance at which this target may be interacted with, or zero.</summary>
     /// <remarks>
     /// Only a detector that decides range per target reads this — the proximity one. Zero means "use
@@ -234,17 +225,16 @@ public partial class InteractiveComponent : Node
     [Export]
     public PackedScene? IndicationScene { get; set; }
 
-    /// <summary>
-    /// Gets or sets the explicit actions offered by this target, evaluated in declaration order.
-    /// </summary>
+    /// <summary>Gets or sets the optional action-list override for this target.</summary>
     /// <remarks>
-    /// Add each <see cref="InteractionAction"/> to the target scene and reference it here. Nothing is
-    /// discovered from the tree, and a target without action offers no interaction at all.
+    /// Leave it empty to compose direct <see cref="InteractionAction"/> children. Fill it only when an
+    /// action lives elsewhere or when the target needs an explicit ordering override.
     /// </remarks>
-    [ExportGroup("Actions")]
+    [ExportGroup("Overrides")]
     [Export]
     public Godot.Collections.Array<InteractionAction> Actions { get; set; } = new();
 
+    [ExportGroup("Rules")]
     /// <summary>
     /// Gets or sets the ordered gameplay conditions shared by every action of this target.
     /// Evaluation stops at the first hidden or blocked result, before the action rules run.
@@ -286,7 +276,6 @@ public partial class InteractiveComponent : Node
         InteractionExecutionPresentationSlot
     > _pendingExecutionProgress = new();
     private readonly HashSet<StringName> _warnedUnknownReplicatedActions = new();
-    private Area3D? _interactionArea;
 
     internal bool HasActiveExecution => _activeExecutions.Count > 0;
 
@@ -321,46 +310,138 @@ public partial class InteractiveComponent : Node
             : null;
     }
 
+    /// <summary>Resolves the explicit interaction area or the unique direct marker child.</summary>
+    public Area3D? ResolveInteractionArea() =>
+        InteractionArea ?? InteractionComposition.FindUniqueDirectChild<InteractionArea3D>(this);
+
+    /// <summary>Resolves the explicit indication area or the unique direct marker child.</summary>
+    public Area3D? ResolveIndicationArea() =>
+        IndicationArea ?? InteractionComposition.FindUniqueDirectChild<IndicationArea3D>(this);
+
+    /// <summary>Resolves the explicit anchor or the unique direct marker child.</summary>
+    public Node3D? ResolveInteractionAnchor() =>
+        InteractionAnchor
+        ?? InteractionComposition.FindUniqueDirectChild<InteractionAnchor3D>(this);
+
+    /// <summary>
+    /// Resolves the explicit action list or all direct <see cref="InteractionAction"/> children.
+    /// </summary>
+    public IReadOnlyList<InteractionAction> ResolveActions()
+    {
+        if (Actions.Count > 0)
+        {
+            return Actions.Where(action => action is not null).ToList();
+        }
+
+        return InteractionComposition.FindDirectChildren<InteractionAction>(this);
+    }
+
     /// <summary>Godot callback that joins the registry the sourceless detectors read.</summary>
     public override void _EnterTree()
     {
         if (!_registered.Contains(this))
         {
             _registered.Add(this);
-            IndexArea(InteractionArea);
-            IndexArea(IndicationArea);
         }
     }
 
     /// <summary>Godot callback that validates configuration and connects area and state signals.</summary>
     public override void _Ready()
     {
-        if (InteractionArea is null)
+        Area3D? interactionArea = ResolveInteractionArea();
+        Area3D? indicationArea = ResolveIndicationArea();
+        Node3D? interactionAnchor = ResolveInteractionAnchor();
+        IReadOnlyList<InteractionAction> actions = ResolveActions();
+
+        // Cache composed values in the public runtime references while leaving the scene's override
+        // exports empty. This assignment happens after scene loading and is never written back to the
+        // authored scene.
+        if (InteractionArea is null && interactionArea is not null)
         {
-            GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionArea.");
+            InteractionArea = interactionArea;
         }
 
-        if (InteractionAnchor is null)
+        if (IndicationArea is null && indicationArea is not null)
         {
-            GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionAnchor.");
+            IndicationArea = indicationArea;
+        }
+
+        if (InteractionAnchor is null && interactionAnchor is not null)
+        {
+            InteractionAnchor = interactionAnchor;
         }
 
         if (Actions.Count == 0)
         {
+            foreach (InteractionAction action in actions)
+            {
+                Actions.Add(action);
+            }
+        }
+
+        if (interactionArea is null)
+        {
+            List<InteractionArea3D> composedAreas =
+                InteractionComposition.FindDirectChildren<InteractionArea3D>(this);
+            if (InteractionArea is null && composedAreas.Count > 1)
+            {
+                GD.PushError(
+                    $"{GetPath()}: InteractionArea composition is ambiguous: expected exactly one direct InteractionArea3D child."
+                );
+            }
+            else
+            {
+                GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionArea.");
+            }
+        }
+
+        if (interactionAnchor is null)
+        {
+            List<InteractionAnchor3D> composedAnchors =
+                InteractionComposition.FindDirectChildren<InteractionAnchor3D>(this);
+            if (InteractionAnchor is null && composedAnchors.Count > 1)
+            {
+                GD.PushError(
+                    $"{GetPath()}: InteractionAnchor composition is ambiguous: expected exactly one direct InteractionAnchor3D child."
+                );
+            }
+            else
+            {
+                GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionAnchor.");
+            }
+        }
+
+        if (indicationArea is null && IndicationArea is null)
+        {
+            List<IndicationArea3D> composedIndicationAreas =
+                InteractionComposition.FindDirectChildren<IndicationArea3D>(this);
+            if (composedIndicationAreas.Count > 1)
+            {
+                GD.PushError(
+                    $"{GetPath()}: IndicationArea composition is ambiguous: expected at most one direct IndicationArea3D child."
+                );
+            }
+        }
+
+        if (actions.Count == 0)
+        {
             GD.PushError($"{GetPath()}: InteractiveComponent requires at least one Action.");
         }
 
-        if (InteractionArea is not null)
+        if (interactionArea is not null)
         {
-            InteractionArea.BodyEntered += OnInteractionAreaBodyEntered;
-            InteractionArea.BodyExited += OnInteractionAreaBodyExited;
+            interactionArea.BodyEntered += OnInteractionAreaBodyEntered;
+            interactionArea.BodyExited += OnInteractionAreaBodyExited;
         }
 
-        if (IndicationArea is not null)
+        if (indicationArea is not null)
         {
-            IndicationArea.BodyEntered += OnIndicationAreaBodyEntered;
-            IndicationArea.BodyExited += OnIndicationAreaBodyExited;
+            indicationArea.BodyEntered += OnIndicationAreaBodyEntered;
+            indicationArea.BodyExited += OnIndicationAreaBodyExited;
         }
+
+        IndexArea(InteractionArea);
+        IndexArea(IndicationArea);
     }
 
     /// <summary>
@@ -399,7 +480,7 @@ public partial class InteractiveComponent : Node
             return targetAvailability;
         }
 
-        InteractionAvailability actionAvailability = EvaluateRules(action.Rules, context);
+        InteractionAvailability actionAvailability = EvaluateRules(action.ResolveRules(), context);
         if (actionAvailability is not InteractionAllowed)
         {
             return actionAvailability;
@@ -458,7 +539,7 @@ public partial class InteractiveComponent : Node
     }
 
     private static InteractionAvailability EvaluateRules(
-        Godot.Collections.Array<InteractionRule> rules,
+        IEnumerable<InteractionRule> rules,
         in InteractionContext context
     )
     {

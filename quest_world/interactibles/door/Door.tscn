@@ -3,15 +3,15 @@
 [ext_resource type="Script" uid="uid://1pl03uoo7gne" path="res://quest_world/interactibles/door/Door.cs" id="1_6xdtw"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="1_vodtj"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn" id="2_wx55h"]
-[ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="3_llf4b"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="4_adxal"]
 [ext_resource type="PackedScene" uid="uid://mknaynw5h20v" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="4_qkbub"]
-[ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_adxal"]
-[ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_bhqfo"]
 [ext_resource type="Script" uid="uid://cpbt7qansaxqx" path="res://addons/stateful_plugin/runtime/StatefulComponent.cs" id="7_bhqfo"]
-[ext_resource type="Script" uid="uid://bw02qn7pyxpy4" path="res://addons/interaction_plugin/integration/stateful/SetStateInteractionExecutor.cs" id="7_wx55h"]
 [ext_resource type="Script" uid="uid://bncq4bgetbnu7" path="res://addons/stateful_plugin/runtime/StateSchema.cs" id="8_j1fib"]
 [ext_resource type="AudioStream" uid="uid://dh5ssj12f4ily" path="res://quest_world/interactibles/door/door_unlock.mp3" id="12_c4v56"]
+[ext_resource type="Script" uid="uid://bhgugen3gbi4d" path="res://addons/interaction_plugin/integration/stateful/StatefulTransitionAction.cs" id="13_transition_action"]
+[ext_resource type="Script" uid="uid://c2kgrci3tb873" path="res://addons/interaction_plugin/runtime/interactive/InteractionArea3D.cs" id="14_interaction_area"]
+[ext_resource type="Script" uid="uid://c5d10ub023v1a" path="res://addons/interaction_plugin/runtime/interactive/IndicationArea3D.cs" id="15_indication_area"]
+[ext_resource type="Script" uid="uid://df8wm6fw7tmob" path="res://addons/interaction_plugin/runtime/interactive/InteractionAnchor3D.cs" id="16_interaction_anchor"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_mokd0"]
 size = Vector3(1, 1.9, 0.1)
@@ -97,25 +97,11 @@ Id = &"open"
 Label = "Open"
 metadata/_custom_type_script = "uid://bqs31n67gwjq1"
 
-[sub_resource type="Resource" id="Resource_ii2gm"]
-script = ExtResource("6_bhqfo")
-StatefulPath = NodePath("../../StatefulComponent")
-ExpectedStates = Array[StringName]([&"closed"])
-BlockReason = ""
-metadata/_custom_type_script = "uid://cvrhmun38iql5"
-
 [sub_resource type="Resource" id="Resource_wx55h"]
 script = ExtResource("4_adxal")
 Id = &"close"
 Label = "Close"
 metadata/_custom_type_script = "uid://bqs31n67gwjq1"
-
-[sub_resource type="Resource" id="Resource_6xdtw"]
-script = ExtResource("6_bhqfo")
-StatefulPath = NodePath("../../StatefulComponent")
-ExpectedStates = Array[StringName]([&"opened"])
-BlockReason = ""
-metadata/_custom_type_script = "uid://cvrhmun38iql5"
 
 [sub_resource type="Resource" id="Resource_qkbub"]
 script = ExtResource("4_adxal")
@@ -123,13 +109,6 @@ Id = &"unlock"
 Label = "Unlock"
 HoldThreshold = 2.0
 metadata/_custom_type_script = "uid://bqs31n67gwjq1"
-
-[sub_resource type="Resource" id="Resource_c4v56"]
-script = ExtResource("6_bhqfo")
-StatefulPath = NodePath("../../StatefulComponent")
-ExpectedStates = Array[StringName]([&"locked"])
-BlockReason = ""
-metadata/_custom_type_script = "uid://cvrhmun38iql5"
 
 [sub_resource type="Resource" id="Resource_j1fib"]
 script = ExtResource("8_j1fib")
@@ -180,70 +159,54 @@ libraries/ = SubResource("AnimationLibrary_6xdtw")
 
 [node name="Interaction" type="Node3D" parent="." unique_id=1276253519]
 
-[node name="IndicationArea" type="Area3D" parent="Interaction" unique_id=1133866117]
+[node name="InteractiveComponent" type="Node3D" parent="Interaction" unique_id=1375300189]
+script = ExtResource("1_vodtj")
+DisplayName = "Door"
+ActionPromptScene = ExtResource("2_wx55h")
+IndicationScene = ExtResource("4_qkbub")
+metadata/_custom_type_script = "uid://dip8gc8uyuju"
 
-[node name="IndicationAreaShape" type="CollisionShape3D" parent="Interaction/IndicationArea" unique_id=1073881630]
+[node name="InteractionArea3D" type="Area3D" parent="Interaction/InteractiveComponent" unique_id=1163350443]
+script = ExtResource("14_interaction_area")
+
+[node name="InteractionAreaShape" type="CollisionShape3D" parent="Interaction/InteractiveComponent/InteractionArea3D" unique_id=1310880081]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+shape = SubResource("BoxShape3D_mokd0")
+
+[node name="IndicationArea3D" type="Area3D" parent="Interaction/InteractiveComponent" unique_id=1133866117]
+script = ExtResource("15_indication_area")
+
+[node name="IndicationAreaShape" type="CollisionShape3D" parent="Interaction/InteractiveComponent/IndicationArea3D" unique_id=1073881630]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 shape = SubResource("BoxShape3D_qkbub")
 debug_color = Color(0.8980768, 0.22753963, 0.5545721, 0.41960785)
 
-[node name="InteractionArea" type="Area3D" parent="Interaction" unique_id=1163350443]
+[node name="InteractionAnchor3D" type="Marker3D" parent="Interaction/InteractiveComponent" unique_id=208728173]
+script = ExtResource("16_interaction_anchor")
+position = Vector3(-0.24409503, 0.97814316, 0)
 
-[node name="InteractionAreaShape" type="CollisionShape3D" parent="Interaction/InteractionArea" unique_id=1310880081]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
-shape = SubResource("BoxShape3D_mokd0")
-
-[node name="InteractiveComponent" type="Node" parent="Interaction" unique_id=1375300189 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Actions")]
-script = ExtResource("1_vodtj")
-InteractionArea = NodePath("../InteractionArea")
-IndicationArea = NodePath("../IndicationArea")
-InteractionAnchor = NodePath("../../Visual/Pivot/DoorMesh/HandleMesh")
-DisplayName = "Door"
-ActionPromptScene = ExtResource("2_wx55h")
-IndicationScene = ExtResource("4_qkbub")
-Actions = [NodePath("OpenAction"), NodePath("CloseAction"), NodePath("UnlockAction")]
-metadata/_custom_type_script = "uid://dip8gc8uyuju"
-
-[node name="OpenAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=395259595 node_paths=PackedStringArray("Executor")]
-script = ExtResource("3_llf4b")
+[node name="OpenAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=395259595]
+script = ExtResource("13_transition_action")
 Definition = SubResource("Resource_mokd0")
-Executor = NodePath("OpenExecutor")
-Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_ii2gm")])
-metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+From = Array[StringName]([&"closed"])
+To = &"opened"
+metadata/_custom_type_script = "uid://bhgugen3gbi4d"
 
-[node name="OpenExecutor" type="Node" parent="Interaction/InteractiveComponent/OpenAction" unique_id=1352586469 node_paths=PackedStringArray("Stateful")]
-script = ExtResource("7_wx55h")
-Stateful = NodePath("../../../StatefulComponent")
-TargetState = &"opened"
-metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
-
-[node name="CloseAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=1558009407 node_paths=PackedStringArray("Executor")]
-script = ExtResource("3_llf4b")
+[node name="CloseAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=1558009407]
+script = ExtResource("13_transition_action")
 Definition = SubResource("Resource_wx55h")
-Executor = NodePath("CloseExecutor")
-Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_6xdtw")])
+From = Array[StringName]([&"opened"])
+To = &"closed"
 Priority = 1
-metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+metadata/_custom_type_script = "uid://bhgugen3gbi4d"
 
-[node name="CloseExecutor" type="Node" parent="Interaction/InteractiveComponent/CloseAction" unique_id=1929747493 node_paths=PackedStringArray("Stateful")]
-script = ExtResource("7_wx55h")
-Stateful = NodePath("../../../StatefulComponent")
-TargetState = &"closed"
-metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
-
-[node name="UnlockAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=37820192 node_paths=PackedStringArray("Executor")]
-script = ExtResource("3_llf4b")
+[node name="UnlockAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=37820192]
+script = ExtResource("13_transition_action")
 Definition = SubResource("Resource_qkbub")
-Executor = NodePath("UnlockExecutor")
-Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_c4v56")])
+From = Array[StringName]([&"locked"])
+To = &"closed"
 Priority = 2
-metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
-
-[node name="UnlockExecutor" type="Node" parent="Interaction/InteractiveComponent/UnlockAction" unique_id=491570712 node_paths=PackedStringArray("Stateful")]
-script = ExtResource("7_wx55h")
-Stateful = NodePath("../../../StatefulComponent")
-TargetState = &"closed"
-metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
+metadata/_custom_type_script = "uid://bhgugen3gbi4d"
 
 [node name="StatefulComponent" type="Node" parent="Interaction" unique_id=957633712]
 script = ExtResource("7_bhqfo")

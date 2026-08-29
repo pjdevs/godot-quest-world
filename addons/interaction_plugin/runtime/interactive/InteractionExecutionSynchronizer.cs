@@ -5,8 +5,9 @@ namespace QuestWorld.Interaction.Runtime.Interactive;
 /// <summary>Replicates the current presentation state of world-observable executions.</summary>
 /// <remarks>
 /// Add this node as a child of an <see cref="InteractiveComponent"/> that authors at least one
-/// <see cref="InteractionExecutionVisibility.Replicated"/> action and assign <see cref="Interactive"/>.
-/// Native synchronizer visibility remains the interest-management boundary.
+/// <see cref="InteractionExecutionVisibility.Replicated"/> action. Its parent is used by default;
+/// assign <see cref="Interactive"/> only when the synchronized target is elsewhere. Native
+/// synchronizer visibility remains the interest-management boundary.
 /// </remarks>
 [GlobalClass]
 public partial class InteractionExecutionSynchronizer : MultiplayerSynchronizer
@@ -14,7 +15,8 @@ public partial class InteractionExecutionSynchronizer : MultiplayerSynchronizer
     private const string RevisionKey = "revision";
     private const string EntriesKey = "entries";
 
-    /// <summary>Gets or sets the target whose execution read model this node transports.</summary>
+    /// <summary>Gets or sets the optional target override whose execution read model is transported.</summary>
+    [ExportGroup("Overrides")]
     [Export]
     public InteractiveComponent? Interactive { get; set; }
 
@@ -35,6 +37,10 @@ public partial class InteractionExecutionSynchronizer : MultiplayerSynchronizer
     private Godot.Collections.Dictionary _replicatedSnapshot = new();
     private long _outgoingRevision;
     private long _lastAppliedRevision;
+
+    /// <summary>Resolves the explicit target override or this node's direct Interactive parent.</summary>
+    public InteractiveComponent? ResolveInteractive() =>
+        Interactive ?? GetParent() as InteractiveComponent;
 
     /// <summary>Creates the self-rooted replication configuration before the node enters a tree.</summary>
     public InteractionExecutionSynchronizer()
@@ -57,25 +63,32 @@ public partial class InteractionExecutionSynchronizer : MultiplayerSynchronizer
     /// <summary>Initializes the self-rooted replication property and observes sparse target changes.</summary>
     public override void _Ready()
     {
-        if (Interactive is null)
+        Interactive ??= GetParent() as InteractiveComponent;
+        InteractiveComponent? interactive = Interactive;
+        if (interactive is null)
         {
             GD.PushError($"{GetPath()}: InteractionExecutionSynchronizer requires an Interactive.");
             return;
         }
 
-        Interactive.ExecutionPresentationChanged += OnExecutionPresentationChanged;
+        interactive.ExecutionPresentationChanged += OnExecutionPresentationChanged;
         if (IsAuthoritative)
         {
             PublishSnapshot();
+        }
+        else
+        {
+            ApplySnapshot(_replicatedSnapshot);
         }
     }
 
     /// <summary>Disconnects the observed target when the synchronizer leaves the tree.</summary>
     public override void _ExitTree()
     {
-        if (Interactive is not null && IsInstanceValid(Interactive))
+        InteractiveComponent? interactive = Interactive;
+        if (interactive is not null && IsInstanceValid(interactive))
         {
-            Interactive.ExecutionPresentationChanged -= OnExecutionPresentationChanged;
+            interactive.ExecutionPresentationChanged -= OnExecutionPresentationChanged;
         }
     }
 
@@ -110,7 +123,7 @@ public partial class InteractionExecutionSynchronizer : MultiplayerSynchronizer
         }
 
         _lastAppliedRevision = revision;
-        Interactive.ApplyReplicatedExecutionEntries(entriesValue.AsGodotArray());
+        Interactive!.ApplyReplicatedExecutionEntries(entriesValue.AsGodotArray());
         return true;
     }
 

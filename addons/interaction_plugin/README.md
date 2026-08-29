@@ -60,7 +60,13 @@ Door
 └── StatefulComponent        optional world state
 ```
 
-On `InteractiveComponent`, assign `InteractionArea`, `InteractionAnchor`, and every `InteractionAction` explicitly in `Actions`. Nothing is discovered by node name or tree search.
+For the normal authoring path, leave the reference overrides empty: direct `InteractionArea3D`,
+`IndicationArea3D`, `InteractionAnchor3D`, and `InteractionAction` children are composed by type. An
+action composes its unique direct `InteractionActionExecutor` child. Explicit references remain
+available under the `Overrides` Inspector group for nodes outside the local composition or for an
+intentional ordering override. Composition never recurses and never uses node names. The composition
+is resolved once in `_Ready()` and the runtime keeps the resulting references; `Resolve...` helpers are
+for inspection and setup-time queries.
 
 `InteractionAnchor` is the single world point used for distance, focus, LOS, and UI projection. `InteractionArea` is currently required for every target: the area detector consumes its body overlaps, the aim detector casts against its collision shape, and the proximity detector ignores its geometry. Configure collision layers/masks accordingly.
 

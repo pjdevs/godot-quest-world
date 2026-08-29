@@ -6,10 +6,11 @@ namespace QuestWorld.Interaction.Runtime.Actions;
 /// Single owner of the gameplay mutation of one action, called by the authoritative target.
 /// </summary>
 /// <remarks>
-/// Add the node to the target scene and reference it from <see cref="InteractionAction.Executor"/>;
-/// nothing is discovered in the tree and an action without executor is a configuration error. The
-/// core never broadcasts a command, so exactly one executor runs per accepted action. Availability
-/// belongs to rules: this call happens once the action is already allowed and reserved.
+/// Add the node as a direct child of its action for local composition, or assign it through
+/// <see cref="InteractionAction.Executor"/> when it lives elsewhere. An action without executor is a
+/// configuration error. The core never broadcasts a command, so exactly one executor runs per accepted
+/// action. Availability belongs to rules: this call happens once the action is already allowed and
+/// reserved.
 /// </remarks>
 [GlobalClass]
 public abstract partial class InteractionActionExecutor : Node
