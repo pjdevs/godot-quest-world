@@ -111,6 +111,21 @@ public readonly record struct InteractionContext(
     InteractionAction Action
 );
 
+/// <summary>Snapshot of one execution visible on an interactive target.</summary>
+/// <remarks>
+/// The execution model is separate from <see cref="InteractionActionPresentation"/>: an action says
+/// what may be requested, while this record says what is currently observable on the target. A null
+/// progress means that the active execution has no generic presentable progress.
+/// </remarks>
+/// <param name="ExecutionId">Opaque identifier of the active execution.</param>
+/// <param name="ActionId">Stable identifier of the action owning the execution.</param>
+/// <param name="Progress">Optional normalized progress between zero and one.</param>
+public readonly record struct InteractionExecutionPresentation(
+    ulong ExecutionId,
+    StringName ActionId,
+    float? Progress = null
+);
+
 /// <summary>Indicates that the executor finished the action synchronously.</summary>
 /// <remarks>The reservation held during the call is released immediately.</remarks>
 public sealed record InteractionExecutionCompleted();
@@ -186,18 +201,12 @@ public readonly record struct InteractionExecutionContext(
 /// <param name="Availability">Availability of this action, either allowed or blocked.</param>
 /// <param name="IsAutomatic">Whether local focus requests this action without any player input.</param>
 /// <param name="IsHoldable">Whether selecting this action requires holding its input.</param>
-/// <param name="HasTimedExecution">
-/// Whether this action currently declares a positive execution duration.
-/// </param>
 /// <param name="HoldProgress">
 /// How far the hold selecting this action has progressed towards <b>its own</b> threshold, or null when
 /// none is in progress.
 /// </param>
 /// <param name="HoldElapsed">
 /// Seconds that hold has lasted, or null when none is in progress.
-/// </param>
-/// <param name="ExecutionProgress">
-/// How far the running execution of this action has progressed, or null when none is running.
 /// </param>
 public readonly record struct InteractionActionPresentation(
     StringName ActionId,
@@ -207,10 +216,8 @@ public readonly record struct InteractionActionPresentation(
     InteractionAvailability Availability,
     bool IsAutomatic = false,
     bool IsHoldable = false,
-    bool HasTimedExecution = false,
     float? HoldProgress = null,
-    float? HoldElapsed = null,
-    float? ExecutionProgress = null
+    float? HoldElapsed = null
 )
 {
     /// <summary>Gets whether this action can currently be requested.</summary>

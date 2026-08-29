@@ -1,5 +1,6 @@
 namespace QuestWorld.Tests;
 
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using GdUnit4;
@@ -183,6 +184,24 @@ public sealed partial class InteractionConfigurationTest
                 ) == null
             )
             .IsTrue();
+    }
+
+    [TestCase]
+    public void ActionPresentationContainsOnlyActionAndHoldData()
+    {
+        AssertThat(typeof(InteractionActionPresentation).GetProperty("HasTimedExecution") == null)
+            .IsTrue();
+        AssertThat(typeof(InteractionActionPresentation).GetProperty("ExecutionProgress") == null)
+            .IsTrue();
+
+        System.Reflection.ParameterInfo[] parameters = typeof(IInteractionActionWidget)
+            .GetMethod("Bind")!
+            .GetParameters();
+        AssertThat(parameters.Length).IsEqual(2);
+        AssertThat(parameters[0].ParameterType)
+            .IsEqual(typeof(InteractionActionPresentation).MakeByRefType());
+        AssertThat(parameters[1].ParameterType)
+            .IsEqual(typeof(InteractionExecutionPresentation?));
     }
 
     [TestCase]

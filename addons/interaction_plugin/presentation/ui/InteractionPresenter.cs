@@ -237,7 +237,15 @@ public partial class InteractionPresenter : CanvasLayer
 
         for (int index = 0; index < _promptActions.Count; index++)
         {
-            (_promptActions[index] as IInteractionActionWidget)?.Bind(_promptedActions[index]);
+            InteractionActionPresentation action = _promptedActions[index];
+            InteractionExecutionPresentation? execution =
+                presentation.Interactive.TryGetExecutionPresentation(
+                    action.ActionId,
+                    out InteractionExecutionPresentation currentExecution
+                )
+                ? currentExecution
+                : null;
+            (_promptActions[index] as IInteractionActionWidget)?.Bind(action, execution);
         }
     }
 

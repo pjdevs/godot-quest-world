@@ -66,6 +66,92 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public async Task SameActionIdCannotReserveTwiceWhenConcurrencyGroupsDiffer()
+    {
+        TestWorld testWorld = BuildWorld();
+        InteractionAction duplicate = CreateAction("activate");
+        duplicate.ConcurrencyGroup = new StringName("other");
+        AddAction(testWorld.Interactive, duplicate);
+        await testWorld.Runner.SimulateFrames(1);
+
+        InteractionExecution? first = testWorld.Interactive.ReserveExecutionCore(
+            testWorld.Interactor,
+            testWorld.Action
+        );
+        InteractionExecution? second = testWorld.Interactive.ReserveExecutionCore(
+            testWorld.Interactor,
+            duplicate
+        );
+
+        AssertThat(first.HasValue).IsTrue();
+        AssertThat(second.HasValue).IsFalse();
+    }
+
+    [TestCase]
+    public async Task RunningExecutionIsProjectedAsAnAuthorityPresentationAndRemovedOnCompletion()
+    {
+        TestWorld testWorld = BuildWorld();
+        ActivationExecutorOf(testWorld.Action).Duration = 3600.0f;
+        int invalidations = 0;
+        testWorld.Interactive.ExecutionPresentationChanged += _ => invalidations++;
+        await testWorld.Runner.SimulateFrames(1);
+
+        testWorld.Interactive.ExecuteAction(
+            testWorld.Interactor,
+            testWorld.Action,
+            out ulong executionId
+        );
+
+        AssertThat(testWorld.Interactive.GetExecutionPresentations().Count).IsEqual(1);
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    new StringName("activate"),
+                    out InteractionExecutionPresentation presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.ExecutionId).IsEqual(executionId);
+        AssertThat(presentation.ActionId).IsEqual(new StringName("activate"));
+        AssertThat(presentation.Progress.HasValue).IsTrue();
+        AssertThat(invalidations).IsEqual(1);
+
+        AssertThat(testWorld.Interactive.CompleteExecution(executionId)).IsTrue();
+
+        AssertThat(testWorld.Interactive.GetExecutionPresentations().Count).IsEqual(0);
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    new StringName("activate"),
+                    out _
+                )
+            )
+            .IsFalse();
+        AssertThat(invalidations).IsEqual(2);
+    }
+
+    [TestCase]
+    public async Task IndefiniteRunningExecutionIsProjectedWithUnknownProgress()
+    {
+        TestWorld testWorld = BuildWorld();
+        await testWorld.Runner.SimulateFrames(1);
+
+        testWorld.Interactive.ExecuteAction(
+            testWorld.Interactor,
+            testWorld.Action,
+            out ulong executionId
+        );
+
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    new StringName("activate"),
+                    out InteractionExecutionPresentation presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.ExecutionId).IsEqual(executionId);
+        AssertThat(presentation.Progress.HasValue).IsFalse();
+    }
+
+    [TestCase]
     public async Task ExecutionResultCoreReleasesTheReservationWithoutDispatch()
     {
         TestWorld testWorld = BuildWorld();
@@ -1988,15 +2074,13 @@ public sealed partial class InteractionBehaviorTest
         // threshold reports nothing: its bar would promise a hold that selects it, and none does.
         AssertThat(PresentedAction(presentation, "activate").HoldProgress.HasValue).IsFalse();
         AssertThat(PresentedAction(presentation, "activate").HoldElapsed.HasValue).IsFalse();
-        AssertThat(PresentedAction(presentation, "force").ExecutionProgress.HasValue).IsFalse();
     }
 
     [TestCase]
-    public async Task IdlePresentationDescribesHoldAndTimedExecutionCapabilities()
+    public async Task IdlePresentationDescribesActionAndHoldData()
     {
         TestWorld testWorld = BuildWorld();
         testWorld.Action.Definition!.HoldThreshold = 2.0f;
-        ActivationExecutorOf(testWorld.Action).Duration = 3.0f;
         InteractionAction inspect = CreateAction("inspect");
         AddAction(testWorld.Interactive, inspect);
         testWorld.Detect(testWorld.Interactive);
@@ -2011,14 +2095,11 @@ public sealed partial class InteractionBehaviorTest
 
         AssertThat(activation.IsHoldable).IsTrue();
         AssertThat(activation.HoldProgress.HasValue).IsFalse();
-        AssertThat(activation.HasTimedExecution).IsTrue();
-        AssertThat(activation.ExecutionProgress.HasValue).IsFalse();
         AssertThat(inspection.IsHoldable).IsFalse();
-        AssertThat(inspection.HasTimedExecution).IsFalse();
     }
 
     [TestCase]
-    public async Task ExecutionProgressIsCarriedByItsOwnActionAlone()
+    public async Task ExecutionPresentationIsCarriedByItsOwnActionAlone()
     {
         TestWorld testWorld = BuildWorld();
         ActivationExecutorOf(testWorld.Action).Duration = 3600.0f;
@@ -2028,17 +2109,23 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
         await testWorld.Runner.SimulateFrames(2);
-        InteractionTargetPresentation presentation = testWorld.Interactive.GetPresentation(
-            testWorld.Interactor,
-            true
-        );
-
-        // Per action and not per target: a widget reads its own progress without filtering by
-        // identifier, and the neighbour blocked by the same execution shows no bar at all.
-        AssertThat(PresentedAction(presentation, "activate").ExecutionProgress.HasValue).IsTrue();
-        AssertThat(PresentedAction(presentation, "activate").ExecutionProgress!.Value > 0.0f)
+        AssertThat(testWorld.Interactive.GetExecutionPresentations().Count).IsEqual(1);
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    new StringName("activate"),
+                    out InteractionExecutionPresentation activation
+                )
+            )
             .IsTrue();
-        AssertThat(PresentedAction(presentation, "inspect").ExecutionProgress.HasValue).IsFalse();
+        AssertThat(activation.Progress.HasValue).IsTrue();
+        AssertThat(activation.Progress!.Value > 0.0f).IsTrue();
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    new StringName("inspect"),
+                    out _
+                )
+            )
+            .IsFalse();
     }
 
     [TestCase]

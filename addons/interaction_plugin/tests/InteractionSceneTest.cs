@@ -94,7 +94,8 @@ public sealed partial class InteractionSceneTest
                 "Open it",
                 "interact",
                 new InteractionAllowed()
-            )
+            ),
+            null
         );
 
         AssertThat(widget.ActionKeyLabel!.Text).IsNotEqual("???");
@@ -107,7 +108,8 @@ public sealed partial class InteractionSceneTest
                 "Open it",
                 "interact",
                 new InteractionBlocked("Locked")
-            )
+            ),
+            null
         );
 
         AssertThat(widget.ActionNameLabel.Text).IsEqual("Open: Locked");
@@ -137,7 +139,8 @@ public sealed partial class InteractionSceneTest
                 "interact",
                 new InteractionAllowed(),
                 IsHoldable: true
-            )
+            ),
+            null
         );
 
         AssertThat(progress.Visible).IsTrue();
@@ -150,7 +153,8 @@ public sealed partial class InteractionSceneTest
                 "Open it",
                 "interact",
                 new InteractionAllowed()
-            )
+            ),
+            null
         );
 
         AssertThat(progress.Visible).IsFalse();

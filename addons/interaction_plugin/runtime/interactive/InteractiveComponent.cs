@@ -32,22 +32,18 @@ internal readonly record struct InteractionExecution(
     public float Progress => Duration > 0.0f ? Mathf.Clamp(Elapsed / Duration, 0.0f, 1.0f) : 0.0f;
 }
 
-/// <summary>Notification payload built once an execution result has been applied.</summary>
-/// <summary>The two progressions the interactor reports, read once per presentation snapshot.</summary>
+/// <summary>The hold progression the interactor reports, read once per presentation snapshot.</summary>
 /// <remarks>
-/// They are attributed per action rather than per target so a widget never has to filter by action
-/// identifier — and because they answer two different questions the §18.1 forbids confusing: the hold
-/// is a local <b>selection</b> between actions sharing an input, the execution is the action itself.
+/// The hold is attributed per action rather than per target so a widget never has to filter by action
+/// identifier. It answers a different question from execution presentation: it is a local
+/// <b>selection</b> between actions sharing an input, while execution presentation belongs to the
+/// interactive target.
 /// </remarks>
 /// <param name="HeldInput">Input being held, or null when no hold is in progress.</param>
 /// <param name="HoldElapsed">Seconds that input has been held.</param>
-/// <param name="RunningActionId">Action whose execution is predicted, or null when none is.</param>
-/// <param name="ExecutionProgress">Progress of that execution.</param>
 internal readonly record struct InteractionProgress(
     StringName? HeldInput,
-    float HoldElapsed,
-    StringName? RunningActionId,
-    float ExecutionProgress
+    float HoldElapsed
 )
 {
     /// <summary>Gets the hold progress one action should show, or null when it shows none.</summary>
@@ -71,14 +67,6 @@ internal readonly record struct InteractionProgress(
     /// </remarks>
     public float? HoldElapsedOf(InteractionActionDefinition definition) =>
         Holds(definition) ? HoldElapsed : null;
-
-    /// <summary>Gets the execution progress one action should show, or null when it shows none.</summary>
-    /// <remarks>
-    /// Predicted locally for the action this player requested, so another player's execution on the
-    /// same target reports nothing here — that progress is not replicated.
-    /// </remarks>
-    public float? ExecutionOf(InteractionActionDefinition definition) =>
-        RunningActionId is not null && definition.Id == RunningActionId ? ExecutionProgress : null;
 
     private bool Holds(InteractionActionDefinition definition) =>
         HeldInput is not null
@@ -161,6 +149,11 @@ public partial class InteractiveComponent : Node
     /// </summary>
     [Signal]
     public delegate void InteractiveStatusChangedEventHandler();
+
+    /// <summary>Emitted when this peer's visible execution slot changes structurally.</summary>
+    /// <param name="actionId">Action whose execution presentation was created or removed.</param>
+    [Signal]
+    public delegate void ExecutionPresentationChangedEventHandler(StringName actionId);
 
     /// <summary>Gets or sets the required area that registers interactors in interaction range.</summary>
     [ExportGroup("Interaction")]
@@ -265,6 +258,7 @@ public partial class InteractiveComponent : Node
     private readonly HashSet<InteractionInteractor> _indicationOverlaps = new();
     private readonly List<InteractionInteractor> _overlapBuffer = new();
     private readonly List<InteractionExecution> _activeExecutions = new();
+    private readonly Dictionary<StringName, InteractionExecutionPresentation> _executionPresentations = new();
     private Area3D? _interactionArea;
 
     internal bool HasActiveExecution => _activeExecutions.Count > 0;
@@ -393,11 +387,17 @@ public partial class InteractiveComponent : Node
         // A reserved group blocks the action for everybody, its own interactor included. Staying
         // allowed for the owner would make a prompt claim an action the target would immediately
         // refuse; blocked keeps the action presented, with the reason, which is what a prompt needs.
-        return TryGetGroupExecution(action, out InteractionExecution running)
-            ? new InteractionBlocked(
+        if (
+            TryGetActionExecution(action, out InteractionExecution running)
+            || TryGetGroupExecution(action, out running)
+        )
+        {
+            return new InteractionBlocked(
                 running.Interactor == interactor ? AlreadyRunningReason : SomeoneElseReason
-            )
-            : new InteractionAllowed();
+            );
+        }
+
+        return new InteractionAllowed();
     }
 
     /// <summary>Aggregates the availability of every action into one target-level result.</summary>
@@ -656,17 +656,13 @@ public partial class InteractiveComponent : Node
         bool isFocused
     )
     {
-        // Read once for the whole snapshot: the interactor holds one hold and one predicted execution
-        // at a time, and every action of this target reads the same two answers.
+        // Read once for the whole snapshot: the interactor holds one input at a time, and every action
+        // of this target reads the same hold state.
         InteractionProgress progress = new(
             interactor.TryGetGestureElapsed(out StringName heldInput, out float holdElapsed)
                 ? heldInput
                 : null,
-            holdElapsed,
-            interactor.TryGetExecutionProgress(out StringName runningId, out float runningProgress)
-                ? runningId
-                : null,
-            runningProgress
+            holdElapsed
         );
 
         List<InteractionActionPresentation> presentedActions = new();
@@ -734,7 +730,6 @@ public partial class InteractiveComponent : Node
             return false;
         }
 
-        InteractionContext context = new(interactor, this, action);
         presentation = new InteractionActionPresentation(
             action.Definition.Id,
             action.Definition.Label,
@@ -743,12 +738,60 @@ public partial class InteractiveComponent : Node
             availability,
             action.Automatic,
             action.Definition.HoldThreshold > 0.0f,
-            action.Executor?.ComputeInteractionDuration(context) > 0.0f,
             progress.HoldOf(action.Definition),
-            progress.HoldElapsedOf(action.Definition),
-            progress.ExecutionOf(action.Definition)
+            progress.HoldElapsedOf(action.Definition)
         );
         return true;
+    }
+
+    /// <summary>Gets the execution presentations visible on this authority or offline target.</summary>
+    /// <remarks>
+    /// The returned snapshot is ordered by <see cref="Actions"/>, not by execution start time. Remote
+    /// peers have no local execution slots in this implementation tranche and therefore receive an
+    /// empty snapshot.
+    /// </remarks>
+    /// <returns>A fresh action-ordered snapshot of the visible active executions.</returns>
+    public IReadOnlyList<InteractionExecutionPresentation> GetExecutionPresentations()
+    {
+        List<InteractionExecutionPresentation> presentations = new();
+        if (!IsAuthoritative)
+        {
+            return presentations;
+        }
+
+        HashSet<StringName> addedActionIds = new();
+        foreach (InteractionAction action in Actions)
+        {
+            if (
+                action?.Definition is not null
+                && addedActionIds.Add(action.Definition.Id)
+                && _executionPresentations.TryGetValue(
+                    action.Definition.Id,
+                    out InteractionExecutionPresentation presentation
+                )
+            )
+            {
+                presentations.Add(presentation);
+            }
+        }
+
+        return presentations;
+    }
+
+    /// <summary>Looks up the visible execution presentation for one action identifier.</summary>
+    /// <param name="actionId">Stable identifier of the action to look up.</param>
+    /// <param name="presentation">Visible execution snapshot when one exists.</param>
+    /// <returns><see langword="true"/> when this target has a matching visible execution.</returns>
+    public bool TryGetExecutionPresentation(
+        StringName actionId,
+        out InteractionExecutionPresentation presentation
+    )
+    {
+        presentation = default;
+        return IsAuthoritative
+            && actionId is not null
+            && !actionId.IsEmpty
+            && _executionPresentations.TryGetValue(actionId, out presentation);
     }
 
     /// <summary>Runs the authoritative command of one action through its single executor.</summary>
@@ -847,7 +890,9 @@ public partial class InteractiveComponent : Node
             float elapsed = execution.Elapsed + (float)delta;
             if (elapsed < execution.Duration)
             {
-                _activeExecutions[index] = execution with { Elapsed = elapsed };
+                execution = execution with { Elapsed = elapsed };
+                _activeExecutions[index] = execution;
+                UpdateExecutionPresentationProgress(execution);
                 continue;
             }
 
@@ -886,6 +931,7 @@ public partial class InteractiveComponent : Node
         {
             Duration = Mathf.Max(duration, 0.0f),
         };
+        AddExecutionPresentation(_activeExecutions[index]);
         UpdateExecutionProcessing();
     }
 
@@ -901,6 +947,73 @@ public partial class InteractiveComponent : Node
         }
 
         SetProcess(false);
+    }
+
+    private void AddExecutionPresentation(in InteractionExecution execution)
+    {
+        if (
+            !IsAuthoritative
+            || execution.Action?.Definition is not InteractionActionDefinition definition
+        )
+        {
+            return;
+        }
+
+        StringName actionId = definition.Id;
+        InteractionExecutionPresentation presentation = new(
+            execution.Id,
+            actionId,
+            execution.Duration > 0.0f ? execution.Progress : null
+        );
+        bool structuralChange =
+            !_executionPresentations.TryGetValue(
+                actionId,
+                out InteractionExecutionPresentation previous
+            ) || previous.ExecutionId != presentation.ExecutionId;
+        _executionPresentations[actionId] = presentation;
+        if (structuralChange)
+        {
+            EmitSignal(SignalName.ExecutionPresentationChanged, actionId);
+        }
+    }
+
+    private void UpdateExecutionPresentationProgress(in InteractionExecution execution)
+    {
+        if (
+            !IsAuthoritative
+            || execution.Action?.Definition is not InteractionActionDefinition definition
+            || !_executionPresentations.TryGetValue(
+                definition.Id,
+                out InteractionExecutionPresentation presentation
+            )
+            || presentation.ExecutionId != execution.Id
+        )
+        {
+            return;
+        }
+
+        _executionPresentations[definition.Id] = presentation with
+        {
+            Progress = execution.Duration > 0.0f ? execution.Progress : null,
+        };
+    }
+
+    private void RemoveExecutionPresentation(in InteractionExecution execution)
+    {
+        if (
+            execution.Action?.Definition is not InteractionActionDefinition definition
+            || !_executionPresentations.TryGetValue(
+                definition.Id,
+                out InteractionExecutionPresentation presentation
+            )
+            || presentation.ExecutionId != execution.Id
+        )
+        {
+            return;
+        }
+
+        _executionPresentations.Remove(definition.Id);
+        EmitSignal(SignalName.ExecutionPresentationChanged, definition.Id);
     }
 
     /// <summary>Gets whether one execution is still reserved on this target.</summary>
@@ -920,12 +1033,17 @@ public partial class InteractiveComponent : Node
         InteractionAction action
     )
     {
-        if (interactor is null || action?.Executor is null || !Actions.Contains(action))
+        if (
+            interactor is null
+            || action?.Definition is null
+            || action.Executor is null
+            || !Actions.Contains(action)
+        )
         {
             return null;
         }
 
-        if (TryGetGroupExecution(action, out _))
+        if (TryGetActionExecution(action, out _) || TryGetGroupExecution(action, out _))
         {
             return null;
         }
@@ -1025,6 +1143,7 @@ public partial class InteractiveComponent : Node
 
         InteractionExecution execution = _activeExecutions[index];
         _activeExecutions.RemoveAt(index);
+        RemoveExecutionPresentation(execution);
         UpdateExecutionProcessing();
         return execution;
     }
@@ -1054,6 +1173,26 @@ public partial class InteractiveComponent : Node
         foreach (InteractionExecution candidate in _activeExecutions)
         {
             if (candidate.ConcurrencyGroup == group)
+            {
+                execution = candidate;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryGetActionExecution(InteractionAction action, out InteractionExecution execution)
+    {
+        execution = default;
+        if (action?.Definition is not InteractionActionDefinition definition || definition.Id.IsEmpty)
+        {
+            return false;
+        }
+
+        foreach (InteractionExecution candidate in _activeExecutions)
+        {
+            if (candidate.Action?.Definition?.Id == definition.Id)
             {
                 execution = candidate;
                 return true;
@@ -1295,6 +1434,7 @@ public partial class InteractiveComponent : Node
         ForgetArea(InteractionArea);
         ForgetArea(IndicationArea);
         _activeExecutions.Clear();
+        _executionPresentations.Clear();
         PurgeInvalidInteractors();
 
         // An area cannot report the overlap it loses by being freed, so every interactor that holds

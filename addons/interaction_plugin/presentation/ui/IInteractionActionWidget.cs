@@ -7,7 +7,11 @@ namespace QuestWorld.Interaction.Presentation.UI;
 /// </remarks>
 public interface IInteractionActionWidget
 {
-    /// <summary>Refreshes the local widget from the latest action presentation.</summary>
-    /// <param name="presentation">Immutable snapshot of the single action shown by this widget.</param>
-    void Bind(in InteractionActionPresentation presentation);
+    /// <summary>Refreshes the widget from its action and optional execution snapshots.</summary>
+    /// <param name="action">Immutable snapshot of the single action shown by this widget.</param>
+    /// <param name="execution">Matching execution on the target, or null when none is visible.</param>
+    void Bind(
+        in InteractionActionPresentation action,
+        InteractionExecutionPresentation? execution
+    );
 }

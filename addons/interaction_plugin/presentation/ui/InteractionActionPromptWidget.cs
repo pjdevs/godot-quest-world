@@ -18,7 +18,10 @@ public partial class InteractionActionPromptWidget : PanelContainer, IInteractio
     public override void _Ready() { }
 
     /// <inheritdoc />
-    public void Bind(in InteractionActionPresentation presentation)
+    public void Bind(
+        in InteractionActionPresentation presentation,
+        InteractionExecutionPresentation? execution
+    )
     {
         string actionKey =
             InputMap.ActionGetEvents(presentation.InputActionName).FirstOrDefault()?.AsText()

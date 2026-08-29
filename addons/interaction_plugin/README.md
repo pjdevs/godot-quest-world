@@ -244,10 +244,10 @@ The reliable client RPC carries only `targetPath + actionId`. The server checks 
 The target supplies `ActionPromptScene` and `IndicationScene`; leaving one unset simply omits that visual.
 
 - A prompt container implements `IInteractionPromptContainer.Bind(targetPresentation)` and exposes `ActionsContainer`.
-- One action widget implements `IInteractionActionWidget.Bind(actionPresentation)`.
+- One action widget implements `IInteractionActionWidget.Bind(in actionPresentation, executionPresentation?)`.
 - A target-level indication implements `IInteractionWidget.Bind(targetPresentation)`.
 
-`Bind` runs locally every presentation frame so hold progress, execution progress, rules, and projection remain current. Keep it allocation-free and side-effect free. The presenter reuses widget instances; it only recreates them when the target, scene, or presented action count changes.
+`Bind` runs locally every presentation frame so hold progress, execution presentation, rules, and projection remain current. Keep it allocation-free and side-effect free. The presenter reuses widget instances; it only recreates them when the target, scene, or presented action count changes.
 
 ### Provided presentation
 
@@ -272,7 +272,7 @@ The target supplies `ActionPromptScene` and `IndicationScene`; leaving one unset
 | Validate sustained presence | Never | Once per running, presence-bound execution per process frame |
 | Render widgets | Every local presentation frame | Never on a dedicated server |
 
-Offline and listen-server play take the authoritative path directly. Active execution identifiers are transient and server-only; interaction execution state is not replicated. Client progress is a local prediction computed from `ComputeInteractionDuration` at the press and then recalibrated by the `InteractionStarted` acknowledgement, which carries the deadline the authority reserved and pushes it by the round trip the prediction measured — so the bar is immediate, ends when the completion actually arrives, and the authority still has the last word. Presentation exposes `IsHoldable` and `HasTimedExecution` even while idle; nullable progress values still mean that no matching hold or execution is currently advancing. Persistent replicated world state belongs to `StatefulComponent`.
+Offline and listen-server play take the authoritative path directly. Impl 1 exposes active execution presentations only on the authority or offline target; remote clients receive no execution slots because interaction execution state is not replicated yet. Client progress remains the V3 local prediction computed from `ComputeInteractionDuration` and recalibrated by the `InteractionStarted` acknowledgement, but it is no longer part of `InteractionActionPresentation`. Action presentation exposes `IsHoldable` and nullable hold values; execution presentation carries the matching `ExecutionId`, `ActionId`, and optional progress. Persistent replicated world state belongs to `StatefulComponent`.
 
 ### Notifications
 

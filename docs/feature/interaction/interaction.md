@@ -437,6 +437,32 @@ feedback vaut ici comme pour l'état : une UI ouverte par l'acquittement ne doit
 l'état répliqué, sinon le host la joue deux fois.
 
 
+## Interaction V4 — Impl 1 delivered
+
+L'Impl 1 sépare désormais la présentation de l'action et celle de l'exécution, sans modifier encore
+le transport de prédiction V3.
+
+- `InteractionActionPresentation` porte uniquement l'identité, le texte, l'input, la disponibilité,
+  l'automaticité et le maintien (`HoldProgress` / `HoldElapsed`). Il n'expose plus la capacité timed ni
+  la progression d'exécution.
+- `InteractionExecutionPresentation` porte `ExecutionId`, `ActionId` et une progression nullable.
+  `InteractiveComponent.GetExecutionPresentations()` renvoie un snapshot dans l'ordre des actions et
+  `TryGetExecutionPresentation(actionId, out presentation)` permet un accès direct.
+- Les exécutions `Running` de l'autorité et du mode offline alimentent un slot local par `ActionId`.
+  Une durée V3 expose sa progression courante ; une exécution indéfinie expose `Progress = null`.
+  La complétion ou l'annulation retire immédiatement le slot et émet
+  `ExecutionPresentationChanged(actionId)`. Les clients distants restent sans slot dans cette tranche.
+- Une seconde réservation portant le même `ActionId` est refusée avant l'évaluation de la
+  `ConcurrencyGroup`. Les actions de groupes différents restent concurrentes lorsqu'elles ont des
+  identifiants distincts.
+- `IInteractionActionWidget.Bind` reçoit maintenant l'action et son exécution optionnelle. Le
+  `InteractionPresenter` effectue la jointure par `ActionId`; le widget par défaut conserve uniquement
+  l'affichage de l'input, de la disponibilité et du maintien.
+
+Le chrono V3, la prédiction requester et l'acquittement avec durée restent volontairement internes
+jusqu'à l'Impl 2. La progression publiée, les `Callable`, le timed helper, les slots requester et la
+réplication sont hors de cette tranche.
+
 ## Integration
 
 1. Pour le Character du projet, `quest_world/character/Character.tscn` dérive de `addons/dummy_character_plugin/Character.tscn` et ajoute `InteractionInteractor` (distance calculée depuis le player propriétaire, direction calculée depuis la caméra) ainsi que `InteractionPresenter`. Le script global `quest_world/character/Character.cs` échantillonne l'action `interact` (`E` par défaut) et appelle les deux points d'entrée de l'interactor.
