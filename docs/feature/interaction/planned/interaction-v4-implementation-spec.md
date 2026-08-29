@@ -1,6 +1,6 @@
 # Interaction V4 — implementation specification
 
-> **Status: Impl 1 delivered; Impl 2 and Impl 3 pending.** Cette spec transforme
+> **Status: Impl 2 delivered; Impl 3 pending.** Cette spec transforme
 > [`interaction-v4-architecture.md`](./interaction-v4-architecture.md) en trois tranches de
 > réalisation exécutables. Le document d'architecture reste le contrat d'intention ; celui-ci fixe
 > les APIs, la migration, le transport réseau, les tests et les critères de fin. Aucun plan séparé
@@ -388,7 +388,11 @@ It keeps a protected `Running()` helper returning payload-free `InteractionExecu
 `TryGetExecutionProgress` and duration application. Reservation, input release, presence validation,
 completion, cancellation and failure remain unchanged.
 
-### 6.2 TimedInteractionExecutor
+### 6.2 TimedExecution and TimedInteractionExecutor
+
+`TimedExecution` is a composable helper, not a second Interaction execution. It owns the positive
+duration, authority time anchor, sparse linear samples, local derived progress and automatic call to
+`CompleteExecution(executionId)`. It can be embedded in any custom executor hierarchy.
 
 ```csharp
 [GlobalClass]
@@ -408,8 +412,9 @@ public abstract partial class TimedInteractionExecutor : InteractionActionExecut
 }
 ```
 
-`ComputeTimedDuration` defaults to the exported `Duration`, remains a pure query, and is only part of
-the timed feature. `RunningTimed` clamps negative duration to zero.
+`TimedInteractionExecutor` is the author-facing inheritance shortcut. It composes one
+`TimedExecution`; `ComputeTimedDuration` defaults to the exported `Duration`, remains a pure query,
+and is only part of the timed feature. `RunningTimed` clamps negative duration to zero.
 
 - positive duration: register authoritative clock and linear progress sample, return `Running()` ;
 - zero duration: return generic `Running()` with no clock or progress ;
@@ -417,11 +422,12 @@ the timed feature. `RunningTimed` clamps negative duration to zero.
 - completion/cancellation/failure: clear clock and progress state before subclass callback ;
 - stale timer callback: no-op through the execution id guard.
 
-The helper processes only while it owns a positive-duration execution. Core Interaction never checks
+The helper subscribes to frame processing only while it owns a positive-duration execution. Core Interaction never checks
 `executor is TimedInteractionExecutor`.
 
-`TransitionStateInteractionExecutor` migrates to this base. Existing `Duration = 0` continues to mean
-the gameplay system completes the execution externally.
+`TransitionStateInteractionExecutor` remains the non-timed three-state executor completed by gameplay.
+`TimedTransitionStateInteractionExecutor` derives from it and composes `TimedExecution`, proving that
+the timed policy is reusable when another executor base already owns the gameplay behavior.
 
 ### 6.3 Timing correction
 
@@ -486,10 +492,10 @@ Reconciliation:
 - completion/cancellation/failure removes matching authoritative id immediately ;
 - stale terminal ACK never removes a newer id in the same action slot.
 
-For timed ACK after local prediction, preserve the elapsed request time and retime so the remaining
-visual duration equals the authoritative duration represented by the sample. This retains V3's
-latency compensation: the bar does not rewind at ACK and does not finish one round trip before the
-terminal ACK.
+For a linear ACK after local prediction, preserve the visible progress and recompute only its rate so
+the remaining visual duration equals the authoritative remaining time represented by the sample.
+Later linear corrections apply the same monotonic rule. This retains latency compensation without a
+visible rewind and prevents the bar from finishing one round trip before the terminal ACK.
 
 ### 7.4 Requester-only progress updates
 
@@ -585,7 +591,7 @@ plus transport latency. Authority completion remains exact.
 
 ## 9. Three implementation slices
 
-### 9.1 Impl 1 — read model foundation
+### 9.1 Impl 1 — read model foundation (delivered)
 
 ### Code scope
 
@@ -623,7 +629,7 @@ plus transport latency. Authority completion remains exact.
 - remote clients receive null execution in this tranche ;
 - all existing gameplay, ACK and network tests still pass after expected API updates.
 
-### 9.2 Impl 2 — progress, timing and requester
+### 9.2 Impl 2 — progress, timing and requester (delivered)
 
 ### Code scope
 
@@ -632,8 +638,9 @@ plus transport latency. Authority completion remains exact.
 - add `FailExecution` and failed callback/signal ;
 - make `InteractionExecutionRunning` payload-free ;
 - remove duration/elapsed/process from Interactive core ;
-- add `TimedInteractionExecutor` ;
-- migrate `TransitionStateInteractionExecutor` and scripted test executors ;
+- add composable `TimedExecution` and the `TimedInteractionExecutor` inheritance shortcut ;
+- keep `TransitionStateInteractionExecutor` generic, add `TimedTransitionStateInteractionExecutor`,
+  and migrate scripted test executors ;
 - move requester prediction from one interactor float to per-target/action local slots ;
 - remove duration from public ACK signal/RPC semantics ;
 - add requester-only sample update RPC ;
@@ -705,7 +712,7 @@ plus transport latency. Authority completion remains exact.
 
 - duration leaves core result, target storage and public ACK ;
 - requester presentation is restored through execution slots ;
-- all timed authoring uses `TimedInteractionExecutor` ;
+- timed authoring uses either `TimedInteractionExecutor` or a composed `TimedExecution` ;
 - old `ComputeInteractionDuration`, `RunningForDuration`, `_prediction` float and
   `TryGetExecutionProgress` are deleted, not deprecated.
 
@@ -725,12 +732,12 @@ Primary runtime:
 - `addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs` ;
 - `addons/interaction_plugin/runtime/actions/InteractionAction.cs` ;
 - `addons/interaction_plugin/runtime/actions/InteractionActionExecutor.cs` ;
-- new `TimedInteractionExecutor.cs` ;
+- new `TimedExecution.cs` and `TimedInteractionExecutor.cs` ;
 - new `InteractionExecutionSynchronizer.cs`.
 
 Integration and presentation:
 
-- `TransitionStateInteractionExecutor.cs` ;
+- `TransitionStateInteractionExecutor.cs` and `TimedTransitionStateInteractionExecutor.cs` ;
 - `InteractionPresenter.cs` ;
 - `IInteractionActionWidget.cs` ;
 - `InteractionActionPromptWidget.cs` ;

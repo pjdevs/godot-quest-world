@@ -124,6 +124,17 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
+    public void TimedStateTransitionReportsANegativeDuration()
+    {
+        TimedTransitionStateInteractionExecutor executor = new() { Duration = -1.0f };
+
+        string[] warnings = InteractionValidator.Validate(executor).ToArray();
+
+        AssertThat(warnings.Contains("Duration must not be negative.")).IsTrue();
+        AssertThat(warnings.Contains("Stateful must be assigned.")).IsTrue();
+    }
+
+    [TestCase]
     public void MissingFocusIsRepresentedByAnAbsentPresentation()
     {
         InteractionInteractor interactor = new();
@@ -200,8 +211,7 @@ public sealed partial class InteractionConfigurationTest
         AssertThat(parameters.Length).IsEqual(2);
         AssertThat(parameters[0].ParameterType)
             .IsEqual(typeof(InteractionActionPresentation).MakeByRefType());
-        AssertThat(parameters[1].ParameterType)
-            .IsEqual(typeof(InteractionExecutionPresentation?));
+        AssertThat(parameters[1].ParameterType).IsEqual(typeof(InteractionExecutionPresentation?));
     }
 
     [TestCase]
@@ -291,6 +301,7 @@ public sealed partial class InteractionConfigurationTest
             AssertThat(signals.Contains("InteractionActionStarted")).IsTrue();
             AssertThat(signals.Contains("InteractionActionCompleted")).IsTrue();
             AssertThat(signals.Contains("InteractionActionCancelled")).IsTrue();
+            AssertThat(signals.Contains("InteractionActionFailed")).IsTrue();
             AssertThat(signals.Contains("InteractionActionRejected")).IsTrue();
         }
         finally

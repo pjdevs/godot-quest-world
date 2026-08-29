@@ -55,7 +55,6 @@ public sealed partial class InteractionNetworkTest
             AssertThat(session.KindsA()).IsEqual(new List<string> { "started" });
             AssertThat(session.KindsB()).IsEmpty();
             Ack started = session.AcksA[0];
-            AssertThat(started.Duration).IsEqual(2.0f);
             AssertThat(started.ExecutionId).IsGreater(0ul);
             // Each peer resolves the path in its own branch, so the requester is handed its own copy.
             AssertThat(started.Target == session.ClientA.Interactive).IsTrue();
@@ -160,7 +159,10 @@ public sealed partial class InteractionNetworkTest
 
             AssertThat(session.KindsA()).IsEqual(new List<string> { "rejected" });
             AssertThat(session.AcksA[0].Reason).IsEqual("The till is closed.");
-            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsFalse();
+            AssertThat(
+                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsFalse();
         }
         finally
         {
@@ -211,18 +213,22 @@ public sealed partial class InteractionNetworkTest
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
 
             AssertThat(
-                    session.ClientA.InteractorA.TryGetExecutionProgress(
-                        out StringName actionId,
-                        out float progress
+                    session.ClientA.Interactive.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out InteractionExecutionPresentation presentation
                     )
                 )
                 .IsTrue();
-            AssertThat(actionId.ToString()).IsEqual("activate");
-            AssertThat(progress < 1.0f).IsTrue();
+            AssertThat(presentation.ActionId.ToString()).IsEqual("activate");
+            AssertThat(presentation.Progress.HasValue).IsTrue();
+            AssertThat(presentation.Progress!.Value < 1.0f).IsTrue();
 
             await session.Pump(RoundTripFrames);
 
-            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsTrue();
+            AssertThat(
+                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsTrue();
         }
         finally
         {
@@ -245,11 +251,17 @@ public sealed partial class InteractionNetworkTest
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
 
-            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsFalse();
+            AssertThat(
+                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsFalse();
 
             await session.Pump(RoundTripFrames);
 
-            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsTrue();
+            AssertThat(
+                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsTrue();
         }
         finally
         {
@@ -272,12 +284,22 @@ public sealed partial class InteractionNetworkTest
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
 
-            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsTrue();
+            AssertThat(
+                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsTrue();
 
             await session.Pump(RoundTripFrames);
 
             AssertThat(session.KindsA()).IsEqual(new List<string> { "started" });
-            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsFalse();
+            AssertThat(
+                    session.ClientA.Interactive.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out InteractionExecutionPresentation presentation
+                    )
+                )
+                .IsTrue();
+            AssertThat(presentation.Progress.HasValue).IsFalse();
         }
         finally
         {
@@ -302,10 +324,15 @@ public sealed partial class InteractionNetworkTest
             AssertThat(session.KindsB()).IsEqual(new List<string> { "rejected" });
             // The loser drew a bar at its own press, like the winner did, and the refusal takes it
             // away: an unacknowledged prediction is exactly what a refusal invalidates.
-            AssertThat(session.ClientB.InteractorB.TryGetExecutionProgress(out _, out _))
+            AssertThat(
+                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
                 .IsFalse();
             // The winner keeps drawing its own bar.
-            AssertThat(session.ClientA.InteractorA.TryGetExecutionProgress(out _, out _)).IsTrue();
+            AssertThat(
+                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsTrue();
         }
         finally
         {
@@ -1076,7 +1103,6 @@ public sealed partial class InteractionNetworkTest
         Node? Target,
         StringName ActionId,
         ulong ExecutionId,
-        float Duration,
         string Reason
     );
 
@@ -1236,16 +1262,16 @@ public sealed partial class InteractionNetworkTest
 
         private static void Record(InteractionInteractor interactor, List<Ack> acks)
         {
-            interactor.InteractionStarted += (target, actionId, executionId, duration) =>
-                acks.Add(new Ack("started", target, actionId, executionId, duration, string.Empty));
+            interactor.InteractionStarted += (target, actionId, executionId) =>
+                acks.Add(new Ack("started", target, actionId, executionId, string.Empty));
             interactor.InteractionCompleted += (target, actionId) =>
-                acks.Add(new Ack("completed", target, actionId, 0ul, 0.0f, string.Empty));
+                acks.Add(new Ack("completed", target, actionId, 0ul, string.Empty));
             interactor.InteractionCancelled += (target, actionId, reason) =>
-                acks.Add(new Ack("cancelled", target, actionId, 0ul, 0.0f, reason));
+                acks.Add(new Ack("cancelled", target, actionId, 0ul, reason));
             interactor.InteractionFailed += (target, actionId, reason) =>
-                acks.Add(new Ack("failed", target, actionId, 0ul, 0.0f, reason));
+                acks.Add(new Ack("failed", target, actionId, 0ul, reason));
             interactor.InteractionRejected += (target, actionId, reason) =>
-                acks.Add(new Ack("rejected", target, actionId, 0ul, 0.0f, reason));
+                acks.Add(new Ack("rejected", target, actionId, 0ul, reason));
         }
 
         private static List<string> Kinds(List<Ack> acks)

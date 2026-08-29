@@ -140,10 +140,10 @@ Une exécution devient une entité identifiée que le target possède, et le chr
 - Ce qui restait n'avait plus rien d'un exemple, donc `LongActionInteractionExecutor` est promu en brique générique : [`TransitionStateInteractionExecutor`](../../../addons/interaction_plugin/integration/stateful/TransitionStateInteractionExecutor.cs), à côté de `SetStateInteractionExecutor` dont il est le pendant long. Il applique l'état de course au départ, l'état de fin à la complétion, et restaure l'état d'annulation sinon. Il n'a plus de compteurs publics d'instrumentation : les tests de scène observent désormais les signaux et l'état, ce qu'un consommateur réel observerait. Il couvre le cas courant et ne doit pas grossir — une action qui joue aussi un son ou avance une quête écrit son propre executor, libre de réutiliser le même motif à trois états.
 - **La durée est une fonction, et c'est la même pour tout le monde.** `ExpectedDuration` est supprimée : une propriété déclarée à côté du code qui décide expose la donnée deux fois, et les deux peuvent se contredire — on peut author 2 s et retourner `RunningFor(5)`. À la place, `InteractionActionExecutor.ComputeInteractionDuration(context)` est une **query pure**, publique, défaut `0`, que l'autorité et le client propriétaire exécutent tous les deux : le premier via `RunningForDuration(context)` pour armer sa réservation, le second pour dessiner sa barre sans attendre. Une seule source, deux lecteurs.
 - Corollaire assumé : `RunningFor(seconds)` **n'existe pas**. Si elle existait, un executor pourrait retourner un nombre que sa propre query ne connaît pas, et la duplication reviendrait par la fenêtre. Il ne reste que `RunningForDuration(context)` et `RunningUntilCompleted()` — donc **le seul moyen d'obtenir une échéance est une fonction que tous les peers peuvent appeler**. Le cas perdu, une longueur connue seulement après le démarrage (le clip qu'on vient de lancer), n'était de toute façon prédictible par personne : il devient `RunningUntilCompleted()` plus une complétion gameplay, ce que l'addon fait déjà.
-- Une longueur qui doit être réglable est un `[Export]` de l'executor, répondu par sa query : `TransitionStateInteractionExecutor.Duration` → `ComputeInteractionDuration`. La donnée reste dans la scène — donc présente sur tous les peers — mais elle traverse le code qui l'utilise, donc l'Inspector, le chrono et la barre ne peuvent plus diverger.
+- Une longueur qui doit être réglable est un `[Export]` de l'executor timed, répondu par sa query : `TimedTransitionStateInteractionExecutor.Duration` → `ComputeTimedDuration`. La donnée reste dans la scène — donc présente sur tous les peers — mais elle traverse le code qui l'utilise, donc l'Inspector, le chrono et la barre ne peuvent plus diverger.
 - **Lire un état que le client n'a pas n'est pas interdit, c'est une incohérence choisie.** Un jet de dés serveur ou un inventaire non répliqué donnent une prédiction fausse pendant un aller-retour, puis l'acquittement recale. C'est une note pour l'implémenteur, pas une règle du core : une durée assez importante pour varier se calcule presque toujours depuis des données que tout le monde a déjà. Et c'est le même contrat qu'une `InteractionRule`, qui tourne déjà des deux côtés.
 - **L'autorité a le dernier mot sur la longueur, sans rien répliquer.** La durée ne passe par aucun `MultiplayerSynchronizer` : elle voyage une fois, dans l'acquittement `InteractionStarted`, au seul demandeur. Cet acquittement arme la barre si la prédiction avait renoncé, la retime si la query a répondu autrement sur ce peer, et l'efface si l'exécution n'a finalement pas d'échéance. Trois tests réseau couvrent les trois branches (`ARemoteClientDrawsItsBarBeforeTheAuthorityAnswers`, `TheAcknowledgementArmsABarTheClientCouldNotPredict`, `TheAcknowledgementClearsABarTheClientInvented`).
-- **Le recalage décale aussi l'échéance de l'aller-retour qu'il vient de mesurer.** Sans ça, une prédiction parfaitement juste finit un RTT trop tôt : le serveur n'a démarré son chrono qu'un demi-trajet après la pression, et sa complétion a besoin de l'autre moitié pour revenir — le joueur verrait la barre se remplir, disparaître, et seulement ensuite la porte s'ouvrir. Le trou, pas juste le décalage. La compensation est l'`elapsed` que la prédiction accumule depuis la pression, donc gratuite et auto-calibrée : un host n'ajoute rien, une liaison pourrie ajoute ce qu'elle coûte, un hoquet de 500 ms allonge la barre de 500 ms — ce qui est correct, la complétion arrivera bien 500 ms plus tard. Le prix est que la barre sous-estime légèrement le progrès serveur à mi-parcours ; elle finit à l'heure, ce qui est ce que le joueur voit. `ADelayedAcknowledgementPushesTheDeadlineByTheRoundTripItMeasured` le vérifie par l'identité `e / (1 + e)`, sans dépendre d'aucun frame rate.
+- **Le recalage conserve la valeur visible et ajuste seulement la pente sur le temps autoritaire restant.** Sans compensation, une prédiction parfaitement juste finit un RTT trop tôt : le serveur n'a démarré son chrono qu'après l'aller de la commande et la complétion doit encore revenir. L'ACK garde donc la progression déjà rendue — aucun rewind — puis ralentit ou accélère la pente afin que le temps restant corresponde à l'échantillon autoritaire. `ADelayedAcknowledgementExtendsTheRemainingTimeWithoutVisibleRewind` verrouille cette continuité.
 - La prédiction porte l'`ExecutionId` acquitté, `0` tant qu'elle n'est qu'une prédiction, et cette distinction est ce qui rend deux comportements compatibles : un refus efface la barre que le client s'était inventée (le client qui perd la course, `TheClientThatLostTheRaceClearsItsPredictionAtOnce`) mais **jamais** celle d'une exécution acquittée — rappuyer sur le hack qu'on est déjà en train de faire renvoie « This is already in use. » et ne doit pas éteindre sa barre (`ARejectionLeavesTheBarOfARunningExecutionAlone`). Un acquittement terminal l'efface aussi, même sans relâchement d'input, pour qu'une exécution annulée avant l'heure n'aille pas descendre vers une fin qui n'existe plus (`AnExecutionEndedBeforeItsDeadlineTakesItsBarWithIt`).
 - **Une exécution en cours bloque son action pour tout le monde, son propre interactor compris**, au lieu de rester `Allowed` pour lui. `Blocked` n'est pas `Hidden` : l'action reste présentée avec sa raison, donc le prompt garde où afficher l'explication et la barre, mais il ne prétend plus proposer une action que le target refuserait aussitôt. Les deux situations gardent des mots différents — « This is already in use. » pour soi, « Someone else is using this. » pour un autre.
 - Ce changement a exigé de **remettre la concurrence en fin de pipeline**, là où le §7 la place déjà : invariants → `TargetRules` → `Action.Rules` → concurrence. L'implémentation la vérifiait en premier, ce qui faisait remonter en `Blocked` des actions que leurs rules avaient déjà cachées — une porte fermée se mettait à proposer « Fermer » dès que quelqu'un l'ouvrait. Évaluée en dernier, la concurrence ne touche qu'une action qui serait autrement disponible.
@@ -388,33 +388,30 @@ RPC de rejet — il ne savait pas génériquement que le serveur avait accepté,
 fini. `InteractionInteractor` porte maintenant le lifecycle autoritaire de **sa propre** requête.
 
 - Quatre signaux s'ajoutent à `InteractionRejected` : `InteractionStarted(interactive, actionId,
-  executionId, duration)`, `InteractionCompleted(interactive, actionId)`,
+  executionId)`, `InteractionCompleted(interactive, actionId)`,
   `InteractionCancelled(interactive, actionId, reason)` et `InteractionFailed(interactive, actionId,
   reason)`, alimentés par les RPC `Authority` `ClientInteractionStarted/Completed/Cancelled/Failed`.
 - **Un seul terminal par requête** (`Completed | Cancelled | Failed | Rejected`), et `Started` précède
   les trois premiers, jamais `Rejected`. Une action instantanée est donc acquittée `Started` puis
   `Completed`, miroir exact de ce que l'autorité notifie : il n'y a qu'un lifecycle à apprendre.
-- **La corrélation est `(target, actionId)`**, pas un numéro de requête. C'est suffisant *parce que* le
-  demandeur ne garde qu'une prédiction et une entrée soutenue par input : au plus une requête d'une
-  paire donnée est en vol. Un client qui tolérerait plusieurs requêtes concurrentes sur la même paire
-  aurait d'abord besoin d'un identifiant de requête.
+- **La corrélation est `(target, actionId)`**, pas un numéro de requête. Le demandeur garde un marqueur
+  pending par paire, donc une seule requête peut être en vol pour cette paire ; l'`ExecutionId` protège
+  ensuite le slot confirmé contre les acquittements terminaux obsolètes.
 - **Délivré exactement une fois au peer propriétaire, listen host inclus, jamais diffusé.** Le host
   reçoit l'acquittement par appel local direct plutôt que par RPC, comme le faisait déjà le rejet. Les
   autres joueurs observent le monde par l'état répliqué ou par le système métier : c'est late-join-safe
   là où un acquittement transitoire ne l'est pas, et ça ne divulgue pas une action qui leur est cachée.
 - **`Failed` cesse d'être rapporté comme `Rejected`.** L'autorité notifie une défaillance comme
-  `Started` puis `Cancelled` — l'action *a* démarré — alors que le client recevait un rejet, c'est-à-dire
+  `Started` puis `Failed` — l'action *a* démarré — alors que le client recevait un rejet, c'est-à-dire
   « ça n'a jamais commencé ». `TryStartInteractionAuthoritatively` retourne donc l'`InteractionExecutionResult`
   au lieu d'un `bool` + `out string` qui écrasait quatre issues en une : seul un `Rejected` produit un
   refus, un `Failed` ayant déjà été acquitté par la cible elle-même.
-- **La `duration` acquittée est celle que l'autorité a retenue**, pas l'estimation de la réservation :
-  un executor qui reprend le chrono à son compte avec `Running(seconds)` fait suivre cette valeur.
-- **Un refus réconcilie la prédiction.** `ClientInteractionRejected` nettoie `_prediction` et l'input
-  soutenu de l'action refusée avant d'émettre son signal. Une requête **automatique** est oubliée elle
+- **Un refus réconcilie la prédiction.** `ClientInteractionRejected` nettoie le slot local `ExecutionId = 0`
+  et le marqueur pending de l'action refusée avant d'émettre son signal. Une requête **automatique** est oubliée elle
   aussi, mais la paire refusée est retenue : l'oublier seule aurait réémis la même requête à la frame
   suivante, transformant un refus en flot. La paire est relâchée dès que la situation change — focus qui
   bouge, action qui quitte les choix offerts, ou gameplay qui invalide la cible.
-- **Le relâchement garde son nettoyage optimiste.** `TryEndInteractionInput` vide la prédiction tout de
+- **Le relâchement garde son nettoyage optimiste.** `TryEndInteractionInput` vide le slot prédit tout de
   suite, sans aller-retour : la barre appartient au local. L'acquittement terminal qui suit est ce sur
   quoi tout le reste se referme, et le recevoir alors que la prédiction est déjà partie est normal.
 - **Les chemins qui traversent le réseau sont nommés relativement à la racine multijoueur**
@@ -437,10 +434,11 @@ feedback vaut ici comme pour l'état : une UI ouverte par l'acquittement ne doit
 l'état répliqué, sinon le host la joue deux fois.
 
 
-## Interaction V4 — Impl 1 delivered
+## Interaction V4 — Impl 2 delivered
 
-L'Impl 1 sépare désormais la présentation de l'action et celle de l'exécution, sans modifier encore
-le transport de prédiction V3.
+L'Impl 1 a séparé la présentation de l'action et celle de l'exécution. L'Impl 2 retire maintenant la
+sémantique de durée du core, rétablit la présentation requester et introduit les producteurs génériques
+de progression. La réplication world-observable reste l'Impl 3.
 
 - `InteractionActionPresentation` porte uniquement l'identité, le texte, l'input, la disponibilité,
   l'automaticité et le maintien (`HoldProgress` / `HoldElapsed`). Il n'expose plus la capacité timed ni
@@ -448,10 +446,10 @@ le transport de prédiction V3.
 - `InteractionExecutionPresentation` porte `ExecutionId`, `ActionId` et une progression nullable.
   `InteractiveComponent.GetExecutionPresentations()` renvoie un snapshot dans l'ordre des actions et
   `TryGetExecutionPresentation(actionId, out presentation)` permet un accès direct.
-- Les exécutions `Running` de l'autorité et du mode offline alimentent un slot local par `ActionId`.
-  Une durée V3 expose sa progression courante ; une exécution indéfinie expose `Progress = null`.
-  La complétion ou l'annulation retire immédiatement le slot et émet
-  `ExecutionPresentationChanged(actionId)`. Les clients distants restent sans slot dans cette tranche.
+- Toute exécution `Running` de l'autorité et du mode offline alimente un slot local par `ActionId` ; une
+  exécution sans producteur expose `Progress = null`. La complétion, l'annulation ou l'échec retire
+  immédiatement le slot et émet `ExecutionPresentationChanged(actionId)`. Les clients distants ne
+  reçoivent toujours pas de slot hors du requester de leur propre commande.
 - Une seconde réservation portant le même `ActionId` est refusée avant l'évaluation de la
   `ConcurrencyGroup`. Les actions de groupes différents restent concurrentes lorsqu'elles ont des
   identifiants distincts.
@@ -459,9 +457,31 @@ le transport de prédiction V3.
   `InteractionPresenter` effectue la jointure par `ActionId`; le widget par défaut conserve uniquement
   l'affichage de l'input, de la disponibilité et du maintien.
 
-Le chrono V3, la prédiction requester et l'acquittement avec durée restent volontairement internes
-jusqu'à l'Impl 2. La progression publiée, les `Callable`, le timed helper, les slots requester et la
-réplication sont hors de cette tranche.
+`ReportExecutionProgress(id, value)` publie une valeur discrète finie et clampée, `null` la retire,
+et `SetExecutionProgressSource` / `ClearExecutionProgressSource` branchent une `Callable` locale.
+La résolution suit l'ordre `Callable` valide, échantillon linéaire reçu, snapshot publié, puis
+`null`; les sources invalides ou non numériques retombent proprement sur ce fallback.
+
+`TimedExecution` porte le chrono autoritaire, la source de progression locale, les échantillons linéaires
+et la complétion automatique. Ce helper n'est pas une seconde exécution Interaction : il se compose dans
+n'importe quel executor. `TimedInteractionExecutor` garde l'ergonomie d'authoring par héritage avec
+`Duration`, `CorrectionInterval` et `RunningTimed(context)`. `InteractionExecutionRunning` reste sans
+payload et le core ne connaît ni durée ni type d'executor.
+
+`TransitionStateInteractionExecutor` est la variante générique sans timer : elle attend une terminaison
+du gameplay. `TimedTransitionStateInteractionExecutor` réutilise le même cycle d'états et compose
+`TimedExecution`. Annulation et échec restaurent tous deux `CancelledState`, afin qu'aucune terminaison
+non complétée ne laisse l'objet bloqué dans `RunningState`.
+
+Le requester garde un slot par `(target, ActionId)` avec `ExecutionId = 0` pendant la prédiction et un
+marqueur pending même sans progression. L'ACK `InteractionStarted(interactive, actionId,
+executionId)` peut transporter un échantillon interne. La valeur visible reste monotone ; seule sa pente
+est recalculée pour respecter le temps autoritaire restant. Les
+corrections discrètes/timed ciblées passent par un RPC fiable owner-only. Les ACKs terminaux portent
+l'identifiant d'exécution afin qu'un message obsolète ne retire pas une exécution plus récente.
+
+`FailExecution(id, reason)` et `OnExecutionFailed` distinguent l'échec de l'annulation, sur l'autorité
+comme dans le signal `InteractionActionFailed` et l'ACK `InteractionFailed`.
 
 ## Integration
 
@@ -469,10 +489,19 @@ réplication sont hors de cette tranche.
 2. Pour un personnage custom, ajouter `InteractionInteractor` au personnage local, lui ajouter un détecteur en enfant (`AreaInteractionDetector` pour le modèle par area) et l'assigner à `Detector` — sans détecteur, l'interacteur ne détecte rien. Assigner `ViewOrigin` **sur le détecteur** vers un `Marker3D` ou une caméra, puis appeler `TryStartInteractionInput(inputActionName)` / `TryEndInteractionInput(inputActionName)` depuis son contrôleur d'input, en passant le nom de l'action projet réellement pressée. Pour ne pas coder ce nom en dur, itérer `GetRelevantInputs()` : la cible focusée déclare elle-même les inputs à échantillonner, et la liste conserve aussi les inputs consommés ou soutenus jusqu'à leur relâchement. Une pression acceptée est consommée jusqu'au release : un changement d'état pendant un hold ne peut donc pas réutiliser la même pression pour lancer l'action devenue disponible. `InteractionOrigin` reste facultatif sur le détecteur et utilise le premier ancêtre `Node3D` comme fallback documenté, ce qui donne le personnage quand le détecteur est enfant de l'interacteur. `MaxDistance` et `MaxAngleDegrees` appartiennent au détecteur d'area, pas à l'interacteur : la portée est une décision du modèle de détection. `OcclusionMask` porte les layers qui bloquent la vue (défaut layer 2 « Occluder ») et `LineOfSightLossGrace` la temporisation de perte ; mettre le mask à zéro désactive le LOS. La géométrie censée occlure doit porter la layer : dans ce projet `test_world` et le mur mobile du `LeverWall` sont en `collision_layer = 1|2`, `facility_blockout` non.
 3. Ajouter `InteractionArea`, `InteractionAnchor` et `InteractiveComponent` au propriétaire Node3D, puis assigner `InteractionArea` et `InteractionAnchor` dans l'inspecteur. Ajouter et assigner un `StatefulComponent` (addon `stateful_plugin`) seulement si l'objet a besoin d'un état monde persistant/répliqué. `InteractiveComponent` n'a aucune référence vers lui : seules les rules et les executors le connaissent. `IndicationArea` reste facultatif. Rien n'est à authorer pour le LOS sur la cible : ce sont les occluders qui portent la layer, donc une grille qu'on veut traverser est simplement gardée hors de la layer d'occlusion.
 4. Ajouter au moins une `InteractionAction` sous le composant, lui assigner une `InteractionActionDefinition` (`Id`, `Label`, `InputActionName`), un `Executor` obligatoire, et la référencer dans `Actions`. `Priority` départage deux actions qui partagent un input, `Automatic` déclenche l'action au focus sans input, et `ConcurrencyGroup` décide de quelles autres actions du même target elle s'exclut (défaut `"default"`, donc exclusive de toutes). Sur la Definition, `HoldThreshold` sert uniquement à départager plusieurs actions sur un même input, et `CancelOnInputReleased` déclare une action soutenue que le relâchement annule. Sans action, le target n'offre aucune interaction. Mettre dans `Action.Rules` les conditions propres à l'action, et dans `TargetRules` celles communes à toutes les actions. Une rule reste une query pure : pour dépendre de l'état du monde, la rule lit l'état, elle ne le modifie jamais. Pour une condition d'état, utiliser `StatefulStateInteractionRule` plutôt qu'une rule custom : une rule par phase présentée, une seconde rule ordonnée pour expliquer la fenêtre transitoire.
-5. Écrire un `InteractionActionExecutor` par action, le placer sous l'`InteractionAction` et l'assigner à `Action.Executor`. Quand la mutation est un simple changement d'état monde, utiliser `SetStateInteractionExecutor` : aucun script n'est nécessaire, y compris pour agir sur un objet d'une autre scène. `Execute()` retourne `Completed` pour une action instantanée, ou `Running` pour une action longue. Un executor déclare aussi s'il exige la présence de l'interacteur (`RequiresInteractorPresence`, défaut `true`) : le laisser vrai pour un channel que le joueur soutient, le décocher pour un état que le monde possède une fois lancé (la machine qu'on démarre, la porte qui finit de s'ouvrir), ce que `TransitionStateInteractionExecutor` expose sous `RequiresPresence`. Une exécution qui ne réclame pas la présence survit au joueur qui s'en va, et n'a donc plus que le gameplay pour la terminer. Un executor long répond sa longueur dans `ComputeInteractionDuration(context)` et retourne `RunningForDuration(context)` ; le target possède le chrono et complète tout seul à l'échéance. `RunningUntilCompleted()` veut dire « pas d'échéance » : le gameplay appelle plus tard `Interactive.CompleteExecution(id)` ou `Interactive.CancelExecution(id, reason)` avec l'identifiant reçu dans `InteractionExecutionContext.ExecutionId`, ce que fait un objet qui pilote sa propre animation. La query est publique et pure parce que le client propriétaire l'exécute aussi, pour sa barre : ne lui faire lire que des données répliquées, ou retourner `0` quand la longueur dépend d'un état que seul le serveur possède. Dans les deux cas, l'executor apprend la fin de sa propre exécution par `OnExecutionCompleted` / `OnExecutionCancelled`, appelés directement sur lui : il n'a jamais à s'abonner à un signal ni à filtrer les exécutions de ses voisins. Les signaux `InteractionActionStarted/Completed/Cancelled/Rejected` sont des notifications : les utiliser pour l'audio, la VFX, les quêtes ou l'UI, jamais pour effectuer l'action. Ils restent **locaux à l'autorité** : une UI qui appartient au seul joueur demandeur s'abonne aux acquittements de son propre `InteractionInteractor` (`InteractionStarted`, puis `Completed`/`Cancelled`/`Failed`/`Rejected`), jamais aux notifications de la cible. Pour réagir aux changements d’état, s’abonner au signal universel, autoritaire ou de présentation selon la responsabilité du consommateur.
+5. Écrire un `InteractionActionExecutor` par action, le placer sous l'`InteractionAction` et l'assigner à `Action.Executor`. Quand la mutation est un simple changement d'état monde, utiliser `SetStateInteractionExecutor` : aucun script n'est nécessaire, y compris pour agir sur un objet d'une autre scène. `Execute()` retourne `Completed` pour une action instantanée, ou `Running` pour une action longue. Un executor déclare aussi s'il exige la présence de l'interacteur (`RequiresInteractorPresence`, défaut `true`) : le laisser vrai pour un channel que le joueur soutient, le décocher pour un état que le monde possède une fois lancé (la machine qu'on démarre, la porte qui finit de s'ouvrir), ce que `TransitionStateInteractionExecutor` expose sous `RequiresPresence`. Une exécution qui ne réclame pas la présence survit au joueur qui s'en va, et n'a donc plus que le gameplay pour la terminer. Depuis l'Impl 2, un executor qui veut une échéance hérite de `TimedInteractionExecutor` ou compose directement `TimedExecution` ; le chemin par héritage surcharge `ComputeTimedDuration(context)` et retourne `RunningTimed(context)`. Le helper possède le chrono autoritaire et complète l'exécution générique à l'échéance. Un executor générique retourne `Running()` : le gameplay appelle plus tard `Interactive.CompleteExecution(id)`, `Interactive.CancelExecution(id, reason)` ou `Interactive.FailExecution(id, reason)` avec l'identifiant reçu dans `InteractionExecutionContext.ExecutionId`. La query de durée reste pure parce que le client propriétaire peut aussi prédire la présentation : elle ne doit lire que des données disponibles localement. Dans les deux cas, l'executor apprend la fin de sa propre exécution par `OnExecutionCompleted` / `OnExecutionCancelled` / `OnExecutionFailed`, appelés directement sur lui : il n'a jamais à s'abonner à un signal ni à filtrer les exécutions de ses voisins. Les signaux `InteractionActionStarted/Completed/Cancelled/Failed/Rejected` sont des notifications : les utiliser pour l'audio, la VFX, les quêtes ou l'UI, jamais pour effectuer l'action. Ils restent **locaux à l'autorité** : une UI qui appartient au seul joueur demandeur s'abonne aux acquittements de son propre `InteractionInteractor` (`InteractionStarted`, puis `Completed`/`Cancelled`/`Failed`/`Rejected`), jamais aux notifications de la cible. Pour réagir aux changements d'état, s'abonner au signal universel, autoritaire ou de présentation selon la responsabilité du consommateur.
 6. Choisir entre une **exécution** et une **rule** en se demandant ce qu'on modélise. Une exécution dit « cet interactor est engagé avec ce target, maintenant » ; une rule dit « le monde est dans un état où cette action est (in)disponible ». Le test qui tranche : si une rule lit un drapeau qu'un executor pose et retire, la réservation a été réimplémentée à la main — et sans son filet, puisque sortir de portée, relâcher un input soutenu ou quitter l'arbre terminent une exécution alors qu'un drapeau reste posé. Un dialogue avec un PNJ est donc une exécution ouverte : l'executor ouvre le dialogue et retourne `Running()`, la fermeture appelle `CompleteExecution(id)`. Les rules gardent les deux autres portées : une condition propre au joueur, lue sur `context.Interactor`, et une condition de monde, lue sur l'état.
-7. Un widget lit les grandeurs nommées de la présentation plutôt que d'aller chercher l'interacteur : `Distance` sur la cible (unités monde, mesurée depuis l'`InteractionOrigin`), puis `IsHoldable`, `HasTimedExecution`, `HoldProgress`, `HoldElapsed` et `ExecutionProgress` sur chaque action. Les booléens exposent les capacités au repos ; les progressions restent `null` quand rien n'avance. `HoldProgress` est normalisé sur le seuil de l'action lue, donc une barre par action est correcte sans que le widget connaisse ses voisines. Ne pas confondre les deux barres : le hold est la **sélection** entre plusieurs actions d'un même input, l'exécution est l'action elle-même. Les empiler est légal et produit deux barres successives ; un widget qui n'en veut qu'une choisit laquelle, il ne les additionne pas.
+7. Un widget lit les grandeurs nommées de la présentation plutôt que d'aller chercher l'interacteur : `Distance` sur la cible (unités monde, mesurée depuis l'`InteractionOrigin`), puis `HoldProgress` et `HoldElapsed` sur chaque action. Une barre d'exécution éventuelle se lit séparément sur `InteractiveComponent.TryGetExecutionPresentation(actionId, out presentation)` ; `Progress` reste nullable quand aucun producteur ne l'expose. `HoldProgress` est normalisé sur le seuil de l'action lue, donc une barre par action est correcte sans que le widget connaisse ses voisines. Ne pas confondre les deux barres : le hold est la **sélection** entre plusieurs actions d'un même input, l'exécution est l'action elle-même. Les empiler est légal et produit deux barres successives ; un widget qui n'en veut qu'une choisit laquelle, il ne les additionne pas.
 8. Ajouter `InteractionPresenter` seulement si une UI est souhaitée, avec `Interactor`, `Camera` et éventuellement `PromptContainerScene`. Assigner `ActionPromptScene` sur le composant pour le prompt d'une action et `IndicationScene` pour l'indication globale de l'objet. L'absence de scène de widget est valide : sans conteneur les prompts d'action sont empilés dans un `VBoxContainer` nu, sans `ActionPromptScene` aucun prompt d'action n'est créé.
+
+Depuis l'Impl 2, un executor qui veut une échéance hérite de `TimedInteractionExecutor`, ou compose
+directement `TimedExecution` si sa hiérarchie possède déjà une autre base. Le chemin par héritage répond sa
+durée dans `ComputeTimedDuration(context)` et retourne `RunningTimed(context)`. Un executor générique retourne
+`Running()` puis termine avec `CompleteExecution`, `CancelExecution` ou `FailExecution`. Pour afficher une
+progression de gameplay, l'autorité appelle `ReportExecutionProgress(executionId, value)` ; une progression
+locale dérivée utilise `SetExecutionProgressSource(executionId, callable)`. Le renderer lit toujours
+`InteractiveComponent.TryGetExecutionPresentation(actionId, out presentation)` et ne connaît pas le
+producteur.
 
 ## Explicit configuration and validation
 
@@ -488,7 +517,7 @@ Les types et membres publics du runtime, des rules fournies et de la présentati
 
 ## Base scene
 
-[`integration/stateful/examples/LongActionExample.tscn`](../../../addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn) est le prefab de départ duplicable : zones d'interaction et d'indication, ancre, composant, `StatefulComponent` avec son schéma (`idle`, `activating`, `activated`), synchroniseur et widgets par défaut. **Sa racine ne porte aucun script.** Son action porte un `TransitionStateInteractionExecutor` de 1,5 s qui applique `activating` au départ ; le target garde l'exécution réservée le temps de la durée, la complète lui-même, et l'executor applique alors `activated` — ou restaure `idle` si l'exécution est annulée. Deux `StatefulStateInteractionRule` ordonnées bloquent l'action pendant puis après l'activation. Il vit dans `integration/stateful/` parce qu'il dépend de `stateful_plugin`.
+[`integration/stateful/examples/LongActionExample.tscn`](../../../addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn) est le prefab de départ duplicable : zones d'interaction et d'indication, ancre, composant, `StatefulComponent` avec son schéma (`idle`, `activating`, `activated`), synchroniseur et widgets par défaut. **Sa racine ne porte aucun script.** Son action porte un `TimedTransitionStateInteractionExecutor` de 1,5 s qui applique `activating` au départ ; `TimedExecution` complète l'exécution générique à l'échéance et l'executor applique alors `activated` — ou restaure `idle` si l'exécution est annulée ou échoue. Deux `StatefulStateInteractionRule` ordonnées bloquent l'action pendant puis après l'activation. Il vit dans `integration/stateful/` parce qu'il dépend de `stateful_plugin`.
 
 ## Persistence boundary
 
@@ -510,7 +539,7 @@ Les tests couvrent les trois cas de l’union d’availability, l’ordre `Targe
 
 `InteractionAckTest` couvre le protocole d'acquittement sur le host, qui est aussi le jeu offline :
 l'action instantanée acquittée `started,completed`, la cible et l'identifiant d'action que
-l'acquittement corrèle, la durée déclarée par l'executor puis celle qu'il reprend à son compte, la
+l'acquittement corrèle, l'échantillon de présentation timed confirmé puis retimé, la
 complétion et l'annulation d'une exécution longue avec sa raison, la défaillance acquittée
 `started,failed` au lieu d'un rejet, le refus à la frontière d'exécution qui ne démarre jamais, le host
 refusé par sa propre autorité qui l'apprend exactement une fois, le refus qui nettoie la prédiction de
@@ -525,8 +554,9 @@ seul acquittement, ne s'ouvre jamais sur une requête refusée, et se referme su
 attachée — et vérifie ce qu'aucun test en arbre unique ne peut prouver : que les déclarations RPC, les
 types de payload, le ciblage et la réplication `MultiplayerSynchronizer` sont justes.
 
-Acquittement : le démarrage acquitté au seul demandeur avec sa durée et la copie du target résolue dans
-sa propre branche, la commande exécutée une fois sur l'autorité et nulle part ailleurs, la complétion
+Acquittement : le démarrage acquitté au seul demandeur avec son identifiant et son échantillon de
+présentation optionnel, la copie du target résolue dans sa propre branche, la commande exécutée une fois
+sur l'autorité et nulle part ailleurs, la complétion
 acquittée au seul demandeur, la défaillance qui traverse en `started,failed`, et le refus qui traverse
 sans jamais démarrer.
 

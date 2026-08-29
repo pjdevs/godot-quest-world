@@ -25,6 +25,7 @@ public static class InteractionValidator
         InteractionActionDefinition,
         SetStateInteractionExecutor,
         TransitionStateInteractionExecutor,
+        TimedTransitionStateInteractionExecutor,
         StatefulStateInteractionRule,
     }
 
@@ -52,6 +53,8 @@ public static class InteractionValidator
                 return ValidateSetStateExecutor(obj);
             case InspectableType.TransitionStateInteractionExecutor:
                 return ValidateTransitionStateExecutor(obj);
+            case InspectableType.TimedTransitionStateInteractionExecutor:
+                return ValidateTimedTransitionStateExecutor(obj);
             case InspectableType.StatefulStateInteractionRule:
                 return ValidateStatefulRule(obj);
             default:
@@ -238,9 +241,6 @@ public static class InteractionValidator
 
     private static IEnumerable<string> ValidateTransitionStateExecutor(GodotObject obj)
     {
-        if (GetFloat(obj, "Duration") < 0.0f)
-            yield return "Duration must not be negative.";
-
         GodotObject? stateful = GetObject(obj, "Stateful");
         if (stateful is null)
         {
@@ -261,6 +261,17 @@ public static class InteractionValidator
 
             if (states is not null && !states.Contains(state))
                 yield return $"{property} '{state}' is absent from the assigned StateSchema.";
+        }
+    }
+
+    private static IEnumerable<string> ValidateTimedTransitionStateExecutor(GodotObject obj)
+    {
+        if (GetFloat(obj, "Duration") < 0.0f)
+            yield return "Duration must not be negative.";
+
+        foreach (string warning in ValidateTransitionStateExecutor(obj))
+        {
+            yield return warning;
         }
     }
 
@@ -363,6 +374,8 @@ public static class InteractionValidator
             InteractionAction => InspectableType.InteractionAction,
             InteractionActionDefinition => InspectableType.InteractionActionDefinition,
             SetStateInteractionExecutor => InspectableType.SetStateInteractionExecutor,
+            TimedTransitionStateInteractionExecutor =>
+                InspectableType.TimedTransitionStateInteractionExecutor,
             TransitionStateInteractionExecutor =>
                 InspectableType.TransitionStateInteractionExecutor,
             StatefulStateInteractionRule => InspectableType.StatefulStateInteractionRule,
@@ -387,6 +400,8 @@ public static class InteractionValidator
             nameof(InteractionAction) => InspectableType.InteractionAction,
             nameof(InteractionActionDefinition) => InspectableType.InteractionActionDefinition,
             nameof(SetStateInteractionExecutor) => InspectableType.SetStateInteractionExecutor,
+            nameof(TimedTransitionStateInteractionExecutor) =>
+                InspectableType.TimedTransitionStateInteractionExecutor,
             nameof(TransitionStateInteractionExecutor) =>
                 InspectableType.TransitionStateInteractionExecutor,
             nameof(StatefulStateInteractionRule) => InspectableType.StatefulStateInteractionRule,
@@ -418,6 +433,8 @@ public static class InteractionValidator
                 InspectableType.InteractionActionDefinition,
             "res://addons/interaction_plugin/integration/stateful/SetStateInteractionExecutor.cs" =>
                 InspectableType.SetStateInteractionExecutor,
+            "res://addons/interaction_plugin/integration/stateful/TimedTransitionStateInteractionExecutor.cs" =>
+                InspectableType.TimedTransitionStateInteractionExecutor,
             "res://addons/interaction_plugin/integration/stateful/TransitionStateInteractionExecutor.cs" =>
                 InspectableType.TransitionStateInteractionExecutor,
             "res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" =>

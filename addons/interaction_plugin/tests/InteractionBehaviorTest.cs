@@ -119,10 +119,7 @@ public sealed partial class InteractionBehaviorTest
 
         AssertThat(testWorld.Interactive.GetExecutionPresentations().Count).IsEqual(0);
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
-                    new StringName("activate"),
-                    out _
-                )
+                testWorld.Interactive.TryGetExecutionPresentation(new StringName("activate"), out _)
             )
             .IsFalse();
         AssertThat(invalidations).IsEqual(2);
@@ -711,20 +708,20 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task FailedExecutionIsAnnouncedAsStartedThenCancelled()
+    public async Task FailedExecutionIsAnnouncedAsStartedThenFailed()
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
         ExecutorOf(door.Open).Result = new InteractionExecutionFailed("The door came off.");
         List<string> notifications = new();
-        string cancelledReason = string.Empty;
+        string failedReason = string.Empty;
         door.Interactive.InteractionActionStarted += (_, _) => notifications.Add("started");
         door.Interactive.InteractionActionCompleted += (_, _) => notifications.Add("completed");
         door.Interactive.InteractionActionRejected += (_, _, _) => notifications.Add("rejected");
-        door.Interactive.InteractionActionCancelled += (_, _, reason) =>
+        door.Interactive.InteractionActionFailed += (_, _, reason) =>
         {
-            notifications.Add("cancelled");
-            cancelledReason = reason;
+            notifications.Add("failed");
+            failedReason = reason;
         };
 
         InteractionExecutionResult result = door.Interactive.ExecuteAction(
@@ -733,8 +730,8 @@ public sealed partial class InteractionBehaviorTest
         );
 
         AssertThat(result is InteractionExecutionFailed).IsTrue();
-        AssertThat(string.Join(",", notifications)).IsEqual("started,cancelled");
-        AssertThat(cancelledReason).IsEqual("The door came off.");
+        AssertThat(string.Join(",", notifications)).IsEqual("started,failed");
+        AssertThat(failedReason).IsEqual("The door came off.");
         AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
     }
 
@@ -1649,6 +1646,73 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public async Task GenericStateTransitionWaitsForGameplayCompletionWithoutProgress()
+    {
+        TestWorld testWorld = BuildWorld();
+        testWorld.Stateful.Schema = new StateSchema
+        {
+            States = States("idle", "working", "completed"),
+        };
+        InteractionAction action = NewAction("transition", Array.Empty<InteractionRule>());
+        TransitionStateInteractionExecutor executor = new()
+        {
+            Name = "TransitionExecutor",
+            Stateful = testWorld.Stateful,
+            RunningState = new StringName("working"),
+            CompletedState = new StringName("completed"),
+            CancelledState = IdleState,
+        };
+        action.AddChild(executor);
+        action.Executor = executor;
+        AddAction(testWorld.Interactive, action);
+        await testWorld.Runner.SimulateFrames(1);
+
+        testWorld.Interactive.ExecuteAction(testWorld.Interactor, action, out ulong executionId);
+        await testWorld.Runner.SimulateFrames(10);
+
+        AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsTrue();
+        AssertThat(testWorld.Stateful.State).IsEqual(new StringName("working"));
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    action.Definition!.Id,
+                    out InteractionExecutionPresentation presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.Progress.HasValue).IsFalse();
+
+        AssertThat(testWorld.Interactive.CompleteExecution(executionId)).IsTrue();
+        AssertThat(testWorld.Stateful.State).IsEqual(new StringName("completed"));
+    }
+
+    [TestCase]
+    public async Task FailedStateTransitionRestoresItsCancelledState()
+    {
+        TestWorld testWorld = BuildWorld();
+        testWorld.Stateful.Schema = new StateSchema { States = States("idle", "working") };
+        InteractionAction action = NewAction("transition", Array.Empty<InteractionRule>());
+        TransitionStateInteractionExecutor executor = new()
+        {
+            Name = "TransitionExecutor",
+            Stateful = testWorld.Stateful,
+            RunningState = new StringName("working"),
+            CompletedState = IdleState,
+            CancelledState = IdleState,
+        };
+        action.AddChild(executor);
+        action.Executor = executor;
+        AddAction(testWorld.Interactive, action);
+        await testWorld.Runner.SimulateFrames(1);
+
+        testWorld.Interactive.ExecuteAction(testWorld.Interactor, action, out ulong executionId);
+        AssertThat(testWorld.Stateful.State).IsEqual(new StringName("working"));
+
+        AssertThat(testWorld.Interactive.FailExecution(executionId, "The machine jammed."))
+            .IsTrue();
+        AssertThat(testWorld.Stateful.State).IsEqual(IdleState);
+    }
+
+    [TestCase]
     public async Task TheInteractorReportsWhichInputsAreWorthSampling()
     {
         TestWorld testWorld = BuildWorld();
@@ -1856,7 +1920,7 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task TheTargetOwnsTheClockOfARunningActionAndCompletesItItself()
+    public async Task TimedExecutionOwnsTheClockAndCompletesTheGenericExecution()
     {
         TestWorld testWorld = BuildWorld();
         ActivationExecutorOf(testWorld.Action).Duration = 0.05f;
@@ -1871,9 +1935,16 @@ public sealed partial class InteractionBehaviorTest
         );
 
         AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsTrue();
-        AssertThat(testWorld.Interactive.TryGetExecutionProgress(executionId, out float started))
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    testWorld.Action.Definition!.Id,
+                    out InteractionExecutionPresentation startedPresentation
+                )
+            )
             .IsTrue();
-        AssertThat(started < 1.0f).IsTrue();
+        AssertThat(startedPresentation.ExecutionId).IsEqual(executionId);
+        AssertThat(startedPresentation.Progress.HasValue).IsTrue();
+        AssertThat(startedPresentation.Progress!.Value < 1.0f).IsTrue();
 
         for (
             int frame = 0;
@@ -1890,6 +1961,73 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public async Task TimedExecutionCanBeComposedByAGenericExecutor()
+    {
+        TestWorld testWorld = BuildWorld();
+        InteractionAction action = NewAction("composed", Array.Empty<InteractionRule>());
+        ComposedTimedExecutor executor = new() { Name = "ComposedExecutor", Duration = 0.05f };
+        action.AddChild(executor);
+        action.Executor = executor;
+        AddAction(testWorld.Interactive, action);
+        await testWorld.Runner.SimulateFrames(1);
+
+        testWorld.Interactive.ExecuteAction(testWorld.Interactor, action, out ulong executionId);
+
+        AssertThat(executor.Timer.IsActive).IsTrue();
+        AssertThat(executor.Timer.ExecutionId).IsEqual(executionId);
+        AssertThat(executor.Timer.GetProgress() < 1.0f).IsTrue();
+
+        for (
+            int frame = 0;
+            frame < 300 && testWorld.Interactive.IsExecutionActive(executionId);
+            frame++
+        )
+        {
+            await testWorld.Runner.SimulateFrames(1);
+        }
+
+        AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsFalse();
+        AssertThat(executor.Timer.IsActive).IsFalse();
+    }
+
+    [TestCase]
+    public async Task SharedTimedExecutorCannotAbandonItsFirstActiveClock()
+    {
+        TestWorld testWorld = BuildWorld();
+        TestActivationExecutor executor = ActivationExecutorOf(testWorld.Action);
+        executor.Duration = 0.05f;
+        InteractionAction second = NewAction("second", Array.Empty<InteractionRule>());
+        second.ConcurrencyGroup = new StringName("other");
+        second.Executor = executor;
+        AddAction(testWorld.Interactive, second);
+        await testWorld.Runner.SimulateFrames(1);
+
+        InteractionExecutionResult firstResult = testWorld.Interactive.ExecuteAction(
+            testWorld.Interactor,
+            testWorld.Action,
+            out ulong firstExecutionId
+        );
+        InteractionExecutionResult secondResult = testWorld.Interactive.ExecuteAction(
+            testWorld.Interactor,
+            second
+        );
+
+        AssertThat(firstResult is InteractionExecutionRunning).IsTrue();
+        AssertThat(secondResult is InteractionExecutionFailed).IsTrue();
+
+        for (
+            int frame = 0;
+            frame < 300 && testWorld.Interactive.IsExecutionActive(firstExecutionId);
+            frame++
+        )
+        {
+            await testWorld.Runner.SimulateFrames(1);
+        }
+
+        AssertThat(testWorld.Interactive.IsExecutionActive(firstExecutionId)).IsFalse();
+    }
+
+    [TestCase]
     public async Task AnExecutorWithoutDurationWaitsForAnExternalEvent()
     {
         TestWorld testWorld = BuildWorld();
@@ -1903,10 +2041,120 @@ public sealed partial class InteractionBehaviorTest
         await testWorld.Runner.SimulateFrames(10);
 
         AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsTrue();
-        AssertThat(testWorld.Interactive.TryGetExecutionProgress(executionId, out float progress))
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    testWorld.Action.Definition!.Id,
+                    out InteractionExecutionPresentation presentation
+                )
+            )
             .IsTrue();
-        AssertThat(progress).IsEqual(0.0f);
+        AssertThat(presentation.Progress.HasValue).IsFalse();
         AssertThat(testWorld.Interactive.CompleteExecution(executionId)).IsTrue();
+    }
+
+    [TestCase]
+    public async Task NonFiniteTimedDurationFallsBackToGenericRunningWithoutProgress()
+    {
+        TestWorld testWorld = BuildWorld();
+        ActivationExecutorOf(testWorld.Action).Duration = float.NaN;
+        await testWorld.Runner.SimulateFrames(1);
+
+        testWorld.Interactive.ExecuteAction(
+            testWorld.Interactor,
+            testWorld.Action,
+            out ulong executionId
+        );
+
+        AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsTrue();
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    testWorld.Action.Definition!.Id,
+                    out InteractionExecutionPresentation presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.Progress.HasValue).IsFalse();
+        AssertThat(testWorld.Interactive.CompleteExecution(executionId)).IsTrue();
+    }
+
+    [TestCase]
+    public async Task ARunningExecutionPublishesDiscreteProgressThroughItsGenericPresentation()
+    {
+        TestWorld testWorld = BuildWorld();
+        InteractionAction action = CreateAction("hack");
+        AddAction(testWorld.Interactive, action);
+        ExecutorOf(action).Result = new InteractionExecutionRunning();
+        await testWorld.Runner.SimulateFrames(1);
+
+        testWorld.Interactive.ExecuteAction(testWorld.Interactor, action, out ulong executionId);
+
+        AssertThat(
+                testWorld.Interactive.SetExecutionProgressSource(
+                    executionId,
+                    Callable.From(() => 0.42f)
+                )
+            )
+            .IsTrue();
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    action.Definition!.Id,
+                    out InteractionExecutionPresentation sourcedPresentation
+                )
+            )
+            .IsTrue();
+        AssertThat(sourcedPresentation.Progress!.Value).IsEqualApprox(0.42f, 0.0005f);
+        AssertThat(testWorld.Interactive.ClearExecutionProgressSource(executionId)).IsTrue();
+
+        AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, -1.0f)).IsTrue();
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    action.Definition!.Id,
+                    out InteractionExecutionPresentation presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.Progress).IsEqual(0.0f);
+
+        AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, 0.33f)).IsTrue();
+        AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, 0.66f)).IsTrue();
+        AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, null)).IsTrue();
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    action.Definition!.Id,
+                    out presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.Progress.HasValue).IsFalse();
+
+        AssertThat(testWorld.Interactive.CompleteExecution(executionId)).IsTrue();
+        AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, 1.0f)).IsFalse();
+    }
+
+    [TestCase]
+    public async Task ARunningExecutionCanFailOnceAndNotCompleteAfterwards()
+    {
+        TestWorld testWorld = BuildWorld();
+        InteractionAction action = CreateAction("fail");
+        AddAction(testWorld.Interactive, action);
+        RecordingInteractionExecutor executor = ExecutorOf(action);
+        executor.Result = new InteractionExecutionRunning();
+        await testWorld.Runner.SimulateFrames(1);
+        List<string> notifications = new();
+        testWorld.Interactive.InteractionActionFailed += (_, _, reason) =>
+        {
+            notifications.Add(reason);
+        };
+
+        testWorld.Interactive.ExecuteAction(testWorld.Interactor, action, out ulong executionId);
+
+        AssertThat(testWorld.Interactive.FailExecution(executionId, "The session expired."))
+            .IsTrue();
+        AssertThat(testWorld.Interactive.FailExecution(executionId, "Too late.")).IsFalse();
+        AssertThat(testWorld.Interactive.CompleteExecution(executionId)).IsFalse();
+        AssertThat(executor.FailedCount).IsEqual(1);
+        AssertThat(executor.LastFailureReason).IsEqual("The session expired.");
+        AssertThat(notifications).IsEqual(new List<string> { "The session expired." });
     }
 
     [TestCase]
@@ -1958,7 +2206,9 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(door.State.State.ToString()).IsEqual("closed");
         door.Detector.ClearDetection(door.Interactive);
         door.Interactor.RecalculateFocus();
-        AssertThat(new List<StringName>(door.Interactor.GetRelevantInputs()).Contains(InteractInput))
+        AssertThat(
+                new List<StringName>(door.Interactor.GetRelevantInputs()).Contains(InteractInput)
+            )
             .IsTrue();
         door.Detect(door.Interactive);
 
@@ -2000,19 +2250,26 @@ public sealed partial class InteractionBehaviorTest
         await testWorld.Runner.SimulateFrames(2);
 
         AssertThat(
-                testWorld.Interactor.TryGetExecutionProgress(
-                    out StringName actionId,
-                    out float progress
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    testWorld.Action.Definition!.Id,
+                    out InteractionExecutionPresentation presentation
                 )
             )
             .IsTrue();
-        AssertThat(actionId).IsEqual(new StringName("activate"));
-        AssertThat(progress > 0.0f).IsTrue();
-        AssertThat(progress < 1.0f).IsTrue();
+        AssertThat(presentation.ActionId).IsEqual(new StringName("activate"));
+        AssertThat(presentation.Progress.HasValue).IsTrue();
+        AssertThat(presentation.Progress!.Value > 0.0f).IsTrue();
+        AssertThat(presentation.Progress!.Value < 1.0f).IsTrue();
 
         AssertThat(testWorld.Interactor.TryEndInteractionInput(InteractInput)).IsTrue();
 
-        AssertThat(testWorld.Interactor.TryGetExecutionProgress(out _, out _)).IsFalse();
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    testWorld.Action.Definition!.Id,
+                    out _
+                )
+            )
+            .IsFalse();
     }
 
     [TestCase]
@@ -2120,10 +2377,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(activation.Progress.HasValue).IsTrue();
         AssertThat(activation.Progress!.Value > 0.0f).IsTrue();
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
-                    new StringName("inspect"),
-                    out _
-                )
+                testWorld.Interactive.TryGetExecutionPresentation(new StringName("inspect"), out _)
             )
             .IsFalse();
     }
@@ -2175,8 +2429,8 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(doorsOpened).IsEqual(1);
 
         // The two phases differ only by authored data: same generic executor, same generic rules.
-        AssertThat(core.Activate.Executor is TransitionStateInteractionExecutor).IsTrue();
-        AssertThat(core.Reactivate.Executor is TransitionStateInteractionExecutor).IsTrue();
+        AssertThat(core.Activate.Executor is TimedTransitionStateInteractionExecutor).IsTrue();
+        AssertThat(core.Reactivate.Executor is TimedTransitionStateInteractionExecutor).IsTrue();
     }
 
     private static async Task WaitUntilExecutionEnds(CoreWorld core, ulong executionId)
@@ -2275,7 +2529,7 @@ public sealed partial class InteractionBehaviorTest
     )
     {
         InteractionAction action = NewAction(id, rules);
-        TransitionStateInteractionExecutor executor = new()
+        TimedTransitionStateInteractionExecutor executor = new()
         {
             Name = $"{id}Executor",
             Stateful = stateful,
@@ -2641,17 +2895,13 @@ public sealed partial class InteractionBehaviorTest
         }
     }
 
-    private sealed partial class TestActivationExecutor : InteractionActionExecutor
+    private sealed partial class TestActivationExecutor : TimedInteractionExecutor
     {
         public TestInteractiveActor? Actor { get; set; }
-
-        public float Duration { get; set; }
 
         public bool RequiresPresence { get; set; } = true;
 
         public override bool RequiresInteractorPresence => RequiresPresence;
-
-        public override float ComputeInteractionDuration(in InteractionContext context) => Duration;
 
         public override InteractionExecutionResult Execute(in InteractionExecutionContext context)
         {
@@ -2663,18 +2913,28 @@ public sealed partial class InteractionBehaviorTest
             // The actor decides the outcome, this executor decides how long a running one lasts:
             // a deadline now comes only from the query every peer may run.
             InteractionExecutionResult result = Actor.BeginActivation();
-            return result is InteractionExecutionRunning ? RunningForDuration(context) : result;
+            return result is InteractionExecutionRunning ? RunningTimed(context) : result;
         }
     }
 
-    private sealed partial class RecordingInteractionExecutor : InteractionActionExecutor
+    private sealed partial class ComposedTimedExecutor : InteractionActionExecutor
+    {
+        public float Duration { get; set; }
+
+        public TimedExecution Timer { get; } = new();
+
+        public override InteractionExecutionResult Execute(in InteractionExecutionContext context)
+        {
+            return Timer.Start(context.Interactive, context.ExecutionId, Duration)
+                ? Running()
+                : new InteractionExecutionFailed("The timer could not start.");
+        }
+    }
+
+    private sealed partial class RecordingInteractionExecutor : TimedInteractionExecutor
     {
         public InteractionExecutionResult Result { get; set; } =
             new InteractionExecutionCompleted();
-
-        public float Duration { get; set; }
-
-        public override float ComputeInteractionDuration(in InteractionContext context) => Duration;
 
         public int ExecuteCount { get; private set; }
 
@@ -2690,7 +2950,11 @@ public sealed partial class InteractionBehaviorTest
 
         public int CancelledCount { get; private set; }
 
+        public int FailedCount { get; private set; }
+
         public string LastCancelReason { get; private set; } = string.Empty;
+
+        public string LastFailureReason { get; private set; } = string.Empty;
 
         public override InteractionExecutionResult Execute(in InteractionExecutionContext context)
         {
@@ -2699,13 +2963,14 @@ public sealed partial class InteractionBehaviorTest
             LastAction = context.Action;
             LastExecutionId = context.ExecutionId;
             ReservedInteractorDuringExecute = context.Interactive.ActiveInteractor;
-            return Result is InteractionExecutionRunning ? RunningForDuration(context) : Result;
+            return Result is InteractionExecutionRunning ? RunningTimed(context) : Result;
         }
 
         protected internal override void OnExecutionCompleted(
             in InteractionExecutionContext context
         )
         {
+            base.OnExecutionCompleted(context);
             CompletedCount++;
             LastExecutionId = context.ExecutionId;
         }
@@ -2715,9 +2980,21 @@ public sealed partial class InteractionBehaviorTest
             string reason
         )
         {
+            base.OnExecutionCancelled(context, reason);
             CancelledCount++;
             LastExecutionId = context.ExecutionId;
             LastCancelReason = reason;
+        }
+
+        protected internal override void OnExecutionFailed(
+            in InteractionExecutionContext context,
+            string reason
+        )
+        {
+            base.OnExecutionFailed(context, reason);
+            FailedCount++;
+            LastExecutionId = context.ExecutionId;
+            LastFailureReason = reason;
         }
     }
 

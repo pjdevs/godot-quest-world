@@ -76,7 +76,7 @@ public sealed partial class InteractionSceneTest
         AssertThat(synchronizer != null).IsTrue();
         AssertThat(synchronizer!.ReplicationConfig != null).IsTrue();
         AssertThat(actor.GetScript().AsGodotObject() == null).IsTrue();
-        AssertThat(action.Executor is TransitionStateInteractionExecutor).IsTrue();
+        AssertThat(action.Executor is TimedTransitionStateInteractionExecutor).IsTrue();
     }
 
     [TestCase]
@@ -448,7 +448,7 @@ public sealed partial class InteractionSceneTest
             interactor,
             actor.GetNode<StatefulComponent>("StatefulComponent"),
             interactive.Actions[0],
-            (TransitionStateInteractionExecutor)interactive.Actions[0].Executor!
+            (TimedTransitionStateInteractionExecutor)interactive.Actions[0].Executor!
         );
     }
 
@@ -458,7 +458,7 @@ public sealed partial class InteractionSceneTest
         InteractionInteractor Interactor,
         StatefulComponent State,
         InteractionAction Action,
-        TransitionStateInteractionExecutor Executor
+        TimedTransitionStateInteractionExecutor Executor
     );
 
     [TestCase]

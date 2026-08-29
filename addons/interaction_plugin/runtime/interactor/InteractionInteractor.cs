@@ -43,33 +43,21 @@ internal readonly record struct InteractionGesture(
     public float Progress => Threshold > 0.0f ? Mathf.Clamp(Elapsed / Threshold, 0.0f, 1.0f) : 1.0f;
 }
 
-/// <summary>Local prediction of the running execution the owning player requested.</summary>
+/// <summary>Pending requester command, keyed by its target and action.</summary>
 /// <remarks>
-/// Built by running the duration query of the executor on this peer, so a bar needs no replication and
-/// no round trip, then recalibrated by the acknowledgement that carries the deadline the authority
-/// actually reserved. It is feedback only: what runs is the authoritative execution, and a prediction
-/// that drifts is corrected by that acknowledgement and by the world state it is waiting for.
+/// The marker exists even when the action cannot provide a local progress sample. Prediction itself
+/// lives on the target's local execution presentation slot.
 /// </remarks>
 /// <param name="Target">Target the action was requested on.</param>
 /// <param name="ActionId">Identifier of the requested action.</param>
-/// <param name="Duration">Deadline predicted locally, then the one the authority acknowledged.</param>
-/// <param name="Elapsed">Seconds since the request was sent.</param>
-/// <param name="ExecutionId">
-/// Identifier the authority acknowledged, or zero while this is still only a prediction. It is what
-/// tells apart a bar the client invented at the press — which a refusal must take away — from the bar
-/// of an execution that is really running, which a later refusal on the same action must not touch.
-/// </param>
-internal readonly record struct PredictedExecution(
+/// <remarks>
+/// The pending marker is cleared when the authority acknowledges or refuses the request.
+/// A confirmed execution is protected by its authoritative identifier.
+/// </remarks>
+internal readonly record struct InteractionRequestKey(
     InteractiveComponent Target,
-    StringName ActionId,
-    float Duration,
-    float Elapsed,
-    ulong ExecutionId
-)
-{
-    /// <summary>Gets how far the predicted execution has progressed.</summary>
-    public float Progress => Duration > 0.0f ? Mathf.Clamp(Elapsed / Duration, 0.0f, 1.0f) : 0.0f;
-}
+    StringName ActionId
+);
 
 /// <summary>
 /// Detects interaction targets, selects local focus, and routes input intentions to the server.
@@ -132,13 +120,13 @@ public partial class InteractionInteractor : Node
     /// <summary>Emitted on the requesting peer once the authority accepted and started its command.</summary>
     /// <remarks>
     /// This is the acknowledgement a requesting client had no generic way to obtain: a Godot signal is
-    /// local, so the target-level notifications of <see cref="InteractiveComponent"/> never left the
-    /// authority and a client only ever knew about its own prediction and about refusals.
+    /// local, so the target-level notifications of <see cref="InteractiveComponent"/> never leave the
+    /// authority. The requester therefore learns its own accepted lifecycle through this signal.
     /// <para>
     /// An acknowledgement is correlated by target and action identifier, not by a request number. That
-    /// is sufficient <b>because</b> the requesting peer keeps a single prediction and one sustained
-    /// entry per input, so at most one request of a given pair is ever in flight. A client that starts
-    /// tolerating several concurrent requests on the same pair needs a request identifier first.
+    /// is sufficient <b>because</b> the requesting peer keeps one pending marker per target/action pair,
+    /// so at most one request of that pair is ever in flight. The execution identifier then protects
+    /// the confirmed slot from stale terminal acknowledgements.
     /// </para>
     /// <para>
     /// The acknowledgement is delivered exactly once to the owning peer, the listen host included, and
@@ -158,13 +146,11 @@ public partial class InteractionInteractor : Node
     /// <param name="interactive">Target that accepted the command, or null when it cannot be resolved locally.</param>
     /// <param name="actionId">Identifier of the accepted action, correlating this acknowledgement.</param>
     /// <param name="executionId">Identifier the authority allocated, addressable by a downstream system.</param>
-    /// <param name="duration">Seconds the authority decided the execution lasts, or zero for no deadline.</param>
     [Signal]
     public delegate void InteractionStartedEventHandler(
         Node interactive,
         StringName actionId,
-        ulong executionId,
-        float duration
+        ulong executionId
     );
 
     /// <summary>Emitted on the requesting peer once its accepted action reached its end.</summary>
@@ -250,6 +236,7 @@ public partial class InteractionInteractor : Node
     private readonly List<InteractiveComponent> _detectionEntered = new();
     private readonly List<InteractiveComponent> _detectionExited = new();
     private readonly List<InteractorExecution> _ownedExecutions = new();
+    private readonly HashSet<InteractionRequestKey> _pendingRequests = new();
     private readonly HashSet<StringName> _consumedInputs = new();
     private readonly HashSet<StringName> _sustainedInputs = new();
     private readonly List<StringName> _relevantInputs = new();
@@ -261,7 +248,6 @@ public partial class InteractionInteractor : Node
     private InteractiveComponent? _refusedAutomaticTarget;
     private StringName? _refusedAutomaticActionId;
     private InteractionGesture? _gesture;
-    private PredictedExecution? _prediction;
     private bool _hasKnownLocalControl;
     private bool _lastKnownLocalControl;
 
@@ -339,14 +325,13 @@ public partial class InteractionInteractor : Node
 
         RecalculateFocus();
         AdvanceGesture((float)delta);
-        AdvancePrediction((float)delta);
     }
 
     /// <summary>Reads how far the hold in progress is towards selecting its action.</summary>
     /// <remarks>
     /// Local feedback for a gesture widget. This is the selection layer, not the action: an action
-    /// the player must stay engaged in reports its progress through
-    /// <see cref="TryGetExecutionProgress"/> instead.
+    /// the player must stay engaged in reports its progress through the target's
+    /// <see cref="InteractiveComponent.TryGetExecutionPresentation"/> instead.
     /// </remarks>
     /// <param name="inputActionName">Input being held, or an empty name when none is.</param>
     /// <param name="progress">Progress between zero and one.</param>
@@ -372,28 +357,6 @@ public partial class InteractionInteractor : Node
         inputActionName = _gesture?.Input ?? new StringName(string.Empty);
         seconds = _gesture?.Elapsed ?? 0.0f;
         return _gesture is not null;
-    }
-
-    /// <summary>Reads how far the action requested by the owning player has progressed.</summary>
-    /// <remarks>
-    /// Predicted by running <see cref="InteractionActionExecutor.ComputeInteractionDuration"/> on this
-    /// peer, which is the same query the authority is about to run, then recalibrated by the started
-    /// acknowledgement. The authoritative clock stays on the target: this only decides what the bar
-    /// draws.
-    /// <para>
-    /// A prediction that disagrees with the acknowledgement means the query read state this peer does
-    /// not have. That is the implementer's choice, not a failure of the core: the bar is simply wrong
-    /// for one round trip and then jumps to the deadline the authority reserved.
-    /// </para>
-    /// </remarks>
-    /// <param name="actionId">Running action, or an empty name when none is.</param>
-    /// <param name="progress">Progress between zero and one.</param>
-    /// <returns><see langword="true"/> while a timed action requested by this peer is running.</returns>
-    public bool TryGetExecutionProgress(out StringName actionId, out float progress)
-    {
-        actionId = _prediction?.ActionId ?? new StringName(string.Empty);
-        progress = _prediction?.Progress ?? 0.0f;
-        return _prediction is not null;
     }
 
     private void AdvanceGesture(float delta)
@@ -424,23 +387,6 @@ public partial class InteractionInteractor : Node
         RequestResolvedAction(gesture.Target, gesture.Input, elapsed);
     }
 
-    private void AdvancePrediction(float delta)
-    {
-        if (_prediction is not PredictedExecution prediction)
-        {
-            return;
-        }
-
-        float elapsed = prediction.Elapsed + delta;
-        _prediction =
-            elapsed >= prediction.Duration || !IsUsable(prediction.Target)
-                ? null
-                : prediction with
-                {
-                    Elapsed = elapsed,
-                };
-    }
-
     /// <summary>Forgets a target the framework is tearing down, on every peer.</summary>
     /// <remarks>
     /// An area never reports an overlap it loses by being freed, so the target itself says so. This
@@ -449,6 +395,7 @@ public partial class InteractionInteractor : Node
     /// </remarks>
     internal void NotifyInteractiveRemoved(InteractiveComponent interactive)
     {
+        _pendingRequests.RemoveWhere(request => request.Target == interactive);
         Detector?.Forget(interactive);
         if (_detectedInteractives.Remove(interactive))
         {
@@ -805,7 +752,7 @@ public partial class InteractionInteractor : Node
             return handled || consumed;
         }
 
-        _prediction = null;
+        ClearPendingPredictionsForInput(inputActionName);
 
         if (!IsAuthoritative)
         {
@@ -879,6 +826,22 @@ public partial class InteractionInteractor : Node
     )
     {
         StringName actionId = action.Definition!.Id;
+        InteractionRequestKey request = new(target, actionId);
+        if (
+            _pendingRequests.Contains(request)
+            || (
+                !IsAuthoritative
+                && (
+                    target.HasLocalExecution(action)
+                    || target.HasLocalExecutionInGroup(action.GetConcurrencyGroup())
+                    || HasPendingRequestInGroup(target, action.GetConcurrencyGroup())
+                )
+            )
+        )
+        {
+            return false;
+        }
+
         InteractionAvailability localAvailability = target.EvaluateAvailability(this, action);
         if (localAvailability is not InteractionAllowed)
         {
@@ -894,6 +857,7 @@ public partial class InteractionInteractor : Node
         EmitSignal(SignalName.InteractionRequested, target, actionId);
         if (!IsAuthoritative)
         {
+            _pendingRequests.Add(request);
             RpcId(
                 ServerPeerId,
                 nameof(ServerTryStartInteraction),
@@ -931,20 +895,33 @@ public partial class InteractionInteractor : Node
         return true;
     }
 
-    // The bar starts now rather than on the acknowledgement, by running the very query the authority
-    // is about to run. Interacting has no "starting" state: the player pressed, so the bar is there.
-    // Reading a duration this peer cannot compute is what makes a prediction wrong, and the started
-    // acknowledgement recalibrates it one round trip later.
+    // The bar starts now rather than on the acknowledgement by asking the executor for its generic
+    // initial sample. The interactor does not know whether that sample came from a timed producer.
     private void PredictExecution(InteractiveComponent target, InteractionAction action)
     {
-        float duration =
-            action.Executor?.ComputeInteractionDuration(
-                new InteractionContext(this, target, action)
-            ) ?? 0.0f;
-        _prediction =
-            duration > 0.0f
-                ? new PredictedExecution(target, action.Definition!.Id, duration, 0.0f, 0ul)
-                : null;
+        InteractionProgressSample? sample = action.Executor?.GetPredictionSample(
+            new InteractionContext(this, target, action)
+        );
+        if (sample is InteractionProgressSample initial)
+        {
+            target.AddPredictedExecution(action.Definition!.Id, initial);
+        }
+    }
+
+    private bool HasPendingRequestInGroup(InteractiveComponent target, StringName group)
+    {
+        foreach (InteractionRequestKey request in _pendingRequests)
+        {
+            if (
+                request.Target == target
+                && request.Target.ResolveAction(request.ActionId)?.GetConcurrencyGroup() == group
+            )
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Purely local: the client predicts that it is sustaining this input so a release it never
@@ -958,6 +935,20 @@ public partial class InteractionInteractor : Node
         )
         {
             _sustainedInputs.Add(inputActionName);
+        }
+    }
+
+    private void ClearPendingPredictionsForInput(StringName inputActionName)
+    {
+        foreach (InteractionRequestKey request in _pendingRequests)
+        {
+            InteractionActionDefinition? definition = request
+                .Target.ResolveAction(request.ActionId)
+                ?.Definition;
+            if (definition?.InputActionName == inputActionName)
+            {
+                request.Target.RemovePendingExecution(request.ActionId);
+            }
         }
     }
 
@@ -1008,9 +999,16 @@ public partial class InteractionInteractor : Node
         _consumedInputs.Clear();
         _sustainedInputs.Clear();
         _relevantInputs.Clear();
+        foreach (InteractionRequestKey request in _pendingRequests)
+        {
+            if (IsUsable(request.Target))
+            {
+                request.Target.RemovePendingExecution(request.ActionId);
+            }
+        }
+        _pendingRequests.Clear();
         _focusedInteractive = null;
         _gesture = null;
-        _prediction = null;
         ForgetAutomaticRequest();
     }
 
@@ -1096,7 +1094,10 @@ public partial class InteractionInteractor : Node
     /// <param name="targetPath">Path of the target that accepted the command.</param>
     /// <param name="actionId">Identifier of the accepted action.</param>
     /// <param name="executionId">Identifier the authority allocated for the execution.</param>
-    /// <param name="duration">Seconds the authority decided the execution lasts, or zero for no deadline.</param>
+    /// <param name="hasProgress">Whether the acknowledgement carries a progress sample.</param>
+    /// <param name="progressBase">Progress value at sample receipt, when present.</param>
+    /// <param name="progressPerSecond">Local extrapolation rate, when present.</param>
+    /// <param name="revision">Monotonic presentation sample revision.</param>
     [Rpc(
         MultiplayerApi.RpcMode.Authority,
         CallLocal = false,
@@ -1106,10 +1107,24 @@ public partial class InteractionInteractor : Node
         NodePath targetPath,
         StringName actionId,
         ulong executionId,
-        float duration
+        bool hasProgress,
+        float progressBase,
+        float progressPerSecond,
+        long revision
     )
     {
         Node? target = ResolveAcknowledgedTarget(targetPath);
+
+        if (target is InteractiveComponent interactive)
+        {
+            _pendingRequests.Remove(new InteractionRequestKey(interactive, actionId));
+            interactive.ConfirmRequesterExecution(
+                actionId,
+                executionId,
+                hasProgress,
+                new InteractionProgressSample(progressBase, progressPerSecond, revision)
+            );
+        }
 
         // The authority has the last word on the deadline, so this recalibrates the bar the client
         // predicted at the press: armed if the prediction declined to draw one, retimed if the query
@@ -1123,33 +1138,42 @@ public partial class InteractionInteractor : Node
         // bar finish, vanish, and only then the door open. The compensation is free and self-tuning: it
         // is the latency actually suffered, so a host adds nothing and a bad link adds what it costs.
         // The bar therefore understates the real progress slightly in the middle, and ends on time.
-        if (duration <= 0.0f)
+        EmitSignal(SignalName.InteractionStarted, target!, actionId, executionId);
+    }
+
+    /// <summary>Reliable server-to-owner RPC carrying a published or timed progress correction.</summary>
+    /// <param name="targetPath">Path of the target carrying the execution.</param>
+    /// <param name="actionId">Identifier of the action carrying the execution.</param>
+    /// <param name="executionId">Identifier of the confirmed execution.</param>
+    /// <param name="hasProgress">Whether the update carries a progress sample.</param>
+    /// <param name="progressBase">Progress value at sample receipt, when present.</param>
+    /// <param name="progressPerSecond">Local extrapolation rate, when present.</param>
+    /// <param name="revision">Monotonic presentation sample revision.</param>
+    [Rpc(
+        MultiplayerApi.RpcMode.Authority,
+        CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
+    )]
+    public void ClientInteractionProgress(
+        NodePath targetPath,
+        StringName actionId,
+        ulong executionId,
+        bool hasProgress,
+        float progressBase,
+        float progressPerSecond,
+        long revision
+    )
+    {
+        Node? target = ResolveAcknowledgedTarget(targetPath);
+        if (target is InteractiveComponent interactive)
         {
-            _prediction = null;
-        }
-        else if (
-            _prediction is PredictedExecution predicted
-            && predicted.Target == target
-            && predicted.ActionId == actionId
-        )
-        {
-            _prediction = predicted with
-            {
-                Duration = duration + predicted.Elapsed,
-                ExecutionId = executionId,
-            };
-        }
-        else if (target is InteractiveComponent interactive)
-        {
-            _prediction = new PredictedExecution(
-                interactive,
+            interactive.ApplyRequesterProgress(
                 actionId,
-                duration,
-                0.0f,
-                executionId
+                executionId,
+                hasProgress,
+                new InteractionProgressSample(progressBase, progressPerSecond, revision)
             );
         }
-        EmitSignal(SignalName.InteractionStarted, target!, actionId, executionId, duration);
     }
 
     /// <summary>Reliable server-to-owner RPC acknowledging that the accepted action completed.</summary>
@@ -1161,10 +1185,17 @@ public partial class InteractionInteractor : Node
         CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
     )]
-    public void ClientInteractionCompleted(NodePath targetPath, StringName actionId)
+    public void ClientInteractionCompleted(
+        NodePath targetPath,
+        StringName actionId,
+        ulong executionId
+    )
     {
         Node? target = ResolveAcknowledgedTarget(targetPath);
-        ClearPredictionOf(target, actionId);
+        if (target is InteractiveComponent interactive)
+        {
+            interactive.RemoveRequesterExecution(actionId, executionId);
+        }
         EmitSignal(SignalName.InteractionCompleted, target!, actionId);
     }
 
@@ -1178,10 +1209,18 @@ public partial class InteractionInteractor : Node
         CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
     )]
-    public void ClientInteractionCancelled(NodePath targetPath, StringName actionId, string reason)
+    public void ClientInteractionCancelled(
+        NodePath targetPath,
+        StringName actionId,
+        ulong executionId,
+        string reason
+    )
     {
         Node? target = ResolveAcknowledgedTarget(targetPath);
-        ClearPredictionOf(target, actionId);
+        if (target is InteractiveComponent interactive)
+        {
+            interactive.RemoveRequesterExecution(actionId, executionId);
+        }
         EmitSignal(SignalName.InteractionCancelled, target!, actionId, reason);
     }
 
@@ -1195,10 +1234,18 @@ public partial class InteractionInteractor : Node
         CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
     )]
-    public void ClientInteractionFailed(NodePath targetPath, StringName actionId, string reason)
+    public void ClientInteractionFailed(
+        NodePath targetPath,
+        StringName actionId,
+        ulong executionId,
+        string reason
+    )
     {
         Node? target = ResolveAcknowledgedTarget(targetPath);
-        ReconcileRefusedRequest(target as InteractiveComponent, actionId);
+        if (target is InteractiveComponent interactive)
+        {
+            interactive.RemoveRequesterExecution(actionId, executionId);
+        }
         EmitSignal(SignalName.InteractionFailed, target!, actionId, reason);
     }
 
@@ -1211,12 +1258,62 @@ public partial class InteractionInteractor : Node
     /// <param name="interactive">Target that accepted the command.</param>
     /// <param name="action">Action that was accepted.</param>
     /// <param name="executionId">Identifier allocated for the execution.</param>
-    /// <param name="duration">Authoritative duration of the execution, or zero for no deadline.</param>
     internal void NotifyExecutionStarted(
         InteractiveComponent interactive,
         InteractionAction action,
+        ulong executionId
+    )
+    {
+        if (!TryBuildAcknowledgement(interactive, action, out NodePath path, out StringName id))
+        {
+            return;
+        }
+
+        bool hasSlot = interactive.TryGetProgressSample(
+            executionId,
+            out bool hasProgress,
+            out InteractionProgressSample sample
+        );
+        if (!hasSlot || !hasProgress)
+        {
+            hasProgress = false;
+            sample = default;
+        }
+
+        if (IsLocallyControlled)
+        {
+            ClientInteractionStarted(
+                path,
+                id,
+                executionId,
+                hasProgress,
+                sample.ProgressBase,
+                sample.ProgressPerSecond,
+                sample.Revision
+            );
+        }
+        else if (CanSendToOwner)
+        {
+            RpcId(
+                OwnerPeerId,
+                nameof(ClientInteractionStarted),
+                path,
+                id,
+                executionId,
+                hasProgress,
+                sample.ProgressBase,
+                sample.ProgressPerSecond,
+                sample.Revision
+            );
+        }
+    }
+
+    internal void NotifyExecutionProgress(
+        InteractiveComponent interactive,
+        InteractionAction action,
         ulong executionId,
-        float duration
+        bool hasProgress,
+        InteractionProgressSample sample
     )
     {
         if (!TryBuildAcknowledgement(interactive, action, out NodePath path, out StringName id))
@@ -1226,11 +1323,29 @@ public partial class InteractionInteractor : Node
 
         if (IsLocallyControlled)
         {
-            ClientInteractionStarted(path, id, executionId, duration);
+            ClientInteractionProgress(
+                path,
+                id,
+                executionId,
+                hasProgress,
+                sample.ProgressBase,
+                sample.ProgressPerSecond,
+                sample.Revision
+            );
         }
         else if (CanSendToOwner)
         {
-            RpcId(OwnerPeerId, nameof(ClientInteractionStarted), path, id, executionId, duration);
+            RpcId(
+                OwnerPeerId,
+                nameof(ClientInteractionProgress),
+                path,
+                id,
+                executionId,
+                hasProgress,
+                sample.ProgressBase,
+                sample.ProgressPerSecond,
+                sample.Revision
+            );
         }
     }
 
@@ -1239,7 +1354,8 @@ public partial class InteractionInteractor : Node
     /// <param name="action">Action that completed.</param>
     internal void NotifyExecutionCompleted(
         InteractiveComponent interactive,
-        InteractionAction action
+        InteractionAction action,
+        ulong executionId
     )
     {
         if (!TryBuildAcknowledgement(interactive, action, out NodePath path, out StringName id))
@@ -1249,11 +1365,11 @@ public partial class InteractionInteractor : Node
 
         if (IsLocallyControlled)
         {
-            ClientInteractionCompleted(path, id);
+            ClientInteractionCompleted(path, id, executionId);
         }
         else if (CanSendToOwner)
         {
-            RpcId(OwnerPeerId, nameof(ClientInteractionCompleted), path, id);
+            RpcId(OwnerPeerId, nameof(ClientInteractionCompleted), path, id, executionId);
         }
     }
 
@@ -1264,6 +1380,7 @@ public partial class InteractionInteractor : Node
     internal void NotifyExecutionCancelled(
         InteractiveComponent interactive,
         InteractionAction action,
+        ulong executionId,
         string reason
     )
     {
@@ -1274,11 +1391,11 @@ public partial class InteractionInteractor : Node
 
         if (IsLocallyControlled)
         {
-            ClientInteractionCancelled(path, id, reason);
+            ClientInteractionCancelled(path, id, executionId, reason);
         }
         else if (CanSendToOwner)
         {
-            RpcId(OwnerPeerId, nameof(ClientInteractionCancelled), path, id, reason);
+            RpcId(OwnerPeerId, nameof(ClientInteractionCancelled), path, id, executionId, reason);
         }
     }
 
@@ -1293,6 +1410,7 @@ public partial class InteractionInteractor : Node
     internal void NotifyExecutionFailed(
         InteractiveComponent interactive,
         InteractionAction action,
+        ulong executionId,
         string reason
     )
     {
@@ -1303,11 +1421,11 @@ public partial class InteractionInteractor : Node
 
         if (IsLocallyControlled)
         {
-            ClientInteractionFailed(path, id, reason);
+            ClientInteractionFailed(path, id, executionId, reason);
         }
         else if (CanSendToOwner)
         {
-            RpcId(OwnerPeerId, nameof(ClientInteractionFailed), path, id, reason);
+            RpcId(OwnerPeerId, nameof(ClientInteractionFailed), path, id, executionId, reason);
         }
     }
 
@@ -1438,18 +1556,6 @@ public partial class InteractionInteractor : Node
     // nobody asked for — takes its bar with it instead of letting it draw down to an end that already
     // happened. Matched on the pair, so a terminal acknowledgement arriving late never erases the bar
     // of a newer execution.
-    private void ClearPredictionOf(Node? target, StringName actionId)
-    {
-        if (
-            _prediction is PredictedExecution prediction
-            && prediction.Target == target
-            && prediction.ActionId == actionId
-        )
-        {
-            _prediction = null;
-        }
-    }
-
     // A request the authority refused leaves nothing running, so the bar it drew optimistically and the
     // sustained input it created must go with it. Only an unacknowledged prediction is dropped: pressing
     // again on the very action one is already running is also a refusal, and it must not erase the bar
@@ -1459,14 +1565,10 @@ public partial class InteractionInteractor : Node
     // moving, the action leaving the offered choices, or gameplay invalidating the target.
     private void ReconcileRefusedRequest(InteractiveComponent? target, StringName actionId)
     {
-        if (
-            _prediction is PredictedExecution prediction
-            && prediction.ExecutionId == 0ul
-            && prediction.Target == target
-            && prediction.ActionId == actionId
-        )
+        if (target is InteractiveComponent interactive)
         {
-            _prediction = null;
+            interactive.RemovePendingExecution(actionId);
+            _pendingRequests.Remove(new InteractionRequestKey(interactive, actionId));
         }
 
         if (!IsUsable(target) || actionId is null || actionId.IsEmpty)

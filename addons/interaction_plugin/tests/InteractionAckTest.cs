@@ -51,7 +51,7 @@ public sealed partial class InteractionAckTest
     }
 
     [TestCase]
-    public async Task ARunningActionAcknowledgesTheDurationItsExecutorDecided()
+    public async Task ARunningActionAcknowledgesWithoutExposingDuration()
     {
         AckWorld world = BuildWorld();
         world.Executor.Duration = 2.0f;
@@ -62,7 +62,14 @@ public sealed partial class InteractionAckTest
         world.Interactor.TryStartInteractionInput(InteractInput);
 
         AssertThat(world.Kinds()).IsEqual(new List<string> { "started" });
-        AssertThat(world.Acks[0].Duration).IsEqual(2.0f);
+        AssertThat(
+                world.Interactive.TryGetExecutionPresentation(
+                    world.Definition.Id,
+                    out InteractionExecutionPresentation presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.Progress.HasValue).IsTrue();
     }
 
     [TestCase]
@@ -152,7 +159,8 @@ public sealed partial class InteractionAckTest
 
         world.Interactor.TryStartInteractionInput(InteractInput);
 
-        AssertThat(world.Interactor.TryGetExecutionProgress(out _, out _)).IsFalse();
+        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+            .IsFalse();
     }
 
     [TestCase]
@@ -198,11 +206,12 @@ public sealed partial class InteractionAckTest
             "This is already in use."
         );
 
-        AssertThat(world.Interactor.TryGetExecutionProgress(out _, out _)).IsTrue();
+        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+            .IsTrue();
     }
 
     [TestCase]
-    public async Task ADelayedAcknowledgementPushesTheDeadlineByTheRoundTripItMeasured()
+    public async Task ADelayedAcknowledgementExtendsTheRemainingTimeWithoutVisibleRewind()
     {
         // The authority starts its clock half a round trip after the press and its completion needs the
         // other half to come back, so a bar that ran from the press would finish a full trip early. The
@@ -214,25 +223,49 @@ public sealed partial class InteractionAckTest
         await world.Runner.SimulateFrames(1);
         world.Focus();
         world.Interactor.TryStartInteractionInput(InteractInput);
-        await world.Runner.SimulateFrames(30);
-
-        AssertThat(world.Interactor.TryGetExecutionProgress(out _, out float uncompensated))
+        ulong authoritativeExecutionId = world.Executor.LastExecutionId;
+        AssertThat(
+                world.Interactive.RemoveRequesterExecution(
+                    world.Definition.Id,
+                    authoritativeExecutionId
+                )
+            )
             .IsTrue();
+        world.Interactive.AddPredictedExecution(
+            world.Definition.Id,
+            new InteractionProgressSample(0.0f, 1.0f, 0L)
+        );
+        await world.Runner.SimulateFrames(30);
+        AssertThat(
+                world.Interactive.TryGetExecutionPresentation(
+                    world.Definition.Id,
+                    out InteractionExecutionPresentation beforeAck
+                )
+            )
+            .IsTrue();
+        float uncompensated = beforeAck.Progress!.Value;
 
         world.Interactor.ClientInteractionStarted(
             world.Interactive.GetPath(),
             world.Definition.Id,
-            world.Executor.LastExecutionId,
-            1.0f
+            world.Executor.LastExecutionId + 1ul,
+            true,
+            0.0f,
+            1.0f,
+            1L
         );
 
-        AssertThat(world.Interactor.TryGetExecutionProgress(out _, out float compensated)).IsTrue();
-        // No frame ran between the two reads, so the whole difference is the deadline moving out — by
-        // exactly the elapsed time the prediction had measured. With a predicted deadline of one
-        // second the elapsed time *is* the progress, so the compensated progress must be e / (1 + e),
-        // an identity that depends on no frame rate at all.
-        AssertThat(compensated < uncompensated).IsTrue();
-        AssertThat(compensated).IsEqualApprox(uncompensated / (1.0f + uncompensated), 0.0005f);
+        AssertThat(
+                world.Interactive.TryGetExecutionPresentation(
+                    world.Definition.Id,
+                    out InteractionExecutionPresentation afterAck
+                )
+            )
+            .IsTrue();
+        float compensated = afterAck.Progress!.Value;
+        // No frame ran between the two reads. Reconciliation changes the remaining rate, not the value
+        // the player already saw, so a lower value here would be a visible rewind at ACK.
+        AssertThat(compensated).IsEqualApprox(uncompensated, 0.0005f);
     }
 
     [TestCase]
@@ -247,11 +280,13 @@ public sealed partial class InteractionAckTest
         await world.Runner.SimulateFrames(1);
         world.Focus();
         world.Interactor.TryStartInteractionInput(InteractInput);
-        AssertThat(world.Interactor.TryGetExecutionProgress(out _, out _)).IsTrue();
+        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+            .IsTrue();
 
         world.Interactive.CancelExecution(world.Executor.LastExecutionId, "The reactor tripped.");
 
-        AssertThat(world.Interactor.TryGetExecutionProgress(out _, out _)).IsFalse();
+        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+            .IsFalse();
     }
 
     [TestCase]
@@ -269,7 +304,8 @@ public sealed partial class InteractionAckTest
 
         world.Interactor.TryEndInteractionInput(InteractInput);
 
-        AssertThat(world.Interactor.TryGetExecutionProgress(out _, out _)).IsFalse();
+        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+            .IsFalse();
         AssertThat(world.Kinds()).IsEqual(new List<string> { "started", "cancelled" });
     }
 
@@ -432,7 +468,6 @@ public sealed partial class InteractionAckTest
         Node? Target,
         StringName ActionId,
         ulong ExecutionId,
-        float Duration,
         string Reason
     );
 
@@ -449,16 +484,16 @@ public sealed partial class InteractionAckTest
     {
         public void Listen()
         {
-            Interactor.InteractionStarted += (target, actionId, executionId, duration) =>
-                Acks.Add(new Ack("started", target, actionId, executionId, duration, string.Empty));
+            Interactor.InteractionStarted += (target, actionId, executionId) =>
+                Acks.Add(new Ack("started", target, actionId, executionId, string.Empty));
             Interactor.InteractionCompleted += (target, actionId) =>
-                Acks.Add(new Ack("completed", target, actionId, 0ul, 0.0f, string.Empty));
+                Acks.Add(new Ack("completed", target, actionId, 0ul, string.Empty));
             Interactor.InteractionCancelled += (target, actionId, reason) =>
-                Acks.Add(new Ack("cancelled", target, actionId, 0ul, 0.0f, reason));
+                Acks.Add(new Ack("cancelled", target, actionId, 0ul, reason));
             Interactor.InteractionFailed += (target, actionId, reason) =>
-                Acks.Add(new Ack("failed", target, actionId, 0ul, 0.0f, reason));
+                Acks.Add(new Ack("failed", target, actionId, 0ul, reason));
             Interactor.InteractionRejected += (target, actionId, reason) =>
-                Acks.Add(new Ack("rejected", target, actionId, 0ul, 0.0f, reason));
+                Acks.Add(new Ack("rejected", target, actionId, 0ul, reason));
         }
 
         /// <summary>Detects the target as interactible and runs the pipeline once, like a frame would.</summary>
@@ -498,7 +533,7 @@ public sealed partial class InteractionAckTest
 
         public void Listen(InteractionInteractor interactor)
         {
-            interactor.InteractionStarted += (_, _, _, _) => Open();
+            interactor.InteractionStarted += (_, _, _) => Open();
             interactor.InteractionCompleted += (_, _) => Close();
             interactor.InteractionCancelled += (_, _, _) => Close();
             interactor.InteractionFailed += (_, _, _) => Close();

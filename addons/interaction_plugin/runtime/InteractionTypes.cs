@@ -126,27 +126,54 @@ public readonly record struct InteractionExecutionPresentation(
     float? Progress = null
 );
 
+/// <summary>Linear progress sample transported between the authority and a presentation owner.</summary>
+/// <remarks>
+/// The sample is presentation state only. A positive rate lets a receiving peer extrapolate locally;
+/// a zero rate represents a discrete published value. Revisions are monotonic for one execution so
+/// ACKs and later corrections cannot rewind a slot through a different transport path.
+/// </remarks>
+/// <param name="ProgressBase">Normalised value at the moment the sample was received.</param>
+/// <param name="ProgressPerSecond">Local extrapolation rate, or zero for a discrete value.</param>
+/// <param name="Revision">Monotonic sample revision for this execution.</param>
+internal readonly record struct InteractionProgressSample(
+    float ProgressBase,
+    float ProgressPerSecond,
+    long Revision
+)
+{
+    /// <summary>Preserves the value already rendered while adopting this sample's remaining time.</summary>
+    public InteractionProgressSample PreserveVisibleProgress(float visibleProgress)
+    {
+        if (ProgressPerSecond <= 0.0f)
+        {
+            return this;
+        }
+
+        float authoritativeBase = Mathf.Clamp(ProgressBase, 0.0f, 1.0f);
+        float preservedBase = Mathf.Max(
+            Mathf.Clamp(visibleProgress, 0.0f, 1.0f),
+            authoritativeBase
+        );
+        float remainingSeconds = (1.0f - authoritativeBase) / ProgressPerSecond;
+        float preservedRate = remainingSeconds > 0.0f
+            ? (1.0f - preservedBase) / remainingSeconds
+            : 0.0f;
+        return new InteractionProgressSample(preservedBase, preservedRate, Revision);
+    }
+}
+
 /// <summary>Indicates that the executor finished the action synchronously.</summary>
 /// <remarks>The reservation held during the call is released immediately.</remarks>
 public sealed record InteractionExecutionCompleted();
 
 /// <summary>Indicates that the executor started an action that finishes later.</summary>
-/// <param name="Duration">
-/// Seconds this execution should last, or zero to hold the reservation until gameplay ends it.
-/// </param>
 /// <remarks>
-/// The target keeps the execution reserved until its duration elapses, or until gameplay calls
-/// <c>InteractiveComponent.CompleteExecution</c> or <c>InteractiveComponent.CancelExecution</c> with
-/// the identifier carried by <see cref="InteractionExecutionContext.ExecutionId"/>.
-/// <para>
-/// The number is never authored next to the outcome: it comes from
-/// <see cref="InteractionActionExecutor.ComputeInteractionDuration"/>, the one query every peer may
-/// run, so the owning client predicts exactly what the authority is about to reserve. Return this
-/// through <c>RunningForDuration(context)</c> or <c>RunningUntilCompleted()</c> rather than through
-/// this constructor, which exists for the two of them and for the core that reads them.
-/// </para>
+/// The target keeps the execution reserved until gameplay calls
+/// <c>InteractiveComponent.CompleteExecution</c>, <c>InteractiveComponent.CancelExecution</c>, or
+/// <c>InteractiveComponent.FailExecution</c> with the identifier carried by
+/// <see cref="InteractionExecutionContext.ExecutionId"/>.
 /// </remarks>
-public sealed record InteractionExecutionRunning(float Duration = 0.0f);
+public sealed record InteractionExecutionRunning();
 
 /// <summary>Indicates that the executor refused the action at the execution boundary.</summary>
 /// <param name="Reason">Reason reported to the requesting interactor.</param>
@@ -160,7 +187,7 @@ public sealed record InteractionExecutionRejected(string Reason = "Interaction u
 /// <param name="Reason">Reason reported to the requesting interactor.</param>
 /// <remarks>
 /// A failure is a gameplay or technical error discovered after acceptance, never a plain
-/// "not allowed": the action did start, so it is notified as started and then cancelled.
+/// "not allowed": the action did start, so it is notified as started and then failed.
 /// </remarks>
 public sealed record InteractionExecutionFailed(string Reason = "The interaction failed.");
 

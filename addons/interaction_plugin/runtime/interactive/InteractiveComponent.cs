@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 using QuestWorld.Interaction.Runtime.Actions;
@@ -17,19 +18,44 @@ namespace QuestWorld.Interaction.Runtime.Interactive;
 /// <param name="Interactor">Interactor that reserved the execution.</param>
 /// <param name="Action">Action being executed.</param>
 /// <param name="ConcurrencyGroup">Group this execution is exclusive with on its target.</param>
-/// <param name="Duration">Seconds the target holds the execution, or zero when its executor decides.</param>
-/// <param name="Elapsed">Seconds already spent, advanced by the authoritative target.</param>
 internal readonly record struct InteractionExecution(
     ulong Id,
     InteractionInteractor Interactor,
     InteractionAction Action,
-    StringName ConcurrencyGroup,
-    float Duration,
-    float Elapsed
-)
+    StringName ConcurrencyGroup
+);
+
+internal sealed class InteractionExecutionPresentationSlot
 {
-    /// <summary>Gets how far this execution has progressed, or zero when it has no duration.</summary>
-    public float Progress => Duration > 0.0f ? Mathf.Clamp(Elapsed / Duration, 0.0f, 1.0f) : 0.0f;
+    public InteractionExecutionPresentationSlot(ulong executionId, StringName actionId)
+    {
+        ExecutionId = executionId;
+        ActionId = actionId;
+    }
+
+    public ulong ExecutionId { get; set; }
+
+    public StringName ActionId { get; }
+
+    public bool HasPublishedProgress { get; set; }
+
+    public float PublishedProgress { get; set; }
+
+    public bool HasTransportSample { get; set; }
+
+    public bool OwnsLinearProgress { get; set; }
+
+    public float ProgressBase { get; set; }
+
+    public float ProgressPerSecond { get; set; }
+
+    public long SampleRevision { get; set; }
+
+    public double SampleReceivedAt { get; set; }
+
+    public bool HasWarnedLinearProgressOverride { get; set; }
+
+    public Callable? ProgressSource { get; set; }
 }
 
 /// <summary>The hold progression the interactor reports, read once per presentation snapshot.</summary>
@@ -41,10 +67,7 @@ internal readonly record struct InteractionExecution(
 /// </remarks>
 /// <param name="HeldInput">Input being held, or null when no hold is in progress.</param>
 /// <param name="HoldElapsed">Seconds that input has been held.</param>
-internal readonly record struct InteractionProgress(
-    StringName? HeldInput,
-    float HoldElapsed
-)
+internal readonly record struct InteractionProgress(StringName? HeldInput, float HoldElapsed)
 {
     /// <summary>Gets the hold progress one action should show, or null when it shows none.</summary>
     /// <remarks>
@@ -95,7 +118,7 @@ public partial class InteractiveComponent : Node
     /// Every notification of this component reports something that already happened. None of them is
     /// a command: the gameplay mutation belongs to <see cref="InteractionAction.Executor"/>, so
     /// connecting any number of observers never runs the action more than once. A started action is
-    /// always followed by exactly one completion or cancellation.
+    /// always followed by exactly one completion, cancellation, or failure.
     /// </remarks>
     /// <param name="interactor">Interactor that requested the action.</param>
     /// <param name="action">Action whose executor accepted the command.</param>
@@ -116,14 +139,24 @@ public partial class InteractiveComponent : Node
 
     /// <summary>Emitted on the authoritative instance when a started action ends without completing.</summary>
     /// <remarks>
-    /// This covers a released input, an interactor leaving range, an explicit gameplay cancellation,
-    /// and an executor failing after acceptance.
+    /// This covers a released input, an interactor leaving range, and an explicit gameplay cancellation.
     /// </remarks>
     /// <param name="interactor">Interactor that requested the action.</param>
     /// <param name="action">Action that was cancelled.</param>
     /// <param name="reason">Reason describing why the action did not complete.</param>
     [Signal]
     public delegate void InteractionActionCancelledEventHandler(
+        InteractionInteractor interactor,
+        InteractionAction action,
+        string reason
+    );
+
+    /// <summary>Emitted on the authoritative instance when a started action fails.</summary>
+    /// <param name="interactor">Interactor that requested the action.</param>
+    /// <param name="action">Action that failed after it was accepted.</param>
+    /// <param name="reason">Reason describing the failure.</param>
+    [Signal]
+    public delegate void InteractionActionFailedEventHandler(
         InteractionInteractor interactor,
         InteractionAction action,
         string reason
@@ -150,8 +183,12 @@ public partial class InteractiveComponent : Node
     [Signal]
     public delegate void InteractiveStatusChangedEventHandler();
 
-    /// <summary>Emitted when this peer's visible execution slot changes structurally.</summary>
-    /// <param name="actionId">Action whose execution presentation was created or removed.</param>
+    /// <summary>Emitted when this peer's visible execution presentation changes.</summary>
+    /// <remarks>
+    /// It covers slot creation/removal and published or synchronized progress changes. Derived local
+    /// progress is pulled by consumers and does not emit once per frame.
+    /// </remarks>
+    /// <param name="actionId">Action whose execution presentation changed.</param>
     [Signal]
     public delegate void ExecutionPresentationChangedEventHandler(StringName actionId);
 
@@ -258,7 +295,14 @@ public partial class InteractiveComponent : Node
     private readonly HashSet<InteractionInteractor> _indicationOverlaps = new();
     private readonly List<InteractionInteractor> _overlapBuffer = new();
     private readonly List<InteractionExecution> _activeExecutions = new();
-    private readonly Dictionary<StringName, InteractionExecutionPresentation> _executionPresentations = new();
+    private readonly Dictionary<
+        StringName,
+        InteractionExecutionPresentationSlot
+    > _executionPresentations = new();
+    private readonly Dictionary<
+        ulong,
+        InteractionExecutionPresentationSlot
+    > _pendingExecutionProgress = new();
     private Area3D? _interactionArea;
 
     internal bool HasActiveExecution => _activeExecutions.Count > 0;
@@ -308,8 +352,6 @@ public partial class InteractiveComponent : Node
     /// <summary>Godot callback that validates configuration and connects area and state signals.</summary>
     public override void _Ready()
     {
-        SetProcess(false);
-
         if (InteractionArea is null)
         {
             GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionArea.");
@@ -744,21 +786,15 @@ public partial class InteractiveComponent : Node
         return true;
     }
 
-    /// <summary>Gets the execution presentations visible on this authority or offline target.</summary>
+    /// <summary>Gets the execution presentations visible on this peer.</summary>
     /// <remarks>
-    /// The returned snapshot is ordered by <see cref="Actions"/>, not by execution start time. Remote
-    /// peers have no local execution slots in this implementation tranche and therefore receive an
-    /// empty snapshot.
+    /// The returned snapshot is ordered by <see cref="Actions"/>, not by execution start time. Progress
+    /// is resolved lazily from a local source, a linear transport sample, or a published value.
     /// </remarks>
     /// <returns>A fresh action-ordered snapshot of the visible active executions.</returns>
     public IReadOnlyList<InteractionExecutionPresentation> GetExecutionPresentations()
     {
         List<InteractionExecutionPresentation> presentations = new();
-        if (!IsAuthoritative)
-        {
-            return presentations;
-        }
-
         HashSet<StringName> addedActionIds = new();
         foreach (InteractionAction action in Actions)
         {
@@ -767,11 +803,11 @@ public partial class InteractiveComponent : Node
                 && addedActionIds.Add(action.Definition.Id)
                 && _executionPresentations.TryGetValue(
                     action.Definition.Id,
-                    out InteractionExecutionPresentation presentation
+                    out InteractionExecutionPresentationSlot? slot
                 )
             )
             {
-                presentations.Add(presentation);
+                presentations.Add(ResolveExecutionPresentation(slot));
             }
         }
 
@@ -788,10 +824,20 @@ public partial class InteractiveComponent : Node
     )
     {
         presentation = default;
-        return IsAuthoritative
-            && actionId is not null
-            && !actionId.IsEmpty
-            && _executionPresentations.TryGetValue(actionId, out presentation);
+        if (
+            actionId is null
+            || actionId.IsEmpty
+            || !_executionPresentations.TryGetValue(
+                actionId,
+                out InteractionExecutionPresentationSlot? slot
+            )
+        )
+        {
+            return false;
+        }
+
+        presentation = ResolveExecutionPresentation(slot);
+        return true;
     }
 
     /// <summary>Runs the authoritative command of one action through its single executor.</summary>
@@ -861,94 +907,6 @@ public partial class InteractiveComponent : Node
         return result;
     }
 
-    /// <summary>Godot callback that advances the timed executions this target owns.</summary>
-    /// <remarks>
-    /// The authoritative peer owns the clock of a running action, so the progress a player watches
-    /// cannot be forged by holding an input longer. Processing stays disabled while no execution
-    /// declares a duration.
-    /// </remarks>
-    public override void _Process(double delta)
-    {
-        if (!IsAuthoritative)
-        {
-            return;
-        }
-
-        for (int index = _activeExecutions.Count - 1; index >= 0; index--)
-        {
-            if (index >= _activeExecutions.Count)
-            {
-                continue;
-            }
-
-            InteractionExecution execution = _activeExecutions[index];
-            if (execution.Duration <= 0.0f)
-            {
-                continue;
-            }
-
-            float elapsed = execution.Elapsed + (float)delta;
-            if (elapsed < execution.Duration)
-            {
-                execution = execution with { Elapsed = elapsed };
-                _activeExecutions[index] = execution;
-                UpdateExecutionPresentationProgress(execution);
-                continue;
-            }
-
-            // Completing runs the same path as a gameplay completion, callbacks and notifications
-            // included: nothing about the end differs because the clock happened to own it.
-            CompleteExecution(execution.Id);
-        }
-    }
-
-    /// <summary>Reads how far one running execution has progressed on the authoritative peer.</summary>
-    /// <remarks>
-    /// A pure query. An execution without duration always reports zero: its end is owned by gameplay,
-    /// so the target has nothing to measure it against.
-    /// </remarks>
-    /// <param name="executionId">Identifier carried by the execution context.</param>
-    /// <param name="progress">Progress between zero and one, or zero when unknown.</param>
-    /// <returns><see langword="true"/> while the execution holds its reservation.</returns>
-    public bool TryGetExecutionProgress(ulong executionId, out float progress)
-    {
-        int index = IndexOfExecution(executionId);
-        progress = index < 0 ? 0.0f : _activeExecutions[index].Progress;
-        return index >= 0;
-    }
-
-    // Zero is a valid answer and not a "leave it alone": it is what an execution only gameplay ends
-    // reports, and the reservation was built with no deadline anyway.
-    private void ApplyRunningDurationCore(ulong executionId, float duration)
-    {
-        int index = IndexOfExecution(executionId);
-        if (index < 0)
-        {
-            return;
-        }
-
-        _activeExecutions[index] = _activeExecutions[index] with
-        {
-            Duration = Mathf.Max(duration, 0.0f),
-        };
-        AddExecutionPresentation(_activeExecutions[index]);
-        UpdateExecutionProcessing();
-    }
-
-    private void UpdateExecutionProcessing()
-    {
-        foreach (InteractionExecution execution in _activeExecutions)
-        {
-            if (execution.Duration > 0.0f)
-            {
-                SetProcess(true);
-                return;
-            }
-        }
-
-        SetProcess(false);
-    }
-
     private void AddExecutionPresentation(in InteractionExecution execution)
     {
         if (
@@ -960,42 +918,109 @@ public partial class InteractiveComponent : Node
         }
 
         StringName actionId = definition.Id;
-        InteractionExecutionPresentation presentation = new(
-            execution.Id,
-            actionId,
-            execution.Duration > 0.0f ? execution.Progress : null
-        );
+        InteractionExecutionPresentationSlot slot;
+        if (
+            _pendingExecutionProgress.Remove(
+                execution.Id,
+                out InteractionExecutionPresentationSlot? pending
+            )
+        )
+        {
+            slot = pending;
+        }
+        else
+        {
+            slot = new InteractionExecutionPresentationSlot(execution.Id, actionId);
+        }
+        slot.ExecutionId = execution.Id;
         bool structuralChange =
             !_executionPresentations.TryGetValue(
                 actionId,
-                out InteractionExecutionPresentation previous
-            ) || previous.ExecutionId != presentation.ExecutionId;
-        _executionPresentations[actionId] = presentation;
+                out InteractionExecutionPresentationSlot? previous
+            )
+            || previous.ExecutionId != slot.ExecutionId;
+        _executionPresentations[actionId] = slot;
         if (structuralChange)
         {
             EmitSignal(SignalName.ExecutionPresentationChanged, actionId);
         }
     }
 
-    private void UpdateExecutionPresentationProgress(in InteractionExecution execution)
+    private static double CurrentTimeSeconds() => Time.GetTicksMsec() / 1000.0;
+
+    private InteractionExecutionPresentation ResolveExecutionPresentation(
+        InteractionExecutionPresentationSlot slot
+    )
     {
-        if (
-            !IsAuthoritative
-            || execution.Action?.Definition is not InteractionActionDefinition definition
-            || !_executionPresentations.TryGetValue(
-                definition.Id,
-                out InteractionExecutionPresentation presentation
-            )
-            || presentation.ExecutionId != execution.Id
-        )
+        if (slot.ProgressSource is Callable source)
         {
-            return;
+            if (!IsCallableUsable(source))
+            {
+                slot.ProgressSource = null;
+            }
+            else
+            {
+                bool clearSource = false;
+                try
+                {
+                    Variant value = source.Call();
+                    if (value.VariantType is Variant.Type.Float or Variant.Type.Int)
+                    {
+                        float numeric = (float)value.AsDouble();
+                        if (float.IsFinite(numeric))
+                        {
+                            return new InteractionExecutionPresentation(
+                                slot.ExecutionId,
+                                slot.ActionId,
+                                Mathf.Clamp(numeric, 0.0f, 1.0f)
+                            );
+                        }
+
+                        GD.PushWarning(
+                            $"{GetPath()}: execution progress source for '{slot.ActionId}' returned a non-finite value."
+                        );
+                        clearSource = true;
+                    }
+                    else if (value.VariantType != Variant.Type.Nil)
+                    {
+                        GD.PushWarning(
+                            $"{GetPath()}: execution progress source for '{slot.ActionId}' returned a non-numeric value."
+                        );
+                        clearSource = true;
+                    }
+                }
+                catch (Exception exception)
+                {
+                    GD.PushWarning(
+                        $"{GetPath()}: execution progress source for '{slot.ActionId}' failed: {exception.Message}"
+                    );
+                    clearSource = true;
+                }
+
+                if (clearSource)
+                {
+                    slot.ProgressSource = null;
+                }
+            }
         }
 
-        _executionPresentations[definition.Id] = presentation with
+        if (slot.HasTransportSample)
         {
-            Progress = execution.Duration > 0.0f ? execution.Progress : null,
-        };
+            double elapsed = Mathf.Max((float)(CurrentTimeSeconds() - slot.SampleReceivedAt), 0.0f);
+            return new InteractionExecutionPresentation(
+                slot.ExecutionId,
+                slot.ActionId,
+                Mathf.Clamp(slot.ProgressBase + slot.ProgressPerSecond * (float)elapsed, 0.0f, 1.0f)
+            );
+        }
+
+        return slot.HasPublishedProgress
+            ? new InteractionExecutionPresentation(
+                slot.ExecutionId,
+                slot.ActionId,
+                Mathf.Clamp(slot.PublishedProgress, 0.0f, 1.0f)
+            )
+            : new InteractionExecutionPresentation(slot.ExecutionId, slot.ActionId);
     }
 
     private void RemoveExecutionPresentation(in InteractionExecution execution)
@@ -1004,9 +1029,9 @@ public partial class InteractiveComponent : Node
             execution.Action?.Definition is not InteractionActionDefinition definition
             || !_executionPresentations.TryGetValue(
                 definition.Id,
-                out InteractionExecutionPresentation presentation
+                out InteractionExecutionPresentationSlot? slot
             )
-            || presentation.ExecutionId != execution.Id
+            || slot.ExecutionId != execution.Id
         )
         {
             return;
@@ -1014,6 +1039,474 @@ public partial class InteractiveComponent : Node
 
         _executionPresentations.Remove(definition.Id);
         EmitSignal(SignalName.ExecutionPresentationChanged, definition.Id);
+    }
+
+    /// <summary>Publishes a discrete normalized progress value for a running execution.</summary>
+    /// <remarks>
+    /// This is an authority-only gameplay API. An owned linear sample cannot be overwritten by a
+    /// discrete producer; an execution without one may publish null or a
+    /// clamped finite value. The value is sent to the requester's local presentation through the
+    /// existing reliable owner channel.
+    /// </remarks>
+    /// <param name="executionId">Identifier of the active execution.</param>
+    /// <param name="progress">Normalized value, or null to clear the published value.</param>
+    /// <returns>False for stale executions or invalid values.</returns>
+    public bool ReportExecutionProgress(ulong executionId, float? progress)
+    {
+        InteractionExecution? execution = FindExecution(executionId);
+        if (execution is null || !IsAuthoritative)
+        {
+            return false;
+        }
+
+        if (progress.HasValue && !float.IsFinite(progress.Value))
+        {
+            GD.PushWarning($"{GetPath()}: execution progress must be finite.");
+            return false;
+        }
+
+        bool wasVisible = IsVisibleExecutionSlot(execution.Value.Action, executionId);
+        InteractionExecutionPresentationSlot slot = GetProgressSlot(execution.Value);
+
+        if (slot.OwnsLinearProgress)
+        {
+            if (!slot.HasWarnedLinearProgressOverride)
+            {
+                GD.PushWarning(
+                    $"{GetPath()}: execution '{executionId}' already owns a linear progress source."
+                );
+                slot.HasWarnedLinearProgressOverride = true;
+            }
+            return false;
+        }
+
+        float normalized = progress.HasValue ? Mathf.Clamp(progress.Value, 0.0f, 1.0f) : 0.0f;
+        if (
+            slot.HasPublishedProgress == progress.HasValue
+            && (!progress.HasValue || Mathf.IsEqualApprox(slot.PublishedProgress, normalized))
+        )
+        {
+            return false;
+        }
+
+        slot.HasTransportSample = false;
+        slot.OwnsLinearProgress = false;
+        slot.HasPublishedProgress = progress.HasValue;
+        slot.PublishedProgress = normalized;
+        slot.SampleRevision++;
+        slot.SampleReceivedAt = CurrentTimeSeconds();
+        if (wasVisible)
+        {
+            EmitSignal(SignalName.ExecutionPresentationChanged, slot.ActionId);
+            NotifyRequesterProgress(execution.Value, slot, progress.HasValue);
+        }
+        return true;
+    }
+
+    /// <summary>Registers a local callable that derives progress for an existing presentation slot.</summary>
+    /// <param name="executionId">Identifier of the local execution presentation.</param>
+    /// <param name="source">Callable returning null or a numeric normalized value.</param>
+    /// <returns>False for the prediction sentinel or an unknown execution.</returns>
+    public bool SetExecutionProgressSource(ulong executionId, Callable source)
+    {
+        if (
+            executionId == 0ul
+            || !TryGetProgressSlot(executionId, out InteractionExecutionPresentationSlot? slot)
+            || slot is null
+        )
+        {
+            return false;
+        }
+
+        slot.ProgressSource = IsCallableUsable(source) ? source : null;
+        if (IsVisibleExecutionSlot(slot.ActionId, slot.ExecutionId))
+        {
+            EmitSignal(SignalName.ExecutionPresentationChanged, slot.ActionId);
+        }
+        return true;
+    }
+
+    /// <summary>Clears a local callable progress source.</summary>
+    /// <param name="executionId">Identifier of the local execution presentation.</param>
+    /// <returns>False when no matching local slot exists.</returns>
+    public bool ClearExecutionProgressSource(ulong executionId)
+    {
+        if (
+            executionId == 0ul
+            || !TryGetProgressSlot(executionId, out InteractionExecutionPresentationSlot? slot)
+            || slot is null
+        )
+        {
+            return false;
+        }
+
+        slot.ProgressSource = null;
+        if (IsVisibleExecutionSlot(slot.ActionId, slot.ExecutionId))
+        {
+            EmitSignal(SignalName.ExecutionPresentationChanged, slot.ActionId);
+        }
+        return true;
+    }
+
+    internal bool ReportExecutionLinearProgress(
+        ulong executionId,
+        float progressBase,
+        float progressPerSecond
+    )
+    {
+        InteractionExecution? execution = FindExecution(executionId);
+        if (execution is null || !IsAuthoritative)
+        {
+            return false;
+        }
+
+        bool wasVisible = IsVisibleExecutionSlot(execution.Value.Action, executionId);
+        InteractionExecutionPresentationSlot slot = GetProgressSlot(execution.Value);
+
+        slot.HasTransportSample = true;
+        slot.OwnsLinearProgress = true;
+        slot.HasPublishedProgress = false;
+        slot.ProgressBase = Mathf.Clamp(progressBase, 0.0f, 1.0f);
+        slot.ProgressPerSecond = Mathf.Max(progressPerSecond, 0.0f);
+        slot.SampleRevision++;
+        slot.SampleReceivedAt = CurrentTimeSeconds();
+        if (wasVisible)
+        {
+            EmitSignal(SignalName.ExecutionPresentationChanged, slot.ActionId);
+            NotifyRequesterProgress(execution.Value, slot, hasProgress: true);
+        }
+        return true;
+    }
+
+    internal bool AddPredictedExecution(StringName actionId, InteractionProgressSample sample)
+    {
+        if (actionId is null || actionId.IsEmpty || _executionPresentations.ContainsKey(actionId))
+        {
+            return false;
+        }
+
+        InteractionExecutionPresentationSlot slot = new(0ul, actionId)
+        {
+            HasTransportSample = true,
+            OwnsLinearProgress = true,
+            ProgressBase = Mathf.Clamp(sample.ProgressBase, 0.0f, 1.0f),
+            ProgressPerSecond = Mathf.Max(sample.ProgressPerSecond, 0.0f),
+            SampleRevision = sample.Revision,
+            SampleReceivedAt = CurrentTimeSeconds(),
+        };
+        _executionPresentations.Add(actionId, slot);
+        EmitSignal(SignalName.ExecutionPresentationChanged, actionId);
+        return true;
+    }
+
+    internal bool ConfirmRequesterExecution(
+        StringName actionId,
+        ulong executionId,
+        bool hasSample,
+        InteractionProgressSample sample
+    )
+    {
+        if (executionId == 0ul || actionId is null || actionId.IsEmpty)
+        {
+            return false;
+        }
+
+        InteractionExecutionPresentationSlot? slot = _executionPresentations.TryGetValue(
+            actionId,
+            out InteractionExecutionPresentationSlot? existing
+        )
+            ? existing
+            : null;
+        if (slot is not null && slot.ExecutionId != 0ul && slot.ExecutionId != executionId)
+        {
+            return false;
+        }
+
+        if (slot is not null && slot.ExecutionId == executionId)
+        {
+            if (hasSample && sample.Revision > slot.SampleRevision)
+            {
+                ApplyRequesterProgress(actionId, executionId, true, sample);
+            }
+            return true;
+        }
+
+        if (slot is null)
+        {
+            slot = new InteractionExecutionPresentationSlot(executionId, actionId);
+            _executionPresentations.Add(actionId, slot);
+        }
+
+        bool structuralChange = slot.ExecutionId != executionId;
+        bool hasPrediction = slot.ExecutionId == 0ul && slot.HasTransportSample;
+        float visibleProgress = hasPrediction
+            ? ResolveExecutionPresentation(slot).Progress ?? 0.0f
+            : 0.0f;
+        slot.ExecutionId = executionId;
+        slot.ProgressSource = null;
+        if (hasSample && sample.ProgressPerSecond > 0.0f)
+        {
+            InteractionProgressSample reconciled = hasPrediction
+                ? sample.PreserveVisibleProgress(visibleProgress)
+                : sample;
+            slot.HasTransportSample = true;
+            slot.OwnsLinearProgress = true;
+            slot.HasPublishedProgress = false;
+            slot.ProgressBase = reconciled.ProgressBase;
+            slot.ProgressPerSecond = reconciled.ProgressPerSecond;
+            slot.SampleRevision = reconciled.Revision;
+            slot.SampleReceivedAt = CurrentTimeSeconds();
+        }
+        else if (hasSample)
+        {
+            slot.HasTransportSample = true;
+            slot.OwnsLinearProgress = false;
+            slot.HasPublishedProgress = true;
+            slot.ProgressBase = Mathf.Clamp(sample.ProgressBase, 0.0f, 1.0f);
+            slot.ProgressPerSecond = 0.0f;
+            slot.PublishedProgress = slot.ProgressBase;
+            slot.SampleRevision = sample.Revision;
+            slot.SampleReceivedAt = CurrentTimeSeconds();
+        }
+        else
+        {
+            slot.HasTransportSample = false;
+            slot.OwnsLinearProgress = false;
+            slot.HasPublishedProgress = false;
+            slot.SampleRevision = sample.Revision;
+            slot.SampleReceivedAt = CurrentTimeSeconds();
+        }
+
+        if (structuralChange)
+        {
+            EmitSignal(SignalName.ExecutionPresentationChanged, actionId);
+        }
+
+        return true;
+    }
+
+    internal bool ApplyRequesterProgress(
+        StringName actionId,
+        ulong executionId,
+        bool hasProgress,
+        InteractionProgressSample sample
+    )
+    {
+        if (
+            !_executionPresentations.TryGetValue(
+                actionId,
+                out InteractionExecutionPresentationSlot? slot
+            )
+            || slot.ExecutionId != executionId
+            || sample.Revision <= slot.SampleRevision
+        )
+        {
+            return false;
+        }
+
+        if (hasProgress && sample.ProgressPerSecond > 0.0f)
+        {
+            float visibleProgress = ResolveExecutionPresentation(slot).Progress ?? 0.0f;
+            sample = sample.PreserveVisibleProgress(visibleProgress);
+        }
+
+        slot.SampleRevision = sample.Revision;
+        slot.SampleReceivedAt = CurrentTimeSeconds();
+        slot.HasTransportSample = hasProgress;
+        slot.OwnsLinearProgress = hasProgress && sample.ProgressPerSecond > 0.0f;
+        slot.HasPublishedProgress = hasProgress && !slot.OwnsLinearProgress;
+        slot.PublishedProgress = Mathf.Clamp(sample.ProgressBase, 0.0f, 1.0f);
+        slot.ProgressBase = slot.PublishedProgress;
+        slot.ProgressPerSecond = Mathf.Max(sample.ProgressPerSecond, 0.0f);
+        EmitSignal(SignalName.ExecutionPresentationChanged, actionId);
+        return true;
+    }
+
+    internal bool RemovePendingExecution(StringName actionId)
+    {
+        return RemoveExecutionPresentation(actionId, 0ul);
+    }
+
+    internal bool RemoveRequesterExecution(StringName actionId, ulong executionId)
+    {
+        return RemoveExecutionPresentation(actionId, executionId);
+    }
+
+    internal bool HasLocalExecution(InteractionAction action)
+    {
+        return action?.Definition is not null
+            && _executionPresentations.ContainsKey(action.Definition.Id);
+    }
+
+    internal bool HasLocalExecutionInGroup(StringName group)
+    {
+        foreach (InteractionExecutionPresentationSlot slot in _executionPresentations.Values)
+        {
+            if (ResolveAction(slot.ActionId)?.GetConcurrencyGroup() == group)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool RemoveExecutionPresentation(StringName actionId, ulong executionId)
+    {
+        if (
+            actionId is null
+            || !_executionPresentations.TryGetValue(
+                actionId,
+                out InteractionExecutionPresentationSlot? slot
+            )
+            || slot.ExecutionId != executionId
+        )
+        {
+            return false;
+        }
+
+        _executionPresentations.Remove(actionId);
+        EmitSignal(SignalName.ExecutionPresentationChanged, actionId);
+        return true;
+    }
+
+    private InteractionExecution? FindExecution(ulong executionId)
+    {
+        int index = IndexOfExecution(executionId);
+        return index < 0 ? null : _activeExecutions[index];
+    }
+
+    private bool TryGetProgressSlot(
+        ulong executionId,
+        out InteractionExecutionPresentationSlot? slot
+    )
+    {
+        foreach (InteractionExecutionPresentationSlot candidate in _executionPresentations.Values)
+        {
+            if (candidate.ExecutionId == executionId)
+            {
+                slot = candidate;
+                return true;
+            }
+        }
+        if (
+            _pendingExecutionProgress.TryGetValue(
+                executionId,
+                out InteractionExecutionPresentationSlot? pending
+            )
+        )
+        {
+            slot = pending;
+            return true;
+        }
+
+        slot = null;
+        return false;
+    }
+
+    private static bool IsCallableUsable(in Callable source)
+    {
+        if (source.Delegate is not null)
+        {
+            return true;
+        }
+
+        return source.Target is GodotObject target
+            && GodotObject.IsInstanceValid(target)
+            && !source.Method.IsEmpty;
+    }
+
+    private bool IsVisibleExecutionSlot(InteractionAction action, ulong executionId)
+    {
+        return action.Definition is InteractionActionDefinition definition
+            && IsVisibleExecutionSlot(definition.Id, executionId);
+    }
+
+    private bool IsVisibleExecutionSlot(StringName actionId, ulong executionId)
+    {
+        return _executionPresentations.TryGetValue(
+                actionId,
+                out InteractionExecutionPresentationSlot? slot
+            )
+            && slot.ExecutionId == executionId;
+    }
+
+    private InteractionExecutionPresentationSlot GetProgressSlot(in InteractionExecution execution)
+    {
+        if (
+            TryGetProgressSlot(execution.Id, out InteractionExecutionPresentationSlot? existing)
+            && existing is not null
+        )
+        {
+            return existing;
+        }
+
+        InteractionExecutionPresentationSlot slot = new(
+            execution.Id,
+            execution.Action.Definition!.Id
+        );
+        _pendingExecutionProgress.Add(execution.Id, slot);
+        return slot;
+    }
+
+    private void NotifyRequesterProgress(
+        in InteractionExecution execution,
+        InteractionExecutionPresentationSlot slot,
+        bool hasProgress
+    )
+    {
+        if (IsRequesterUsable(execution) && !execution.Interactor.IsLocallyControlled)
+        {
+            execution.Interactor.NotifyExecutionProgress(
+                this,
+                execution.Action,
+                execution.Id,
+                hasProgress,
+                new InteractionProgressSample(
+                    hasProgress ? slot.ProgressBase : 0.0f,
+                    hasProgress ? slot.ProgressPerSecond : 0.0f,
+                    slot.SampleRevision
+                )
+            );
+        }
+    }
+
+    internal bool TryGetProgressSample(
+        ulong executionId,
+        out bool hasProgress,
+        out InteractionProgressSample sample
+    )
+    {
+        hasProgress = false;
+        sample = default;
+        if (
+            !TryGetProgressSlot(executionId, out InteractionExecutionPresentationSlot? slot)
+            || slot is null
+        )
+        {
+            return false;
+        }
+
+        if (slot.HasTransportSample)
+        {
+            hasProgress = true;
+            sample = new InteractionProgressSample(
+                slot.ProgressBase,
+                slot.ProgressPerSecond,
+                slot.SampleRevision
+            );
+        }
+        else if (slot.HasPublishedProgress)
+        {
+            hasProgress = true;
+            sample = new InteractionProgressSample(
+                slot.PublishedProgress,
+                0.0f,
+                slot.SampleRevision
+            );
+        }
+
+        return true;
     }
 
     /// <summary>Gets whether one execution is still reserved on this target.</summary>
@@ -1048,19 +1541,21 @@ public partial class InteractiveComponent : Node
             return null;
         }
 
-        // Reserved without a deadline, because only the executor about to run knows whether there is
-        // one: the reservation exists so the executor may call back into a coherent target, and the
-        // clock is written right after, from the outcome it returned.
+        if (_nextExecutionId > (ulong)long.MaxValue)
+        {
+            GD.PushError($"{GetPath()}: interaction execution identifier space is exhausted.");
+            return null;
+        }
+
+        // The reservation exists before arbitrary gameplay runs so the executor receives a coherent
+        // target and cannot race a sibling execution.
         InteractionExecution execution = new(
             _nextExecutionId++,
             interactor,
             action,
-            action.GetConcurrencyGroup(),
-            0.0f,
-            0.0f
+            action.GetConcurrencyGroup()
         );
         _activeExecutions.Add(execution);
-        UpdateExecutionProcessing();
         return execution;
     }
 
@@ -1069,9 +1564,9 @@ public partial class InteractiveComponent : Node
         in InteractionExecutionResult result
     )
     {
-        if (result is InteractionExecutionRunning running)
+        if (result is InteractionExecutionRunning)
         {
-            ApplyRunningDurationCore(execution.Id, running.Duration);
+            AddExecutionPresentation(execution);
         }
         else
         {
@@ -1122,6 +1617,27 @@ public partial class InteractiveComponent : Node
         return true;
     }
 
+    /// <summary>Fails the execution an executor left running.</summary>
+    /// <remarks>
+    /// Failure is distinct from cancellation and produces one failed notification after releasing the
+    /// reservation. The method is authority-only and stale identifiers are ignored.
+    /// </remarks>
+    /// <param name="executionId">Identifier of the execution to fail.</param>
+    /// <param name="reason">Reason carried by <see cref="InteractionActionFailed"/>.</param>
+    /// <returns><see langword="true"/> when a running execution was failed.</returns>
+    public bool FailExecution(ulong executionId, string reason)
+    {
+        InteractionExecution? execution = EndExecutionCore(executionId);
+        if (execution is null)
+        {
+            return false;
+        }
+
+        NotifyExecutorFailed(execution.Value, reason);
+        DispatchExecutionFailure(execution.Value, reason);
+        return true;
+    }
+
     internal InteractionExecution? EndExecutionCore(ulong executionId)
     {
         if (!IsAuthoritative)
@@ -1144,7 +1660,7 @@ public partial class InteractiveComponent : Node
         InteractionExecution execution = _activeExecutions[index];
         _activeExecutions.RemoveAt(index);
         RemoveExecutionPresentation(execution);
-        UpdateExecutionProcessing();
+        _pendingExecutionProgress.Remove(execution.Id);
         return execution;
     }
 
@@ -1185,7 +1701,10 @@ public partial class InteractiveComponent : Node
     private bool TryGetActionExecution(InteractionAction action, out InteractionExecution execution)
     {
         execution = default;
-        if (action?.Definition is not InteractionActionDefinition definition || definition.Id.IsEmpty)
+        if (
+            action?.Definition is not InteractionActionDefinition definition
+            || definition.Id.IsEmpty
+        )
         {
             return false;
         }
@@ -1233,6 +1752,15 @@ public partial class InteractiveComponent : Node
         }
     }
 
+    private void NotifyExecutorFailed(in InteractionExecution execution, string reason)
+    {
+        InteractionActionExecutor? executor = execution.Action?.Executor;
+        if (executor is not null && IsInstanceValid(executor))
+        {
+            executor.OnExecutionFailed(BuildExecutionContext(execution), reason);
+        }
+    }
+
     private InteractionExecutionResult RefuseExecution(
         InteractionInteractor interactor,
         InteractionAction action,
@@ -1252,16 +1780,14 @@ public partial class InteractiveComponent : Node
         {
             case InteractionExecutionCompleted:
                 EmitSignal(SignalName.InteractionActionStarted, interactor, action);
-                NotifyRequesterStarted(dispatch.Execution, duration: 0.0f);
+                NotifyRequesterStarted(dispatch.Execution);
                 EmitSignal(SignalName.InteractionActionCompleted, interactor, action);
                 NotifyRequesterCompleted(dispatch.Execution);
                 break;
 
-            case InteractionExecutionRunning running:
+            case InteractionExecutionRunning:
                 EmitSignal(SignalName.InteractionActionStarted, interactor, action);
-                // The owner is told the deadline its command actually got, which is the first moment
-                // any peer knows it: the duration is a decision of the executor, taken here.
-                NotifyRequesterStarted(dispatch.Execution, Mathf.Max(running.Duration, 0.0f));
+                NotifyRequesterStarted(dispatch.Execution);
                 break;
 
             case InteractionExecutionRejected rejected:
@@ -1278,17 +1804,24 @@ public partial class InteractiveComponent : Node
 
             case InteractionExecutionFailed failed:
                 EmitSignal(SignalName.InteractionActionStarted, interactor, action);
-                NotifyRequesterStarted(dispatch.Execution, duration: 0.0f);
-                EmitSignal(
-                    SignalName.InteractionActionCancelled,
-                    interactor,
-                    action,
-                    failed.Reason
-                );
+                NotifyRequesterStarted(dispatch.Execution);
+                EmitSignal(SignalName.InteractionActionFailed, interactor, action, failed.Reason);
                 NotifyRequesterFailed(dispatch.Execution, failed.Reason);
                 break;
         }
 
+        NotifyStatusChanged();
+    }
+
+    private void DispatchExecutionFailure(in InteractionExecution execution, string reason)
+    {
+        EmitSignal(
+            SignalName.InteractionActionFailed,
+            execution.Interactor,
+            execution.Action,
+            reason
+        );
+        NotifyRequesterFailed(execution, reason);
         NotifyStatusChanged();
     }
 
@@ -1314,16 +1847,11 @@ public partial class InteractiveComponent : Node
     // The peer that asked for the action learns its authoritative lifecycle by a direct call, on the
     // same principle as the executor callbacks above: nothing is broadcast, so the acknowledgement
     // stays with its requester instead of telling every client what somebody else is doing.
-    private void NotifyRequesterStarted(in InteractionExecution execution, float duration)
+    private void NotifyRequesterStarted(in InteractionExecution execution)
     {
         if (IsRequesterUsable(execution))
         {
-            execution.Interactor.NotifyExecutionStarted(
-                this,
-                execution.Action,
-                execution.Id,
-                duration
-            );
+            execution.Interactor.NotifyExecutionStarted(this, execution.Action, execution.Id);
         }
     }
 
@@ -1331,7 +1859,7 @@ public partial class InteractiveComponent : Node
     {
         if (IsRequesterUsable(execution))
         {
-            execution.Interactor.NotifyExecutionCompleted(this, execution.Action);
+            execution.Interactor.NotifyExecutionCompleted(this, execution.Action, execution.Id);
         }
     }
 
@@ -1339,7 +1867,12 @@ public partial class InteractiveComponent : Node
     {
         if (IsRequesterUsable(execution))
         {
-            execution.Interactor.NotifyExecutionCancelled(this, execution.Action, reason);
+            execution.Interactor.NotifyExecutionCancelled(
+                this,
+                execution.Action,
+                execution.Id,
+                reason
+            );
         }
     }
 
@@ -1347,7 +1880,12 @@ public partial class InteractiveComponent : Node
     {
         if (IsRequesterUsable(execution))
         {
-            execution.Interactor.NotifyExecutionFailed(this, execution.Action, reason);
+            execution.Interactor.NotifyExecutionFailed(
+                this,
+                execution.Action,
+                execution.Id,
+                reason
+            );
         }
     }
 
@@ -1435,6 +1973,7 @@ public partial class InteractiveComponent : Node
         ForgetArea(IndicationArea);
         _activeExecutions.Clear();
         _executionPresentations.Clear();
+        _pendingExecutionProgress.Clear();
         PurgeInvalidInteractors();
 
         // An area cannot report the overlap it loses by being freed, so every interactor that holds

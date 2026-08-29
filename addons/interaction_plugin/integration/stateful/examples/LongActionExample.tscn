@@ -10,7 +10,7 @@
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="7_action"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="8_actiondef"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="9_staterule"]
-[ext_resource type="Script" uid="uid://dafaivn8exu7s" path="res://addons/interaction_plugin/integration/stateful/TransitionStateInteractionExecutor.cs" id="10_executor"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/integration/stateful/TimedTransitionStateInteractionExecutor.cs" id="10_executor"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
 

@@ -135,28 +135,37 @@ public partial class OpenDoorExecutor : InteractionActionExecutor
 | Member | Required | Called on | When |
 | --- | --- | --- | --- |
 | `Execute(context)` | Yes | Authority only | Once, synchronously, after rules pass and the execution is reserved |
-| `ComputeInteractionDuration(context)` | No | Authority and owning client | Read by the authority when a running outcome is returned, and by the owning client at the press to predict its bar; must stay a pure read, `0` means no deadline |
+| `TimedInteractionExecutor.ComputeTimedDuration(context)` | No | Authority and owning client | Pure timed-feature query; a positive value predicts a linear sample, `0` leaves the execution open |
 | `RequiresInteractorPresence` | No | Authority | Read after a running result; default `true` |
 | `OnExecutionCompleted(context)` | No | Authority only | Once when a previously running execution completes |
 | `OnExecutionCancelled(context, reason)` | No | Authority only | Once when a previously running execution is cancelled |
+| `OnExecutionFailed(context, reason)` | No | Authority only | Once when a previously running execution fails |
 
 `Execute` returns one of:
 
 - `InteractionExecutionCompleted`: mutation finished now.
-- `InteractionExecutionRunning(duration)`: keep the reservation. Return it through `RunningForDuration(context)` or `RunningUntilCompleted()`, never through the constructor. There is no `RunningFor(seconds)` on purpose: the only way to get a deadline is `ComputeInteractionDuration`, so the owning client can run the very same query to draw its progress bar. A length that belongs in the Inspector is an export of the executor answered by that query.
+- `InteractionExecutionRunning`: keep the reservation. Return the payload-free result through the protected `Running()` helper. A timed executor uses `RunningTimed(context)` to register its authoritative clock and linear presentation sample; a generic executor leaves completion to gameplay.
 - `InteractionExecutionRejected(reason)`: nothing started. Use this rarely; ordinary conditions belong in rules.
-- `InteractionExecutionFailed(reason)`: it started but failed, so observers receive started then cancelled.
+- `InteractionExecutionFailed(reason)`: it started but failed, so observers receive started then failed.
 
-For an event-driven action such as dialogue, return `RunningUntilCompleted()`, keep `context.ExecutionId`, and later call `context.Interactive.CompleteExecution(id)` or `CancelExecution(id)` from authoritative gameplay.
+For an event-driven action such as dialogue, return `Running()`, keep `context.ExecutionId`, and later call `context.Interactive.CompleteExecution(id)`, `CancelExecution(id)` or `FailExecution(id, reason)` from authoritative gameplay.
 
-A timed running action enables `InteractiveComponent._Process()` on the server until it ends. A presence-bound running action is also revalidated once per server process frame through its detector. Set `RequiresInteractorPresence = false` for work handed to the world; `CancelOnInputReleased` always keeps it presence-bound.
+For timed authoring, inherit `TimedInteractionExecutor` and return `RunningTimed(context)`. When another
+executor hierarchy is already required, compose the same policy directly: keep one `TimedExecution`, call
+`Start(context.Interactive, context.ExecutionId, duration)` and return `Running()` only when the helper
+started. Forward the three terminal callbacks to `TimedExecution.Stop(context.ExecutionId)`. One helper
+owns at most one active clock and refuses reuse instead of abandoning its first execution.
+
+A timed running action delegates its clock to a composed `TimedExecution`, which publishes sparse linear samples and completes the generic execution on the authority. A presence-bound running action is also revalidated once per server process frame through its detector. Set `RequiresInteractorPresence = false` for work handed to the world; `CancelOnInputReleased` always keeps it presence-bound.
 
 ### Provided executors
 
 | Executor | Use | Cost / trade-off |
 | --- | --- | --- |
 | `SetStateInteractionExecutor` | Apply one state instantly | Constant, event-driven work; fails on a no-op, so pair it with a rule that hides or blocks the already-applied state |
-| `TransitionStateInteractionExecutor` | Apply running/completed/cancelled states | No polling when open-ended and world-owned. A positive `Duration` adds one server update per frame; requiring presence adds one detector validation per server frame. Covers state transitions only. |
+| `TransitionStateInteractionExecutor` | Apply running/completed/cancelled states until gameplay ends the execution | No timer or progress producer; requiring presence adds one detector validation per server frame. Failure restores the cancelled state. |
+| `TimedTransitionStateInteractionExecutor` | Apply the same three-state transition with timed completion | Composes `TimedExecution`; exports duration and sparse correction interval. |
+| `TimedExecution` | Add authoritative timing to a custom generic executor | Plain composable helper; owns one active execution clock, local derived progress, sparse samples, and automatic completion. |
 
 ## Choose or write a detector
 
@@ -268,19 +277,24 @@ The target supplies `ActionPromptScene` and `IndicationScene`; leaving one unset
 | Evaluate rules for visible UI | Every presentation/focus refresh | Listen host only when it also presents |
 | Validate a request | Prevalidation | Always, authoritatively |
 | Run executor and own reservations | Never | Always |
-| Time running executions | Predicted for UI | Authoritative `InteractiveComponent._Process` |
+| Time running executions | Predicts through the executor hook | Composed `TimedExecution` helper |
 | Validate sustained presence | Never | Once per running, presence-bound execution per process frame |
 | Render widgets | Every local presentation frame | Never on a dedicated server |
 
-Offline and listen-server play take the authoritative path directly. Impl 1 exposes active execution presentations only on the authority or offline target; remote clients receive no execution slots because interaction execution state is not replicated yet. Client progress remains the V3 local prediction computed from `ComputeInteractionDuration` and recalibrated by the `InteractionStarted` acknowledgement, but it is no longer part of `InteractionActionPresentation`. Action presentation exposes `IsHoldable` and nullable hold values; execution presentation carries the matching `ExecutionId`, `ActionId`, and optional progress. Persistent replicated world state belongs to `StatefulComponent`.
+Offline and listen-server play take the authoritative path directly. Execution presentation is queried from the
+`InteractiveComponent` through one generic record: timed slots extrapolate a linear sample, published slots
+carry discrete values, and a local `Callable` has priority when registered. A requester creates a local
+`ExecutionId = 0` prediction when the executor exposes an initial sample, then reconciles it with the started
+acknowledgement; requester-only corrections use a reliable owner RPC. Other clients still receive no execution
+slot until Impl 3 adds world replication. Persistent replicated world state belongs to `StatefulComponent`.
 
 ### Notifications
 
-`InteractionActionStarted`, `Completed`, `Cancelled`, and `Rejected` are authoritative notifications on the target. They are never commands. Local interactor signals report focus, presentation invalidation, requests, refusals, and indication changes.
+`InteractionActionStarted`, `Completed`, `Cancelled`, `Failed`, and `Rejected` are authoritative notifications on the target. They are never commands. Local interactor signals report focus, presentation invalidation, requests, refusals, and indication changes.
 
 `InteractionStatusChanged` is an event, not a per-frame push: it fires when focus moves, a target enters detection, or gameplay explicitly invalidates its status. A rule changing by itself emits nothing; consumers needing continuous freshness must pull a new presentation snapshot. The provided presenter already does so once per local process frame.
 
-Mutations and reservations are complete before executors or signal listeners run. A started action is followed by exactly one completion or cancellation; a rejected action never emits started.
+Mutations and reservations are complete before executors or signal listeners run. A started action is followed by exactly one completion, cancellation, or failure; a rejected action never emits started.
 
 ### Explicit configuration and validation
 
@@ -290,4 +304,4 @@ Required references are never guessed from parents, siblings, names, or recursiv
 
 The core is namespaced under `QuestWorld.Interaction` and has no Quest, Inventory, Dialog, Character, Stateful, persistence, or transport abstraction dependency. The optional integration depends on the [`stateful_plugin`](../stateful_plugin/README.md), never the reverse.
 
-[`integration/stateful/examples/LongActionExample.tscn`](integration/stateful/examples/LongActionExample.tscn) is the duplicable reference scene: explicit areas and anchor, default widgets, a replicated `StatefulComponent`, pure state rules, and a timed `TransitionStateInteractionExecutor`, with no script on the scene root.
+[`integration/stateful/examples/LongActionExample.tscn`](integration/stateful/examples/LongActionExample.tscn) is the duplicable reference scene: explicit areas and anchor, default widgets, a replicated `StatefulComponent`, pure state rules, and a `TimedTransitionStateInteractionExecutor`, with no script on the scene root.

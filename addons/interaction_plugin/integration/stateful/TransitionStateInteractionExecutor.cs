@@ -4,18 +4,16 @@ using QuestWorld.State;
 
 namespace QuestWorld.Interaction.Integration.Stateful;
 
-/// <summary>Drives a world state through one interaction that lasts, without any gameplay script.</summary>
+/// <summary>Drives state through one generic running interaction without a gameplay script.</summary>
 /// <remarks>
 /// This is the long counterpart of <see cref="SetStateInteractionExecutor"/>. It applies a running
 /// state when the action starts, the target keeps the execution reserved, and it applies the end
 /// state once the execution completes. A cancellation restores the state instead, so an interaction
 /// the player abandons leaves the world exactly as it found it.
 /// <para>
-/// Nothing here measures time. <see cref="Duration"/> is only declared; the authoritative target
-/// owns the clock, which is what makes a progress bar impossible to forge by holding an input
-/// longer. Leave it at zero when the end comes from something the game already owns — an animation,
-/// a machine, a dialogue — and complete the execution from there with the identifier carried by the
-/// execution context.
+/// This executor deliberately owns no timing. The animation, machine, dialogue, or other gameplay
+/// system that owns the work ends the execution with the identifier carried by its context. Use
+/// <see cref="TimedTransitionStateInteractionExecutor"/> when elapsed time is the completion policy.
 /// </para>
 /// <para>
 /// Covering the common shape is the point; it is not meant to grow. An action that also plays a
@@ -42,19 +40,6 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
     [Export]
     public StringName CancelledState { get; set; } = new(string.Empty);
 
-    /// <summary>Gets or sets how many seconds the running state lasts, or zero for no deadline.</summary>
-    /// <remarks>
-    /// Left at zero, the running state is held until something else completes the execution, which
-    /// is what an object driving its own animation wants.
-    /// <para>
-    /// The export lives on this executor and not on the core, which reads no declared duration at all:
-    /// it is answered by <see cref="ComputeInteractionDuration"/> below, the one query the authority and
-    /// the owning client both run, so the Inspector, the clock and the progress bar cannot drift apart.
-    /// </para>
-    /// </remarks>
-    [Export]
-    public float Duration { get; set; }
-
     /// <summary>Gets or sets whether the interactor must stay in range for the transition to finish.</summary>
     /// <remarks>
     /// This executor serves both usages, which is exactly why it exposes the choice: keep it set for a
@@ -69,8 +54,6 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
     public override bool RequiresInteractorPresence => RequiresPresence;
 
     /// <inheritdoc />
-    public override float ComputeInteractionDuration(in InteractionContext context) => Duration;
-
     /// <summary>Godot callback that reports a missing target or a state outside the schema.</summary>
     public override void _Ready()
     {
@@ -113,13 +96,20 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
         }
 
         return Stateful.SetState(RunningState)
-            ? RunningForDuration(context)
+            ? StartRunning(context)
             : new InteractionExecutionFailed("This cannot start.");
     }
+
+    /// <summary>Starts the reserved execution after the running state was applied.</summary>
+    /// <remarks>The generic implementation has no deadline; specialized policies may compose here.</remarks>
+    protected virtual InteractionExecutionResult StartRunning(
+        in InteractionExecutionContext context
+    ) => Running();
 
     /// <inheritdoc />
     protected internal override void OnExecutionCompleted(in InteractionExecutionContext context)
     {
+        base.OnExecutionCompleted(context);
         Stateful?.SetState(CompletedState);
     }
 
@@ -129,6 +119,17 @@ public partial class TransitionStateInteractionExecutor : InteractionActionExecu
         string reason
     )
     {
+        base.OnExecutionCancelled(context, reason);
+        Stateful?.SetState(CancelledState);
+    }
+
+    /// <inheritdoc />
+    protected internal override void OnExecutionFailed(
+        in InteractionExecutionContext context,
+        string reason
+    )
+    {
+        base.OnExecutionFailed(context, reason);
         Stateful?.SetState(CancelledState);
     }
 }
