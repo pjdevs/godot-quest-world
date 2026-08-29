@@ -3,8 +3,12 @@
 > **Status: Impl 2 delivered; Impl 3 pending.** Cette spec transforme
 > [`interaction-v4-architecture.md`](./interaction-v4-architecture.md) en trois tranches de
 > réalisation exécutables. Le document d'architecture reste le contrat d'intention ; celui-ci fixe
-> les APIs, la migration, le transport réseau, les tests et les critères de fin. Aucun plan séparé
-> n'est nécessaire après validation de cette spec.
+> les APIs, la migration, le transport réseau, les tests et les critères de fin.
+>
+> **Impl 3 est aussi la tranche de fermeture de V4.** Elle n'est pas acceptée si le runtime fonctionne
+> mais qu'il reste un second modèle V3, un transport transitoire devenu permanent, une ancienne API
+> documentée comme courante, un commentaire décrivant l'ancien deadline model, ou un exemple qui
+> enseigne encore l'architecture précédente.
 
 ## 1. Goal
 
@@ -14,8 +18,9 @@ Livrer V4 sans cut massif et sans état intermédiaire ambigu :
    unique, adapter les widgets, conserver temporairement le timing V3 interne ;
 2. **Impl 2 — generic progress, timing and requester prediction** : retirer toute sémantique de
    durée du core, introduire le timed helper, les producers de progression et le slot requester ;
-3. **Impl 3 — replication and visibility** : synchroniser les executions world-observable,
-   supporter late join et prouver les producers custom.
+3. **Impl 3 — replication, visibility and closeout** : synchroniser les executions world-observable,
+   supporter late join, prouver les producers custom et supprimer les dernières traces actives du
+   modèle V3.
 
 À la fin des trois tranches :
 
@@ -23,10 +28,17 @@ Livrer V4 sans cut massif et sans état intermédiaire ambigu :
 - `ExecutionPresentation` décrit ce que le peer peut observer sur l'Interactive ;
 - `Running()` ne transporte aucune durée ;
 - `Progress` est optionnel et ne révèle pas sa provenance ;
-- le timing est une feature spécialisée ;
+- le timing est une feature spécialisée et strictement opt-in ;
 - l'autorité possède le lifecycle ;
 - la visibilité décide seulement qui reçoit le read model ;
-- aucun shim V3 de durée ou de progression ne subsiste.
+- un `Replicated` n'entretient pas deux transports permanents de progress ;
+- aucun shim, nom d'API, commentaire ou documentation **active** V3 de durée/progression ne subsiste.
+
+Les documents V2/V3 explicitement historiques peuvent évidemment conserver leur vocabulaire s'ils
+sont clairement marqués comme tels. La contrainte porte sur le code livré, les commentaires du code
+courant, la documentation utilisateur courante et les proposals encore présentés comme applicables.
+
+---
 
 ## 2. Decisions fixed by this spec
 
@@ -43,13 +55,19 @@ Livrer V4 sans cut massif et sans état intermédiaire ambigu :
 | Published progress | Authority reports nullable normalized snapshots by `ExecutionId` |
 | Derived progress | Local Godot `Callable`; no mandatory C# interface |
 | Timed progress | Linear local extrapolation from sparse progress samples |
+| Timed authoring | A timed executor requires a finite positive duration; open-ended work uses generic `Running()` |
+| Timed clock | Authority timeout and presentation extrapolation use one consistent monotonic time policy |
 | Visibility authoring | Per `InteractionAction`, default `RequesterOnly` |
-| Requester transport | Existing reliable owner RPC channel |
+| Requester transport | Existing reliable owner RPC channel, only for requester-only presentation after start |
 | World transport | Dedicated `MultiplayerSynchronizer`, reliable on-change snapshot |
+| Replicated requester | ACK may seed/reconcile immediately; synchronizer owns later progress corrections |
 | Interest management | Native synchronizer visibility/filter APIs |
 | Correlation | `(target, ActionId)` while pending; authoritative `ExecutionId` after ACK |
-| Failure after start | Add `FailExecution(executionId, reason)` |
+| Failure after start | `FailExecution(executionId, reason)` |
 | Public terminal contract | `Completed`, `Cancelled`, or `Failed`; never a terminal progress value |
+| V4 closeout | Current docs/comments/examples contain no live V3 execution-duration model |
+
+---
 
 ## 3. Final public model
 
@@ -71,6 +89,9 @@ public readonly record struct InteractionActionPresentation(
 
 It contains no execution membership, progress, duration, deadline or timed capability.
 
+`HoldProgress` remains action/interactor presentation because hold is a local selection gesture. It is
+not execution progress and must never be merged with it.
+
 ### 3.2 Execution presentation
 
 ```csharp
@@ -87,9 +108,10 @@ Rules:
 - `Progress = null` means the execution has no generic presentable progress ;
 - a non-null progress is clamped to `[0, 1]` ;
 - `ExecutionId = 0` is used only by an unconfirmed local requester slot ;
-- renderers must treat `ExecutionId` as opaque and must not infer a visual predicted state from zero ;
+- renderers treat `ExecutionId` as opaque and do not infer a predicted visual from zero ;
 - a confirmed execution always has a non-zero authority-allocated identifier ;
-- the record has no terminal state: it disappears on completion, cancellation or failure.
+- the record has no terminal state: it disappears on completion, cancellation or failure ;
+- nothing in this record reveals whether progress is timed, discrete or gameplay-derived.
 
 ### 3.3 Execution visibility
 
@@ -111,8 +133,9 @@ public InteractionExecutionVisibility ExecutionVisibility { get; set; }
 ```
 
 The property belongs to the action occurrence, not the shared definition or executor. Two targets
-using the same action definition may therefore present their executions differently. The default
-preserves V3 privacy: only the requester receives client presentation.
+using the same reusable action definition may therefore expose their transient execution differently.
+
+Visibility controls **presentation membership**, never command authority or lifecycle ACK delivery.
 
 ### 3.4 Interactive queries
 
@@ -125,14 +148,12 @@ public bool TryGetExecutionPresentation(
 );
 ```
 
-The returned list is a fresh immutable-facing snapshot ordered by `InteractiveComponent.Actions`,
-not by start time. Deterministic action order keeps prompts, replication and tests stable.
+The returned list is a fresh immutable-facing snapshot ordered by `InteractiveComponent.Actions`, not
+by start time. Deterministic action order keeps prompts, replication and tests stable.
 
 `GetPresentation(interactor, isFocused)` continues returning action presentation only.
 
 ### 3.5 Presentation invalidation
-
-`InteractiveComponent` adds one structural signal:
 
 ```csharp
 [Signal]
@@ -140,11 +161,12 @@ public delegate void ExecutionPresentationChangedEventHandler(StringName actionI
 ```
 
 It is emitted locally when the visible slot is created, receives a published/synchronized snapshot,
-changes authoritative identity, or disappears. It is not emitted every frame for derived progress.
-A continuous renderer pulls the query from `_Process`; an event-driven renderer pulls after the
-signal.
+changes authoritative identity, changes discrete state, or disappears. It is not emitted every frame
+for locally derived continuous progress.
 
-### 3.6 Widget binding
+A continuous renderer pulls from `_Process`; an event-driven renderer pulls after the signal.
+
+### 3.6 Widget composition
 
 ```csharp
 public interface IInteractionActionWidget
@@ -156,7 +178,7 @@ public interface IInteractionActionWidget
 }
 ```
 
-`InteractionPresenter` performs the join:
+`InteractionPresenter` performs the deterministic join:
 
 ```text
 for each action in target presentation
@@ -164,15 +186,16 @@ for each action in target presentation
     widget.Bind(action, execution?)
 ```
 
-The default widget continues rendering label, input, availability and hold. It does not gain an
-execution progress bar merely because the data is available. Game-specific widgets may use the
-second argument. World-space consumers query the Interactive directly and need no interactor.
+The default widget is not forced to draw an execution bar. Game-specific widgets may use the second
+argument. World-space consumers query the Interactive directly and need no interactor or presenter.
+
+---
 
 ## 4. Runtime model and invariants
 
 ### 4.1 Authoritative execution and local presentation are separate
 
-Keep two internal concepts:
+Keep two concepts:
 
 ```text
 AuthoritativeExecution
@@ -184,14 +207,14 @@ AuthoritativeExecution
 LocalExecutionPresentationSlot
     per-peer presentation state keyed by ActionId
     authoritative, requester or replicated origin
-    optional published/derived progress state
+    optional progress state
 ```
 
 Prediction never enters the authoritative execution collection. Replication never gains gameplay
 mutation methods. The public query projects local presentation slots.
 
 On authority/offline, every active authoritative execution has a local presentation slot regardless
-of network visibility. On a remote peer, only requester or replicated transports create slots.
+of network visibility. On a remote peer, only requester or replicated visibility creates one.
 
 ### 4.2 Slot cardinality
 
@@ -202,32 +225,33 @@ ActionId -> zero or one authoritative execution
 ActionId -> zero or one local presentation slot
 ```
 
-Before reserving, the authority checks in this order:
+Before reserving, authority checks in this order:
 
 1. configuration, target rules and action rules ;
-2. an active execution with the same `ActionId` ;
-3. an active execution in the requested concurrency group.
+2. active execution with the same `ActionId` ;
+3. active execution in the requested concurrency group.
 
-Rule results keep priority over busy feedback: an action already hidden by gameplay stays hidden.
-`ReserveExecutionCore` repeats the two reservation checks so internal/direct execution paths cannot
-bypass cardinality or concurrency after availability was evaluated.
+Action uniqueness and concurrency groups remain orthogonal:
 
-The existing editor validator already reports duplicate action ids. Impl 1 locks that behavior with
-a regression test and adds the runtime `ActionId` guard because mutable scene configuration or direct
-calls must not rely on editor validation.
+```text
+Hack + Hack       -> impossible: same ActionId
+Hack + Repair     -> depends on concurrency group
+Hack + Inspect    -> possible when groups differ
+```
+
+A cooperative `Repair` is one execution/session with several participants owned by gameplay, not
+several independent `Repair` executions.
 
 ### 4.3 Lookup implementation
 
-The authoritative active list may remain a list because targets have few actions. Add direct helper
-lookups by `ExecutionId`, `ActionId` and concurrency group. Do not introduce a collection of executions
-per action.
+The authoritative collection may remain a small list. Direct helpers by `ExecutionId`, `ActionId` and
+concurrency group are enough; do not introduce a list of executions per action.
 
-The presentation layer keeps one dictionary keyed by `ActionId` plus deterministic projection through
-the declared action order. A replicated action id absent from the local action configuration is
-ignored with one warning: network payload does not create authoring data.
+Presentation keeps one dictionary keyed by `ActionId` plus deterministic projection through authored
+action order. A replicated action id absent from local authoring is ignored with one warning.
 
 Authority allocation reserves `0` for prediction and stays within `1..long.MaxValue`, the lossless
-Godot Variant transport range. Exhaustion is a fatal session error rather than a wrapped/reused id.
+Godot Variant transport range. Identifiers are not wrapped/reused within a session.
 
 ### 4.4 Lifecycle
 
@@ -248,10 +272,10 @@ bool CancelExecution(ulong executionId, string reason = "");
 bool FailExecution(ulong executionId, string reason);
 ```
 
-All three are authority-only, return `false` for a stale/unknown identifier, release the slot before
+All three are authority-only, return `false` for stale/unknown identifiers, release the slot before
 external callbacks, and produce exactly one terminal notification.
 
-Executor callbacks become:
+Executor callbacks:
 
 ```csharp
 OnExecutionCompleted(context)
@@ -259,43 +283,26 @@ OnExecutionCancelled(context, reason)
 OnExecutionFailed(context, reason)
 ```
 
-Failure is distinct from cancellation in authority signals and requester ACKs. Existing immediate
-`InteractionExecutionFailed` uses the same public started-then-failed contract.
-
-Authority notification adds:
-
-```csharp
-[Signal]
-public delegate void InteractionActionFailedEventHandler(
-    InteractionInteractor interactor,
-    InteractionAction action,
-    string reason
-);
-```
-
-An immediate failed result emits `Started` then `Failed`, not `Cancelled`. `OnExecutionFailed` is
-called only when an execution previously left running is failed later.
+Failure is distinct from cancellation in authority signals and requester ACKs. Immediate
+`InteractionExecutionFailed` is still accepted-then-failed: `Started` then `Failed`, never `Rejected`.
 
 ### 4.5 Terminal progress
 
-Completion removes the slot in the same authoritative operation. Code may report `Progress = 1`
-while intentionally keeping an execution active, but this is never required before completion.
-
-Therefore:
+Completion removes the slot immediately. `Progress = 1` is not a lifecycle prerequisite.
 
 ```text
 ReportProgress(.66)
 CompleteExecution(id)
 ```
 
-is valid. Local and remote renderers may observe `.66` followed directly by absence. End animation
-comes from the terminal signal or slot disappearance, not from equality with one.
+is valid. Renderers may see `.66` followed directly by absence. Completion animation comes from slot
+removal or terminal lifecycle, never from comparing progress to one.
+
+---
 
 ## 5. Progress production
 
 ### 5.1 Published snapshots
-
-Public API:
 
 ```csharp
 public bool ReportExecutionProgress(ulong executionId, float? progress);
@@ -305,43 +312,74 @@ Semantics:
 
 - authority/offline only ;
 - `null` clears the published value ;
-- finite values are clamped to `[0, 1]` ;
-- `NaN` and infinities warn and return `false` ;
-- stale ids return `false` without warning, so delayed callbacks are safe ;
+- finite values clamp to `[0, 1]` ;
+- `NaN` and infinities fail with warning ;
+- stale ids return `false` safely ;
 - unchanged normalized values are no-ops ;
-- a timed linear sample already owning this execution rejects published progress with one warning ;
+- a linear timed producer cannot be overwritten by a published producer ;
 - the method changes presentation only, never gameplay truth or lifecycle ;
-- a change emits `ExecutionPresentationChanged` and routes the snapshot according to visibility.
+- network routing follows `ExecutionVisibility`.
 
-Use it for discrete/event-driven progress. Calling it every frame is unsupported authoring, not a
-network streaming API.
+Use it for discrete/event-driven progress such as:
+
+```text
+0 -> .33 -> .66 -> 1
+```
+
+It is not a supported per-frame streaming API.
 
 ### 5.2 Derived local source
-
-Public API:
 
 ```csharp
 public bool SetExecutionProgressSource(ulong executionId, Callable source);
 public bool ClearExecutionProgressSource(ulong executionId);
 ```
 
-The source is local presentation state and may be registered on authority or clients for an existing
-slot. It returns either `null`/Nil or a numeric normalized value. `Callable` is chosen over a C#
-interface so C#, GDScript and a future GDExtension can provide it naturally.
+The source is local presentation state. It returns `Nil` or a numeric normalized value. `Callable` is
+chosen instead of a mandatory C# interface so C#, GDScript and future GDExtension producers can bind
+naturally.
 
 Rules:
 
-- one source per execution ; setting another replaces it ;
-- `executionId = 0` is rejected by this public API because several predicted action slots may share
-  that sentinel; prediction sources are installed through the action-aware internal hook ;
-- a freed/invalid callable is cleared and resolves to no derived value ;
-- a thrown call or non-numeric Variant warns once, clears the source and falls back ;
-- source lifetime ends automatically with the slot ;
-- source changes do not replicate ; the owning gameplay system must already synchronize the data
-  from which each peer derives progress ;
-- polling happens only when a consumer asks for presentation.
+- one source per confirmed execution ;
+- `ExecutionId = 0` uses the internal action-aware prediction path instead ;
+- invalid/freed callable is cleared ;
+- exception/non-numeric/non-finite values warn once and fall back ;
+- source lifetime ends with the slot ;
+- source state itself never replicates ; the owning gameplay system synchronizes whatever it derives
+  from ;
+- polling happens only while presentation is queried.
 
-Progress resolution order:
+### 5.3 Progress-state encapsulation
+
+Linear extrapolation is a **presentation transport concern**, not Interaction lifecycle semantics.
+Do not let `InteractiveComponent` regrow a timer model through raw timing fields and branching spread
+across its lifecycle code.
+
+The preferred internal shape is conceptually:
+
+```text
+InteractionExecutionPresentationSlot
+    ExecutionId
+    ActionId
+    ProgressState
+
+InteractionExecutionProgressState
+    optional PublishedSnapshot
+    optional LocalCallable
+    optional LinearSample
+    Revision
+    Resolve(now)
+```
+
+The exact class/struct split is internal, but these invariants are fixed:
+
+- lifecycle code does not reason about duration/deadline/elapsed ;
+- linear sample resolution is encapsulated in presentation/progress machinery ;
+- transport revision ordering is owned next to progress transport state ;
+- renderers still receive only nullable normalized `Progress`.
+
+Resolution order remains:
 
 ```text
 valid local Callable
@@ -350,9 +388,9 @@ valid local Callable
     else null
 ```
 
-### 5.3 Internal linear sample
+### 5.4 Internal linear sample
 
-Timed execution uses an internal transport capability:
+Timed presentation transports:
 
 ```text
 ProgressBase
@@ -360,39 +398,50 @@ ProgressPerSecond
 SampleRevision
 ```
 
-A receiving peer records local receipt time and resolves:
+A receiving peer records receipt time and resolves:
 
 ```text
 clamp(ProgressBase + ProgressPerSecond * localSecondsSinceReceipt, 0, 1)
 ```
 
-This is presentation interpolation, not core lifecycle timing. The public record still exposes only
-the resulting `Progress`. Published progress is the same shape with `ProgressPerSecond = 0`.
+A strictly newer revision wins. ACK and synchronizer may arrive in either order without rewinding the
+same `(ActionId, ExecutionId)` slot.
 
-Revision is monotonic per authoritative execution. ACK, requester RPC and replicated snapshots apply
-only a strictly newer revision, preventing an older transport channel from rewinding a merged slot.
+---
 
 ## 6. Timed execution feature
 
 ### 6.1 Base executor cleanup
 
-`InteractionActionExecutor` removes:
+`InteractionActionExecutor` has no:
 
 - `ComputeInteractionDuration` ;
 - `RunningForDuration` ;
-- duration documentation.
+- `RunningUntilCompleted` compatibility helper ;
+- duration/deadline presentation contract.
 
-It keeps a protected `Running()` helper returning payload-free `InteractionExecutionRunning`.
+It keeps payload-free:
 
-`InteractiveComponent` removes authoritative `Duration`, `Elapsed`, timer `_Process`,
-`TryGetExecutionProgress` and duration application. Reservation, input release, presence validation,
-completion, cancellation and failure remain unchanged.
+```csharp
+protected static InteractionExecutionResult Running();
+```
+
+`InteractiveComponent` owns no authoritative `Duration`, `Elapsed`, timer `_Process`, deadline or
+`TryGetExecutionProgress` API.
 
 ### 6.2 TimedExecution and TimedInteractionExecutor
 
-`TimedExecution` is a composable helper, not a second Interaction execution. It owns the positive
-duration, authority time anchor, sparse linear samples, local derived progress and automatic call to
-`CompleteExecution(executionId)`. It can be embedded in any custom executor hierarchy.
+`TimedExecution` is a composable policy, not another Interaction execution. It owns:
+
+```text
+finite positive duration
+authoritative timing anchor
+sparse linear presentation samples
+automatic CompleteExecution(executionId)
+cleanup on every terminal path
+```
+
+`TimedInteractionExecutor` is the author-facing inheritance shortcut and composes one helper.
 
 ```csharp
 [GlobalClass]
@@ -412,100 +461,162 @@ public abstract partial class TimedInteractionExecutor : InteractionActionExecut
 }
 ```
 
-`TimedInteractionExecutor` is the author-facing inheritance shortcut. It composes one
-`TimedExecution`; `ComputeTimedDuration` defaults to the exported `Duration`, remains a pure query,
-and is only part of the timed feature. `RunningTimed` clamps negative duration to zero.
+### Strict timed contract
 
-- positive duration: register authoritative clock and linear progress sample, return `Running()` ;
-- zero duration: return generic `Running()` with no clock or progress ;
-- timeout: call `CompleteExecution(executionId)` ;
-- completion/cancellation/failure: clear clock and progress state before subclass callback ;
-- stale timer callback: no-op through the execution id guard.
+A timed path means timed work. `ComputeTimedDuration()` must return a finite positive value.
 
-The helper subscribes to frame processing only while it owns a positive-duration execution. Core Interaction never checks
-`executor is TimedInteractionExecutor`.
+```text
+finite duration > 0
+    -> start TimedExecution
+    -> Running()
 
-`TransitionStateInteractionExecutor` remains the non-timed three-state executor completed by gameplay.
-`TimedTransitionStateInteractionExecutor` derives from it and composes `TimedExecution`, proving that
-the timed policy is reusable when another executor base already owns the gameplay behavior.
+0 / negative / NaN / infinity
+    -> configuration/runtime failure
+    -> no silent fallback to an open-ended timed execution
+```
 
-### 6.3 Timing correction
+Open-ended or externally completed work uses `InteractionActionExecutor` / generic `Running()` (for
+example `TransitionStateInteractionExecutor`). A zero-duration `TimedInteractionExecutor` must not be
+a hidden compatibility path back to V3 semantics.
 
-The authority publishes a linear sample at start and every `CorrectionInterval` while the execution
-is active. Default `0.5 s` bounds late-join error and drift without a per-frame float stream.
+The validator reports invalid authored durations. Runtime still validates computed/custom durations.
 
-The server clock alone decides timeout. A client reaching visual progress one clamps there but cannot
-complete anything. Authoritative slot removal ends the presentation.
+### 6.3 TimedExecution start result
 
-`CorrectionInterval <= 0` disables periodic correction after the initial sample. It is allowed for
-short requester-only interactions but does not satisfy replicated late-join acceptance criteria.
-The validator reports a replicated timed action configured this way.
+The helper must not collapse all failed starts into one boolean meaning "already active". Internal
+start result distinguishes at least:
+
+```text
+Started
+AlreadyActive
+InvalidExecution
+InvalidDuration
+```
+
+Exact type is private/internal. The purpose is correct failure handling and diagnostics, not public API.
+
+A stale/invalid target or execution must never be reported as "timed executor already active".
+
+### 6.4 One clock policy
+
+Authority timeout and client/remote presentation extrapolation must use the same elapsed-time
+semantics. Do not accumulate authoritative `process delta` while remote peers extrapolate an unrelated
+wall-clock basis.
+
+V4 default direction:
+
+```text
+monotonic elapsed time owns timing
+ProcessFrame is only a wake-up/check mechanism
+sparse samples re-anchor remote presentation
+```
+
+If pause-sensitive game-time timers are needed later, they belong to the timed feature as an explicit
+clock policy. Interaction core still does not gain time semantics.
+
+### 6.5 Timing correction
+
+Authority publishes a linear sample at start and every `CorrectionInterval` while active. Default
+`0.5 s` bounds drift without per-frame float traffic.
+
+Server alone decides completion. A remote peer reaching visual `1` cannot complete gameplay.
+
+For `Replicated`, `CorrectionInterval <= 0` is invalid because late join/current peers would not get
+bounded correction. The validator reports it. Requester-only may choose looser correction policy if
+explicitly allowed by the timed helper.
+
+---
 
 ## 7. Requester prediction and ACK reconciliation
 
 ### 7.1 Generic prediction hook
 
-`InteractionActionExecutor` gains an internal polymorphic hook returning an optional initial linear
-progress sample. Default returns none. `TimedInteractionExecutor` returns `0` and `1 / duration` for a
-positive locally computable duration.
+`InteractionActionExecutor` exposes only an internal producer-agnostic prediction hook. Generic
+executors return none. Timed executors can provide an initial linear sample from their pure duration
+query.
 
-The interactor invokes the hook without type testing. Custom executors may opt in later; renderers
-never know the producer type.
+The interactor never type-tests `TimedInteractionExecutor`.
 
 ### 7.2 Pending slot
 
-On a local request with a prediction sample:
+Every remote request records:
 
 ```text
-target + ActionId
-    -> local slot ExecutionId = 0
-    -> Progress starts immediately
+(target, ActionId)
 ```
 
-Every request also creates an internal pending marker keyed by target/action, even when no prediction
-sample exists and therefore no public slot is visible yet. The marker prevents duplicate requests and
-participates in local concurrency checks until rejection or started ACK.
+as a pending marker even if no visible prediction exists. If the executor supplies a prediction
+sample, the target additionally exposes a local slot:
 
-Only one pending/confirmed slot is allowed for that pair. Predictions for different action ids may
-coexist when concurrency allows them.
+```text
+ActionId
+ExecutionId = 0
+Progress = locally derived prediction
+```
 
-No `RequestId` is added. The client cannot send a second request for the same target/action until the
-first receives rejection or started ACK. `ExecutionId` protects callbacks after confirmation.
+One pending/confirmed slot exists per action. Different actions may predict concurrently when their
+concurrency groups permit it.
 
-### 7.3 ACK shape
+### 7.3 ACK reconciliation
 
-The public requester signal becomes:
+Public requester lifecycle remains:
 
 ```text
 InteractionStarted(interactive, actionId, executionId)
+InteractionCompleted(...)
+InteractionCancelled(...)
+InteractionFailed(...)
+InteractionRejected(...)
 ```
 
-Duration leaves the signal and RPC contract. Internal started ACK may carry an optional presentation
-sample (`base`, `rate`, `revision`) but the public consumer receives the normal target read model.
+No public duration/deadline returns.
 
-Reconciliation:
+Started ACK may carry an **internal optional progress sample** to immediately reconcile requester
+presentation. This is presentation transport data, not an execution deadline contract.
 
-- rejection removes only pending slot `ExecutionId = 0` ;
-- accepted running replaces zero with authoritative id ;
-- accepted non-timed running creates a confirmed slot with `Progress = null` ;
-- instant completion/failure may start and end inside one network turn without a rendered slot ;
-- completion/cancellation/failure removes matching authoritative id immediately ;
-- stale terminal ACK never removes a newer id in the same action slot.
+Rules:
 
-For a linear ACK after local prediction, preserve the visible progress and recompute only its rate so
-the remaining visual duration equals the authoritative remaining time represented by the sample.
-Later linear corrections apply the same monotonic rule. This retains latency compensation without a
-visible rewind and prevents the bar from finishing one round trip before the terminal ACK.
+- rejection removes only matching pending prediction ;
+- accepted running replaces `ExecutionId = 0` with authority id ;
+- non-progress running may expose `Progress = null` depending on visibility ;
+- terminal ACK removes only matching authority id ;
+- stale terminal ACK cannot remove a newer execution in the same action slot ;
+- linear reconciliation preserves already visible progress and adjusts remaining extrapolation rather
+  than visibly rewinding.
 
-### 7.4 Requester-only progress updates
+### 7.4 Visibility-aware requester behavior
 
-`RequesterOnly` published/correction samples use a reliable targeted RPC to the owner interactor.
-They are not broadcast. The RPC names target, action id and execution id; mismatched/stale updates are
-ignored.
+Lifecycle ACK is always delivered to the requester, including `AuthorityOnly`. Presentation slot
+creation is visibility-dependent:
 
-The lifecycle ACK is always delivered to the requester, including `AuthorityOnly`, because it reports
-the result of the request. Visibility controls creation of client execution presentation, not whether
-the requester learns that its command started or ended.
+```text
+AuthorityOnly
+    lifecycle ACK yes
+    requester execution slot no
+    progress sample transport no
+
+RequesterOnly
+    lifecycle ACK yes
+    requester execution slot yes
+    initial sample in ACK when available
+    later published/timed corrections via targeted owner RPC
+
+Replicated
+    lifecycle ACK yes
+    requester prediction/ACK slot yes for immediate responsiveness
+    initial sample in ACK when available
+    later progress corrections through InteractionExecutionSynchronizer only
+```
+
+**Do not keep the requester progress RPC active for a `Replicated` execution after start.** ACK and
+synchronizer are allowed to overlap only as a reconciliation boundary: ACK gives immediate local
+confirmation; replicated current state then becomes the presentation transport. Revisions make the
+merge idempotent and monotonic.
+
+Terminal requester ACK may remove the local slot before the replicated snapshot disappearance arrives.
+The later synchronizer absence must be idempotent, not recreate or double-notify the slot.
+
+---
 
 ## 8. Replication and visibility
 
@@ -515,213 +626,246 @@ Add a `[GlobalClass]` node derived from `MultiplayerSynchronizer`:
 
 ```text
 InteractionExecutionSynchronizer
-    explicit reference to its InteractiveComponent
+    explicit InteractiveComponent reference
     self-owned replicated snapshot property
-    SceneReplicationConfig configured for spawn + OnChange
+    SceneReplicationConfig: spawn + OnChange
 ```
 
-It owns transport only. It exposes no gameplay mutation. The synchronized property is rooted on the
-synchronizer itself and uses a Variant-compatible `Godot.Collections.Array<Dictionary>`; it contains
-no `Object`, `Resource`, instance id or RID.
+It owns transport only and exposes no gameplay mutation.
 
-The node sets `root_path = "."` and configures `.:ReplicatedSnapshot` with spawn enabled and
-`ReplicationMode.OnChange`. A scene test resolves this exact path from the configured root.
-The replication-only exported property is hidden from the Inspector through `_ValidateProperty` and
-cannot be used as a second gameplay mutation API.
+The synchronized property is Variant-safe, rooted on the synchronizer itself and contains no Object,
+Resource, instance id or RID. The replication-only property is hidden from ordinary Inspector
+authoring.
 
-An Interactive needs the node only when at least one action is `Replicated`. The editor validator
-reports a missing or incorrectly targeted synchronizer. Runtime gameplay still executes if it is
-missing, but pushes one configuration error and cannot provide world replication.
+An Interactive requires this node only if at least one action is `Replicated`. Missing/mistargeted
+configuration is diagnosed; gameplay authority still functions without world presentation replication.
 
-The inherited `PublicVisibility`, `SetVisibilityFor`, visibility filters and update mode remain the
-interest-management API. Visibility applies to the Interactive's replicated execution snapshot as a
-whole; requester-only and authority-only entries are never included.
+Native `MultiplayerSynchronizer` visibility/filter APIs remain the interest-management mechanism.
+Interaction does not build a second interest system.
 
 ### 8.2 Snapshot wire shape
 
-Each dictionary contains Variant-safe values:
+Each replicated entry carries current presentation state only:
 
 ```text
 action_id            StringName
-execution_id         signed 64-bit transport encoding of ulong
+execution_id         signed 64-bit encoding of authority ulong
 progress_present     bool
 progress_base        float
 progress_per_second  float
 revision             signed 64-bit integer
 ```
 
-`execution_id` values are authority-generated and constrained to `1..long.MaxValue` so conversion is
-lossless. Missing progress uses `progress_present = false`; it is not conflated with zero.
+Requester-only and authority-only entries are never included.
 
-The whole small collection is rebuilt on structural change, published progress change or timed
-correction. Entries follow action declaration order. On-change replication is reliable. Spawn sync
-delivers the current collection to late joiners.
+Collection order follows action declaration order. It is rebuilt on structural change, discrete
+published progress change or sparse timed correction. On-change replication is reliable; spawn sync
+provides current state to late joiners.
 
-Applying a snapshot diffs by `ActionId` and `ExecutionId`, then emits local invalidation once per
-changed action. A property carries current state, not transition history: start and end inside one
-replication frame may be observed only as absence, which is valid for an instant execution.
-Revision comparison resolves out-of-order ACK/synchronizer arrival for the requester.
+Applying a snapshot diffs by `(ActionId, ExecutionId)`. Older revisions are ignored. Network payload
+never creates missing local authoring data.
 
 ### 8.3 Visibility behavior
 
-| Mode | Authority/offline | Requester client | Other visible clients | Transport |
+| Mode | Authority/offline | Requester client | Other visible clients | Progress transport after start |
 | --- | --- | --- | --- | --- |
-| `AuthorityOnly` | slot visible | no slot | no slot | lifecycle ACK only |
-| `RequesterOnly` | slot visible | slot visible | no slot | owner RPC |
-| `Replicated` | slot visible | predicted/ACK then sync | slot visible | synchronizer |
+| `AuthorityOnly` | slot visible | no slot | no slot | none |
+| `RequesterOnly` | slot visible | slot visible | no slot | targeted owner RPC |
+| `Replicated` | slot visible | ACK slot -> merged sync slot | slot visible | synchronizer |
 
-For a listen host, the authoritative local slot is the presentation source. Do not replay local RPC or
-replicated setter on the same instance; each structural event is emitted once.
+For listen host, authoritative local presentation is the source. Do not replay RPC/synchronizer state
+onto the same instance in a way that emits duplicate structural changes.
 
-For `Replicated`, the requester ACK confirms prediction immediately. Later synchronizer state merges
-into the same `ActionId`/`ExecutionId` slot and must not create a duplicate.
+For `Replicated`, synchronizer state merging into the requester slot must never create a second slot or
+reset progress backwards.
 
 ### 8.4 Late join
 
-A late join receives:
+A late join receives directly:
 
 - active replicated membership ;
-- current published progress snapshot ;
-- latest timed base/rate sample ;
-- no missed start/progress history ;
-- future terminal disappearance.
+- current discrete published progress ;
+- latest timed linear sample ;
+- no historical start/progress events ;
+- future current-state changes and terminal disappearance.
 
-With default correction interval, timed visual error at arrival is bounded by one correction interval
-plus transport latency. Authority completion remains exact.
+Late join must not depend on requester ACK history, Stateful, focus, detection or interaction areas.
+
+---
 
 ## 9. Three implementation slices
 
 ### 9.1 Impl 1 — read model foundation (delivered)
 
-### Code scope
+Delivered responsibilities:
 
-- add `InteractionExecutionPresentation` ;
-- remove `HasTimedExecution` and `ExecutionProgress` from action presentation ;
-- keep `HoldProgress` and `HoldElapsed` unchanged ;
-- enforce runtime uniqueness by `ActionId` before concurrency group ;
-- preserve and test existing duplicate-id editor diagnostic ;
-- add execution collection/lookup and structural invalidation ;
-- expose authority/offline slots only ;
-- project current V3 positive-duration clock as temporary authority/offline `Progress` ;
-- project indefinite V3 execution as `Progress = null` ;
-- adapt `IInteractionActionWidget` and `InteractionPresenter` to two-model binding ;
-- update all built-in widgets and tests ;
-- retain V3 duration result, clock, requester `_prediction`, duration ACK and network behavior
-  internally until Impl 2.
-
-### Explicit non-goals
-
-- no requester execution slot ;
-- no published or Callable progress API ;
-- no timed executor extraction ;
-- no execution replication or visibility enum ;
-- no world-space example.
-
-### Acceptance tests
-
-- action presentation exposes no execution/timed members ;
-- same `ActionId` cannot reserve twice even if concurrency group changed ;
-- different action ids in different groups coexist ;
-- duplicate authored ids are diagnosed ;
-- lookup returns correct execution id and nullable progress ;
-- completion/cancellation removes lookup immediately ;
-- widget receives matching execution or null ;
-- remote clients receive null execution in this tranche ;
-- all existing gameplay, ACK and network tests still pass after expected API updates.
+- `InteractionExecutionPresentation` introduced ;
+- execution/timing data removed from action presentation ;
+- `ActionId -> 0..1 execution` enforced at runtime ;
+- concurrency between different action ids retained ;
+- execution lookup and widget two-model binding introduced ;
+- V3 timing kept temporarily internal only for the migration tranche.
 
 ### 9.2 Impl 2 — progress, timing and requester (delivered)
 
-### Code scope
+Delivered responsibilities:
 
-- add published and Callable progress APIs ;
-- add internal linear sample resolution ;
-- add `FailExecution` and failed callback/signal ;
-- make `InteractionExecutionRunning` payload-free ;
-- remove duration/elapsed/process from Interactive core ;
-- add composable `TimedExecution` and the `TimedInteractionExecutor` inheritance shortcut ;
-- keep `TransitionStateInteractionExecutor` generic, add `TimedTransitionStateInteractionExecutor`,
-  and migrate scripted test executors ;
-- move requester prediction from one interactor float to per-target/action local slots ;
-- remove duration from public ACK signal/RPC semantics ;
-- add requester-only sample update RPC ;
-- adapt prompt tests to consume execution presentation.
+- payload-free `Running()` ;
+- duration/elapsed removed from authoritative Interaction execution ;
+- published and Callable progress paths ;
+- generic local progress sample model ;
+- `FailExecution` lifecycle ;
+- composable `TimedExecution` and author-facing timed executor ;
+- non-timed `TransitionStateInteractionExecutor` plus timed specialization ;
+- prediction moved from one interactor float to target/action execution slots ;
+- duration removed from public requester lifecycle contract ;
+- requester-only sample update channel established.
 
-### Acceptance tests
+Impl 3 may refactor internals delivered here, but must not restore any V3 semantic dependency.
 
-- generic `Running()` stays active without timer ;
-- timed helper completes authoritatively once ;
-- cancel/fail before timeout prevents double completion ;
-- timed progress appears through the generic record ;
-- discrete `0/.33/.66` uses the same record ;
-- stale progress report/source/terminal ids are safe ;
-- invalid progress is rejected or clamped as specified ;
-- freed/invalid Callable falls back safely ;
-- requester sees predicted timed progress before ACK ;
-- ACK confirms without public predicted flag or visible rewind ;
-- rejection clears pending slot ;
-- different action predictions may coexist ;
-- another client sees no requester-only slot ;
-- existing hold, input-release and presence semantics remain orthogonal.
+### 9.3 Impl 3 — replication, visibility, proofs and closeout
 
-### 9.3 Impl 3 — replication, visibility and real producers
-
-### Code scope
+#### Runtime/network scope
 
 - add `InteractionExecutionSynchronizer` ;
-- add `InteractionExecutionVisibility` and the exported action property with `RequesterOnly` default ;
-- implement Variant snapshot encoding/diff application ;
-- enable `Replicated` action visibility ;
+- add `InteractionExecutionVisibility` to action authoring, default `RequesterOnly` ;
+- implement Variant snapshot encoding and diff application ;
+- enable `Replicated` membership/progress ;
 - integrate native peer visibility/filtering ;
-- route published and timed corrections through the synchronizer ;
-- merge requester ACK with later replicated snapshot ;
-- add a discrete three-step test process ;
-- add a fake replicated `HackSession` whose local Callable derives progress ;
-- add a world feedback consumer reading the Interactive directly ;
-- add a prompt proof binding both read models ;
-- update example scenes only where they exercise replicated execution presentation.
+- route published and timed corrections by visibility ;
+- keep targeted progress RPC **only** for `RequesterOnly` ;
+- make `AuthorityOnly` ACK lifecycle without requester presentation slot ;
+- merge requester predicted/ACK slot with later replicated current state ;
+- make terminal ACK + later replicated absence idempotent ;
+- ensure revision ordering prevents ACK/sync rewind.
 
-### Acceptance tests
+#### Timed/progress closeout scope
 
-- replicated start/end reaches requester and other visible peer once ;
-- requester-only and authority-only never leak into replicated snapshot ;
-- native synchronizer visibility hides/shows the full target snapshot ;
+- enforce finite positive duration for timed executors ;
+- remove zero-duration/non-finite fallback to generic open-ended timing ;
+- make `TimedExecution.Start` diagnostics distinguish failure causes ;
+- use one consistent monotonic elapsed-time policy for authoritative timeout and sample extrapolation ;
+- keep sparse correction out of core lifecycle ;
+- encapsulate linear/published/source resolution so `InteractiveComponent` lifecycle does not regrow
+  timer-specific state-machine logic.
+
+#### Real producer proofs
+
+Add at least:
+
+- a discrete three-step process publishing `0/.33/.66` (and optionally `1`) ;
+- a fake replicated `HackSession` whose local `Callable` derives progress from gameplay-owned state ;
+- a world feedback consumer querying the Interactive directly ;
+- a prompt proof binding action + matching execution ;
+- a shared fake repair/session process with participants outside Interaction but one shared execution
+  progress.
+
+These are architecture proofs, not production gameplay systems.
+
+#### Documentation and migration closeout scope
+
+Impl 3 explicitly owns cleanup of **current-facing** documentation and comments:
+
+- update `addons/interaction_plugin/README.md` ;
+- update `docs/feature/interaction/interaction.md` to the delivered V4 model ;
+- update XML docs/comments in `InteractiveComponent`, `InteractionInteractor`, executor/progress code
+  so they describe samples/slots rather than V3 duration/deadline prediction ;
+- update or mark [`presentation-progress-and-distance.md`](./presentation-progress-and-distance.md)
+  **Superseded by V4**; it must no longer claim `ExecutionProgress`, `HasTimedExecution`,
+  `TryGetExecutionProgress` or `ComputeInteractionDuration` are current APIs ;
+- update [`../../state/planned/stateful-presentation.md`](../../state/planned/stateful-presentation.md)
+  wherever it describes Interaction prediction through the old duration API ;
+- ensure current examples use `TimedInteractionExecutor` / composed `TimedExecution` or generic
+  `Running()`, never a compatibility helper ;
+- mark V4 proposal/spec status delivered when final acceptance passes ;
+- historical V2/V3 documents may retain old API names only when visibly historical/superseded.
+
+No deprecation shim is required for this internal project migration. Old V3 APIs are deleted rather
+than forwarded.
+
+#### Impl 3 acceptance tests
+
+Network/presentation:
+
+- replicated start/end reaches requester and another visible peer once ;
+- requester-only and authority-only entries never leak into replicated snapshot ;
+- `AuthorityOnly` requester receives lifecycle ACK but no execution presentation ;
+- `RequesterOnly` uses owner progress RPC and no synchronizer entry ;
+- `Replicated` uses started ACK for immediate reconcile then synchronizer for subsequent progress ;
+- no `ClientInteractionProgress`-style correction is sent for a replicated execution after start ;
+- native synchronizer visibility hides/shows the full replicated target snapshot ;
+- requester ACK plus sync state merges into one slot ;
+- stale sync revision cannot rewind newer ACK/sync state ;
+- terminal ACK followed by replicated absence does not double-remove/double-notify ;
 - late join sees active membership and current discrete progress ;
 - late join sees extrapolating timed progress near authority value ;
-- two actions in separate groups replicate concurrently ;
+- two different actions in separate groups replicate concurrently ;
 - same action still cannot run twice ;
-- timed correction sends sparse samples, not per-frame progress ;
-- final completion may arrive after `.66` without requiring `1` ;
-- custom gameplay-derived progress and timed progress bind identically ;
 - world feedback works outside every interaction detection area ;
-- listen host emits each presentation change once ;
-- dedicated server owns timeout and lifecycle without presentation UI ;
-- one shared fake repair process can own participants outside Interaction while one execution exposes
-  shared progress.
+- listen host emits each structural presentation change once ;
+- dedicated server owns timeout/lifecycle without UI.
+
+Progress/timing:
+
+- timed correction is sparse, never per-frame network progress ;
+- timed executor rejects/diagnoses zero, negative and non-finite durations ;
+- generic open-ended executor remains valid with `Running()` and `Progress = null` ;
+- custom discrete and gameplay-derived progress bind identically to timed progress ;
+- final completion may follow `.66` directly without requiring a reported `1` ;
+- timeout cannot double-complete after cancel/fail ;
+- timed authority/sample clock semantics do not diverge when process wake-up is delayed.
+
+Architecture proofs:
+
+- world consumer reads `InteractiveComponent` directly without interactor/presenter ;
+- prompt joins action + execution by `ActionId` ;
+- one shared repair/session owns participants outside Interaction while one execution exposes shared
+  progress ;
+- no renderer branches on `TimedInteractionExecutor` or producer type.
+
+---
 
 ## 10. Migration and compatibility
 
 ### After Impl 1
 
-- source-breaking presentation API change is complete ;
-- old timer remains internal ;
-- remote requester temporarily loses generic execution progress because it no longer rides action
-  presentation ;
-- default widget has no regression because it never displayed execution progress.
+- source-breaking presentation split complete ;
+- old timer temporarily internal ;
+- remote requester temporarily lacked new generic execution slot.
 
 ### After Impl 2
 
-- duration leaves core result, target storage and public ACK ;
-- requester presentation is restored through execution slots ;
-- timed authoring uses either `TimedInteractionExecutor` or a composed `TimedExecution` ;
-- old `ComputeInteractionDuration`, `RunningForDuration`, `_prediction` float and
-  `TryGetExecutionProgress` are deleted, not deprecated.
+- duration left core result/storage/public lifecycle ;
+- requester presentation restored through execution slots ;
+- timed authoring moved to specialized helper/base ;
+- old duration/prediction APIs deleted rather than deprecated.
 
 ### After Impl 3
 
+There is one model only:
+
+```text
+ActionPresentation
+ExecutionPresentation
+Generic execution lifecycle
+Optional generic Progress
+Optional TimedExecution policy
+Visibility-aware requester or replicated transport
+```
+
+Specifically:
+
 - `Replicated` is functional and late-join-safe ;
-- no execution presentation depends on Stateful ;
-- no timer-specific presentation field or renderer type check remains ;
-- no V3 compatibility shim remains.
+- execution presentation does not depend on Stateful ;
+- no timer-specific public presentation field exists ;
+- no renderer type-checks timed producers ;
+- no core execution duration/deadline/elapsed exists ;
+- no zero-duration timed compatibility path exists ;
+- no duplicated persistent progress transport exists for `Replicated` ;
+- no V3 compatibility shim remains ;
+- no current-facing documentation or comment teaches the V3 model.
+
+---
 
 ## 11. Files expected to change
 
@@ -732,16 +876,18 @@ Primary runtime:
 - `addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs` ;
 - `addons/interaction_plugin/runtime/actions/InteractionAction.cs` ;
 - `addons/interaction_plugin/runtime/actions/InteractionActionExecutor.cs` ;
-- new `TimedExecution.cs` and `TimedInteractionExecutor.cs` ;
-- new `InteractionExecutionSynchronizer.cs`.
+- `TimedExecution.cs` ;
+- `TimedInteractionExecutor.cs` ;
+- new `InteractionExecutionSynchronizer.cs` ;
+- optional internal progress-state helper extracted beside presentation/runtime code.
 
 Integration and presentation:
 
-- `TransitionStateInteractionExecutor.cs` and `TimedTransitionStateInteractionExecutor.cs` ;
+- `TransitionStateInteractionExecutor.cs` ;
+- `TimedTransitionStateInteractionExecutor.cs` ;
 - `InteractionPresenter.cs` ;
 - `IInteractionActionWidget.cs` ;
-- `InteractionActionPromptWidget.cs` ;
-- relevant example scenes.
+- relevant example scenes/consumers.
 
 Validation and tests:
 
@@ -751,13 +897,19 @@ Validation and tests:
 - `InteractionAckTest.cs` ;
 - `InteractionNetworkTest.cs` ;
 - `InteractionSceneTest.cs` ;
-- focused test helpers/producers introduced beside these suites.
+- focused producer/world-feedback helpers.
 
-Documentation:
+Documentation closeout:
 
-- maintain `docs/feature/interaction/interaction.md` after each implementation tranche ;
-- update this spec status after each accepted tranche ;
-- add a `docs/memory/` entry only for a newly discovered workflow pitfall or hard correction.
+- `addons/interaction_plugin/README.md` ;
+- `docs/feature/interaction/interaction.md` ;
+- `docs/feature/interaction/planned/presentation-progress-and-distance.md` ;
+- `docs/feature/state/planned/stateful-presentation.md` ;
+- this implementation spec ;
+- V4 architecture status if needed ;
+- any current XML docs/comments found by the legacy sweep.
+
+---
 
 ## 12. Verification contract
 
@@ -770,45 +922,111 @@ $env:GODOT_BIN = (Get-Command godot).Source
 dotnet test
 ```
 
-Additionally:
+Additionally for Impl 3:
 
-- Impl 1 must run focused behavior, configuration and UI scene tests while iterating ;
-- Impl 2 must run focused behavior and ACK tests while iterating ;
-- Impl 3 must run the real in-process server/two-client/late-join network suite while iterating ;
-- final acceptance is always the full mandated command sequence, not focused tests alone.
+- run the real in-process server / two-client / late-join suite while iterating ;
+- run focused requester-only, authority-only and replicated transport tests ;
+- run focused timed/discrete/Callable producer tests ;
+- final acceptance is always the full command sequence above.
+
+### Legacy sweep
+
+Before marking V4 delivered, search current-facing code/docs for obsolete V3 symbols:
+
+```powershell
+rg -n "ComputeInteractionDuration|RunningForDuration|RunningUntilCompleted|HasTimedExecution|TryGetExecutionProgress|PredictedExecution|ExpectedDuration" `
+  addons/interaction_plugin `
+  quest_world `
+  addons/interaction_plugin/README.md `
+  docs/feature/interaction/interaction.md `
+  docs/feature/interaction/planned/presentation-progress-and-distance.md `
+  docs/feature/state/planned/stateful-presentation.md
+```
+
+Expected result: **no current API description or executable code reference**. A superseded document may
+mention an old symbol only inside an explicit historical explanation/banner pointing to V4.
+
+Also inspect wording rather than symbols only: requester comments must describe generic progress
+samples/reconciliation, not an "execution duration/deadline carried by ACK" model.
+
+---
 
 ## 13. Performance and safety constraints
 
 - no progress RPC or synchronized property write per render frame ;
 - timed corrections default to at most two writes per second per active timed execution ;
+- replicated requester gets no duplicate targeted correction stream ;
 - full replicated collection rebuild is acceptable because an Interactive has few action slots ;
 - all network payloads use action ids and execution ids, never Node instance ids ;
-- every received target path resolves relative to `SceneMultiplayer.RootPath` ;
-- every authority guard treats a peerless/offline game as authority ;
-- synchronizers must enter a subtree only after its MultiplayerAPI is attached in in-process tests ;
-- replicated property paths are relative to synchronizer `root_path` and verified by a scene test ;
+- received target paths resolve relative to `SceneMultiplayer.RootPath` ;
+- every authority guard treats peerless/offline game as authority ;
+- synchronizers enter test subtrees only after their MultiplayerAPI is attached ;
+- replicated property paths are relative to synchronizer `root_path` and scene-tested ;
 - stale ids cannot mutate, complete, cancel, fail or update a newer occurrence ;
-- current-state replication, not missed transitions, drives late-join presentation.
+- current-state replication, not missed transitions, drives late join ;
+- public/core lifecycle contains no timer-specific branching ;
+- timed helper never silently converts invalid timing configuration into generic open-ended work.
+
+---
 
 ## 14. Final definition of done
 
-The three-tranche implementation is complete only when:
+V4 is complete only when all of the following are true.
 
-- every success scenario in the V4 architecture has an automated test or named example ;
-- the same renderer consumes timed, published and gameplay-derived progress without a producer type
-  branch ;
+### Architecture
+
+- every architecture success scenario has an automated test or named proof example ;
 - action and execution read models remain separately queryable ;
-- action widgets receive both through explicit composition ;
-- remote world feedback does not require focus, indication or interaction overlap ;
-- timed late join extrapolates from sparse state and ends on authority ;
-- visibility modes behave as specified on offline, listen host, remote client and dedicated server ;
-- documentation describes the delivered code rather than future intent ;
-- formatting, build and full tests pass.
+- `ActionId -> 0..1 execution` is enforced ;
+- concurrency groups still govern different actions ;
+- generic `Running()` works indefinitely without a timer ;
+- timing remains optional policy, not core execution semantics ;
+- same renderer consumes timed, published and gameplay-derived progress without producer type branch.
+
+### Networking
+
+- visibility modes work on offline, listen host, remote client and dedicated server ;
+- requester lifecycle ACK is independent from presentation visibility ;
+- replicated execution current state is late-join-safe ;
+- replicated requester transitions from ACK-seeded presentation to synchronizer state without duplicate
+  slot, rewind or permanent duplicate progress transport ;
+- remote world feedback requires no focus, indication or interaction overlap.
+
+### Timing/progress
+
+- timed executor accepts only valid positive timing configuration ;
+- authoritative timeout and local extrapolation share one documented clock policy ;
+- sparse timed samples are not per-frame writes ;
+- published `.33/.66/...` progress is first-class ;
+- progress `1` is never required to terminate an execution ;
+- gameplay-owned progress remains gameplay truth even when Interaction presents it.
+
+### Migration hygiene
+
+- V3 duration/prediction APIs are deleted, not deprecated or forwarded ;
+- no current code comment describes the obsolete duration/deadline ACK architecture ;
+- plugin README and delivered feature docs describe V4 ;
+- old progress/distance proposal is updated or visibly superseded ;
+- Stateful presentation proposal no longer references removed Interaction APIs as current ;
+- examples teach only generic `Running()` or explicit timed policy ;
+- repository legacy sweep has no unexplained current-facing hits ;
+- this spec/status is marked delivered after acceptance.
+
+### Quality
+
+- formatting passes ;
+- build passes ;
+- full tests pass ;
+- no known V4 migration TODO is left merely because the runtime path already works.
+
+---
 
 ## 15. References
 
 - V4 intent: [`interaction-v4-architecture.md`](./interaction-v4-architecture.md)
 - Delivered feature history: [`../interaction.md`](../interaction.md)
+- Superseded progress work: [`presentation-progress-and-distance.md`](./presentation-progress-and-distance.md)
+- Stateful presentation proposal: [`../../state/planned/stateful-presentation.md`](../../state/planned/stateful-presentation.md)
 - In-process peers: [`../../../memory/godot-multiplayer-in-process-peers.md`](../../../memory/godot-multiplayer-in-process-peers.md)
 - Synchronizer property paths: [`../../../memory/godot-multiplayer-synchronizer-root-path.md`](../../../memory/godot-multiplayer-synchronizer-root-path.md)
 - Offline authority guard: [`../../../memory/godot-multiplayer-isserver-requires-peer.md`](../../../memory/godot-multiplayer-isserver-requires-peer.md)
