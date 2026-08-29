@@ -69,6 +69,7 @@ public sealed partial class InteractionSceneTest
             .Single();
         AssertThat(availabilityRule.AvailableStates).Contains(new StringName("idle"));
         AssertThat(availabilityRule.BlockedStates).Contains(new StringName("activating"));
+        AssertThat(availabilityRule.BlockedStates).Contains(new StringName("activated"));
         AssertThat(interactive.TargetRules.Count).IsEqual(1);
         AssertThat(interactive.ActionPromptScene != null).IsTrue();
         MultiplayerSynchronizer synchronizer = actor.GetNode<MultiplayerSynchronizer>(
@@ -441,7 +442,15 @@ public sealed partial class InteractionSceneTest
         world.State.SetState(new StringName("activated"));
 
         AssertThat(Describe(world.Interactive.EvaluateAvailability(world.Interactor, world.Action)))
-            .IsEqual("hidden");
+            .IsEqual("This is busy.");
+
+        InteractionTargetPresentation presentation = world.Interactive.GetPresentation(
+            world.Interactor,
+            true
+        );
+        AssertThat(presentation.Actions.Count).IsEqual(1);
+        AssertThat(presentation.HasAllowedAction).IsFalse();
+        AssertThat(presentation.HasPromptableAction).IsTrue();
     }
 
     [TestCase]

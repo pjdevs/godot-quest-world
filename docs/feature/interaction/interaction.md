@@ -535,7 +535,7 @@ Les rules et executors peuvent toujours porter un `StatefulPath` ou une referenc
 un autre objet. `StatefulTransitionAction` compose une rule d'etat et un `SetStateInteractionExecutor`;
 `StatefulRunningTransitionAction` compose la variante longue a terminaison externe, et
 `StatefulTimedTransitionAction` ajoute la policy `TimedExecution`. Les transitions longues peuvent
-declarer `BlockedStates` et `BlockReason` ; les autres etats restent hidden.
+declarer `BlockedStates` et `BlockReason` ; les etats non listes restent hidden.
 
 Les scenes [Door](../../../quest_world/interactibles/door/Door.tscn),
 [Button](../../../quest_world/interactibles/button/Button.tscn) et
@@ -577,7 +577,7 @@ Les types et membres publics du runtime, des rules fournies et de la présentati
 
 ## Base scene
 
-[`integration/stateful/examples/LongActionExample.tscn`](../../../addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn) est le prefab de départ duplicable : zones d'interaction et d'indication, ancre, composant, `StatefulComponent` avec son schéma (`idle`, `activating`, `activated`), synchroniseur et widgets par défaut. **Sa racine ne porte aucun script.** Son action porte un `TimedTransitionStateInteractionExecutor` de 1,5 s qui applique `activating` au départ ; `TimedExecution` complète l'exécution générique à l'échéance et l'executor applique alors `activated` — ou restaure `idle` si l'exécution est annulée ou échoue. Deux `StatefulStateInteractionRule` ordonnées bloquent l'action pendant puis après l'activation. Il vit dans `integration/stateful/` parce qu'il dépend de `stateful_plugin`.
+[`integration/stateful/examples/LongActionExample.tscn`](../../../addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn) est le prefab de départ duplicable : zones d'interaction et d'indication, ancre, composant, `StatefulComponent` avec son schéma (`idle`, `activating`, `activated`), synchroniseur et widgets par défaut. **Sa racine ne porte aucun script.** Son action porte un `TimedTransitionStateInteractionExecutor` de 1,5 s qui applique `activating` au départ ; `TimedExecution` complète l'exécution générique à l'échéance et l'executor applique alors `activated` — ou restaure `idle` si l'exécution est annulée ou échoue. L'action reste présentée comme bloquée pendant puis après l'activation via `BlockedStates`, afin que l'indicator rouge et le prompt expliquent qu'elle n'est plus disponible. Il vit dans `integration/stateful/` parce qu'il dépend de `stateful_plugin`.
 
 ## Persistence boundary
 

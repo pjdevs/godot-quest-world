@@ -85,11 +85,11 @@ _data = {
 &"open": SubResource("Animation_wx55h")
 }
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_qkbub"]
-size = Vector3(10, 10, 10)
-
 [sub_resource type="BoxShape3D" id="BoxShape3D_mokd0"]
 size = Vector3(4, 2, 4)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_qkbub"]
+size = Vector3(10, 10, 10)
 
 [sub_resource type="Resource" id="Resource_mokd0"]
 script = ExtResource("4_adxal")
@@ -145,6 +145,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.24409503, 0.028143167, 0)
 mesh = SubResource("BoxMesh_gfqkc")
 material = SubResource("StandardMaterial3D_1i5vy")
 
+[node name="InteractionAnchor3D" type="Marker3D" parent="Visual/Pivot/DoorMesh/HandleMesh" unique_id=208728173]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.4703484e-08, 0, 0)
+script = ExtResource("16_interaction_anchor")
+
 [node name="DialMesh" type="CSGMesh3D" parent="Visual" unique_id=1292967751]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 mesh = SubResource("BoxMesh_qo4o4")
@@ -159,8 +163,9 @@ libraries/ = SubResource("AnimationLibrary_6xdtw")
 
 [node name="Interaction" type="Node3D" parent="." unique_id=1276253519]
 
-[node name="InteractiveComponent" type="Node3D" parent="Interaction" unique_id=1375300189]
+[node name="InteractiveComponent" type="Node3D" parent="Interaction" unique_id=1375300189 node_paths=PackedStringArray("InteractionAnchor")]
 script = ExtResource("1_vodtj")
+InteractionAnchor = NodePath("../../Visual/Pivot/DoorMesh/HandleMesh/InteractionAnchor3D")
 DisplayName = "Door"
 ActionPromptScene = ExtResource("2_wx55h")
 IndicationScene = ExtResource("4_qkbub")
@@ -181,30 +186,26 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 shape = SubResource("BoxShape3D_qkbub")
 debug_color = Color(0.8980768, 0.22753963, 0.5545721, 0.41960785)
 
-[node name="InteractionAnchor3D" type="Marker3D" parent="Interaction/InteractiveComponent" unique_id=208728173]
-script = ExtResource("16_interaction_anchor")
-position = Vector3(-0.24409503, 0.97814316, 0)
-
 [node name="OpenAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=395259595]
 script = ExtResource("13_transition_action")
-Definition = SubResource("Resource_mokd0")
-From = Array[StringName]([&"closed"])
 To = &"opened"
+From = Array[StringName]([&"closed"])
+Definition = SubResource("Resource_mokd0")
 metadata/_custom_type_script = "uid://bhgugen3gbi4d"
 
 [node name="CloseAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=1558009407]
 script = ExtResource("13_transition_action")
-Definition = SubResource("Resource_wx55h")
-From = Array[StringName]([&"opened"])
 To = &"closed"
+From = Array[StringName]([&"opened"])
+Definition = SubResource("Resource_wx55h")
 Priority = 1
 metadata/_custom_type_script = "uid://bhgugen3gbi4d"
 
 [node name="UnlockAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=37820192]
 script = ExtResource("13_transition_action")
-Definition = SubResource("Resource_qkbub")
-From = Array[StringName]([&"locked"])
 To = &"closed"
+From = Array[StringName]([&"locked"])
+Definition = SubResource("Resource_qkbub")
 Priority = 2
 metadata/_custom_type_script = "uid://bhgugen3gbi4d"
 
