@@ -1,6 +1,9 @@
 # Interaction Framework V4 — Execution lifecycle & presentation proposal
 
-> **Status: Proposal.** Ce document fixe les intentions, invariants et frontières visées pour une V4 du framework d'interaction. Il ne constitue pas encore un plan d'implémentation final : la forme exacte de certaines APIs, la mécanique Godot de réplication et le contrat de source de progression restent à éprouver par des spikes concrets.
+> **Status: Architecture accepted.** Ce document fixe les intentions, invariants et frontières V4.
+> La réalisation concrète, les APIs finales, le transport Godot et les trois tranches de migration
+> sont fixés séparément dans
+> [`interaction-v4-implementation-spec.md`](./interaction-v4-implementation-spec.md).
 >
 > La V4 ne cherche pas à redessiner V2/V3 pour le plaisir. Elle part d'une friction apparue en utilisant réellement le framework sur des cas plus riches : interactions longues, feedback monde, progression visible par plusieurs joueurs, exécutions pilotées par un système métier, progression discrète/non temporelle, et UI où une même exécution peut être affichée dans le prompt ou directement sur l'objet.
 
@@ -39,7 +42,6 @@ interaction démarre
 → système termine étape B
 → Progress = .66
 → système termine étape C
-→ Progress = 1
 → CompleteExecution
 ```
 
@@ -414,7 +416,8 @@ RequesterOnly
 Replicated / observable by other peers
 ```
 
-Les noms exacts et le niveau d'authoring restent ouverts.
+La spec de réalisation fixe les noms `AuthorityOnly`, `RequesterOnly`, `Replicated` et place
+l'authoring sur chaque occurrence `InteractionAction`.
 
 Une implémentation Godot doit préférer s'appuyer sur les mécanismes natifs de réplication et de visibilité (`MultiplayerSynchronizer`, peer visibility / interest management) plutôt que recréer un système parallèle de fan-out RPC si cela reste compatible avec les invariants.
 
@@ -495,7 +498,9 @@ or
 
 L'unicité par `ActionId` rend naturel un modèle de prediction par action : une action ne doit pas pouvoir accumuler plusieurs predictions concurrentes pendant qu'une requête de ce slot est déjà en vol.
 
-La nécessité d'un `RequestId` distinct reste à confirmer ; elle n'est plus motivée par la possibilité de plusieurs executions simultanées de la même action.
+Aucun `RequestId` distinct n'est introduit : une seule requête de `(target, ActionId)` peut rester en
+vol. Cette décision devra être rouverte si un futur protocole autorise retry ou batching avant réponse
+terminale.
 
 ## 2.11 Gameplay progress remains gameplay-owned when it has gameplay meaning
 
@@ -536,7 +541,8 @@ public readonly record struct InteractionActionPresentation(
 );
 ```
 
-La forme exacte reste à adapter à l'existant, mais `ExecutionProgress` et toute donnée de lifecycle d'exécution en sortent.
+La spec de réalisation adopte cette forme et retire `ExecutionProgress` ainsi que toute donnée de
+lifecycle d'exécution.
 
 `HoldProgress` reste ici : le hold est un geste de sélection relatif à l'interactor, pas une exécution du target.
 
@@ -548,8 +554,7 @@ Première forme minimale envisagée :
 public readonly record struct InteractionExecutionPresentation(
     ulong ExecutionId,
     StringName ActionId,
-    float? Progress = null,
-    bool IsPredicted = false
+    float? Progress = null
 );
 ```
 
@@ -567,7 +572,14 @@ Deadline
 
 Ces notions appartiennent au provider timed éventuel, pas au contrat générique.
 
-`IsPredicted` est lui-même à confirmer : il peut être utile à certains renderers et à la réconciliation, mais il ne doit pas contaminer la vérité autoritaire du serveur.
+Le statut `Predicted / Confirmed` reste un détail interne du slot local et de la réconciliation. Il
+n'est pas exposé dans le read model public tant qu'un renderer réel ne démontre pas qu'il doit
+présenter ces deux états différemment.
+
+Une presentation n'existe que tant que l'execution est active. La completion retire immédiatement
+le slot ; le framework ne garantit donc pas qu'un renderer ou un peer observe une dernière valeur
+`Progress = 1`. La completion, le signal de fin ou la disparition du slot constituent le contrat
+terminal.
 
 ## 3.3 Action slot lookup
 
@@ -588,20 +600,22 @@ Le `ExecutionId` reste exposé dans la présentation pour identifier l'occurrenc
 
 ## 3.4 Target presentation
 
-Deux directions restent possibles :
+L'Interactive expose séparément les deux read models :
 
 ```text
-A. InteractionTargetPresentation contient Actions + Executions
+GetPresentation(interactor, isFocused)
+    -> actions offertes à cet interactor
 
-B. Interactive expose séparément GetPresentation(interactor)
-   et GetExecutionPresentation()
+GetExecutionPresentations()
+TryGetExecutionPresentation(actionId)
+    -> executions observables par ce peer
 ```
 
-Le choix est principalement ergonomique.
+`InteractionTargetPresentation` ne transporte pas les executions. Cette séparation permet à un
+consumer monde de lire directement l'Interactive sans inventer de contexte d'interactor, et évite
+qu'un snapshot d'offre devienne le propriétaire pratique du lifecycle des executions.
 
-L'invariant est que `Actions` et `Executions` restent deux read models conceptuellement indépendants même s'ils sont transportés dans un même snapshot pratique.
-
-Pour les consumers qui ne connaissent aucune zone d'interaction et veulent seulement observer un objet monde, une query directement sur l'Interactive doit rester possible.
+Un consumer qui a besoin des deux modèles les compose explicitement par `ActionId`.
 
 ---
 
@@ -686,6 +700,9 @@ Une progression publiée/discrète peut au contraire ne provoquer un changement 
 
 Le framework ne doit pas émettre un signal de progression réseau ou local à chaque tick par défaut.
 
+La fin d'une execution retire immédiatement sa presentation. Un consumer ne doit pas attendre une
+dernière valeur `Progress = 1` : il réagit au signal terminal ou à la disparition du slot.
+
 ---
 
 # 5. Core execution lifecycle
@@ -726,7 +743,7 @@ Les primitives existantes de fin restent centrales :
 ```text
 CompleteExecution(executionId)
 CancelExecution(executionId, reason)
-FailExecution(executionId, reason)    // forme exacte à confirmer
+FailExecution(executionId, reason)
 ```
 
 Le comportement exact de `Failed` après un `Running()` et son API publique méritent un passage dédié pendant l'implémentation ; V3 possède déjà la distinction ACK `Failed` vs `Rejected` qui doit être préservée.
@@ -851,9 +868,10 @@ Le renderer ne connaît jamais la provenance.
 
 ---
 
-# 7. Progress production — open implementation point
+# 7. Progress production — implementation strategies
 
-La frontière est décidée ; l'API exacte ne l'est pas encore.
+La frontière est décidée. La spec de réalisation fixe les APIs exactes ; cette section conserve le
+raisonnement qui justifie les deux stratégies.
 
 Le besoin :
 
@@ -872,13 +890,7 @@ Cas naturel : une progression change par événements métier.
 → 1
 ```
 
-Une API conceptuelle très simple serait :
-
-```csharp
-Interactive.SetExecutionProgress(executionId, 0.33f);
-```
-
-ou :
+L'API de réalisation retenue est :
 
 ```csharp
 Interactive.ReportExecutionProgress(executionId, 0.33f);
@@ -898,7 +910,6 @@ stage B completed
 → ReportProgress(.66)
 
 stage C completed
-→ ReportProgress(1)
 → CompleteExecution(id)
 ```
 
@@ -951,13 +962,14 @@ Interactive execution
 └── optional ProgressSource
 ```
 
-ou :
+La réalisation retient une source locale Godot-native :
 
 ```csharp
 SetExecutionProgressSource(executionId, source);
 ```
 
-La présentation pull la valeur du provider.
+`source` est un `Callable`. La présentation pull sa valeur localement ; le système gameplay reste
+responsable de synchroniser les données dont ce callable dépend.
 
 ### Pros
 
@@ -992,16 +1004,18 @@ or
 none
 ```
 
-Une piste à tester :
+La résolution retenue est :
 
 ```text
 if local ProgressSource exists:
     Progress = source.Progress
+else if transport sample exists:
+    Progress = extrapolated sample
 else:
     Progress = PublishedProgress
 ```
 
-Ce n'est pas encore une décision d'API, mais cette distinction est utile car elle évite de chercher une abstraction unique qui soit simultanément optimale pour un timer continu et un processus à trois étapes.
+Cette distinction évite de chercher une abstraction unique qui soit simultanément optimale pour un timer continu et un processus à trois étapes.
 
 ## 7.4 Query on executor
 
@@ -1019,11 +1033,9 @@ L'executor pourrait fournir une query de progression pour ses propres executions
 - rapproche à nouveau les executors du rôle de presentation provider ;
 - moins naturel pour un process partagé ou un composant monde indépendant.
 
-### Current leaning
+### Decision
 
-Ne pas figer « setter **ou** provider » trop tôt.
-
-Le modèle a probablement besoin de couvrir proprement :
+La réalisation couvre les deux chemins :
 
 ```text
 PublishedProgress
@@ -1033,7 +1045,8 @@ DerivedProgressSource
     pour continu reconstructible localement
 ```
 
-Le spike doit prouver que ces deux chemins convergent vers la même `ExecutionPresentation.Progress` sans special case dans les renderers.
+Les tests doivent prouver que ces deux chemins convergent vers la même
+`ExecutionPresentation.Progress` sans special case dans les renderers.
 
 ---
 
@@ -1064,7 +1077,8 @@ ActionId = hack
 Progress = .66
 ```
 
-La forme exacte peut être une propriété synchronisée, une collection compacte ou un petit composant dédié ; à décider en fonction des contraintes Godot de réplication des collections et du late join.
+La spec de réalisation retient une collection compacte Variant synchronisée on-change par un
+`InteractionExecutionSynchronizer` dédié, avec spawn sync pour le late join.
 
 ## 8.3 Visibility modes to support
 
@@ -1214,6 +1228,10 @@ L'interactor déclenche la prediction parce qu'il possède l'intention locale et
 L'Interactive expose la prediction parce qu'il possède le read model de ses executions.
 
 Cette distinction évite de recréer un `Interactor._prediction` utilisé comme source de presentation parallèle.
+
+Le slot peut conserver en interne son état `Predicted / Confirmed` pour la réconciliation, mais cet
+état n'est pas un champ de `InteractionExecutionPresentation`. La presentation publique reste
+identique avant et après confirmation tant qu'aucun besoin de renderer ne justifie cette distinction.
 
 ## 9.3 Cardinality
 
@@ -1366,13 +1384,16 @@ step 2 done
 → ReportExecutionProgress(id, .66)
 
 step 3 done
-→ ReportExecutionProgress(id, 1)
 → CompleteExecution(id)
 ```
 
 Pour une execution `Replicated`, tous les clients autorisés voient les mêmes snapshots.
 
 Aucun timer n'existe. `Progress` exprime uniquement une quantité normalisée présentable.
+
+Le dernier snapshot observable peut donc être `.66`. La completion retire immédiatement
+l'execution ; ni le renderer local ni la réplication ne doivent dépendre de l'observation d'un
+snapshot intermédiaire à `1`.
 
 Ce scénario est un test architectural important : si l'implémentation de Progress suppose une duration ou un elapsed, la séparation V4 est ratée.
 
@@ -1597,6 +1618,9 @@ La presentation connaît éventuellement `Progress`, pas `Duration/Elapsed/Remai
 
 Cette forme faisait revenir le timer au centre du modèle et ne représentait pas naturellement une progression par étapes.
 
+`Progress` décrit seulement une execution active. La completion peut retirer le slot sans rendre
+observable une dernière valeur égale à `1`.
+
 ## ADR-009 — Progress may be published or locally derived
 
 **Decision:** accepted at the conceptual level; exact API open.
@@ -1647,6 +1671,13 @@ L'unicité par `ActionId` rend cette jointure déterministe.
 
 Cela supporte aussi bien un prompt minimal qu'une UI type Arc Raiders sans fusionner les deux modèles.
 
+L'Interactive garde des queries séparées pour actions et executions. Le presenter effectue la
+jointure puis bind le widget d'action avec les deux valeurs :
+
+```text
+Bind(ActionPresentation, matching ExecutionPresentation?)
+```
+
 ## ADR-013 — Refactor prediction around per-action execution presentation
 
 **Decision:** accepted in principle; implementation open.
@@ -1654,6 +1685,9 @@ Cela supporte aussi bien un prompt minimal qu'une UI type Arc Raiders sans fusio
 La `_prediction` V3 dédiée au float n'est pas conservée telle quelle.
 
 La prediction devient une forme locale du slot d'exécution de l'action sur le target, créée depuis l'intention de l'interactor puis réconciliée avec l'autorité.
+
+`Predicted / Confirmed` reste un état interne de ce slot ; aucun `IsPredicted` public n'est ajouté sans
+use case de presentation concret.
 
 ## ADR-014 — Keep union-style execution outcomes
 
@@ -1663,7 +1697,7 @@ La prediction devient une forme locale du slot d'exécution de l'action sur le t
 
 ---
 
-# 12. Implementation spikes / attention points
+# 12. Implementation proof points
 
 ## P0 — Prove action-slot cardinality
 
@@ -1685,12 +1719,16 @@ Vérifier que cela permet de simplifier :
 
 L'implémentation ne doit pas maintenir une structure N-per-action « par précaution » si l'API interdit déjà ce cas.
 
+Valider aussi la configuration : deux actions déclarées sur le même Interactive ne doivent pas
+partager le même `ActionId`, même si leurs concurrency groups diffèrent. La garde runtime par
+`ActionId` reste nécessaire en plus du diagnostic d'authoring.
+
 ## P0 — Prove progress with three different producers
 
 Avant de figer l'API de progression, implémenter au moins :
 
 1. `TimedInteractionExecutor` avec progression continue dérivée ;
-2. `ThreeStepProcess` publiant `0 → .33 → .66 → 1` ;
+2. `ThreeStepProcess` publiant `0 → .33 → .66`, puis complétant l'execution ;
 3. `HackSession` custom avec sa propre progression gameplay ;
 4. un feedback monde lisant `ExecutionPresentation` ;
 5. un prompt qui joint `ActionPresentation` et `ExecutionPresentation`.
@@ -1699,7 +1737,7 @@ Si ces cas nécessitent des special cases de type dans le renderer, la frontièr
 
 ## P0 — Replication shape
 
-Tester la forme la plus Godot-native pour synchroniser des slots d'executions :
+Prouver la forme Godot-native retenue par la spec pour synchroniser des slots d'executions :
 
 ```text
 ActionId
@@ -1712,7 +1750,7 @@ avec :
 - start ;
 - end ;
 - late join ;
-- progression `.33/.66/1` ;
+- progression `.33/.66`, puis completion ;
 - deux actions concurrentes de groupes différents ;
 - refus de deux occurrences de la même action ;
 - visibilité requester-only vs world-observable ;
@@ -1738,13 +1776,7 @@ Le détail de clock sync peut rester interne au helper.
 
 ## P1 — Published progress API
 
-Comparer :
-
-```text
-SetExecutionProgress
-ReportExecutionProgress
-UpdateExecutionPresentation
-```
+La spec retient `ReportExecutionProgress`.
 
 Critères :
 
@@ -1758,7 +1790,7 @@ Critères :
 
 ## P1 — Derived progress source lifetime
 
-Comparer des formes Godot-friendly de provider/source avec attention particulière à :
+La spec retient un `Callable` local Godot-friendly, avec attention particulière à :
 
 - source freed ;
 - provider remplacé ;
@@ -1784,15 +1816,9 @@ N'introduire un `RequestId` que si un vrai besoin indépendant de la cardinalit�
 
 ## P1 — Visibility authoring
 
-Décider où vit la politique :
-
-```text
-InteractionActionDefinition?
-InteractionAction?
-Executor?
-Interactive default + action override?
-replication component?
-```
+La spec place la politique sur chaque occurrence `InteractionAction`, avec `RequesterOnly` par
+défaut. Un `InteractionExecutionSynchronizer` optionnel transporte uniquement les actions
+`Replicated`.
 
 Critère principal : la visibilité décrit qui peut **observer l'exécution**, pas qui peut demander l'action.
 
@@ -1855,6 +1881,11 @@ Ordre conceptuel, pas encore plan de tâches définitif :
 
 La migration doit préserver les groupes de concurrence ; ils restent la couche qui exprime l'exclusivité **entre ActionId différents**.
 
+La réalisation est découpée dans une spec séparée afin que ce document reste le contrat d'intention
+V4. Cette spec couvre trois tranches : fondation locale/autoritaire, timing et requester, puis
+réplication/visibilité. Elle constitue le document exécutable ; la liste ci-dessus reste seulement
+l'ordre conceptuel de migration.
+
 ---
 
 # 15. Success criteria
@@ -1866,7 +1897,7 @@ instant action
 simple 3-second built-in action
 custom animation-driven action
 custom replicated hack session
-three-step progress 0/.33/.66/1
+three-step progress 0/.33/.66 then completion
 hold-to-select then long execution
 progress in prompt
 progress on world-space terminal
