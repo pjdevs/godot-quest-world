@@ -1,12 +1,12 @@
 # Interaction Framework V4 — Execution lifecycle & presentation proposal
 
-> **Status: Proposal.** Ce document fixe les intentions, invariants et frontières visées pour une V4 du framework d'interaction. Il ne constitue pas encore un plan d'implémentation final : les formes exactes de certaines APIs, de la réplication et de la source de progression restent volontairement ouvertes.
+> **Status: Proposal.** Ce document fixe les intentions, invariants et frontières visées pour une V4 du framework d'interaction. Il ne constitue pas encore un plan d'implémentation final : la forme exacte de certaines APIs, la mécanique Godot de réplication et le contrat de source de progression restent à éprouver par des spikes concrets.
 >
-> La V4 ne cherche pas à redessiner V2/V3 pour le plaisir. Elle part d'une friction apparue en utilisant réellement le framework sur des cas plus riches : interactions longues, feedback monde, progression visible par plusieurs joueurs, exécutions pilotées par un système métier, et UI où la progression peut être affichée dans le prompt ou directement sur l'objet.
+> La V4 ne cherche pas à redessiner V2/V3 pour le plaisir. Elle part d'une friction apparue en utilisant réellement le framework sur des cas plus riches : interactions longues, feedback monde, progression visible par plusieurs joueurs, exécutions pilotées par un système métier, progression discrète/non temporelle, et UI où une même exécution peut être affichée dans le prompt ou directement sur l'objet.
 
 ## Goal
 
-Préserver les garanties acquises de V2/V3 — commande autoritaire, executor unique, réservation, concurrence, ACK, cancellation, rules pures — tout en retrouvant une propriété essentielle de l'ancien framework Unreal :
+Préserver les garanties acquises de V2/V3 — commande autoritaire, executor unique, réservation, groupes de concurrence, ACK, cancellation, rules pures — tout en retrouvant une propriété essentielle de l'ancien framework Unreal :
 
 > Interaction décide quand une exécution commence, qui la possède et quand elle se termine ; le gameplay reste libre de décider ce qui se passe pendant cette exécution.
 
@@ -28,6 +28,19 @@ interaction démarre
 → terminal lance son propre système de hack répliqué
 → progression arbitraire du terminal
 → terminal décide quand terminer l'exécution
+```
+
+ou :
+
+```text
+interaction démarre
+→ système termine étape A
+→ Progress = .33
+→ système termine étape B
+→ Progress = .66
+→ système termine étape C
+→ Progress = 1
+→ CompleteExecution
 ```
 
 Le résultat doit rester naturel dans Godot, exploitable depuis C#, GDScript ou une future implémentation GDExtension, et ne jamais exiger qu'un renderer soit une progress bar ou même une UI.
@@ -76,6 +89,7 @@ Il n'a pas besoin de connaître :
 duration
 elapsed
 remaining
+deadline
 normalized timer progress
 ```
 
@@ -125,6 +139,23 @@ authoritative ownership
 observability
 ```
 
+## 1.5 Plusieurs exécutions du target ne veut pas dire plusieurs exécutions d'une même action
+
+V3 représente les executions avec une liste parce que plusieurs actions de groupes de concurrence différents peuvent tourner sur une même cible.
+
+Cela ne signifie pas qu'une même action doit pouvoir avoir plusieurs occurrences simultanées.
+
+En pratique, l'implémentation actuelle interdit déjà ce cas : une `InteractionAction` possède un seul `ConcurrencyGroup`, et une seconde exécution de cette même action entre nécessairement en conflit avec la première puisqu'elle appartient au même groupe.
+
+V4 peut donc formaliser un invariant déjà réel et simplifier son modèle :
+
+```text
+for one Interactive:
+    one ActionId -> zero or one active execution
+```
+
+Les concurrency groups restent utiles pour une autre question : quelles **actions différentes** peuvent tourner en même temps ?
+
 ---
 
 # 2. Architectural invariants
@@ -161,7 +192,92 @@ Sur le serveur, l'Interactive possède la vérité autoritaire des exécutions.
 
 Sur un client, la copie de ce même Interactive expose les exécutions que sa politique de visibilité lui permet d'observer.
 
-## 2.3 Core execution has no timing semantics
+Il n'existe pas de miroir d'exécution possédé par l'interactor pour la présentation : un renderer monde doit pouvoir lire l'Interactive directement.
+
+## 2.3 One ActionId owns at most one active execution
+
+Pour un `InteractiveComponent` donné :
+
+```text
+ActionId -> 0..1 active execution
+```
+
+Cette unicité est indépendante des groupes de concurrence.
+
+Les deux contraintes répondent à deux questions différentes :
+
+```text
+Action uniqueness
+    « cette action est-elle déjà en cours ? »
+
+ConcurrencyGroup
+    « une autre action incompatible est-elle en cours ? »
+```
+
+Exemple :
+
+```text
+Hack       group = machine
+Repair     group = machine
+Inspect    group = inspect
+```
+
+Alors :
+
+```text
+Hack + Hack       impossible : même ActionId
+Hack + Repair     impossible : même concurrency group
+Hack + Inspect    possible   : groupes différents
+```
+
+Cette règle permet une API et un stockage action-centric sans supprimer la possibilité de plusieurs exécutions sur un même Interactive :
+
+```text
+Interactive.Executions
+├── Hack    -> execution #42
+└── Inspect -> execution #43
+```
+
+`ExecutionId` reste nécessaire même si `ActionId` identifie le slot. Les deux identités n'ont pas le même rôle :
+
+```text
+ActionId
+    = quel slot logique / quelle action ?
+
+ExecutionId
+    = quelle occurrence précise de cette action ?
+```
+
+Ainsi, un callback retardé appartenant à `Hack execution #41` ne peut pas compléter accidentellement le nouveau `Hack execution #52`.
+
+### Cooperative work is not multiple copies of the same execution
+
+Le contre-exemple principal serait : deux joueurs réparent simultanément le même générateur via la même action `Repair`.
+
+V4 ne modélise pas cela comme :
+
+```text
+Repair execution by A
+Repair execution by B
+```
+
+mais comme une seule exécution/processus partagé :
+
+```text
+Repair execution
+└── RepairSession
+    ├── participant A
+    ├── participant B
+    └── shared Progress
+```
+
+Interaction peut servir à rejoindre/quitter cette session ou à maintenir la réservation, mais la coopération est une propriété du système métier partagé.
+
+Cette direction évite de payer dans tout le framework le coût de plusieurs predictions, plusieurs executions et plusieurs progressions concurrentes pour une même action alors qu'aucun use case actuel ne l'exige.
+
+Si un futur gameplay démontre le besoin de plusieurs occurrences réellement indépendantes de la même action sur le même target, cet invariant devra être réouvert explicitement ; il n'est pas laissé ouvert par défaut « au cas où ».
+
+## 2.4 Core execution has no timing semantics
 
 Le primitive d'une action longue est :
 
@@ -178,6 +294,7 @@ Le core ne suppose jamais qu'une exécution possède une durée.
 Il ne doit pas avoir besoin de `Duration`, `Elapsed`, `Remaining`, deadline ou timer pour gérer :
 
 - la réservation ;
+- l'unicité par `ActionId` ;
 - les groupes de concurrence ;
 - le busy ;
 - le maintien lié à l'input ou à la présence ;
@@ -186,7 +303,7 @@ Il ne doit pas avoir besoin de `Duration`, `Elapsed`, `Remaining`, deadline ou t
 - la failure ;
 - les ACK réseau.
 
-## 2.4 Timed execution is a first-class optional feature
+## 2.5 Timed execution is a first-class optional feature
 
 Le plugin fournit un chemin built-in très simple pour les actions temporisées, mais cette feature reste spécialisée.
 
@@ -208,7 +325,7 @@ Un executor custom qui veut le timing built-in peut hériter de `TimedInteractio
 
 `TimedInteractionExecutor` peut utiliser en interne une composition avec un helper `TimedExecution`; cette composition est un détail d'implémentation et ne doit pas imposer de boilerplate d'authoring à chaque executor timed.
 
-## 2.5 Progress is optional and generic; timing is not the public abstraction
+## 2.6 Progress is optional and generic; timing is not the public abstraction
 
 Une exécution peut fournir une progression normalisée de présentation :
 
@@ -216,7 +333,7 @@ Une exécution peut fournir une progression normalisée de présentation :
 Progress = 0..1
 ```
 
-Cette progression ne signifie pas « timer ».
+Cette progression ne signifie pas « timer » et n'implique même pas qu'elle soit continue.
 
 Elle peut provenir de :
 
@@ -224,6 +341,7 @@ Elle peut provenir de :
 TimedExecution      → elapsed / duration
 HackSession         → downloaded / total
 RepairSystem        → repaired / required
+ThreeStepProcess    → 0 → .33 → .66 → 1
 CraftSystem         → work / target
 Dialogue            → no progress
 Carry interaction   → no progress
@@ -237,7 +355,18 @@ executor is TimedInteractionExecutor
 
 Ils ne connaissent que la présence éventuelle d'une progression présentable.
 
-## 2.6 Execution existence and execution progress are separate replication concerns
+Une progression peut donc être :
+
+```text
+continuous and locally derived
+step-based and published only when it changes
+computed from a replicated gameplay system
+absent
+```
+
+sans modifier le contrat consommé par la présentation.
+
+## 2.7 Execution existence and execution progress are separate replication concerns
 
 Répliquer qu'une exécution existe ne signifie pas répliquer sa progression à chaque frame.
 
@@ -258,9 +387,22 @@ sans envoyer un stream réseau de :
 ...
 ```
 
-Une feature timed peut synchroniser les informations minimales nécessaires à reconstruire son chrono localement. Un système métier custom peut répliquer ses propres données. Les deux peuvent ensuite fournir `Progress` au même read model local.
+Mais « ne pas répliquer un float par frame » ne signifie pas « ne jamais répliquer Progress ».
 
-## 2.7 Execution visibility is a policy, not an assumption
+Une progression discrète :
+
+```text
+0
+→ .33
+→ .66
+→ 1
+```
+
+est au contraire un excellent candidat à une propriété publiée/répliquée lorsqu'elle change.
+
+Une feature timed peut synchroniser les informations minimales nécessaires à reconstruire son chrono localement. Un système métier custom peut répliquer ses propres données. Un processus discret peut publier directement quelques snapshots de `Progress`. Les trois alimentent ensuite le même read model local.
+
+## 2.8 Execution visibility is a policy, not an assumption
 
 Toutes les exécutions n'ont pas la même portée de présentation.
 
@@ -278,21 +420,53 @@ Une implémentation Godot doit préférer s'appuyer sur les mécanismes natifs d
 
 La politique d'existence de l'exécution et la stratégie de synchronisation de sa progression restent deux axes séparés.
 
-## 2.8 Multiple executions remain structurally supported
-
-L'Interactive expose une collection `0..N` d'exécutions.
-
-Le framework ne fige pas une relation :
+Exemples :
 
 ```text
-ActionId -> exactly one execution
+RequesterOnly + derived timed progress
+    → prompt personnel type Arc Raiders
+
+Replicated + derived timed progress
+    → terminal monde avec barre continue visible par tous
+
+Replicated + published step progress
+    → puzzle à trois étapes visible par tous
+
+Replicated execution + no Interaction progress
+    → le monde sait que l'action tourne, un système métier affiche sa propre donnée
 ```
 
-même si les actions longues ordinaires seront souvent exclusives par groupe de concurrence.
+## 2.9 Multiple executions remain supported across different actions
 
-Une UI action-centric peut choisir une exécution correspondant à son `ActionId`; cette décision de présentation ne devient pas un invariant du modèle.
+L'Interactive expose toujours une collection `0..N` d'exécutions, mais cette collection est indexable sans ambiguïté par `ActionId`.
 
-## 2.9 Prediction may create local execution presentation, but the Interactor does not own the read model
+```text
+Interactive
+├── action A -> 0..1 execution
+├── action B -> 0..1 execution
+└── action C -> 0..1 execution
+```
+
+Plusieurs entrées peuvent coexister lorsque leurs groupes de concurrence le permettent.
+
+La cardinalité est donc :
+
+```text
+Interactive -> 0..N executions
+ActionId    -> 0..1 execution
+```
+
+Ce modèle est volontairement plus strict que « N executions quelconques » parce qu'il simplifie :
+
+- availability / already-running ;
+- lookup de présentation ;
+- jointure action ↔ execution ;
+- prediction ;
+- réplication ;
+- reconciliation ;
+- tests réseau.
+
+## 2.10 Prediction may create local execution presentation, but the Interactor does not own the read model
 
 L'interactor reste le composant qui sait qu'une requête locale vient d'être envoyée et peut donc déclencher une prediction immédiate.
 
@@ -309,19 +483,21 @@ Une prediction V4 doit être représentable comme une **execution presentation l
 
 ```text
 local request
-→ predicted execution presentation on target
+→ predicted execution presentation in action slot
 → authoritative acknowledgement / replication
-→ reconcile
+→ reconcile same action slot
 
 or
 
 → rejection
-→ remove prediction
+→ clear predicted slot
 ```
 
-La corrélation exacte, le nombre de predictions simultanées et l'identité utilisée pour réconcilier restent des détails d'implémentation à spécifier.
+L'unicité par `ActionId` rend naturel un modèle de prediction par action : une action ne doit pas pouvoir accumuler plusieurs predictions concurrentes pendant qu'une requête de ce slot est déjà en vol.
 
-## 2.10 Gameplay progress remains gameplay-owned when it has gameplay meaning
+La nécessité d'un `RequestId` distinct reste à confirmer ; elle n'est plus motivée par la possibilité de plusieurs executions simultanées de la même action.
+
+## 2.11 Gameplay progress remains gameplay-owned when it has gameplay meaning
 
 Si « hack = 63 % » affecte réellement :
 
@@ -335,6 +511,8 @@ Si « hack = 63 % » affecte réellement :
 alors cette progression appartient au système métier (`HackSession`, `RepairSystem`, etc.). Interaction peut la présenter, mais ne devient pas sa source de vérité.
 
 Le helper timed n'est approprié que lorsque le timer est réellement la sémantique suffisante du processus.
+
+Un système métier peut néanmoins choisir de **publier un snapshot** de sa progression dans le read model Interaction afin que tous les renderers génériques la consomment. Publier une représentation ne transfère pas l'ownership gameplay.
 
 ---
 
@@ -391,7 +569,24 @@ Ces notions appartiennent au provider timed éventuel, pas au contrat génériqu
 
 `IsPredicted` est lui-même à confirmer : il peut être utile à certains renderers et à la réconciliation, mais il ne doit pas contaminer la vérité autoritaire du serveur.
 
-## 3.3 Target presentation
+## 3.3 Action slot lookup
+
+L'invariant `ActionId -> 0..1 execution` rend une API directe possible :
+
+```csharp
+bool TryGetExecutionPresentation(
+    StringName actionId,
+    out InteractionExecutionPresentation presentation
+);
+```
+
+ou toute forme Godot-friendly équivalente.
+
+Un renderer action-centric n'a pas à demander « laquelle des executions de Hack dois-je afficher ? ».
+
+Le `ExecutionId` reste exposé dans la présentation pour identifier l'occurrence et pour les consumers qui ont besoin de corréler un lifecycle précis.
+
+## 3.4 Target presentation
 
 Deux directions restent possibles :
 
@@ -441,6 +636,14 @@ Hack [E]
 ████████░░ 80 %
 ```
 
+Avec l'unicité par action, la jointure est déterministe :
+
+```text
+action.ActionId
+    ↓
+TryGetExecutionPresentation(action.ActionId)
+```
+
 La donnée de progression reste execution-owned ; le prompt n'en est qu'un renderer.
 
 ## 4.3 Feedback monde
@@ -448,8 +651,7 @@ La donnée de progression reste execution-owned ; le prompt n'en est qu'un rende
 Un terminal peut référencer son `InteractiveComponent` et lire :
 
 ```text
-Executions
-→ find hack execution
+TryGetExecutionPresentation("hack")
 → Progress
 ```
 
@@ -473,12 +675,14 @@ Une API Godot-native doit privilégier queries, properties et signaux structurel
 Les changements structurels peuvent être signalés :
 
 ```text
-ExecutionStarted
-ExecutionEnded
-ExecutionPresentationChanged
+ExecutionStarted(actionId)
+ExecutionEnded(actionId)
+ExecutionPresentationChanged(actionId)
 ```
 
-Un consumer qui a besoin d'une valeur continue peut ensuite pull `Progress` chaque frame.
+Un consumer qui a besoin d'une valeur continue dérivée localement peut ensuite pull `Progress` chaque frame.
+
+Une progression publiée/discrète peut au contraire ne provoquer un changement que lorsque sa valeur passe par exemple de `.33` à `.66`.
 
 Le framework ne doit pas émettre un signal de progression réseau ou local à chaque tick par défaut.
 
@@ -488,7 +692,7 @@ Le framework ne doit pas émettre un signal de progression réseau ou local à c
 
 ## 5.1 Primitive
 
-La forme conceptuelle cible devient :
+La forme conceptuelle cible reste :
 
 ```csharp
 public abstract InteractionExecutionResult Execute(
@@ -527,7 +731,22 @@ FailExecution(executionId, reason)    // forme exacte à confirmer
 
 Le comportement exact de `Failed` après un `Running()` et son API publique méritent un passage dédié pendant l'implémentation ; V3 possède déjà la distinction ACK `Failed` vs `Rejected` qui doit être préservée.
 
-## 5.3 Input and presence lifetime remain orthogonal
+## 5.3 Reservation checks
+
+Avant de réserver une nouvelle exécution, le core vérifie conceptuellement deux contraintes :
+
+```text
+1. no active execution for this ActionId
+2. no active execution in this action's ConcurrencyGroup
+```
+
+La première protège l'unicité logique de l'action.
+
+La seconde protège l'exclusivité entre actions différentes.
+
+L'implémentation peut utiliser un dictionnaire par `ActionId`, un index de groupe ou une simple itération selon le nombre réel d'actions ; l'invariant public ne dépend pas de la structure choisie.
+
+## 5.4 Input and presence lifetime remain orthogonal
 
 Les axes déjà distingués restent valides :
 
@@ -622,51 +841,117 @@ Ces responsabilités ne remontent pas dans le core Interaction.
 Le provider timed alimente la même abstraction de progression que n'importe quel système custom.
 
 ```text
-TimedExecution ─┐
-HackSession    ─┼─→ ExecutionPresentation.Progress
-RepairSystem   ─┘
+TimedExecution ─────┐
+HackSession ────────┼─→ ExecutionPresentation.Progress
+ThreeStepProcess ───┤
+RepairSystem ───────┘
 ```
 
 Le renderer ne connaît jamais la provenance.
 
 ---
 
-# 7. Progress source — open implementation point
+# 7. Progress production — open implementation point
 
 La frontière est décidée ; l'API exacte ne l'est pas encore.
 
 Le besoin :
 
-> Un système associé à une exécution doit pouvoir fournir localement une progression normalisée sans forcer le core à connaître sa nature.
+> Un système associé à une exécution doit pouvoir fournir une progression normalisée sans forcer le core ou le renderer à connaître sa nature.
 
-Plusieurs directions sont à comparer pendant le spike.
+La discussion fait désormais apparaître **deux formes de production réellement différentes** qu'une API finale doit pouvoir couvrir proprement.
 
-## 7.1 Setter on Interactive
+## 7.1 Published / snapshot progress
+
+Cas naturel : une progression change par événements métier.
+
+```text
+0
+→ .33
+→ .66
+→ 1
+```
+
+Une API conceptuelle très simple serait :
 
 ```csharp
-Interactive.SetExecutionProgress(executionId, progress);
+Interactive.SetExecutionProgress(executionId, 0.33f);
 ```
+
+ou :
+
+```csharp
+Interactive.ReportExecutionProgress(executionId, 0.33f);
+```
+
+Le système ne pousse une nouvelle valeur que lorsque sa progression logique change.
+
+### Example
+
+```text
+ThreeStepHack
+
+stage A completed
+→ ReportProgress(.33)
+
+stage B completed
+→ ReportProgress(.66)
+
+stage C completed
+→ ReportProgress(1)
+→ CompleteExecution(id)
+```
+
+Pour une execution `Replicated`, cette valeur peut naturellement faire partie du snapshot répliqué de l'exécution et être envoyée seulement lorsqu'elle change.
 
 ### Pros
 
-- trivial ;
-- très explicite ;
-- facile depuis n'importe quel système.
+- trivial à comprendre ;
+- excellent pour les progressions discrètes ;
+- naturel à répliquer ;
+- late join récupère immédiatement la dernière valeur connue ;
+- aucun provider lifetime à maintenir pour les cas simples.
 
 ### Risks
 
-- pousse naturellement vers un setter par frame ;
-- mélange stockage du read model et ownership de la valeur ;
-- nécessite de définir qui clear la valeur et comment éviter un vieux producer qui écrit sur une nouvelle execution.
+- une API nommée `SetProgress` peut inciter un auteur à l'appeler chaque frame ;
+- stale `ExecutionId` doit devenir un no-op ou une erreur claire ;
+- le core doit définir qui possède/clear le snapshot sur terminaison ;
+- il faut éviter que « presentation progress » devienne par accident la source gameplay d'un système métier.
 
-## 7.2 Registered provider / source
+Le point important : **le setter n'est pas intrinsèquement mauvais**. Il devient mauvais si on l'utilise comme transport continu d'un timer. Pour une progression événementielle, c'est probablement l'API la plus naturelle.
+
+## 7.2 Derived / local progress source
+
+Cas naturel : la progression évolue continuellement mais peut être reconstruite localement sans réplication de chaque valeur.
+
+```text
+TimedExecution
+    replicated duration + timing anchor
+        ↓
+local clock
+        ↓
+Progress = .3726...
+```
+
+ou un système métier déjà répliqué :
+
+```text
+HackSession replicated fields
+        ↓
+local query
+        ↓
+Progress = downloaded / total
+```
+
+Conceptuellement :
 
 ```text
 Interactive execution
 └── optional ProgressSource
 ```
 
-ou conceptuellement :
+ou :
 
 ```csharp
 SetExecutionProgressSource(executionId, source);
@@ -677,16 +962,48 @@ La présentation pull la valeur du provider.
 ### Pros
 
 - pas de setter par frame ;
-- ownership explicite ;
-- le timed helper et un système métier utilisent exactement le même contrat.
+- pas de stream de floats réseau ;
+- ownership du calcul explicite ;
+- `TimedExecution` et un système métier peuvent utiliser le même contrat de sortie.
 
 ### Risks
 
 - API de lifetime à définir ;
+- source freed / replaced ;
 - attention à ne pas introduire une interface C# comme extension point obligatoire ;
-- la forme doit rester naturelle en GDScript / GDExtension.
+- la forme doit rester naturelle en GDScript / GDExtension ;
+- il faut préciser si un provider est purement local ou s'il porte aussi sa propre réplication.
 
-## 7.3 Query on executor
+## 7.3 Published and derived progress may coexist as implementation strategies
+
+Le contrat public consommé reste :
+
+```text
+InteractionExecutionPresentation.Progress?
+```
+
+L'implémentation peut ensuite résoudre cette valeur depuis :
+
+```text
+published snapshot
+or
+local derived source
+or
+none
+```
+
+Une piste à tester :
+
+```text
+if local ProgressSource exists:
+    Progress = source.Progress
+else:
+    Progress = PublishedProgress
+```
+
+Ce n'est pas encore une décision d'API, mais cette distinction est utile car elle évite de chercher une abstraction unique qui soit simultanément optimale pour un timer continu et un processus à trois étapes.
+
+## 7.4 Query on executor
 
 L'executor pourrait fournir une query de progression pour ses propres executions.
 
@@ -699,16 +1016,24 @@ L'executor pourrait fournir une query de progression pour ses propres executions
 
 - un executor n'est pas forcément le propriétaire réel du processus après le start ;
 - le système métier peut être ailleurs dans la scene ;
-- rapproche à nouveau les executors du rôle de presentation provider.
+- rapproche à nouveau les executors du rôle de presentation provider ;
+- moins naturel pour un process partagé ou un composant monde indépendant.
 
 ### Current leaning
 
-Préférer une forme de **provider/source Godot-friendly** plutôt qu'un setter poussé chaque frame, sans figer l'API avant un prototype concret avec :
+Ne pas figer « setter **ou** provider » trop tôt.
 
-1. `TimedInteractionExecutor` ;
-2. un `HackSession` custom ;
-3. un renderer monde ;
-4. un prompt action + execution.
+Le modèle a probablement besoin de couvrir proprement :
+
+```text
+PublishedProgress
+    pour snapshots discrets / événementiels
+
+DerivedProgressSource
+    pour continu reconstructible localement
+```
+
+Le spike doit prouver que ces deux chemins convergent vers la même `ExecutionPresentation.Progress` sans special case dans les renderers.
 
 ---
 
@@ -720,6 +1045,8 @@ Le serveur garde la vérité des executions actives de l'Interactive.
 
 Aucun client ne crée autoritairement, complète ou annule une execution via le read model de presentation.
 
+L'unicité `ActionId -> 0..1` s'applique d'abord à cette vérité autoritaire.
+
 ## 8.2 Replicated execution read model
 
 Quand la politique choisie l'autorise, les peers reçoivent un snapshot de membership suffisant pour savoir :
@@ -727,6 +1054,14 @@ Quand la politique choisie l'autorise, les peers reçoivent un snapshot de membe
 ```text
 execution #42 exists
 ActionId = hack
+```
+
+Une progression publiée peut éventuellement faire partie de ce même snapshot :
+
+```text
+execution #42
+ActionId = hack
+Progress = .66
 ```
 
 La forme exacte peut être une propriété synchronisée, une collection compacte ou un petit composant dédié ; à décider en fonction des contraintes Godot de réplication des collections et du late join.
@@ -747,13 +1082,38 @@ Le demandeur doit voir sa propre exécution — typiquement un prompt/action pro
 
 Les ACK et la prediction locale peuvent suffire ; aucune diffusion monde n'est requise.
 
+Cas type : interaction longue dont la barre n'existe que dans le prompt du joueur qui agit.
+
 ### Replicated / world-observable
 
 Les clients autorisés par la visibilité réseau de l'objet doivent pouvoir observer l'exécution, même s'ils ne sont pas dans les zones d'interaction du target.
 
 Cas type : terminal de hack avec écran monde visible par tous les joueurs présents dans la zone réseau pertinente.
 
-## 8.4 Prefer Godot-native visibility
+## 8.4 Visibility and progress transport are orthogonal axes
+
+La visibilité répond à :
+
+> Qui sait que l'exécution existe ?
+
+Le transport de progression répond à :
+
+> Comment ce peer obtient-il `Progress` ?
+
+Exemples :
+
+| Execution visibility | Progress strategy | Use case |
+| --- | --- | --- |
+| RequesterOnly | derived timed | prompt personnel long-running |
+| Replicated | derived timed | terminal monde avec timer continu |
+| Replicated | published snapshots | puzzle / hack à étapes |
+| Replicated | derived from gameplay system | réparation complexe |
+| Replicated | none | objet simplement busy |
+| AuthorityOnly | none / gameplay-owned | process sans présentation Interaction |
+
+Ne pas créer un enum unique qui essaierait d'encoder le produit cartésien de ces deux axes.
+
+## 8.5 Prefer Godot-native visibility
 
 Si `MultiplayerSynchronizer` et sa visibilité permettent de porter proprement le snapshot des executions, préférer cette voie à une nouvelle couche maison.
 
@@ -761,15 +1121,70 @@ Interaction doit exprimer l'intention de visibilité sans réimplémenter un int
 
 Le détail important : « replicated » ne doit pas nécessairement signifier « envoyé à absolument tous les peers de la session » ; la visibilité native de la node/scene reste applicable.
 
-## 8.5 Progress synchronization is producer-owned
-
-Une execution replicated peut avoir `Progress == null`.
+## 8.6 Timed synchronization is producer-owned
 
 Une `TimedExecution` choisit comment synchroniser son temps : par exemple duration + anchor/elapsed snapshot puis extrapolation locale.
 
-Un `HackSession` custom choisit ses propres données : blocs téléchargés, work units, replicated state, etc.
+Le core Interaction n'a pas besoin de connaître ces champs pour gérer son lifecycle.
 
-Interaction ne standardise pas leur protocole tant qu'un besoin commun réel ne le justifie pas.
+Le résultat final local est simplement :
+
+```text
+ExecutionPresentation.Progress
+```
+
+## 8.7 Discrete progress can be directly replicated
+
+Pour :
+
+```text
+0 → .33 → .66 → 1
+```
+
+il n'y a aucun intérêt à inventer une clock ou une extrapolation.
+
+Le serveur ou le système gameplay autoritaire publie la nouvelle valeur lorsqu'une étape se termine ; la réplication propage ce snapshot aux peers concernés.
+
+Le late join reçoit directement la dernière valeur :
+
+```text
+joins while stage B completed
+→ execution exists
+→ Progress = .66
+```
+
+Cette propriété est particulièrement intéressante pour les feedbacks monde : aucun historique des étapes ratées n'est requis si le renderer ne veut que représenter la progression courante.
+
+## 8.8 Gameplay system may remain the replicated source
+
+Si un `HackSession` possède déjà :
+
+```text
+CurrentStage
+CompletedBlocks
+TotalBlocks
+Participants
+```
+
+Interaction ne doit pas forcément dupliquer ces données.
+
+Deux voies restent légitimes :
+
+```text
+HackSession replicates its state
+→ local ProgressSource derives .66
+→ Interaction presentation exposes .66
+```
+
+ou :
+
+```text
+HackSession owns gameplay truth
+→ reports .66 snapshot to Interaction
+→ Interaction replicates presentation progress
+```
+
+Le choix dépend du coût de duplication et de la réutilisation attendue de la présentation générique.
 
 ---
 
@@ -782,11 +1197,11 @@ La prediction V3 est une solution spécifique au float de timer local. V4 doit l
 ```text
 requester presses input
 → local request is created
-→ target may expose predicted execution presentation immediately
+→ action execution slot may expose predicted presentation immediately
 
 server accepts
 → authoritative execution is acknowledged / replicated
-→ predicted presentation is reconciled with authoritative one
+→ predicted presentation is reconciled in the same ActionId slot
 
 server rejects
 → predicted presentation is removed
@@ -802,28 +1217,54 @@ Cette distinction évite de recréer un `Interactor._prediction` utilisé comme 
 
 ## 9.3 Cardinality
 
-La V3 garde une seule `_prediction` locale. V4 ne doit pas prendre cette limitation comme invariant.
-
-Il faut envisager au minimum :
+La cardinalité cible devient naturellement :
 
 ```text
-one pending prediction per action
+one execution slot per ActionId
 ```
 
-ou plus généralement une collection corrélée aux requêtes en vol.
+Un slot peut être conceptuellement :
 
-Le nombre final dépendra de la politique de request concurrency retenue.
+```text
+Empty
+Predicted
+Confirmed
+```
+
+et éventuellement porter l'information nécessaire pendant la transition de réconciliation.
+
+Une seconde requête pour la même action ne doit pas créer un deuxième slot tant que la première est predicted ou confirmed.
+
+Plusieurs predictions restent possibles sur un même Interactive **pour des ActionId différents** si le protocole et les concurrency groups le permettent.
 
 ## 9.4 Correlation
 
 V3 corrèle aujourd'hui par `(target, actionId)` et documente que cela suffit parce qu'au plus une requête de cette paire est en vol.
 
-V4 peut :
+L'invariant V4 `ActionId -> 0..1 execution` renforce cette direction : tant qu'une seconde requête du même slot est interdite avant la terminaison/refus de la première, `(target, actionId)` reste une corrélation naturelle.
 
-- conserver explicitement cet invariant ;
-- ou introduire une identité de requête permettant plusieurs predictions concurrentes sur une même paire.
+Un `RequestId` peut néanmoins devenir utile pour d'autres raisons :
 
-Ne pas décider avant d'avoir listé les vrais cas d'usage de requêtes simultanées.
+- réponses très retardées après destruction/recréation logique ;
+- protocoles permettant retry avant terminal response ;
+- diagnostics ;
+- futures formes de batching.
+
+Il ne doit pas être introduit uniquement pour supporter plusieurs executions simultanées de la même action, puisque V4 choisit explicitement de ne pas supporter ce modèle.
+
+## 9.5 ExecutionId remains authoritative occurrence identity
+
+Une prediction locale peut ne pas connaître l'`ExecutionId` final avant ACK.
+
+Une fois confirmée :
+
+```text
+Predicted Hack slot
+    ↓ ACK
+Confirmed Hack execution #52
+```
+
+les callbacks et terminaisons utilisent `ExecutionId = 52` pour protéger l'occurrence précise.
 
 ---
 
@@ -857,7 +1298,8 @@ Le helper :
 ```text
 starts authoritative timing
 → Running
-→ exposes Progress
+→ synchronizes minimal timing data
+→ derives Progress locally
 → timeout
 → CompleteExecution
 ```
@@ -900,7 +1342,41 @@ OnExecutionCancelled
 
 Le terminal peut exposer sa propre progression au read model Interaction ou laisser son UI lire directement `HackSession` si Interaction n'est pas le bon consumer.
 
-## 10.4 Arc Raiders-style action prompt progress
+## 10.4 Discrete three-step process visible by everyone
+
+```text
+CalibrateAction
+└── CalibrateExecutor
+```
+
+Le process démarre :
+
+```text
+Running
+Progress = 0
+```
+
+Puis :
+
+```text
+step 1 done
+→ ReportExecutionProgress(id, .33)
+
+step 2 done
+→ ReportExecutionProgress(id, .66)
+
+step 3 done
+→ ReportExecutionProgress(id, 1)
+→ CompleteExecution(id)
+```
+
+Pour une execution `Replicated`, tous les clients autorisés voient les mêmes snapshots.
+
+Aucun timer n'existe. `Progress` exprime uniquement une quantité normalisée présentable.
+
+Ce scénario est un test architectural important : si l'implémentation de Progress suppose une duration ou un elapsed, la séparation V4 est ratée.
+
+## 10.5 Arc Raiders-style action prompt progress
 
 Le target expose :
 
@@ -909,29 +1385,32 @@ ActionPresentation(hack)
 ExecutionPresentation(hack, progress=0.63)
 ```
 
-Le prompt fait la jointure :
+Le prompt fait la jointure déterministe :
 
 ```text
-Bind(action, matchingExecution)
+execution = TryGetExecutionPresentation(action.ActionId)
+Bind(action, execution)
 ```
 
 La progression apparaît à même le prompt sans réintroduire `ExecutionProgress` dans `InteractionActionPresentation`.
 
-## 10.5 World feedback visible outside interaction areas
+## 10.6 World feedback visible outside interaction areas
 
 Un autre joueur n'est ni focused, ni indicated, ni dans `InteractionArea`.
 
 Son replica du terminal reçoit néanmoins l'exécution selon la visibilité réseau configurée :
 
 ```text
-Terminal.Interactive.Executions
-→ hack running
+Terminal.Interactive
+→ Hack execution #42
 → Progress = 0.63
 ```
 
 L'écran monde continue donc d'afficher la progression.
 
-## 10.6 Long-running process with no meaningful progress
+La détection d'interaction et la visibilité de l'exécution sont explicitement indépendantes.
+
+## 10.7 Long-running process with no meaningful progress
 
 ```text
 Dialogue / carry / machine waiting for external event
@@ -943,17 +1422,77 @@ La présentation peut afficher `busy`, jouer un son ou ne rien dessiner.
 
 Aucune fausse progression n'est inventée.
 
-## 10.7 Multiple concurrent executions
+## 10.8 Multiple different actions concurrently
 
 Deux actions appartenant à deux groupes de concurrence indépendants peuvent rester actives simultanément :
 
 ```text
 Interactive.Executions
-├── execution A
-└── execution B
+├── Hack    #42
+└── Inspect #43
 ```
 
-Le read model et la réplication restent une collection même si ce cas est rare dans le gameplay courant.
+mais :
+
+```text
+Hack #42
+Hack #44
+```
+
+n'est jamais un état valide sur le même Interactive.
+
+## 10.9 Same-group actions remain exclusive
+
+```text
+Hack       group = machine
+Repair     group = machine
+```
+
+Si Hack tourne :
+
+```text
+Repair request
+→ blocked/rejected as already occupied
+```
+
+L'unicité par action ne remplace donc pas les concurrency groups.
+
+## 10.10 Cooperative repair
+
+Deux joueurs contribuent au même process :
+
+```text
+Repair action
+→ one Repair execution #51
+→ RepairSession
+   ├── A joined
+   ├── B joined
+   └── Progress = .72
+```
+
+Le système métier décide comment les participants augmentent la progression et quand l'exécution se termine.
+
+Interaction ne crée pas deux copies de `Repair`.
+
+## 10.11 Late join during discrete progress
+
+Serveur :
+
+```text
+Calibrate execution #61
+Progress = .66
+```
+
+Un client rejoint :
+
+```text
+replicated execution snapshot
+→ ActionId = calibrate
+→ ExecutionId = 61
+→ Progress = .66
+```
+
+Le renderer applique directement l'état courant, sans rejouer artificiellement `.33` puis `.66`.
 
 ---
 
@@ -967,7 +1506,7 @@ Ces notes enregistrent les alternatives envisagées afin que l'implémentation f
 
 `ExecutionProgress` quitte `InteractionActionPresentation`.
 
-**Reason:** une action proposée et une execution active ont des ownerships, lifetimes, cardinalités et audiences différentes.
+**Reason:** une action proposée et une execution active ont des ownerships, lifetimes et audiences différentes.
 
 **Rejected alternative:** conserver le champ dans l'action parce que le prompt actuel le consomme.
 
@@ -981,7 +1520,37 @@ L'Interactive expose les executions en cours. L'interactor n'est pas leur miroir
 
 **Reason:** le feedback monde appartient au target et peut être nécessaire à des peers sans aucun contexte d'interaction local.
 
-## ADR-003 — Core execution is indefinite by default
+## ADR-003 — One active execution per ActionId
+
+**Decision:** accepted.
+
+Pour un Interactive :
+
+```text
+ActionId -> 0..1 active execution
+```
+
+**Reason:** l'implémentation actuelle le garantit déjà implicitement par le concurrency group de l'action ; aucun use case actuel ne nécessite plusieurs occurrences indépendantes de la même action ; le coût de généralisation toucherait stockage, prediction, réplication, reconciliation et présentation.
+
+**Counter-example considered:** plusieurs joueurs réparent le même objet.
+
+**Resolution:** représenter un processus/session coopératif unique avec plusieurs participants, pas plusieurs executions identiques.
+
+**Revisit condition:** un gameplay réel démontre plusieurs occurrences indépendantes et simultanées de la même action sur le même Interactive.
+
+## ADR-004 — Concurrency groups remain orthogonal to action uniqueness
+
+**Decision:** accepted.
+
+L'unicité par `ActionId` interdit `Hack + Hack`.
+
+Le concurrency group interdit ou autorise `Hack + Repair`, `Hack + Inspect`, etc.
+
+**Rejected alternative:** supprimer les concurrency groups une fois l'unicité par action adoptée.
+
+Ils répondent à un autre besoin : l'exclusivité entre actions différentes.
+
+## ADR-005 — Core execution is indefinite by default
 
 **Decision:** accepted.
 
@@ -991,7 +1560,7 @@ Le primitive long-running est `Running()` jusqu'à terminaison explicite.
 
 Même présenté comme du « sucre », un résultat portant une durée oblige le core à conserver et interpréter une sémantique temporelle.
 
-## ADR-004 — Keep a built-in timed path
+## ADR-006 — Keep a built-in timed path
 
 **Decision:** accepted.
 
@@ -1001,7 +1570,7 @@ Direction privilégiée : `TimedInteractionExecutor` spécialisé, possiblement 
 
 **Rejected alternative:** supprimer tout timer du plugin et forcer le gameplay à recréer `Timer + CompleteExecution` pour chaque action simple.
 
-## ADR-005 — Prefer inheritance for the author-facing timed executor
+## ADR-007 — Prefer inheritance for the author-facing timed executor
 
 **Decision:** accepted as current direction.
 
@@ -1016,19 +1585,35 @@ La composition reste possible à l'intérieur de l'implémentation timed mais n'
 
 **Reason:** il n'existe pas de besoin identifié de combiner simultanément plusieurs stratégies de timing built-in ; l'héritage exprime directement l'intention et minimise le wiring.
 
-## ADR-006 — Expose generic Progress, not Timing
+## ADR-008 — Expose generic Progress, not Timing
 
 **Decision:** accepted.
 
 La presentation connaît éventuellement `Progress`, pas `Duration/Elapsed/Remaining`.
 
-**Reason:** une progression utile peut venir d'un timer ou d'un système non temporel.
+**Reason:** une progression utile peut venir d'un timer, d'un système métier continu ou d'un processus discret `.33/.66/1`.
 
 **Rejected alternative:** `InteractionExecutionTimingPresentation` comme capability générique.
 
-Cette forme faisait revenir le timer au centre du modèle.
+Cette forme faisait revenir le timer au centre du modèle et ne représentait pas naturellement une progression par étapes.
 
-## ADR-007 — Server-owned, optionally observable executions
+## ADR-009 — Progress may be published or locally derived
+
+**Decision:** accepted at the conceptual level; exact API open.
+
+Deux stratégies légitimes doivent converger vers le même `ExecutionPresentation.Progress` :
+
+```text
+published snapshot
+    → excellent for discrete/event-driven progress
+
+local derived source
+    → excellent for continuous/reconstructible progress
+```
+
+**Rejected alternative:** imposer un setter par frame pour tout, ou imposer un provider complexe pour les trois changements de valeur d'un process discret.
+
+## ADR-010 — Server-owned, optionally observable executions
 
 **Decision:** accepted.
 
@@ -1038,15 +1623,17 @@ La mutation et le lifecycle restent autoritaires serveur. Leur read model peut �
 
 Cette règle rend inutilement coûteux le cas où « l'action est en cours » est exactement l'information transitoire que le monde doit afficher.
 
-## ADR-008 — Do not replicate progress every frame by default
+## ADR-011 — Do not replicate continuous progress every frame by default
 
 **Decision:** accepted.
 
 La réplication d'une execution et la synchronisation de sa progression sont séparées.
 
-**Reason:** un timer est reconstructible à partir d'informations bien plus compactes, et un système métier possède déjà son propre protocole.
+**Reason:** un timer est reconstructible à partir d'informations bien plus compactes, et un système métier peut déjà posséder son propre protocole.
 
-## ADR-009 — Prompt joins action and execution models explicitly
+**Clarification:** cette décision n'interdit pas de répliquer des snapshots de progression lorsqu'ils changent peu fréquemment, par exemple `.33 → .66 → 1`.
+
+## ADR-012 — Prompt joins action and execution models explicitly
 
 **Decision:** accepted.
 
@@ -1056,17 +1643,19 @@ Un widget peut recevoir :
 ActionPresentation + matching ExecutionPresentation?
 ```
 
+L'unicité par `ActionId` rend cette jointure déterministe.
+
 Cela supporte aussi bien un prompt minimal qu'une UI type Arc Raiders sans fusionner les deux modèles.
 
-## ADR-010 — Refactor prediction around execution presentation
+## ADR-013 — Refactor prediction around per-action execution presentation
 
 **Decision:** accepted in principle; implementation open.
 
 La `_prediction` V3 dédiée au float n'est pas conservée telle quelle.
 
-La prediction devient une forme locale du read model d'exécution du target, créée depuis l'intention de l'interactor puis réconciliée avec l'autorité.
+La prediction devient une forme locale du slot d'exécution de l'action sur le target, créée depuis l'intention de l'interactor puis réconciliée avec l'autorité.
 
-## ADR-011 — Keep union-style execution outcomes
+## ADR-014 — Keep union-style execution outcomes
 
 **Decision:** accepted.
 
@@ -1076,24 +1665,46 @@ La prediction devient une forme locale du read model d'exécution du target, cr�
 
 # 12. Implementation spikes / attention points
 
-## P0 — Prove the split with two real consumers
+## P0 — Prove action-slot cardinality
 
-Avant de figer l'API de `ProgressSource`, implémenter au moins :
+Adapter les tests pour rendre explicites les invariants :
 
-1. une action basée sur `TimedInteractionExecutor` ;
-2. un `HackSession` custom avec sa propre progression ;
-3. un feedback monde lisant `ExecutionPresentation` ;
-4. un prompt qui joint `ActionPresentation` et `ExecutionPresentation`.
+```text
+same ActionId twice             → impossible
+same group, different ActionId  → impossible
+different groups/actions        → possible
+```
 
-Si ces quatre cas nécessitent des special cases de type, la frontière n'est pas encore bonne.
+Vérifier que cela permet de simplifier :
+
+- storage lookup ;
+- `AlreadyRunning` ;
+- presentation lookup ;
+- prediction bookkeeping ;
+- ACK reconciliation.
+
+L'implémentation ne doit pas maintenir une structure N-per-action « par précaution » si l'API interdit déjà ce cas.
+
+## P0 — Prove progress with three different producers
+
+Avant de figer l'API de progression, implémenter au moins :
+
+1. `TimedInteractionExecutor` avec progression continue dérivée ;
+2. `ThreeStepProcess` publiant `0 → .33 → .66 → 1` ;
+3. `HackSession` custom avec sa propre progression gameplay ;
+4. un feedback monde lisant `ExecutionPresentation` ;
+5. un prompt qui joint `ActionPresentation` et `ExecutionPresentation`.
+
+Si ces cas nécessitent des special cases de type dans le renderer, la frontière n'est pas encore bonne.
 
 ## P0 — Replication shape
 
-Tester la forme la plus Godot-native pour synchroniser une collection compacte d'executions :
+Tester la forme la plus Godot-native pour synchroniser des slots d'executions :
 
 ```text
-ExecutionId
 ActionId
+ExecutionId
+optional PublishedProgress
 ```
 
 avec :
@@ -1101,7 +1712,9 @@ avec :
 - start ;
 - end ;
 - late join ;
-- deux executions concurrentes ;
+- progression `.33/.66/1` ;
+- deux actions concurrentes de groupes différents ;
+- refus de deux occurrences de la même action ;
 - visibilité requester-only vs world-observable ;
 - listen host ;
 - dedicated server.
@@ -1118,41 +1731,56 @@ Le helper timed doit prouver :
 - late join au milieu ;
 - correction sans stream de progress floats ;
 - cancellation avant timeout ;
-- absence de double completion.
+- absence de double completion ;
+- exposition de `Progress` identique à celle d'un producer discret.
 
 Le détail de clock sync peut rester interne au helper.
 
-## P1 — Progress source lifetime
+## P1 — Published progress API
 
-Comparer au minimum :
+Comparer :
 
 ```text
-setter
-provider/source
-executor query
+SetExecutionProgress
+ReportExecutionProgress
+UpdateExecutionPresentation
 ```
 
-avec attention particulière à :
+Critères :
 
-- stale ExecutionId ;
+- intention claire de snapshot, pas tick API ;
+- validation/clamp `0..1` ;
+- stale `ExecutionId` ;
+- comportement sur `Progress = null` / clear ;
+- emission locale de changement ;
+- réplication seulement lorsque nécessaire ;
+- late join.
+
+## P1 — Derived progress source lifetime
+
+Comparer des formes Godot-friendly de provider/source avec attention particulière à :
+
 - source freed ;
 - provider remplacé ;
 - clear sur end ;
+- stale ExecutionId ;
 - GDScript interoperability ;
 - future GDExtension implementation ;
 - allocations / calls per frame.
 
+Ne pas introduire une interface C# obligatoire uniquement parce qu'elle est ergonomique côté .NET.
+
 ## P1 — Prediction correlation
 
-Décider si V4 conserve :
+Direction de base :
 
 ```text
-one pending request per (target, actionId)
+one pending/active slot per (target, ActionId)
 ```
 
-ou introduit un request identity.
+Vérifier que le protocole interdit bien une seconde requête de cette paire avant terminal response/reconciliation.
 
-Le choix doit être motivé par un use case réel et non uniquement par la possibilité théorique de concurrence.
+N'introduire un `RequestId` que si un vrai besoin indépendant de la cardinalité d'exécution le justifie.
 
 ## P1 — Visibility authoring
 
@@ -1170,6 +1798,18 @@ Critère principal : la visibilité décrit qui peut **observer l'exécution**, 
 
 Elle ne doit donc pas se retrouver accidentellement couplée aux zones de détection ou à l'availability.
 
+## P1 — Cooperative process integration
+
+Faire un spike volontairement simple :
+
+```text
+one Repair execution
+multiple participants in RepairSession
+shared Progress
+```
+
+Le but n'est pas de construire un framework coop, mais de vérifier que l'unicité par ActionId n'oblige pas Interaction à posséder la notion de participant d'un système métier.
+
 ---
 
 # 13. Non-goals
@@ -1178,12 +1818,15 @@ V4 ne cherche pas à :
 
 - faire d'Interaction un framework de hack, crafting, dialogue ou animation ;
 - standardiser toutes les formes de progression gameplay ;
+- modéliser plusieurs occurrences simultanées de la même action sur le même Interactive sans use case réel ;
+- faire d'une coopération multi-joueur plusieurs copies artificielles de la même execution ;
 - prédire la simulation physique ;
 - remplacer Stateful pour les vérités persistantes du monde ;
 - imposer qu'une execution ait une progress bar ;
 - imposer qu'une execution longue soit timed ;
 - rendre les executions autoritaires côté client ;
 - diffuser chaque execution à chaque peer indépendamment de l'interest management ;
+- répliquer une progression continue à chaque frame par défaut ;
 - créer une abstraction C# que GDScript ne peut pas consommer naturellement.
 
 ---
@@ -1195,18 +1838,22 @@ Ordre conceptuel, pas encore plan de tâches définitif :
 ```text
 1. Introduce InteractionExecutionPresentation
 2. Remove ExecutionProgress / HasTimedExecution from ActionPresentation
-3. Make active executions queryable from Interactive
-4. Reduce core Running result to no timing semantics
-5. Extract current Duration/Elapsed clock into timed feature
-6. Implement TimedInteractionExecutor on top of Running()
-7. Introduce optional generic Progress source
-8. Adapt prompt to optionally join action + execution presentation
-9. Add execution visibility / replication modes
-10. Refactor V3 predicted float into predicted execution presentation
-11. Harden with real multiplayer tests and late join
+3. Formalize ActionId -> 0..1 execution per Interactive
+4. Make active executions queryable from Interactive by ActionId
+5. Reduce core Running result to no timing semantics
+6. Extract current Duration/Elapsed clock into timed feature
+7. Implement TimedInteractionExecutor on top of Running()
+8. Introduce optional generic Progress presentation
+9. Spike published progress + derived progress source
+10. Adapt prompt to optionally join action + execution presentation
+11. Add execution visibility / replication modes
+12. Refactor V3 predicted float into per-action predicted execution presentation
+13. Harden with real multiplayer, late-join and discrete-progress tests
 ```
 
 `HasTimedExecution` doit disparaître pour la même raison que `ExecutionProgress`: la présentation générique ne doit pas connaître la nature timed de l'executor. Un renderer s'intéresse à une execution active et éventuellement à `Progress`.
+
+La migration doit préserver les groupes de concurrence ; ils restent la couche qui exprime l'exclusivité **entre ActionId différents**.
 
 ---
 
@@ -1219,14 +1866,19 @@ instant action
 simple 3-second built-in action
 custom animation-driven action
 custom replicated hack session
+three-step progress 0/.33/.66/1
 hold-to-select then long execution
 progress in prompt
 progress on world-space terminal
 remote player sees terminal progress outside interaction range
 requester-only progress
 long action with no progress
-multiple concurrent execution groups
-late join during a world-observable execution
+same action cannot run twice
+multiple different actions can run in separate concurrency groups
+same-group actions stay exclusive
+cooperative gameplay uses one shared process/session
+late join during timed execution
+late join during discrete-progress execution
 ```
 
 Et surtout si l'on peut expliquer le framework sans exception :
@@ -1235,12 +1887,16 @@ Et surtout si l'on peut expliquer le framework sans exception :
 >
 > **Interactive possède les executions qui tournent sur lui.**
 >
-> **ExecutionPresentation décrit ce qu'un peer peut observer de ces executions.**
+> **Une action possède au maximum une execution active ; les concurrency groups contrôlent les conflits entre actions différentes.**
+>
+> **ExecutionPresentation décrit ce qu'un peer peut observer de cette execution.**
 >
 > **Running signifie seulement que l'execution continue jusqu'à sa terminaison.**
 >
-> **TimedInteractionExecutor est un helper spécialisé qui produit éventuellement Progress et termine automatiquement une execution.**
+> **Progress est une donnée de présentation optionnelle ; elle peut être publiée par étapes ou dérivée localement, et ne signifie jamais implicitement « timer ».**
 >
-> **Tout système métier reste libre de posséder sa propre durée, progression, réplication et logique, puis de terminer la même execution générique.**
+> **TimedInteractionExecutor est un helper spécialisé qui synchronise son timing, produit Progress et termine automatiquement une execution générique.**
+>
+> **Tout système métier reste libre de posséder sa propre durée, progression, réplication, participants et logique, puis de présenter et terminer la même execution générique.**
 
-Si un nouveau cas d'usage respecte ces phrases sans demander au core de savoir s'il s'agit d'un timer, d'un hack, d'une animation ou d'un dialogue, la frontière est probablement au bon endroit.
+Si un nouveau cas d'usage respecte ces phrases sans demander au core de savoir s'il s'agit d'un timer, d'un hack, d'une animation, d'un dialogue ou d'un processus à étapes, la frontière est probablement au bon endroit.
