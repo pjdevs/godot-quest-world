@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://peffdrkl4o2n"]
 
-[ext_resource type="PackedScene" uid="uid://dy0n5drkrp4v0" path="res://quest_world/levels/facility_blockout.tscn" id="1_r2hu2"]
+[ext_resource type="PackedScene" uid="uid://biblv21jbgvwk" path="res://quest_world/interactibles/door/Door.tscn" id="1_r2hu2"]
 [ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/NetworkSession.cs" id="4_wtwud"]
 [ext_resource type="PackedScene" uid="uid://bh7me5hps2qp6" path="res://quest_world/character/Character.tscn" id="5_jnsjd"]
 [ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="6_4k80j"]
@@ -24,6 +24,78 @@ sdfgi_bounce_feedback = 0.55
 sdfgi_cascades = 3
 sdfgi_energy = 1.15
 
+[sub_resource type="StandardMaterial3D" id="Material_StaticGray"]
+resource_name = "BLOCKOUT_Static_Gray"
+albedo_color = Color(0.32, 0.35, 0.38, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Material_InteractiveGreen"]
+resource_name = "BLOCKOUT_Interactive_Green"
+albedo_color = Color(0.15, 0.72, 0.32, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="Material_HazardOrange"]
+resource_name = "BLOCKOUT_Hazard_Orange"
+albedo_color = Color(1, 0.4, 0.06, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="Material_TechnicalBlue"]
+resource_name = "BLOCKOUT_Technical_Blue"
+albedo_color = Color(0.08, 0.42, 0.9, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="Material_MovableRed"]
+resource_name = "BLOCKOUT_Movable_Red"
+albedo_color = Color(0.86, 0.16, 0.16, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="Material_Ceiling"]
+resource_name = "BLOCKOUT_Ceiling_DarkGray"
+albedo_color = Color(0.2, 0.22, 0.25, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="Material_LightNeutral"]
+resource_name = "BLOCKOUT_Light_Neutral"
+albedo_color = Color(0.78, 0.86, 1, 1)
+roughness = 0.35
+emission_enabled = true
+emission = Color(0.78, 0.86, 1, 1)
+emission_energy_multiplier = 3.5
+
+[sub_resource type="StandardMaterial3D" id="Material_LightWarm"]
+resource_name = "BLOCKOUT_Light_Warm"
+albedo_color = Color(1, 0.72, 0.42, 1)
+roughness = 0.35
+emission_enabled = true
+emission = Color(1, 0.55, 0.22, 1)
+emission_energy_multiplier = 3.0
+
+[sub_resource type="StandardMaterial3D" id="Material_TransitionYellow"]
+resource_name = "BLOCKOUT_Transition_Yellow"
+albedo_color = Color(0.96, 0.76, 0.08, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="Material_LightCool"]
+resource_name = "BLOCKOUT_Light_Cool"
+albedo_color = Color(0.45, 0.68, 1, 1)
+roughness = 0.35
+emission_enabled = true
+emission = Color(0.25, 0.5, 1, 1)
+emission_energy_multiplier = 3.5
+
+[sub_resource type="StandardMaterial3D" id="Material_ObjectivePurple"]
+resource_name = "BLOCKOUT_Objective_Purple"
+albedo_color = Color(0.62, 0.22, 0.86, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="Material_LightEmergency"]
+resource_name = "BLOCKOUT_Light_Emergency"
+albedo_color = Color(1, 0.16, 0.08, 1)
+roughness = 0.35
+emission_enabled = true
+emission = Color(1, 0.05, 0.02, 1)
+emission_energy_multiplier = 4.0
+
 [node name="test_world" type="Node3D" unique_id=1604557493]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=291661268]
@@ -31,7 +103,1639 @@ environment = SubResource("Environment_20rw3")
 
 [node name="Level" type="Node3D" parent="." unique_id=746620120]
 
-[node name="FacilityBlockout" parent="Level" unique_id=2045492005 instance=ExtResource("1_r2hu2")]
+[node name="FacilityBlockout" type="Node3D" parent="Level" unique_id=2045492005]
+
+[node name="Entrance" type="Node3D" parent="Level/FacilityBlockout" unique_id=1836146719]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 36)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=1032117436]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(12, 0.5, 14)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_West" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=910455618]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 14)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=1161420379]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 14)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South_West" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=1613470871]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 2, 7.25)
+use_collision = true
+size = Vector3(4, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South_East" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=367601692]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 2, 7.25)
+use_collision = true
+size = Vector3(4, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_North_West" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=558171451]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.75, 2, -7.25)
+use_collision = true
+size = Vector3(2.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_North_East" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=1337974782]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.75, 2, -7.25)
+use_collision = true
+size = Vector3(2.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="DeconDivider_West" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=1195500732]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 2, 1.5)
+use_collision = true
+size = Vector3(5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="DeconDivider_East" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=859058586]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 2, 1.5)
+use_collision = true
+size = Vector3(4, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="CheckInCounter" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=686826343]
+transform = Transform3D(0.99026805, 0, -0.1391731, 0, 1, 0, 0.1391731, 0, 0.99026805, -3.8, 0.8, 4.3)
+use_collision = true
+size = Vector3(3.6, 1.6, 1.2)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="DeconScanner_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=1017969788]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2030761, 1.4, 1.4425201)
+use_collision = true
+size = Vector3(0.84384763, 2.8, 1.1)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="DeconScanner_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=1100897094]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.2428708, 1.4, 1.3415031)
+use_collision = true
+size = Vector3(0.7642578, 2.8, 1.3830078)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="GeneratorPartition" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=309294177]
+transform = Transform3D(0.9702957, 0, -0.2419219, 0, 1, 0, 0.2419219, 0, 0.9702957, 3.1, 2, -2.4)
+use_collision = true
+size = Vector3(5.8, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="EmergencyGenerator" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=227095412]
+transform = Transform3D(0.9702957, 0, -0.2419219, 0, 1, 0, 0.2419219, 0, 0.9702957, 4.25, 1.25, -4.8)
+use_collision = true
+size = Vector3(3.1, 2.5, 2.6)
+material = SubResource("Material_HazardOrange")
+
+[node name="GeneratorStarter" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=1206607362]
+transform = Transform3D(0.9702957, 0, -0.2419219, 0, 1, 0, 0.2419219, 0, 0.9702957, 2.15, 1, -4.9)
+use_collision = true
+size = Vector3(0.8, 2, 1)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="AuxiliaryCellDock" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=1612038831]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.9, 0.7, -4.8)
+use_collision = true
+size = Vector3(2.2, 1.4, 1.6)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="ParkedFireDoor" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=596328434]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.35, 1.5, -6)
+use_collision = true
+size = Vector3(0.65, 3, 2)
+material = SubResource("Material_MovableRed")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance" unique_id=403680135 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(12.5, 0.5, 14.5)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Entrance" unique_id=32114733]
+
+[node name="Fixture_CheckIn" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance/Lighting" unique_id=1201469987 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 3.5)
+size = Vector3(2.6, 0.12, 0.4)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light_CheckIn" type="SpotLight3D" parent="Level/FacilityBlockout/Entrance/Lighting" unique_id=374438686]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 3.5)
+light_color = Color(0.78, 0.86, 1, 1)
+light_energy = 3.0
+shadow_enabled = true
+spot_range = 8.0
+spot_angle = 68.0
+spot_angle_attenuation = 0.65
+
+[node name="Fixture_Generator" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance/Lighting" unique_id=1314268554 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, -3.5)
+size = Vector3(2.6, 0.12, 0.4)
+material = SubResource("Material_LightWarm")
+
+[node name="Light_Generator" type="SpotLight3D" parent="Level/FacilityBlockout/Entrance/Lighting" unique_id=1562514957]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, -3.5)
+light_color = Color(1, 0.72, 0.42, 1)
+light_energy = 2.6
+shadow_enabled = true
+spot_range = 8.0
+spot_angle = 68.0
+spot_angle_attenuation = 0.65
+
+[node name="CentralHub" type="Node3D" parent="Level/FacilityBlockout" unique_id=1446087549]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=1693754187]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(24, 0.5, 20)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_North_West" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=436507987]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.5, 2, -10.25)
+use_collision = true
+size = Vector3(6, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_North_East" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=121158279]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.5, 2, -10.25)
+use_collision = true
+size = Vector3(6, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South_West" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=589376481]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.5, 2, 10.25)
+use_collision = true
+size = Vector3(6, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South_East" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=183117656]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.5, 2, 10.25)
+use_collision = true
+size = Vector3(6, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_West_North" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=684884043]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.25, 2, -5.5)
+use_collision = true
+size = Vector3(0.5, 5, 4)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_West_South" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=1514626642]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.25, 2, 5.5)
+use_collision = true
+size = Vector3(0.5, 5, 4)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East_North" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=883210490]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.25, 2, -5.5)
+use_collision = true
+size = Vector3(0.5, 5, 4)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East_South" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=1881317011]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.25, 2, 5.5)
+use_collision = true
+size = Vector3(0.5, 5, 4)
+material = SubResource("Material_StaticGray")
+
+[node name="Chamfer_NW" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=999803637]
+transform = Transform3D(0.70710677, 0, 0.70710677, 0, 1, 0, -0.70710677, 0, 0.70710677, -10.75, 2, -8.75)
+use_collision = true
+size = Vector3(3.9, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Chamfer_NE" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=2110250350]
+transform = Transform3D(0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, 0.70710677, 10.75, 2, -8.75)
+use_collision = true
+size = Vector3(3.9, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Chamfer_SW" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=1269043637]
+transform = Transform3D(0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, 0.70710677, -10.75, 2, 8.75)
+use_collision = true
+size = Vector3(3.9, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Chamfer_SE" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=1540939823]
+transform = Transform3D(0.70710677, 0, 0.70710677, 0, 1, 0, -0.70710677, 0, 0.70710677, 10.75, 2, 8.75)
+use_collision = true
+size = Vector3(3.9, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Column_NW" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=254130038]
+transform = Transform3D(0.9781476, 0, 0.2079117, 0, 1, 0, -0.2079117, 0, 0.9781476, -8.5, 2, -6.5)
+use_collision = true
+size = Vector3(1.1, 5, 1.1)
+material = SubResource("Material_StaticGray")
+
+[node name="Column_NE" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=93499200]
+transform = Transform3D(0.9781476, 0, -0.2079117, 0, 1, 0, 0.2079117, 0, 0.9781476, 8.5, 2, -6.5)
+use_collision = true
+size = Vector3(1.1, 5, 1.1)
+material = SubResource("Material_StaticGray")
+
+[node name="Column_SW" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=1741515651]
+transform = Transform3D(0.9781476, 0, -0.2079117, 0, 1, 0, 0.2079117, 0, 0.9781476, -8.5, 2, 6.5)
+use_collision = true
+size = Vector3(1.1, 5, 1.1)
+material = SubResource("Material_StaticGray")
+
+[node name="Column_SE" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=218571619]
+transform = Transform3D(0.9781476, 0, 0.2079117, 0, 1, 0, -0.2079117, 0, 0.9781476, 8.5, 2, 6.5)
+use_collision = true
+size = Vector3(1.1, 5, 1.1)
+material = SubResource("Material_StaticGray")
+
+[node name="PowerRoutingIsland" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=851563411]
+transform = Transform3D(0.99026805, 0, 0.1391731, 0, 1, 0, -0.1391731, 0, 0.99026805, 0, 0.9, 1.5)
+use_collision = true
+size = Vector3(5.2, 1.8, 2.4)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="MainBreakerPanel" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=474928668]
+transform = Transform3D(0.9848077, 0, 0.17364818, 0, 1, 0, -0.17364818, 0, 0.9848077, -5.8, 1.2, -5.8)
+use_collision = true
+size = Vector3(3.2, 2.4, 1.1)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="TransitConsole" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=338581483]
+transform = Transform3D(0.9848077, 0, -0.17364818, 0, 1, 0, 0.17364818, 0, 0.9848077, 5.5, 0.8, 5.8)
+use_collision = true
+size = Vector3(2.8, 1.6, 1.2)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="CableTrench_West" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=26008829]
+transform = Transform3D(0.99026805, 0, -0.1391731, 0, 1, 0, 0.1391731, 0, 0.99026805, -4.8, 0.03, 0)
+size = Vector3(5.5, 0.08, 0.8)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="CableTrench_East" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=2062140923]
+transform = Transform3D(0.99026805, 0, 0.1391731, 0, 1, 0, -0.1391731, 0, 0.99026805, 4.8, 0.03, 0)
+size = Vector3(5.5, 0.08, 0.8)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="TransitBlastDoor_Parked" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=710574222]
+transform = Transform3D(0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, 0.70710677, 9.4, 1.5, -7.4)
+use_collision = true
+size = Vector3(2.6, 3, 0.6)
+material = SubResource("Material_MovableRed")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=2065179216 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(24.5, 0.5, 20.5)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/CentralHub" unique_id=1535676715]
+
+[node name="Fixture_NW" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=407379410 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 4.4, -4)
+size = Vector3(2.8, 0.12, 0.4)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light_NW" type="SpotLight3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=818519862]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -5, 4.2, -4)
+light_color = Color(0.78, 0.86, 1, 1)
+light_energy = 3.2
+shadow_enabled = true
+spot_range = 9.5
+spot_angle = 70.0
+spot_angle_attenuation = 0.6
+
+[node name="Fixture_NE" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=824244015 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 4.4, -4)
+size = Vector3(2.8, 0.12, 0.4)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light_NE" type="SpotLight3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=761124704]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 5, 4.2, -4)
+light_color = Color(0.78, 0.86, 1, 1)
+light_energy = 3.2
+shadow_enabled = true
+spot_range = 9.5
+spot_angle = 70.0
+spot_angle_attenuation = 0.6
+
+[node name="Fixture_SW" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=2026444481 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 4.4, 4)
+size = Vector3(2.8, 0.12, 0.4)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light_SW" type="SpotLight3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=1448030430]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -5, 4.2, 4)
+light_color = Color(0.78, 0.86, 1, 1)
+light_energy = 3.2
+shadow_enabled = true
+spot_range = 9.5
+spot_angle = 70.0
+spot_angle_attenuation = 0.6
+
+[node name="Fixture_SE" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=178366574 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 4.4, 4)
+size = Vector3(2.8, 0.12, 0.4)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light_SE" type="SpotLight3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=935509561]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 5, 4.2, 4)
+light_color = Color(0.78, 0.86, 1, 1)
+light_energy = 3.2
+shadow_enabled = true
+spot_range = 9.5
+spot_angle = 70.0
+spot_angle_attenuation = 0.6
+
+[node name="SecurityWing" type="Node3D" parent="Level/FacilityBlockout" unique_id=2062788921]
+transform = Transform3D(0.9848077, 0, -0.17364818, 0, 1, 0, 0.17364818, 0, 0.9848077, -31, 0, 6)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=1819719628]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(16, 0.5, 14)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_West" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=867177355]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 14)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=2006985910]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 7.25)
+use_collision = true
+size = Vector3(16, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East_North" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=951985568]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.25, 2, -5.25)
+use_collision = true
+size = Vector3(0.5, 5, 3.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East_South" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=706325811]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.25, 2, 5.25)
+use_collision = true
+size = Vector3(0.5, 5, 3.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_North_West" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=379449923]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.75, 2, -7.25)
+use_collision = true
+size = Vector3(4.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_North_East" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=1607655576]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.75, 2, -7.25)
+use_collision = true
+size = Vector3(4.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="CheckpointDivider" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=403121801]
+transform = Transform3D(0.9781476, 0, 0.2079117, 0, 1, 0, -0.2079117, 0, 0.9781476, 1.1, 2, 2.1)
+use_collision = true
+size = Vector3(7.2, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="CheckpointGapMarker" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=1426086412]
+transform = Transform3D(0.9781476, 0, 0.2079117, 0, 1, 0, -0.2079117, 0, 0.9781476, -3.2, 1.5, 1.2)
+use_collision = true
+size = Vector3(0.7, 3, 1.4)
+material = SubResource("Material_TransitionYellow")
+
+[node name="MonitoringDesk" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=1279077198]
+transform = Transform3D(0.99026805, 0, -0.1391731, 0, 1, 0, 0.1391731, 0, 0.99026805, -3.6, 0.9, -3.8)
+use_collision = true
+size = Vector3(4.2, 1.8, 1.5)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="SecurityBreaker" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=1080891689]
+transform = Transform3D(0.99026805, 0, 0.1391731, 0, 1, 0, -0.1391731, 0, 0.99026805, 5.8, 1.2, -4.8)
+use_collision = true
+size = Vector3(2.2, 2.4, 1)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="CameraTelemetryRack" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=905776375]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.6, 1.5, -0.5)
+use_collision = true
+size = Vector3(1.6, 3, 3.5)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="LockerBank_A" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=1509087958]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.8, 1.1, 5.8)
+use_collision = true
+size = Vector3(3, 2.2, 1)
+material = SubResource("Material_StaticGray")
+
+[node name="LockerBank_B" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=974727078]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.8, 1.1, 5.8)
+use_collision = true
+size = Vector3(3, 2.2, 1)
+material = SubResource("Material_StaticGray")
+
+[node name="BlastDoor_Parked" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=8461494]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.7, 1.5, 3.9)
+use_collision = true
+size = Vector3(0.7, 3, 2.4)
+material = SubResource("Material_MovableRed")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=148900588 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(16.5, 0.5, 14.5)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=949237023]
+
+[node name="Fixture_Checkpoint" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing/Lighting" unique_id=1917972422 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 4.4, -3)
+size = Vector3(2.4, 0.12, 0.4)
+material = SubResource("Material_LightCool")
+
+[node name="Light_Checkpoint" type="SpotLight3D" parent="Level/FacilityBlockout/SecurityWing/Lighting" unique_id=1322769921]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -3, 4.2, -3)
+light_color = Color(0.48, 0.66, 1, 1)
+light_energy = 2.8
+shadow_enabled = true
+spot_range = 8.0
+spot_angle = 68.0
+spot_angle_attenuation = 0.65
+
+[node name="Fixture_Monitoring" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing/Lighting" unique_id=1480297495 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 4.4, 3)
+size = Vector3(2.4, 0.12, 0.4)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light_Monitoring" type="SpotLight3D" parent="Level/FacilityBlockout/SecurityWing/Lighting" unique_id=1592862214]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 3, 4.2, 3)
+light_color = Color(0.78, 0.86, 1, 1)
+light_energy = 2.8
+shadow_enabled = true
+spot_range = 8.0
+spot_angle = 68.0
+spot_angle_attenuation = 0.65
+
+[node name="ArchivesWing" type="Node3D" parent="Level/FacilityBlockout" unique_id=1713866926]
+transform = Transform3D(0.9945219, 0, 0.104528464, 0, 1, 0, -0.104528464, 0, 0.9945219, -29, 0, -16)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=1868247232]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(16, 0.5, 16)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_West" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=500877070]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 16)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_North" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=1600965150]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -8.25)
+use_collision = true
+size = Vector3(16, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South_West" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=369447018]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.75, 2, 8.25)
+use_collision = true
+size = Vector3(4.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South_East" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=1738943341]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.75, 2, 8.25)
+use_collision = true
+size = Vector3(4.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East_North" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=1345286217]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.192614, 2, -5.4357033)
+use_collision = true
+size = Vector3(0.5, 5, 4.036621)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East_North2" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=1260177595]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.183102, 2, -0.060525894)
+use_collision = true
+size = Vector3(0.5, 5, 4.182373)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East_South" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=1350562432]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.25, 2, 4)
+use_collision = true
+size = Vector3(0.5, 5, 8)
+material = SubResource("Material_StaticGray")
+
+[node name="Shelf_A" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=32276180]
+transform = Transform3D(0.9975641, 0, 0.06975647, 0, 1, 0, -0.06975647, 0, 0.9975641, -5.2, 1.35, -3.4)
+use_collision = true
+size = Vector3(1.2, 2.7, 6.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Shelf_B" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=1840504820]
+transform = Transform3D(0.9961947, 0, -0.08715574, 0, 1, 0, 0.08715574, 0, 0.9961947, -1.7, 1.35, -3.1)
+use_collision = true
+size = Vector3(1.2, 2.7, 6.2)
+material = SubResource("Material_StaticGray")
+
+[node name="Shelf_C" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=2077193661]
+transform = Transform3D(0.99254614, 0, 0.12186935, 0, 1, 0, -0.12186935, 0, 0.99254614, 1.9, 1.35, -3.3)
+use_collision = true
+size = Vector3(1.2, 2.7, 6.4)
+material = SubResource("Material_StaticGray")
+
+[node name="Shelf_D" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=1657680399]
+transform = Transform3D(0.9975641, 0, -0.06975647, 0, 1, 0, 0.06975647, 0, 0.9975641, 5.1, 1.35, -3.6)
+use_collision = true
+size = Vector3(1.2, 2.7, 5.8)
+material = SubResource("Material_StaticGray")
+
+[node name="ReadingTable" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=186408329]
+transform = Transform3D(0.98768836, 0, -0.15643448, 0, 1, 0, 0.15643448, 0, 0.98768836, -2.8, 0.75, 4.7)
+use_collision = true
+size = Vector3(4.2, 1.5, 1.8)
+material = SubResource("Material_StaticGray")
+
+[node name="ArchiveTerminal_A" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=149279733]
+transform = Transform3D(0.9945219, 0, -0.104528464, 0, 1, 0, 0.104528464, 0, 0.9945219, -5.4, 1, 6.6)
+use_collision = true
+size = Vector3(2, 2, 0.9)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="ArchiveTerminal_B" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=1754261068]
+transform = Transform3D(0.9848077, 0, 0.17364818, 0, 1, 0, -0.17364818, 0, 0.9848077, 4.8, 1, 5.4)
+use_collision = true
+size = Vector3(2, 2, 0.9)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="ContinuityRecords" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=52906412]
+transform = Transform3D(0.9961947, 0, -0.08715574, 0, 1, 0, 0.08715574, 0, 0.9961947, 5.8, 1.2, -6.6)
+use_collision = true
+size = Vector3(2.2, 2.4, 1.2)
+material = SubResource("Material_ObjectivePurple")
+
+[node name="ArchiveDataBus" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=264107639]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.8, 0.35, 1.5)
+use_collision = true
+size = Vector3(1.2, 0.7, 4)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="MobileArchiveCart" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=219329152]
+transform = Transform3D(0.95105654, 0, 0.309017, 0, 1, 0, -0.309017, 0, 0.95105654, 3.4, 0.65, 1.3)
+use_collision = true
+size = Vector3(1.4, 1.3, 2.2)
+material = SubResource("Material_MovableRed")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=254001453 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(16.5, 0.5, 16.5)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=1177489497]
+
+[node name="Fixture_Stacks" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing/Lighting" unique_id=222754906 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 4.4, -3)
+size = Vector3(2.4, 0.12, 0.4)
+material = SubResource("Material_LightWarm")
+
+[node name="Light_Stacks" type="SpotLight3D" parent="Level/FacilityBlockout/ArchivesWing/Lighting" unique_id=1525452475]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -4, 4.2, -3)
+light_color = Color(1, 0.72, 0.42, 1)
+light_energy = 2.5
+shadow_enabled = true
+spot_range = 8.0
+spot_angle = 66.0
+spot_angle_attenuation = 0.7
+
+[node name="Fixture_Reading" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing/Lighting" unique_id=1971392834 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 4.4, 3)
+size = Vector3(2.4, 0.12, 0.4)
+material = SubResource("Material_LightWarm")
+
+[node name="Light_Reading" type="SpotLight3D" parent="Level/FacilityBlockout/ArchivesWing/Lighting" unique_id=674271337]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 4, 4.2, 3)
+light_color = Color(1, 0.72, 0.42, 1)
+light_energy = 2.5
+shadow_enabled = true
+spot_range = 8.0
+spot_angle = 66.0
+spot_angle_attenuation = 0.7
+
+[node name="Door" parent="Level/FacilityBlockout/ArchivesWing" unique_id=54710487 instance=ExtResource("1_r2hu2")]
+transform = Transform3D(-2.2351742e-08, 0, -1.0000001, 0, 1, 0, 1.0000001, 0, -2.2351742e-08, 8.178549, 0.1000005, -2.7785206)
+
+[node name="WaterSystems" type="Node3D" parent="Level/FacilityBlockout" unique_id=974051641]
+transform = Transform3D(0.9781476, 0, 0.2079117, 0, 1, 0, -0.2079117, 0, 0.9781476, 32, 0, 7)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=1879921622]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(16, 0.5, 14)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=862476143]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 14)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=1368126629]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 7.25)
+use_collision = true
+size = Vector3(16, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_West_North" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=648236976]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.25, 2, -5.25)
+use_collision = true
+size = Vector3(0.5, 5, 3.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_West_South" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=814829700]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.25, 2, 5.25)
+use_collision = true
+size = Vector3(0.5, 5, 3.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_North_West" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=2113803957]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.75, 2, -7.25)
+use_collision = true
+size = Vector3(4.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_North_East" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=827406179]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.75, 2, -7.25)
+use_collision = true
+size = Vector3(4.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="FiltrationDivider" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=723917789]
+transform = Transform3D(0.9848077, 0, -0.17364818, 0, 1, 0, 0.17364818, 0, 0.9848077, -0.5, 2, 2.1)
+use_collision = true
+size = Vector3(7, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="WaterTank_A" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=314445477]
+transform = Transform3D(0.9961947, 0, 0.08715574, 0, 1, 0, -0.08715574, 0, 0.9961947, -4.8, 1.5, -3.8)
+use_collision = true
+size = Vector3(3.1, 3, 3.1)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="WaterTank_B" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=1573405484]
+transform = Transform3D(0.9945219, 0, -0.104528464, 0, 1, 0, 0.104528464, 0, 0.9945219, 0, 1.5, -4.2)
+use_collision = true
+size = Vector3(3.1, 3, 3.1)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="WaterTank_C" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=1978350367]
+transform = Transform3D(0.99026805, 0, 0.1391731, 0, 1, 0, -0.1391731, 0, 0.99026805, 4.8, 1.5, -3.7)
+use_collision = true
+size = Vector3(3.1, 3, 3.1)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="PipeManifold" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=824225931]
+transform = Transform3D(0.9781476, 0, 0.2079117, 0, 1, 0, -0.2079117, 0, 0.9781476, 5.9, 0.9, 3.5)
+use_collision = true
+size = Vector3(1.4, 1.8, 4.2)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="Pump_A" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=1461619584]
+transform = Transform3D(0.9781476, 0, -0.2079117, 0, 1, 0, 0.2079117, 0, 0.9781476, -4.3, 0.75, 4.7)
+use_collision = true
+size = Vector3(2.3, 1.5, 1.8)
+material = SubResource("Material_MovableRed")
+
+[node name="Pump_B" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=1198356321]
+transform = Transform3D(0.99026805, 0, 0.1391731, 0, 1, 0, -0.1391731, 0, 0.99026805, -0.8, 0.75, 5)
+use_collision = true
+size = Vector3(2.3, 1.5, 1.8)
+material = SubResource("Material_MovableRed")
+
+[node name="WaterControl" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=1656552270]
+transform = Transform3D(0.9848077, 0, 0.17364818, 0, 1, 0, -0.17364818, 0, 0.9848077, 3, 1, 5.6)
+use_collision = true
+size = Vector3(2, 2, 1)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="OverflowHazard" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=961973304]
+transform = Transform3D(0.99026805, 0, -0.1391731, 0, 1, 0, 0.1391731, 0, 0.99026805, -4, 0.03, 1)
+size = Vector3(4.5, 0.08, 2.4)
+material = SubResource("Material_HazardOrange")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=188499735 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(16.5, 0.5, 14.5)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=1907265946]
+
+[node name="Fixture_Filtration" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems/Lighting" unique_id=630047524 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 4.4, -3)
+size = Vector3(2.4, 0.12, 0.4)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light_Filtration" type="SpotLight3D" parent="Level/FacilityBlockout/WaterSystems/Lighting" unique_id=1970716697]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -3, 4.2, -3)
+light_color = Color(0.7, 0.86, 1, 1)
+light_energy = 2.9
+shadow_enabled = true
+spot_range = 8.0
+spot_angle = 68.0
+spot_angle_attenuation = 0.65
+
+[node name="Fixture_Pumps" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems/Lighting" unique_id=75577063 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 4.4, 3)
+size = Vector3(2.4, 0.12, 0.4)
+material = SubResource("Material_LightCool")
+
+[node name="Light_Pumps" type="SpotLight3D" parent="Level/FacilityBlockout/WaterSystems/Lighting" unique_id=1650782299]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 3, 4.2, 3)
+light_color = Color(0.45, 0.68, 1, 1)
+light_energy = 2.7
+shadow_enabled = true
+spot_range = 8.0
+spot_angle = 68.0
+spot_angle_attenuation = 0.65
+
+[node name="Cooling" type="Node3D" parent="Level/FacilityBlockout" unique_id=2001256582]
+transform = Transform3D(0.9945219, 0, -0.104528464, 0, 1, 0, 0.104528464, 0, 0.9945219, 30, 0, -16)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=1155062357]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(16, 0.5, 16)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=2124465966]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 16)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_North" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=416318118]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -8.25)
+use_collision = true
+size = Vector3(16, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South_West" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=415296330]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.75, 2, 8.25)
+use_collision = true
+size = Vector3(4.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South_East" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=657663340]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.75, 2, 8.25)
+use_collision = true
+size = Vector3(4.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_West_North" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=1569514587]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.25, 2, -7)
+use_collision = true
+size = Vector3(0.5, 5, 2)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_West_South" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=1224201833]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.25, 2, 4)
+use_collision = true
+size = Vector3(0.5, 5, 8)
+material = SubResource("Material_StaticGray")
+
+[node name="Chiller_A" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=1725287224]
+transform = Transform3D(0.9961947, 0, 0.08715574, 0, 1, 0, -0.08715574, 0, 0.9961947, -4.8, 1.6, -3.8)
+use_collision = true
+size = Vector3(2.8, 3.2, 4.2)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="Chiller_B" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=2023754461]
+transform = Transform3D(0.9945219, 0, -0.104528464, 0, 1, 0, 0.104528464, 0, 0.9945219, 0, 1.6, -4.1)
+use_collision = true
+size = Vector3(2.8, 3.2, 4.2)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="Chiller_C" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=1398024907]
+transform = Transform3D(0.99254614, 0, 0.12186935, 0, 1, 0, -0.12186935, 0, 0.99254614, 4.8, 1.6, -3.7)
+use_collision = true
+size = Vector3(2.8, 3.2, 4.2)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="HeatExchanger" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=961741082]
+transform = Transform3D(0.99026805, 0, -0.1391731, 0, 1, 0, 0.1391731, 0, 0.99026805, 5.8, 1.15, 3.6)
+use_collision = true
+size = Vector3(2.2, 2.3, 4)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="EmergencyBypass" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=480710513]
+transform = Transform3D(0.99254614, 0, -0.12186935, 0, 1, 0, 0.12186935, 0, 0.99254614, -5.8, 1.1, 5.4)
+use_collision = true
+size = Vector3(2.2, 2.2, 1.1)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="ServiceFan" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=567170277]
+transform = Transform3D(0.9781476, 0, 0.2079117, 0, 1, 0, -0.2079117, 0, 0.9781476, 1.4, 1.2, 5.7)
+use_collision = true
+size = Vector3(3.2, 2.4, 1.5)
+material = SubResource("Material_MovableRed")
+
+[node name="HotZone_A" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=1568440323]
+transform = Transform3D(0.99026805, 0, -0.1391731, 0, 1, 0, 0.1391731, 0, 0.99026805, -3.7, 0.03, 1.2)
+size = Vector3(3, 0.08, 2)
+material = SubResource("Material_HazardOrange")
+
+[node name="HotZone_B" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=414317578]
+transform = Transform3D(0.99026805, 0, 0.1391731, 0, 1, 0, -0.1391731, 0, 0.99026805, 2.3, 0.03, 1.1)
+size = Vector3(3, 0.08, 2)
+material = SubResource("Material_HazardOrange")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling" unique_id=1579765743 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(16.5, 0.5, 16.5)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Cooling" unique_id=819125733]
+
+[node name="Fixture_Chillers" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling/Lighting" unique_id=264007952 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 4.4, -4)
+size = Vector3(2.4, 0.12, 0.4)
+material = SubResource("Material_LightCool")
+
+[node name="Light_Chillers" type="SpotLight3D" parent="Level/FacilityBlockout/Cooling/Lighting" unique_id=481551367]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -3, 4.2, -4)
+light_color = Color(0.4, 0.62, 1, 1)
+light_energy = 3.0
+shadow_enabled = true
+spot_range = 8.5
+spot_angle = 68.0
+spot_angle_attenuation = 0.65
+
+[node name="Fixture_Bypass" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling/Lighting" unique_id=1025130371 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 4.4, 4)
+size = Vector3(2.4, 0.12, 0.4)
+material = SubResource("Material_LightEmergency")
+
+[node name="Light_Bypass" type="SpotLight3D" parent="Level/FacilityBlockout/Cooling/Lighting" unique_id=984574719]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 3, 4.2, 4)
+light_color = Color(1, 0.16, 0.08, 1)
+light_energy = 1.8
+shadow_enabled = true
+spot_range = 7.0
+spot_angle = 62.0
+spot_angle_attenuation = 0.75
+
+[node name="PrototypeLab" type="Node3D" parent="Level/FacilityBlockout" unique_id=334944335]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -29)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1488480169]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(24, 0.5, 18)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_North" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1551743969]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -9.25)
+use_collision = true
+size = Vector3(24, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South_West" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=189003126]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.75, 2, 9.25)
+use_collision = true
+size = Vector3(8.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_South_East" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1098967935]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.75, 2, 9.25)
+use_collision = true
+size = Vector3(8.5, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_West_North" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1299924426]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.25, 2, -4)
+use_collision = true
+size = Vector3(0.5, 5, 10)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_West_South" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1996504982]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.25, 2, 8)
+use_collision = true
+size = Vector3(0.5, 5, 2)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East_North" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1705768840]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.25, 2, -4)
+use_collision = true
+size = Vector3(0.5, 5, 10)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_East_South" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1836125065]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.25, 2, 8)
+use_collision = true
+size = Vector3(0.5, 5, 2)
+material = SubResource("Material_StaticGray")
+
+[node name="ObservationDivider_West" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1088886290]
+transform = Transform3D(0.9986295, 0, 0.05233596, 0, 1, 0, -0.05233596, 0, 0.9986295, -7, 2, 4.5)
+use_collision = true
+size = Vector3(10, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="ObservationDivider_East" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=781360461]
+transform = Transform3D(0.9986295, 0, -0.05233596, 0, 1, 0, 0.05233596, 0, 0.9986295, 7, 2, 4.5)
+use_collision = true
+size = Vector3(10, 5, 0.5)
+material = SubResource("Material_StaticGray")
+
+[node name="ObservationConsole_West" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1609862759]
+transform = Transform3D(0.9945219, 0, 0.104528464, 0, 1, 0, -0.104528464, 0, 0.9945219, -6.8, 0.9, 6.8)
+use_collision = true
+size = Vector3(3.5, 1.8, 1.2)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="ObservationConsole_East" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1083653504]
+transform = Transform3D(0.9945219, 0, -0.104528464, 0, 1, 0, 0.104528464, 0, 0.9945219, 6.8, 0.9, 6.8)
+use_collision = true
+size = Vector3(3.5, 1.8, 1.2)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="ContainmentRail_North" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=351719770]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, -7)
+use_collision = true
+size = Vector3(10, 0.7, 0.5)
+material = SubResource("Material_HazardOrange")
+
+[node name="ContainmentRail_South" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=775767571]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 1)
+use_collision = true
+size = Vector3(10, 0.7, 0.5)
+material = SubResource("Material_HazardOrange")
+
+[node name="ContainmentRail_West" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=639333855]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0.35, -3)
+use_collision = true
+size = Vector3(0.5, 0.7, 8)
+material = SubResource("Material_HazardOrange")
+
+[node name="ContainmentRail_East" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1279209426]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0.35, -3)
+use_collision = true
+size = Vector3(0.5, 0.7, 8)
+material = SubResource("Material_HazardOrange")
+
+[node name="ActiveProcessRack_A" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1594623803]
+transform = Transform3D(0.9961947, 0, 0.08715574, 0, 1, 0, -0.08715574, 0, 0.9961947, -3.2, 1.5, -5.2)
+use_collision = true
+size = Vector3(2, 3, 2)
+material = SubResource("Material_ObjectivePurple")
+
+[node name="ActiveProcessRack_B" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=199691164]
+transform = Transform3D(0.9961947, 0, -0.08715574, 0, 1, 0, 0.08715574, 0, 0.9961947, 3.2, 1.5, -5.2)
+use_collision = true
+size = Vector3(2, 3, 2)
+material = SubResource("Material_ObjectivePurple")
+
+[node name="StableStateRack" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=2096177911]
+transform = Transform3D(0.99254614, 0, -0.12186935, 0, 1, 0, 0.12186935, 0, 0.99254614, -3.2, 1.5, -0.8)
+use_collision = true
+size = Vector3(2, 3, 2)
+material = SubResource("Material_ObjectivePurple")
+
+[node name="RecoveryInstanceRack" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=967707660]
+transform = Transform3D(0.99254614, 0, 0.12186935, 0, 1, 0, -0.12186935, 0, 0.99254614, 3.2, 1.5, -0.8)
+use_collision = true
+size = Vector3(2, 3, 2)
+material = SubResource("Material_ObjectivePurple")
+
+[node name="SubstrateBus_West" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=502003769]
+transform = Transform3D(0.9961947, 0, 0.08715574, 0, 1, 0, -0.08715574, 0, 0.9961947, -8.5, 1.25, -3.2)
+use_collision = true
+size = Vector3(2.8, 2.5, 5.5)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="SubstrateBus_East" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1680257074]
+transform = Transform3D(0.9961947, 0, -0.08715574, 0, 1, 0, 0.08715574, 0, 0.9961947, 8.5, 1.25, -3.2)
+use_collision = true
+size = Vector3(2.8, 2.5, 5.5)
+material = SubResource("Material_TechnicalBlue")
+
+[node name="MovableRecoveryCradle" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=181365620]
+transform = Transform3D(0.9781476, 0, -0.2079117, 0, 1, 0, 0.2079117, 0, 0.9781476, 8.5, 0.9, 2.2)
+use_collision = true
+size = Vector3(2.5, 1.8, 2.8)
+material = SubResource("Material_MovableRed")
+
+[node name="CoolantEmergencyPanel" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=728031757]
+transform = Transform3D(0.99026805, 0, 0.1391731, 0, 1, 0, -0.1391731, 0, 0.99026805, -9.5, 1.1, 2.8)
+use_collision = true
+size = Vector3(2.2, 2.2, 1)
+material = SubResource("Material_InteractiveGreen")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1661559121 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(24.5, 0.5, 18.5)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1967461418]
+
+[node name="Fixture_NW" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=891487382 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 4.4, -4)
+size = Vector3(2.8, 0.12, 0.4)
+material = SubResource("Material_LightCool")
+
+[node name="Light_NW" type="SpotLight3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=851653263]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -6, 4.2, -4)
+light_color = Color(0.45, 0.62, 1, 1)
+light_energy = 3.1
+shadow_enabled = true
+spot_range = 9.0
+spot_angle = 68.0
+spot_angle_attenuation = 0.65
+
+[node name="Fixture_NE" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=1222454520 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 4.4, -4)
+size = Vector3(2.8, 0.12, 0.4)
+material = SubResource("Material_LightCool")
+
+[node name="Light_NE" type="SpotLight3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=1776335650]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 6, 4.2, -4)
+light_color = Color(0.45, 0.62, 1, 1)
+light_energy = 3.1
+shadow_enabled = true
+spot_range = 9.0
+spot_angle = 68.0
+spot_angle_attenuation = 0.65
+
+[node name="Fixture_SW" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=839797895 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 4.4, 4)
+size = Vector3(2.8, 0.12, 0.4)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light_SW" type="SpotLight3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=1905098585]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -6, 4.2, 4)
+light_color = Color(0.72, 0.82, 1, 1)
+light_energy = 2.8
+shadow_enabled = true
+spot_range = 9.0
+spot_angle = 68.0
+spot_angle_attenuation = 0.65
+
+[node name="Fixture_SE" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=668666429 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 4.4, 4)
+size = Vector3(2.8, 0.12, 0.4)
+material = SubResource("Material_LightEmergency")
+
+[node name="Light_SE" type="SpotLight3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=686166905]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 6, 4.2, 4)
+light_color = Color(0.86, 0.2, 0.3, 1)
+light_energy = 1.6
+shadow_enabled = true
+spot_range = 7.0
+spot_angle = 62.0
+spot_angle_attenuation = 0.75
+
+[node name="Connectors" type="Node3D" parent="Level/FacilityBlockout" unique_id=1682291149]
+
+[node name="EntranceToHub" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=149623773]
+transform = Transform3D(0.9659258, 0, 0.25881904, 0, 1, 0, -0.25881904, 0, 0.9659258, 2, 0, 21.5)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub" unique_id=492800724]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(6, 0.5, 16.3)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub" unique_id=189377843]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 16.3)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub" unique_id=1124217851]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 16.3)
+material = SubResource("Material_StaticGray")
+
+[node name="Bulkhead_A_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub" unique_id=118533600]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.15, 1.6, -7.5)
+use_collision = true
+size = Vector3(0.7, 3.2, 1.2)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Bulkhead_A_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub" unique_id=1365751234]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.15, 1.6, -7.5)
+use_collision = true
+size = Vector3(0.7, 3.2, 1.2)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Bulkhead_B_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub" unique_id=705504809]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.15, 1.6, 7.5)
+use_collision = true
+size = Vector3(0.7, 3.2, 1.2)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Bulkhead_B_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub" unique_id=1407408931]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.15, 1.6, 7.5)
+use_collision = true
+size = Vector3(0.7, 3.2, 1.2)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub" unique_id=634958701 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(7, 0.5, 16.7)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub" unique_id=902558194]
+
+[node name="Fixture_A" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub/Lighting" unique_id=2051904617 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, -4.5)
+size = Vector3(1.8, 0.12, 0.35)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light_A" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub/Lighting" unique_id=935639235]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, -4.5)
+light_color = Color(0.78, 0.86, 1, 1)
+light_energy = 2.4
+shadow_enabled = true
+spot_range = 7.0
+spot_angle = 64.0
+
+[node name="Fixture_B" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub/Lighting" unique_id=338222855 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 4.5)
+size = Vector3(1.8, 0.12, 0.35)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light_B" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub/Lighting" unique_id=267803274]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 4.5)
+light_color = Color(0.78, 0.86, 1, 1)
+light_energy = 2.4
+shadow_enabled = true
+spot_range = 7.0
+spot_angle = 64.0
+
+[node name="HubToSecurity" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=2080231173]
+transform = Transform3D(0.29237178, 0, -0.9563047, 0, 1, 0, 0.9563047, 0, 0.29237178, -17.6, 0, 5.7)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToSecurity" unique_id=898959168]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(6, 0.5, 12.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToSecurity" unique_id=948211709]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 12.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToSecurity" unique_id=3799430]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 12.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Bulkhead_A_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToSecurity" unique_id=159133452]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.15, 1.6, -5.6)
+use_collision = true
+size = Vector3(0.7, 3.2, 1.2)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Bulkhead_A_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToSecurity" unique_id=986116406]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.15, 1.6, -5.6)
+use_collision = true
+size = Vector3(0.7, 3.2, 1.2)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToSecurity" unique_id=67583611 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(7, 0.5, 12.9)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/HubToSecurity" unique_id=1421572047]
+
+[node name="Fixture" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToSecurity/Lighting" unique_id=2066570688 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
+size = Vector3(1.8, 0.12, 0.35)
+material = SubResource("Material_LightCool")
+
+[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/HubToSecurity/Lighting" unique_id=1474289661]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
+light_color = Color(0.6, 0.74, 1, 1)
+light_energy = 2.4
+shadow_enabled = true
+spot_range = 7.5
+spot_angle = 64.0
+
+[node name="HubToWater" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=477457500]
+transform = Transform3D(0.35836798, 0, 0.9335804, 0, 1, 0, -0.9335804, 0, 0.35836798, 18.1, 0, 6.3)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToWater" unique_id=770469173]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(6, 0.5, 13.9)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToWater" unique_id=447597942]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 13.9)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToWater" unique_id=222018632]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 13.9)
+material = SubResource("Material_StaticGray")
+
+[node name="Bulkhead_A_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToWater" unique_id=1915451219]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.15, 1.6, -6.3)
+use_collision = true
+size = Vector3(0.7, 3.2, 1.2)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Bulkhead_A_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToWater" unique_id=1547692655]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.15, 1.6, -6.3)
+use_collision = true
+size = Vector3(0.7, 3.2, 1.2)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToWater" unique_id=1586987397 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(7, 0.5, 14.3)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/HubToWater" unique_id=1059801951]
+
+[node name="Fixture" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToWater/Lighting" unique_id=883040820 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
+size = Vector3(1.8, 0.12, 0.35)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/HubToWater/Lighting" unique_id=823414130]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
+light_color = Color(0.72, 0.84, 1, 1)
+light_energy = 2.4
+shadow_enabled = true
+spot_range = 8.0
+spot_angle = 64.0
+
+[node name="SecurityToArchives" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=1633468613]
+transform = Transform3D(0.97437006, 0, -0.22495104, 0, 1, 0, 0.22495104, 0, 0.97437006, -29, 0, -4.5)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/SecurityToArchives" unique_id=574613118]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(6, 0.5, 8.2)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/SecurityToArchives" unique_id=2122989003]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 8.2)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/SecurityToArchives" unique_id=1551025087]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 8.2)
+material = SubResource("Material_StaticGray")
+
+[node name="ArchiveBulkhead" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/SecurityToArchives" unique_id=864075477]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.45, -3.5)
+use_collision = true
+size = Vector3(6.8, 0.6, 1)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/SecurityToArchives" unique_id=1811672869 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(7, 0.5, 8.6)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/SecurityToArchives" unique_id=1236286598]
+
+[node name="Fixture" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/SecurityToArchives/Lighting" unique_id=1556164529 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
+size = Vector3(1.8, 0.12, 0.35)
+material = SubResource("Material_LightWarm")
+
+[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/SecurityToArchives/Lighting" unique_id=739645269]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
+light_color = Color(1, 0.72, 0.42, 1)
+light_energy = 2.1
+shadow_enabled = true
+spot_range = 6.5
+spot_angle = 64.0
+
+[node name="WaterToCooling" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=1267142652]
+transform = Transform3D(0.985996, 0, 0.16676874, 0, 1, 0, -0.16676874, 0, 0.985996, 29.85, 0, -3.95)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/WaterToCooling" unique_id=1975175298]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(6, 0.5, 9.2)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/WaterToCooling" unique_id=2144154049]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 9.2)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/WaterToCooling" unique_id=49807772]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 9.2)
+material = SubResource("Material_StaticGray")
+
+[node name="CoolingBulkhead" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/WaterToCooling" unique_id=234012594]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.45, -4)
+use_collision = true
+size = Vector3(6.8, 0.6, 1)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/WaterToCooling" unique_id=767835903 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(7, 0.5, 9.6)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/WaterToCooling" unique_id=61297898]
+
+[node name="Fixture" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/WaterToCooling/Lighting" unique_id=1685134748 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
+size = Vector3(1.8, 0.12, 0.35)
+material = SubResource("Material_LightCool")
+
+[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/WaterToCooling/Lighting" unique_id=1453893644]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
+light_color = Color(0.45, 0.68, 1, 1)
+light_energy = 2.3
+shadow_enabled = true
+spot_range = 6.5
+spot_angle = 64.0
+
+[node name="HubToPrototype" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=66400227]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -13)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype" unique_id=277595237]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(6, 0.5, 14.8)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype" unique_id=505820394]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 14.8)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype" unique_id=1262173260]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 14.8)
+material = SubResource("Material_StaticGray")
+
+[node name="BlastDoor_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype" unique_id=420589715]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.15, 1.6, 6.6)
+use_collision = true
+size = Vector3(0.7, 3.2, 1.2)
+material = SubResource("Material_TransitionYellow")
+
+[node name="BlastDoor_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype" unique_id=818598289]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.15, 1.6, 6.6)
+use_collision = true
+size = Vector3(0.7, 3.2, 1.2)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype" unique_id=1651864309 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(7, 0.5, 15.2)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype" unique_id=106780148]
+
+[node name="Fixture_A" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype/Lighting" unique_id=468404953 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, -3.5)
+size = Vector3(1.8, 0.12, 0.35)
+material = SubResource("Material_LightCool")
+
+[node name="Light_A" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype/Lighting" unique_id=1285947372]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, -3.5)
+light_color = Color(0.48, 0.65, 1, 1)
+light_energy = 2.4
+shadow_enabled = true
+spot_range = 7.0
+spot_angle = 64.0
+
+[node name="Fixture_B" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype/Lighting" unique_id=1212854821 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 3.5)
+size = Vector3(1.8, 0.12, 0.35)
+material = SubResource("Material_LightNeutral")
+
+[node name="Light_B" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype/Lighting" unique_id=422410541]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 3.5)
+light_color = Color(0.72, 0.82, 1, 1)
+light_energy = 2.4
+shadow_enabled = true
+spot_range = 7.0
+spot_angle = 64.0
+
+[node name="ArchivesToLab" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=659620042]
+transform = Transform3D(0.48480958, 0, -0.8746197, 0, 1, 0, 0.8746197, 0, 0.48480958, -16.7, 0, -22.4)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/ArchivesToLab" unique_id=487489170]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(6, 0.5, 11.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/ArchivesToLab" unique_id=1155710569]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 11.5)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/ArchivesToLab" unique_id=1154431378]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 11.5)
+material = SubResource("Material_StaticGray")
+
+[node name="MaintenanceHatch" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/ArchivesToLab" unique_id=1560282977]
+transform = Transform3D(0.9945219, -0.104528464, 0, 0.104528464, 0.9945219, 0, 0, 0, 1, 0, 3.45, 0)
+use_collision = true
+size = Vector3(6.8, 0.6, 1)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/ArchivesToLab" unique_id=2118781213 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(7, 0.5, 11.9)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/ArchivesToLab" unique_id=187344980]
+
+[node name="Fixture" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/ArchivesToLab/Lighting" unique_id=876510304 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
+size = Vector3(1.8, 0.12, 0.35)
+material = SubResource("Material_LightWarm")
+
+[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/ArchivesToLab/Lighting" unique_id=305165511]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
+light_color = Color(0.95, 0.66, 0.42, 1)
+light_energy = 2.2
+shadow_enabled = true
+spot_range = 7.0
+spot_angle = 64.0
+
+[node name="CoolingToLab" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=1953534450]
+transform = Transform3D(0.44619778, 0, 0.89493436, 0, 1, 0, -0.89493436, 0, 0.44619778, 17.2, 0, -22.4)
+
+[node name="Floor" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/CoolingToLab" unique_id=1508137757]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+use_collision = true
+size = Vector3(6, 0.5, 12.4)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Left" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/CoolingToLab" unique_id=1807674609]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 12.4)
+material = SubResource("Material_StaticGray")
+
+[node name="Wall_Right" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/CoolingToLab" unique_id=1204212870]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.25, 2, 0)
+use_collision = true
+size = Vector3(0.5, 5, 12.4)
+material = SubResource("Material_StaticGray")
+
+[node name="MaintenanceHatch" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/CoolingToLab" unique_id=1586146571]
+transform = Transform3D(0.9945219, 0.104528464, 0, -0.104528464, 0.9945219, 0, 0, 0, 1, 0, 3.45, 0)
+use_collision = true
+size = Vector3(6.8, 0.6, 1)
+material = SubResource("Material_TransitionYellow")
+
+[node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/CoolingToLab" unique_id=1666973441 groups=["blockout_roof"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+use_collision = true
+size = Vector3(7, 0.5, 12.8)
+material = SubResource("Material_Ceiling")
+
+[node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/CoolingToLab" unique_id=363784411]
+
+[node name="Fixture" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/CoolingToLab/Lighting" unique_id=1339102949 groups=["blockout_light_fixture"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
+size = Vector3(1.8, 0.12, 0.35)
+material = SubResource("Material_LightCool")
+
+[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/CoolingToLab/Lighting" unique_id=849769513]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
+light_color = Color(0.42, 0.62, 1, 1)
+light_energy = 2.4
+shadow_enabled = true
+spot_range = 7.5
+spot_angle = 64.0
+
+[node name="Annotations" type="Node3D" parent="Level/FacilityBlockout" unique_id=1659826280]
+
+[node name="EntranceLabel" type="Label3D" parent="Level/FacilityBlockout/Annotations" unique_id=570985045]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 5.8, 36)
+pixel_size = 0.018
+billboard = 1
+no_depth_test = true
+modulate = Color(0.9, 0.95, 1, 1)
+text = "ENTRANCE / PROCEDURE
+Check-in • Decon • Emergency generator"
+font_size = 64
+outline_size = 14
+
+[node name="HubLabel" type="Label3D" parent="Level/FacilityBlockout/Annotations" unique_id=777556432]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 4)
+pixel_size = 0.018
+billboard = 1
+no_depth_test = true
+modulate = Color(0.9, 0.95, 1, 1)
+text = "CENTRAL HUB
+Power triage • Transit routing"
+font_size = 64
+outline_size = 14
+
+[node name="SecurityLabel" type="Label3D" parent="Level/FacilityBlockout/Annotations" unique_id=1300826786]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -31, 5.8, 6)
+pixel_size = 0.018
+billboard = 1
+no_depth_test = true
+modulate = Color(0.9, 0.95, 1, 1)
+text = "SECURITY
+Cameras • Failsafes • Blast doors"
+font_size = 64
+outline_size = 14
+
+[node name="ArchivesLabel" type="Label3D" parent="Level/FacilityBlockout/Annotations" unique_id=362369291]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -29, 5.8, -16)
+pixel_size = 0.018
+billboard = 1
+no_depth_test = true
+modulate = Color(0.9, 0.95, 1, 1)
+text = "ARCHIVES
+Optional context • Continuity records"
+font_size = 64
+outline_size = 14
+
+[node name="WaterLabel" type="Label3D" parent="Level/FacilityBlockout/Annotations" unique_id=1698423214]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32, 5.8, 7)
+pixel_size = 0.018
+billboard = 1
+no_depth_test = true
+modulate = Color(0.9, 0.95, 1, 1)
+text = "WATER SYSTEMS
+Filtration • Pumps • Environmental bus"
+font_size = 64
+outline_size = 14
+
+[node name="CoolingLabel" type="Label3D" parent="Level/FacilityBlockout/Annotations" unique_id=1256185260]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 5.8, -16)
+pixel_size = 0.018
+billboard = 1
+no_depth_test = true
+modulate = Color(0.9, 0.95, 1, 1)
+text = "COOLING
+Chillers • Emergency bypass"
+font_size = 64
+outline_size = 14
+
+[node name="PrototypeLabel" type="Label3D" parent="Level/FacilityBlockout/Annotations" unique_id=557336629]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, -29)
+pixel_size = 0.018
+billboard = 1
+no_depth_test = true
+modulate = Color(0.92, 0.8, 1, 1)
+text = "PROTOTYPE LAB
+Distributed cognitive process • Recovery states"
+font_size = 64
+outline_size = 14
+
+[node name="ColorLegend" type="Label3D" parent="Level/FacilityBlockout/Annotations" unique_id=1770236210]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 6.8, 43)
+pixel_size = 0.014
+billboard = 1
+no_depth_test = true
+text = "BLOCKOUT LEGEND
+GRAY static  •  GREEN interactive  •  RED movable
+ORANGE hazard  •  BLUE technical  •  PURPLE objective  •  YELLOW transition"
+font_size = 48
 
 [node name="Players" type="Node3D" parent="." unique_id=7684642]
 

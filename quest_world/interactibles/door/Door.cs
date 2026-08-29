@@ -3,6 +3,14 @@ using QuestWorld.State;
 
 public partial class Door : Node3D
 {
+    [ExportGroup("Door")]
+    [Export]
+    public bool IsLocked { get; set; } = false;
+
+    [Export]
+    public StringName? RequiredKeyItem { get; set; } = null;
+
+    [ExportGroup("References")]
     [Export]
     public StatefulComponent? StatefulComponent { get; set; }
 
@@ -15,8 +23,11 @@ public partial class Door : Node3D
     [Export]
     public AudioStreamPlayer3D? AudioPlayer { get; set; }
 
+    // [Export] the rule with the Inventoryitem to set the key item
+
     public override void _EnterTree()
     {
+        StatefulComponent?.InitialState = IsLocked ? "locked" : "closed";
         StatefulComponent?.StateChanged += OnStateChanged;
         StatefulComponent?.StateChangedPresentation += OnStateChangedPresentation;
     }
