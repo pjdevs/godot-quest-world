@@ -1,6 +1,6 @@
 # Interaction Framework V4 — Execution lifecycle & presentation proposal
 
-> **Status: Architecture accepted.** Ce document fixe les intentions, invariants et frontières V4.
+> **Status: Architecture accepted and delivered.** Ce document fixe les intentions, invariants et frontières V4.
 > La réalisation concrète, les APIs finales, le transport Godot et les trois tranches de migration
 > sont fixés séparément dans
 > [`interaction-v4-implementation-spec.md`](./interaction-v4-implementation-spec.md).

@@ -46,6 +46,13 @@ public partial class Door : Node3D
         bool isSynchronization
     )
     {
+        if (isSynchronization)
+        {
+            AnimationPlayer?.Play(newState == "opened" ? "open" : "RESET");
+            AnimationPlayer?.Seek(1.0, update: true);
+            return;
+        }
+
         switch ((oldState, newState))
         {
             case var (state, _) when state == "locked":

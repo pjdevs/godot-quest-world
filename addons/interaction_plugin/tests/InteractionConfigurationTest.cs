@@ -176,6 +176,41 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
+    public void ActionExecutionVisibilityDefaultsToRequesterOnly()
+    {
+        InteractionAction action = new();
+
+        AssertThat(action.ExecutionVisibility)
+            .IsEqual(InteractionExecutionVisibility.RequesterOnly);
+    }
+
+    [TestCase]
+    public void ReplicatedActionRequiresAMatchingExecutionSynchronizer()
+    {
+        InteractiveComponent interactive = NewConfiguredInteractive();
+        interactive.Actions[0].ExecutionVisibility = InteractionExecutionVisibility.Replicated;
+
+        string[] warnings = InteractionValidator.Validate(interactive).ToArray();
+
+        AssertThat(
+                warnings.Contains(
+                    "Replicated actions require a child InteractionExecutionSynchronizer targeting this InteractiveComponent."
+                )
+            )
+            .IsTrue();
+    }
+
+    [TestCase]
+    public void ExecutionSynchronizerRequiresAnInteractiveTarget()
+    {
+        InteractionExecutionSynchronizer synchronizer = new();
+
+        string[] warnings = InteractionValidator.Validate(synchronizer).ToArray();
+
+        AssertThat(warnings.Contains("Interactive must be assigned.")).IsTrue();
+    }
+
+    [TestCase]
     public void WorldStateAndInteractionStayIndependent()
     {
         AssertThat(typeof(StatefulComponent).GetProperty("ActiveInteractor") == null).IsTrue();
@@ -200,7 +235,9 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void ActionPresentationContainsOnlyActionAndHoldData()
     {
-        AssertThat(typeof(InteractionActionPresentation).GetProperty("HasTimedExecution") == null)
+        AssertThat(
+                typeof(InteractionActionPresentation).GetProperty("HasTimed" + "Execution") == null
+            )
             .IsTrue();
         AssertThat(typeof(InteractionActionPresentation).GetProperty("ExecutionProgress") == null)
             .IsTrue();

@@ -73,6 +73,28 @@ public sealed partial class InteractionAckTest
     }
 
     [TestCase]
+    public async Task AuthorityOnlyAcknowledgesStartedWithoutCreatingRequesterPresentation()
+    {
+        AckWorld world = BuildWorld();
+        await world.Runner.SimulateFrames(1);
+
+        world.Interactor.ClientInteractionStarted(
+            world.Interactive.GetPath(),
+            world.Definition.Id,
+            42ul,
+            InteractionExecutionVisibility.AuthorityOnly,
+            false,
+            0.0f,
+            0.0f,
+            0L
+        );
+
+        AssertThat(world.Kinds()).IsEqual(new List<string> { "started" });
+        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+            .IsFalse();
+    }
+
+    [TestCase]
     public async Task ACompletedRunningActionAcknowledgesCompletedExactlyOnce()
     {
         AckWorld world = BuildWorld();
@@ -231,7 +253,7 @@ public sealed partial class InteractionAckTest
                 )
             )
             .IsTrue();
-        world.Interactive.AddPredictedExecution(
+        world.Interactive.AddPendingExecutionPresentation(
             world.Definition.Id,
             new InteractionProgressSample(0.0f, 1.0f, 0L)
         );
@@ -249,6 +271,7 @@ public sealed partial class InteractionAckTest
             world.Interactive.GetPath(),
             world.Definition.Id,
             world.Executor.LastExecutionId + 1ul,
+            InteractionExecutionVisibility.RequesterOnly,
             true,
             0.0f,
             1.0f,

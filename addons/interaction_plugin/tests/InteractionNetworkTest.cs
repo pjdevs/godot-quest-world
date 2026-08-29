@@ -765,6 +765,150 @@ public sealed partial class InteractionNetworkTest
     }
 
     [TestCase]
+    public async Task ReplicatedExecutionReachesRequesterObserverLateJoinerAndThenDisappears()
+    {
+        Session session = await Connect();
+        try
+        {
+            session.SetExecutionVisibility(InteractionExecutionVisibility.Replicated);
+            session.Arm(new InteractionExecutionRunning(), 3600.0f);
+            session.Focus();
+
+            session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(
+                    session.ClientA.Interactive.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out InteractionExecutionPresentation requester
+                    )
+                )
+                .IsTrue();
+            AssertThat(
+                    session.ClientB.Interactive.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out InteractionExecutionPresentation observer
+                    )
+                )
+                .IsTrue();
+            AssertThat(observer.ExecutionId).IsEqual(requester.ExecutionId);
+
+            LatePeer late = await session.JoinLate("ClientC");
+            AssertThat(
+                    late.Scene.Interactive.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out InteractionExecutionPresentation joined
+                    )
+                )
+                .IsTrue();
+            AssertThat(joined.ExecutionId).IsEqual(requester.ExecutionId);
+
+            AssertThat(session.Server.Interactive.CompleteExecution(requester.ExecutionId))
+                .IsTrue();
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(
+                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsFalse();
+            AssertThat(
+                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsFalse();
+            AssertThat(late.Scene.Interactive.TryGetExecutionPresentation(ActivateAction, out _))
+                .IsFalse();
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
+    public async Task AuthorityOnlyAcknowledgesLifecycleWithoutLeakingExecutionPresentation()
+    {
+        Session session = await Connect();
+        try
+        {
+            session.SetExecutionVisibility(InteractionExecutionVisibility.AuthorityOnly);
+            session.Arm(new InteractionExecutionRunning(), 3600.0f);
+            session.Focus();
+
+            session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(session.KindsA()).IsEqual(new List<string> { "started" });
+            AssertThat(
+                    session.Server.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsTrue();
+            AssertThat(
+                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsFalse();
+            AssertThat(
+                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsFalse();
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
+    public async Task NativeSynchronizerVisibilityHidesThenRevealsTheCurrentSnapshot()
+    {
+        Session session = await Connect();
+        try
+        {
+            session.SetExecutionVisibility(InteractionExecutionVisibility.Replicated);
+            session.Arm(new InteractionExecutionRunning(), 3600.0f);
+            session.Focus();
+            int observerPeerId = session.Server.InteractorB.OwnerPeerId;
+            AssertThat(observerPeerId).IsEqual(session.ClientB.Root.Multiplayer.GetUniqueId());
+            session.Server.ExecutionSynchronizer.PublicVisibility = false;
+            session.Server.ExecutionSynchronizer.SetVisibilityFor(
+                session.Server.InteractorA.OwnerPeerId,
+                true
+            );
+            session.Server.ExecutionSynchronizer.UpdateVisibility();
+            AssertThat(session.Server.ExecutionSynchronizer.GetVisibilityFor(observerPeerId))
+                .IsFalse();
+            AssertThat(
+                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsFalse();
+
+            session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(
+                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsTrue();
+            AssertThat(
+                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsFalse();
+
+            session.Server.ExecutionSynchronizer.SetVisibilityFor(observerPeerId, true);
+            session.Server.ExecutionSynchronizer.UpdateVisibility(observerPeerId);
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(
+                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                )
+                .IsTrue();
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
     public async Task ADroppedPeerReleasesItsExecutionOnTheAuthority()
     {
         // The node departure is not the only way out. Here nobody despawns the dropped player, so only
@@ -931,6 +1075,7 @@ public sealed partial class InteractionNetworkTest
         return new PeerScene(
             root,
             first.Interactive,
+            first.ExecutionSynchronizer,
             second.Interactive,
             stateful,
             activate,
@@ -970,6 +1115,12 @@ public sealed partial class InteractionNetworkTest
             InteractionArea = area,
             InteractionAnchor = actor,
         };
+        InteractionExecutionSynchronizer executionSynchronizer = new()
+        {
+            Name = "InteractionExecutionSynchronizer",
+            Interactive = interactive,
+        };
+        interactive.AddChild(executionSynchronizer);
         actor.AddChild(area);
         if (stateful is not null)
         {
@@ -978,7 +1129,7 @@ public sealed partial class InteractionNetworkTest
 
         actor.AddChild(interactive);
         root.AddChild(actor);
-        return new Target(actor, interactive);
+        return new Target(actor, interactive, executionSynchronizer);
     }
 
     private static TestScriptedExecutor AddScriptedAction(
@@ -1064,7 +1215,11 @@ public sealed partial class InteractionNetworkTest
         return new PeerInteractor(interactor, detector);
     }
 
-    private sealed record Target(Node3D Actor, InteractiveComponent Interactive);
+    private sealed record Target(
+        Node3D Actor,
+        InteractiveComponent Interactive,
+        InteractionExecutionSynchronizer ExecutionSynchronizer
+    );
 
     private sealed record LatePeer(PeerScene Scene, StateLog Log);
 
@@ -1115,6 +1270,7 @@ public sealed partial class InteractionNetworkTest
     private sealed record PeerScene(
         Node3D Root,
         InteractiveComponent Interactive,
+        InteractionExecutionSynchronizer ExecutionSynchronizer,
         InteractiveComponent SecondInteractive,
         StatefulComponent Stateful,
         TestScriptedExecutor Executor,
@@ -1141,6 +1297,9 @@ public sealed partial class InteractionNetworkTest
         List<Ack> AcksB
     )
     {
+        private InteractionExecutionVisibility _executionVisibility =
+            InteractionExecutionVisibility.RequesterOnly;
+
         /// <summary>Tells every copy of an interactor which peer is allowed to drive it.</summary>
         public void Own(int peerA, int peerB)
         {
@@ -1168,6 +1327,15 @@ public sealed partial class InteractionNetworkTest
                 scene.TuneExecutor.Duration = duration;
                 scene.SecondExecutor.Result = result;
                 scene.SecondExecutor.Duration = duration;
+            }
+        }
+
+        public void SetExecutionVisibility(InteractionExecutionVisibility visibility)
+        {
+            _executionVisibility = visibility;
+            foreach (PeerScene scene in new[] { Server, ClientA, ClientB })
+            {
+                SetExecutionVisibility(scene, visibility);
             }
         }
 
@@ -1222,6 +1390,7 @@ public sealed partial class InteractionNetworkTest
             MultiplayerApi api = Attach(World.GetTree(), root, peer);
             Peers.Add(peer);
             PeerScene scene = BuildPeerScene(root);
+            SetExecutionVisibility(scene, _executionVisibility);
             StateLog log = new(scene.Stateful);
 
             for (int frame = 0; frame < ConnectFrames; frame++)
@@ -1236,6 +1405,14 @@ public sealed partial class InteractionNetworkTest
             AssertThat(api.GetUniqueId()).IsGreater(1);
             await Pump(RoundTripFrames);
             return new LatePeer(scene, log);
+        }
+
+        private static void SetExecutionVisibility(
+            PeerScene scene,
+            InteractionExecutionVisibility visibility
+        )
+        {
+            scene.Interactive.ResolveAction(ActivateAction)!.ExecutionVisibility = visibility;
         }
 
         public async Task Pump(int frames) => await Runner.SimulateFrames((uint)frames);

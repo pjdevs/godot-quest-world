@@ -291,8 +291,17 @@ Offline and listen-server play take the authoritative path directly. Execution p
 `InteractiveComponent` through one generic record: timed slots extrapolate a linear sample, published slots
 carry discrete values, and a local `Callable` has priority when registered. A requester creates a local
 `ExecutionId = 0` prediction when the executor exposes an initial sample, then reconciles it with the started
-acknowledgement; requester-only corrections use a reliable owner RPC. Other clients still receive no execution
-slot until Impl 3 adds world replication. Persistent replicated world state belongs to `StatefulComponent`.
+acknowledgement; requester-only corrections use a reliable owner RPC. `InteractionAction.ExecutionVisibility`
+selects who receives that transient slot:
+
+- `RequesterOnly` (default) keeps it on the authority and requesting peer;
+- `Replicated` publishes it to visible peers through an explicitly wired child
+  `InteractionExecutionSynchronizer`, including late joiners;
+- `AuthorityOnly` keeps it on the authority while lifecycle acknowledgements still reach the requester.
+
+The synchronizer replicates presentation samples, not execution authority. Keep persistent world truth in a
+`StatefulComponent`; use execution replication only for transient, world-observable feedback. Native
+`MultiplayerSynchronizer` visibility controls which peers may observe replicated execution slots.
 
 ### Notifications
 
@@ -310,4 +319,4 @@ Required references are never guessed from parents, siblings, names, or recursiv
 
 The core is namespaced under `QuestWorld.Interaction` and has no Quest, Inventory, Dialog, Character, Stateful, persistence, or transport abstraction dependency. The optional integration depends on the [`stateful_plugin`](../stateful_plugin/README.md), never the reverse.
 
-[`integration/stateful/examples/LongActionExample.tscn`](integration/stateful/examples/LongActionExample.tscn) is the duplicable reference scene: explicit areas and anchor, default widgets, a replicated `StatefulComponent`, pure state rules, and a `TimedTransitionStateInteractionExecutor`, with no script on the scene root.
+[`integration/stateful/examples/LongActionExample.tscn`](integration/stateful/examples/LongActionExample.tscn) is the duplicable reference scene: explicit areas and anchor, default widgets, a replicated `StatefulComponent`, pure state rules, a replicated action with `InteractionExecutionSynchronizer`, and a `TimedTransitionStateInteractionExecutor`, with no script on the scene root. Instant project templates such as Door and Button keep the default requester-only execution presentation because their durable result is already carried by Stateful.

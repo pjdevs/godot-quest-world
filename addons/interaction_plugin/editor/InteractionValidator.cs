@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Actions;
@@ -22,6 +23,7 @@ public static class InteractionValidator
         AreaInteractionDetector,
         InteractionPresenter,
         InteractionAction,
+        InteractionExecutionSynchronizer,
         InteractionActionDefinition,
         SetStateInteractionExecutor,
         TransitionStateInteractionExecutor,
@@ -47,6 +49,8 @@ public static class InteractionValidator
                 return ValidatePresenter(obj);
             case InspectableType.InteractionAction:
                 return ValidateAction(obj);
+            case InspectableType.InteractionExecutionSynchronizer:
+                return ValidateExecutionSynchronizer(obj);
             case InspectableType.InteractionActionDefinition:
                 return ValidateActionDefinition(obj);
             case InspectableType.SetStateInteractionExecutor:
@@ -76,6 +80,7 @@ public static class InteractionValidator
 
         HashSet<string> ids = new();
         Dictionary<string, string> inputs = new();
+        bool hasReplicatedAction = false;
 
         for (int index = 0; index < actions.Count; index++)
         {
@@ -95,6 +100,10 @@ public static class InteractionValidator
 
             if (GetObject(action, "Executor") is null)
                 yield return $"Actions[{index}] has no Executor.";
+
+            hasReplicatedAction |=
+                GetInt(action, "ExecutionVisibility")
+                == (int)InteractionExecutionVisibility.Replicated;
 
             string id = GetName(definition, "Id");
             if (id.Length == 0)
@@ -128,6 +137,11 @@ public static class InteractionValidator
             {
                 inputs[trigger] = id;
             }
+        }
+
+        if (hasReplicatedAction && !HasMatchingExecutionSynchronizer(obj))
+        {
+            yield return "Replicated actions require a child InteractionExecutionSynchronizer targeting this InteractiveComponent.";
         }
 
         foreach (string warning in ValidateRules(obj, obj, "TargetRules"))
@@ -203,6 +217,33 @@ public static class InteractionValidator
         {
             yield return warning;
         }
+    }
+
+    private static IEnumerable<string> ValidateExecutionSynchronizer(GodotObject obj)
+    {
+        if (GetObject(obj, "Interactive") is null)
+            yield return "Interactive must be assigned.";
+    }
+
+    private static bool HasMatchingExecutionSynchronizer(GodotObject interactive)
+    {
+        if (interactive is not Node node)
+        {
+            return false;
+        }
+
+        foreach (Node child in node.GetChildren())
+        {
+            if (
+                ResolveType(child) == InspectableType.InteractionExecutionSynchronizer
+                && GetObject(child, "Interactive") == interactive
+            )
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static IEnumerable<string> ValidateActionDefinition(GodotObject obj)
@@ -373,6 +414,7 @@ public static class InteractionValidator
             InteractionDetector => InspectableType.InteractionDetector,
             InteractionPresenter => InspectableType.InteractionPresenter,
             InteractionAction => InspectableType.InteractionAction,
+            InteractionExecutionSynchronizer => InspectableType.InteractionExecutionSynchronizer,
             InteractionActionDefinition => InspectableType.InteractionActionDefinition,
             SetStateInteractionExecutor => InspectableType.SetStateInteractionExecutor,
             TimedTransitionStateInteractionExecutor =>
@@ -399,6 +441,8 @@ public static class InteractionValidator
             nameof(InteractionDetector) => InspectableType.InteractionDetector,
             nameof(InteractionPresenter) => InspectableType.InteractionPresenter,
             nameof(InteractionAction) => InspectableType.InteractionAction,
+            nameof(InteractionExecutionSynchronizer) =>
+                InspectableType.InteractionExecutionSynchronizer,
             nameof(InteractionActionDefinition) => InspectableType.InteractionActionDefinition,
             nameof(SetStateInteractionExecutor) => InspectableType.SetStateInteractionExecutor,
             nameof(TimedTransitionStateInteractionExecutor) =>
@@ -430,6 +474,8 @@ public static class InteractionValidator
                 InspectableType.InteractionPresenter,
             "res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" =>
                 InspectableType.InteractionAction,
+            "res://addons/interaction_plugin/runtime/interactive/InteractionExecutionSynchronizer.cs" =>
+                InspectableType.InteractionExecutionSynchronizer,
             "res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" =>
                 InspectableType.InteractionActionDefinition,
             "res://addons/interaction_plugin/integration/stateful/SetStateInteractionExecutor.cs" =>

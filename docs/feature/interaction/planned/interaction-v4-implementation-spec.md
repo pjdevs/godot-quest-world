@@ -1,6 +1,6 @@
 # Interaction V4 — implementation specification
 
-> **Status: Impl 2 delivered; Impl 3 pending.** Cette spec transforme
+> **Status: V4 delivered (Impl 1–3).** Cette spec transforme
 > [`interaction-v4-architecture.md`](./interaction-v4-architecture.md) en trois tranches de
 > réalisation exécutables. Le document d'architecture reste le contrat d'intention ; celui-ci fixe
 > les APIs, la migration, le transport réseau, les tests et les critères de fin.

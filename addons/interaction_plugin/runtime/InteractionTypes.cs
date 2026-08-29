@@ -126,6 +126,19 @@ public readonly record struct InteractionExecutionPresentation(
     float? Progress = null
 );
 
+/// <summary>Controls which peers may observe one action's active execution presentation.</summary>
+public enum InteractionExecutionVisibility
+{
+    /// <summary>Only the requesting peer receives execution presentation updates.</summary>
+    RequesterOnly,
+
+    /// <summary>Peers admitted by the target synchronizer receive current execution state.</summary>
+    Replicated,
+
+    /// <summary>The authority keeps its local slot without exposing one to remote peers.</summary>
+    AuthorityOnly,
+}
+
 /// <summary>Linear progress sample transported between the authority and a presentation owner.</summary>
 /// <remarks>
 /// The sample is presentation state only. A positive rate lets a receiving peer extrapolate locally;

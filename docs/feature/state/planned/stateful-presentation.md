@@ -2,7 +2,13 @@
 
 ## Statut
 
-**Proposal.** Ce chantier part d'un problème visible dans le multiplayer Interaction — le joueur prédit immédiatement une exécution longue, mais le monde attend encore la mutation puis la réplication du `StatefulComponent` — et l'extrait volontairement hors d'Interaction.
+**Proposal.** Ce chantier part d'un problème visible dans le multiplayer Interaction — le joueur peut
+présenter immédiatement une exécution, mais le monde attend encore la mutation puis la réplication du
+`StatefulComponent` — et l'extrait volontairement hors d'Interaction.
+
+> Les références Interaction ont été migrées vers le contrat V4. Cette proposition concerne la
+> prédiction des conséquences Stateful ; elle ne remplace ni la présentation d'exécution V4 ni son
+> `InteractionExecutionSynchronizer`.
 
 Le besoin est plus général : un mur de niveau, un ascenseur déclenché par une `Area3D`, une salle qui s'allume ou s'éteint, une alimentation qui bascule, un objet piloté à distance ou n'importe quel script gameplay peuvent connaître localement la représentation attendue avant que la vérité autoritaire correspondante ait atteint ce peer.
 
@@ -25,7 +31,9 @@ intention locale
   → réaction visuelle
 ```
 
-Interaction masque déjà une partie de ce délai pour son propre protocole : la progression d'une exécution longue est prédite localement à partir de `InteractionActionExecutor.ComputeInteractionDuration()`, puis recalée par l'ACK `InteractionStarted`. Cela rend la barre immédiate, mais pas les conséquences visibles de l'action.
+Interaction masque déjà une partie de ce délai pour son propre protocole : une action peut fournir un
+sample initial de présentation, puis le réconcilier avec l'ACK `InteractionStarted`. Cela rend la barre
+immédiate, mais pas les conséquences visibles de l'action.
 
 Exemple : le joueur appuie sur un bouton qui met un mur en `raising`. La barre peut commencer à `t = 0`, alors que l'animation du mur attend encore que le serveur applique `raising` puis que le `MultiplayerSynchronizer` le réplique.
 
@@ -233,16 +241,16 @@ Une action sans predictor conserve exactement le comportement actuel.
 Le mécanisme existant de durée reste séparé :
 
 ```text
-PredictedExecution
-    = prediction générique du lifecycle temporel de l'interaction
+InteractionExecutionPresentation
+    = présentation générique et transitoire du lifecycle de l'interaction
 
 InteractionActionPrediction
     = prediction optionnelle des conséquences / feedbacks locaux
 ```
 
-`InteractionActionExecutor.ComputeInteractionDuration(context)` **reste sur l'executor**.
-
-La durée est une sémantique de l'exécution autoritaire : le serveur en a besoin pour réserver et terminer l'exécution. Le client est simplement autorisé à exécuter la même query pure afin d'anticiper ce contrat. La déplacer dans un objet nommé `Prediction` rendrait le dedicated server dépendant d'une abstraction de présentation et recréerait une seconde source de vérité.
+La production de progression reste séparée du predictor Stateful. Une exécution temporisée compose
+`TimedExecution`; une exécution générique peut publier une valeur ou brancher une source locale. Le
+predictor peut observer la présentation obtenue, mais il ne définit jamais la terminaison autoritaire.
 
 Le predictor peut recevoir la durée calculée comme donnée read-only s'il veut synchroniser une animation, mais il ne la définit jamais.
 
@@ -416,8 +424,8 @@ Ajouter des tests qui couvrent explicitement l'ordre temporel, pas seulement la 
 2. un refus restaure la vérité autoritaire ;
 3. une confirmation identique ne redémarre pas l'animation / le signal de présentation ;
 4. une valeur autoritaire différente supersède la prediction ;
-5. une action instantanée bénéficie de la prediction même avec `ExecutionDuration == 0` ;
-6. `ComputeInteractionDuration` reste la source unique pour serveur et client ;
+5. une action instantanée bénéficie de la prediction même sans progression d'exécution ;
+6. le predictor Stateful ne définit aucune sémantique de terminaison Interaction ;
 7. completion/cancellation ACK puis réplication Stateful ne produit pas de double transition visible.
 
 ## Hors périmètre
@@ -429,7 +437,7 @@ Ajouter des tests qui couvrent explicitement l'ordre temporel, pas seulement la 
 - aucune persistence de l'override local ;
 - aucun système global de rollback gameplay ;
 - aucun clock sync supplémentaire ;
-- aucun déplacement de `ComputeInteractionDuration` hors de `InteractionActionExecutor` ;
+- aucun déplacement de la terminaison autoritaire dans une abstraction de présentation ;
 - aucun couplage de `stateful_plugin` vers `interaction_plugin`.
 
 ## Critère de réussite

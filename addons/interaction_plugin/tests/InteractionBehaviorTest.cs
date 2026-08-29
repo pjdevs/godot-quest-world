@@ -2141,6 +2141,14 @@ public sealed partial class InteractionBehaviorTest
 
         AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, 0.33f)).IsTrue();
         AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, 0.66f)).IsTrue();
+        AssertThat(
+                testWorld.Interactive.TryGetExecutionPresentation(
+                    action.Definition.Id,
+                    out presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.Progress!.Value).IsEqualApprox(0.66f, 0.001f);
         AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, null)).IsTrue();
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
@@ -2153,6 +2161,86 @@ public sealed partial class InteractionBehaviorTest
 
         AssertThat(testWorld.Interactive.CompleteExecution(executionId)).IsTrue();
         AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, 1.0f)).IsFalse();
+    }
+
+    [TestCase]
+    public async Task ReplicatedSnapshotAppliesCurrentProgressRejectsStaleStateAndRemovesAbsence()
+    {
+        TestWorld authority = BuildWorld();
+        authority.Action.ExecutionVisibility = InteractionExecutionVisibility.Replicated;
+        InteractiveComponent receiver = AddPresentationReceiver(
+            authority.World,
+            authority.Action.Definition!.Id,
+            InteractionExecutionVisibility.Replicated
+        );
+        await authority.Runner.SimulateFrames(1);
+        authority.Interactive.ExecuteAction(
+            authority.Interactor,
+            authority.Action,
+            out ulong executionId
+        );
+        InteractionExecutionSynchronizer source = new() { Interactive = authority.Interactive };
+        InteractionExecutionSynchronizer destination = new() { Interactive = receiver };
+
+        Godot.Collections.Dictionary started = source.CaptureSnapshot();
+        AssertThat(destination.ApplySnapshot(started)).IsTrue();
+        AssertThat(
+                receiver.TryGetExecutionPresentation(
+                    authority.Action.Definition.Id,
+                    out InteractionExecutionPresentation initial
+                )
+            )
+            .IsTrue();
+        AssertThat(initial.ExecutionId).IsEqual(executionId);
+
+        AssertThat(authority.Interactive.ReportExecutionProgress(executionId, 0.66f)).IsTrue();
+        Godot.Collections.Dictionary progressed = source.CaptureSnapshot();
+        AssertThat(destination.ApplySnapshot(progressed)).IsTrue();
+        AssertThat(destination.ApplySnapshot(started)).IsFalse();
+        AssertThat(
+                receiver.TryGetExecutionPresentation(
+                    authority.Action.Definition.Id,
+                    out InteractionExecutionPresentation current
+                )
+            )
+            .IsTrue();
+        AssertThat(current.Progress!.Value).IsEqualApprox(0.66f, 0.001f);
+
+        AssertThat(authority.Interactive.CompleteExecution(executionId)).IsTrue();
+        AssertThat(destination.ApplySnapshot(source.CaptureSnapshot())).IsTrue();
+        AssertThat(receiver.TryGetExecutionPresentation(authority.Action.Definition.Id, out _))
+            .IsFalse();
+    }
+
+    [TestCase]
+    public async Task SharedGameplaySessionDrivesAWorldConsumerWithoutOwningItsParticipants()
+    {
+        TestWorld testWorld = BuildWorld();
+        InteractionAction repair = CreateAction("repair");
+        AddAction(testWorld.Interactive, repair);
+        ExecutorOf(repair).Result = new InteractionExecutionRunning();
+        Node participantA = new() { Name = "ParticipantA" };
+        Node participantB = new() { Name = "ParticipantB" };
+        testWorld.World.AddChild(participantA);
+        testWorld.World.AddChild(participantB);
+        FakeRepairSession repairSession = new(participantA, participantB, stepCount: 3);
+        await testWorld.Runner.SimulateFrames(1);
+        testWorld.Interactive.ExecuteAction(testWorld.Interactor, repair, out ulong executionId);
+        AssertThat(
+                testWorld.Interactive.SetExecutionProgressSource(
+                    executionId,
+                    Callable.From(repairSession.GetProgress)
+                )
+            )
+            .IsTrue();
+        WorldExecutionGauge gauge = new(testWorld.Interactive, repair.Definition!.Id);
+
+        repairSession.CompleteStep();
+        repairSession.CompleteStep();
+
+        AssertThat(gauge.Read()).IsEqualApprox(2.0f / 3.0f, 0.001f);
+        AssertThat(participantA.GetParent() == testWorld.World).IsTrue();
+        AssertThat(participantB.GetParent() == testWorld.World).IsTrue();
     }
 
     [TestCase]
@@ -2645,6 +2733,31 @@ public sealed partial class InteractionBehaviorTest
         interactive.Actions.Add(action);
     }
 
+    private static InteractiveComponent AddPresentationReceiver(
+        Node parent,
+        StringName actionId,
+        InteractionExecutionVisibility visibility
+    )
+    {
+        Node3D actor = new() { Name = "PresentationReceiver" };
+        Area3D area = new() { Name = "InteractionArea" };
+        area.AddChild(new CollisionShape3D { Shape = new SphereShape3D() });
+        InteractiveComponent interactive = new()
+        {
+            Name = "Interactive",
+            InteractionArea = area,
+            InteractionAnchor = actor,
+        };
+        InteractionAction action = CreateAction(actionId.ToString());
+        action.ExecutionVisibility = visibility;
+        interactive.Actions.Add(action);
+        actor.AddChild(area);
+        actor.AddChild(interactive);
+        interactive.AddChild(action);
+        parent.AddChild(actor);
+        return interactive;
+    }
+
     private static InteractionAction CreateActivationAction(
         string id,
         TestInteractiveActor owner,
@@ -3051,6 +3164,44 @@ public sealed partial class InteractionBehaviorTest
             LastExecutionId = context.ExecutionId;
             LastFailureReason = reason;
         }
+    }
+
+    private sealed class FakeRepairSession
+    {
+        private readonly int _stepCount;
+        private int _completedSteps;
+
+        public FakeRepairSession(Node participantA, Node participantB, int stepCount)
+        {
+            Participants = new[] { participantA, participantB };
+            _stepCount = stepCount;
+        }
+
+        public IReadOnlyList<Node> Participants { get; }
+
+        public void CompleteStep() => _completedSteps++;
+
+        public float GetProgress() => (float)_completedSteps / _stepCount;
+    }
+
+    private sealed class WorldExecutionGauge
+    {
+        private readonly InteractiveComponent _interactive;
+        private readonly StringName _actionId;
+
+        public WorldExecutionGauge(InteractiveComponent interactive, StringName actionId)
+        {
+            _interactive = interactive;
+            _actionId = actionId;
+        }
+
+        public float Read() =>
+            _interactive.TryGetExecutionPresentation(
+                _actionId,
+                out InteractionExecutionPresentation presentation
+            )
+                ? presentation.Progress ?? 0.0f
+                : 0.0f;
     }
 
     private sealed partial class InteractiveParentGameplayRule : InteractionRule

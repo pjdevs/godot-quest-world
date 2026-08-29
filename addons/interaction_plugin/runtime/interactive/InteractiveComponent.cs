@@ -285,6 +285,7 @@ public partial class InteractiveComponent : Node
         ulong,
         InteractionExecutionPresentationSlot
     > _pendingExecutionProgress = new();
+    private readonly HashSet<StringName> _warnedUnknownReplicatedActions = new();
     private Area3D? _interactionArea;
 
     internal bool HasActiveExecution => _activeExecutions.Count > 0;
@@ -1073,7 +1074,10 @@ public partial class InteractiveComponent : Node
         return true;
     }
 
-    internal bool AddPredictedExecution(StringName actionId, InteractionProgressSample sample)
+    internal bool AddPendingExecutionPresentation(
+        StringName actionId,
+        InteractionProgressSample sample
+    )
     {
         if (actionId is null || actionId.IsEmpty || _executionPresentations.ContainsKey(actionId))
         {
@@ -1292,7 +1296,11 @@ public partial class InteractiveComponent : Node
         bool hasProgress
     )
     {
-        if (IsRequesterUsable(execution) && !execution.Interactor.IsLocallyControlled)
+        if (
+            execution.Action.ExecutionVisibility == InteractionExecutionVisibility.RequesterOnly
+            && IsRequesterUsable(execution)
+            && !execution.Interactor.IsLocallyControlled
+        )
         {
             slot.Progress.TryGetSample(out _, out InteractionProgressSample sample);
             execution.Interactor.NotifyExecutionProgress(
@@ -1323,6 +1331,189 @@ public partial class InteractiveComponent : Node
 
         return slot.Progress.TryGetSample(out hasProgress, out sample);
     }
+
+    internal Godot.Collections.Array BuildReplicatedExecutionEntries()
+    {
+        Godot.Collections.Array entries = new();
+        foreach (InteractionAction action in Actions)
+        {
+            if (
+                action?.Definition is not InteractionActionDefinition definition
+                || action.ExecutionVisibility != InteractionExecutionVisibility.Replicated
+                || !TryGetActionExecution(action, out InteractionExecution execution)
+            )
+            {
+                continue;
+            }
+
+            InteractionExecutionPresentationSlot slot = GetProgressSlot(execution);
+            slot.Progress.TryGetSample(out bool hasProgress, out InteractionProgressSample sample);
+            entries.Add(
+                new Godot.Collections.Dictionary
+                {
+                    ["action_id"] = definition.Id,
+                    ["execution_id"] = checked((long)execution.Id),
+                    ["progress_present"] = hasProgress,
+                    ["progress_base"] = sample.ProgressBase,
+                    ["progress_per_second"] = sample.ProgressPerSecond,
+                    ["revision"] = sample.Revision,
+                }
+            );
+        }
+
+        return entries;
+    }
+
+    internal void ApplyReplicatedExecutionEntries(Godot.Collections.Array entries)
+    {
+        HashSet<StringName> presentActions = new();
+        foreach (Variant entryValue in entries)
+        {
+            if (entryValue.VariantType != Variant.Type.Dictionary)
+            {
+                continue;
+            }
+
+            Godot.Collections.Dictionary entry = entryValue.AsGodotDictionary();
+            if (!TryReadReplicatedExecutionEntry(entry, out ReplicatedExecutionEntry decoded))
+            {
+                continue;
+            }
+
+            InteractionAction? action = ResolveAction(decoded.ActionId);
+            if (action?.Definition is null)
+            {
+                if (_warnedUnknownReplicatedActions.Add(decoded.ActionId))
+                {
+                    GD.PushWarning(
+                        $"{GetPath()}: replicated execution references unknown action '{decoded.ActionId}'."
+                    );
+                }
+                continue;
+            }
+
+            if (action.ExecutionVisibility != InteractionExecutionVisibility.Replicated)
+            {
+                continue;
+            }
+
+            presentActions.Add(decoded.ActionId);
+            ApplyReplicatedExecution(decoded);
+        }
+
+        foreach (InteractionAction action in Actions)
+        {
+            if (
+                action?.Definition is not InteractionActionDefinition definition
+                || action.ExecutionVisibility != InteractionExecutionVisibility.Replicated
+                || presentActions.Contains(definition.Id)
+                || !_executionPresentations.TryGetValue(
+                    definition.Id,
+                    out InteractionExecutionPresentationSlot? slot
+                )
+                || slot.ExecutionId == 0ul
+            )
+            {
+                continue;
+            }
+
+            _executionPresentations.Remove(definition.Id);
+            EmitSignal(SignalName.ExecutionPresentationChanged, definition.Id);
+        }
+    }
+
+    private void ApplyReplicatedExecution(in ReplicatedExecutionEntry entry)
+    {
+        if (
+            _executionPresentations.TryGetValue(
+                entry.ActionId,
+                out InteractionExecutionPresentationSlot? existing
+            )
+            && existing.ExecutionId == entry.ExecutionId
+        )
+        {
+            if (
+                existing.Progress.ApplyNewerSample(
+                    entry.HasProgress,
+                    entry.Sample,
+                    CurrentTimeSeconds(),
+                    this,
+                    entry.ActionId
+                )
+            )
+            {
+                EmitSignal(SignalName.ExecutionPresentationChanged, entry.ActionId);
+            }
+            return;
+        }
+
+        InteractionExecutionPresentationSlot slot = new(entry.ExecutionId, entry.ActionId);
+        slot.Progress.Confirm(
+            entry.HasProgress,
+            entry.Sample,
+            CurrentTimeSeconds(),
+            this,
+            entry.ActionId
+        );
+        _executionPresentations[entry.ActionId] = slot;
+        EmitSignal(SignalName.ExecutionPresentationChanged, entry.ActionId);
+    }
+
+    private static bool TryReadReplicatedExecutionEntry(
+        Godot.Collections.Dictionary entry,
+        out ReplicatedExecutionEntry decoded
+    )
+    {
+        decoded = default;
+        if (
+            !entry.TryGetValue("action_id", out Variant actionValue)
+            || !entry.TryGetValue("execution_id", out Variant executionValue)
+            || !entry.TryGetValue("progress_present", out Variant presentValue)
+            || !entry.TryGetValue("progress_base", out Variant baseValue)
+            || !entry.TryGetValue("progress_per_second", out Variant rateValue)
+            || !entry.TryGetValue("revision", out Variant revisionValue)
+            || actionValue.VariantType != Variant.Type.StringName
+            || executionValue.VariantType != Variant.Type.Int
+            || presentValue.VariantType != Variant.Type.Bool
+            || baseValue.VariantType != Variant.Type.Float
+            || rateValue.VariantType != Variant.Type.Float
+            || revisionValue.VariantType != Variant.Type.Int
+        )
+        {
+            return false;
+        }
+
+        long signedExecutionId = executionValue.AsInt64();
+        if (signedExecutionId <= 0)
+        {
+            return false;
+        }
+
+        StringName actionId = actionValue.AsStringName();
+        if (actionId.IsEmpty)
+        {
+            return false;
+        }
+
+        decoded = new ReplicatedExecutionEntry(
+            actionId,
+            (ulong)signedExecutionId,
+            presentValue.AsBool(),
+            new InteractionProgressSample(
+                (float)baseValue.AsDouble(),
+                (float)rateValue.AsDouble(),
+                revisionValue.AsInt64()
+            )
+        );
+        return true;
+    }
+
+    private readonly record struct ReplicatedExecutionEntry(
+        StringName ActionId,
+        ulong ExecutionId,
+        bool HasProgress,
+        InteractionProgressSample Sample
+    );
 
     /// <summary>Gets whether one execution is still reserved on this target.</summary>
     /// <remarks>

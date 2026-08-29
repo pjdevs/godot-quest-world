@@ -904,7 +904,7 @@ public partial class InteractionInteractor : Node
         );
         if (sample is InteractionProgressSample initial)
         {
-            target.AddPredictedExecution(action.Definition!.Id, initial);
+            target.AddPendingExecutionPresentation(action.Definition!.Id, initial);
         }
     }
 
@@ -1094,6 +1094,7 @@ public partial class InteractionInteractor : Node
     /// <param name="targetPath">Path of the target that accepted the command.</param>
     /// <param name="actionId">Identifier of the accepted action.</param>
     /// <param name="executionId">Identifier the authority allocated for the execution.</param>
+    /// <param name="visibility">Presentation visibility authored by the authoritative action.</param>
     /// <param name="hasProgress">Whether the acknowledgement carries a progress sample.</param>
     /// <param name="progressBase">Progress value at sample receipt, when present.</param>
     /// <param name="progressPerSecond">Local extrapolation rate, when present.</param>
@@ -1107,6 +1108,7 @@ public partial class InteractionInteractor : Node
         NodePath targetPath,
         StringName actionId,
         ulong executionId,
+        InteractionExecutionVisibility visibility,
         bool hasProgress,
         float progressBase,
         float progressPerSecond,
@@ -1118,26 +1120,24 @@ public partial class InteractionInteractor : Node
         if (target is InteractiveComponent interactive)
         {
             _pendingRequests.Remove(new InteractionRequestKey(interactive, actionId));
-            interactive.ConfirmRequesterExecution(
-                actionId,
-                executionId,
-                hasProgress,
-                new InteractionProgressSample(progressBase, progressPerSecond, revision)
-            );
+            if (visibility != InteractionExecutionVisibility.AuthorityOnly)
+            {
+                interactive.ConfirmRequesterExecution(
+                    actionId,
+                    executionId,
+                    hasProgress,
+                    new InteractionProgressSample(progressBase, progressPerSecond, revision)
+                );
+            }
+            else
+            {
+                interactive.RemovePendingExecution(actionId);
+            }
         }
 
-        // The authority has the last word on the deadline, so this recalibrates the bar the client
-        // predicted at the press: armed if the prediction declined to draw one, retimed if the query
-        // answered something else on this peer, cleared when the execution turns out to have no
-        // deadline at all.
-        //
-        // Retiming also pushes the deadline by the time this acknowledgement took to arrive, which the
-        // prediction has been measuring since the press. Without it the bar would fill a whole round
-        // trip before anything happens — the authority started its own clock half a trip after the
-        // press, and its completion needs the other half to come back — so the player would watch a
-        // bar finish, vanish, and only then the door open. The compensation is free and self-tuning: it
-        // is the latency actually suffered, so a host adds nothing and a bad link adds what it costs.
-        // The bar therefore understates the real progress slightly in the middle, and ends on time.
+        // The acknowledgement confirms the requester slot with the authority's latest presentation
+        // sample. Reconciliation preserves the value already shown and applies only newer revisions;
+        // actions hidden from the requester discard their pending marker without creating a slot.
         EmitSignal(SignalName.InteractionStarted, target!, actionId, executionId);
     }
 
@@ -1286,6 +1286,7 @@ public partial class InteractionInteractor : Node
                 path,
                 id,
                 executionId,
+                action.ExecutionVisibility,
                 hasProgress,
                 sample.ProgressBase,
                 sample.ProgressPerSecond,
@@ -1300,6 +1301,7 @@ public partial class InteractionInteractor : Node
                 path,
                 id,
                 executionId,
+                (int)action.ExecutionVisibility,
                 hasProgress,
                 sample.ProgressBase,
                 sample.ProgressPerSecond,
@@ -1552,10 +1554,8 @@ public partial class InteractionInteractor : Node
         return true;
     }
 
-    // An execution ended before its deadline — gameplay completing it early, presence lost, a cancel
-    // nobody asked for — takes its bar with it instead of letting it draw down to an end that already
-    // happened. Matched on the pair, so a terminal acknowledgement arriving late never erases the bar
-    // of a newer execution.
+    // A terminal acknowledgement removes the matching presentation slot immediately. Matching on the
+    // pair prevents a stale acknowledgement from erasing the slot of a newer execution.
     // A request the authority refused leaves nothing running, so the bar it drew optimistically and the
     // sustained input it created must go with it. Only an unacknowledged prediction is dropped: pressing
     // again on the very action one is already running is also a refusal, and it must not erase the bar

@@ -11,6 +11,7 @@
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="8_actiondef"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="9_staterule"]
 [ext_resource type="Script" path="res://addons/interaction_plugin/integration/stateful/TimedTransitionStateInteractionExecutor.cs" id="10_executor"]
+[ext_resource type="Script" uid="uid://bh3lpwhoij01g" path="res://addons/interaction_plugin/runtime/interactive/InteractionExecutionSynchronizer.cs" id="11_execution_sync"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
 
@@ -96,6 +97,7 @@ script = ExtResource("7_action")
 Definition = SubResource("Resource_activate_definition")
 Executor = NodePath("ActivateExecutor")
 Rules = Array[ExtResource("5_ll77h")]([SubResource("Resource_activate_phase_rule"), SubResource("Resource_activate_ready_rule")])
+ExecutionVisibility = 1
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
 [node name="ActivateExecutor" type="Node" parent="Interactive/ActivateAction" node_paths=PackedStringArray("Stateful")]
@@ -106,6 +108,11 @@ CompletedState = &"activated"
 CancelledState = &"idle"
 Duration = 1.5
 metadata/_custom_type_script = "uid://dafaivn8exu7s"
+
+[node name="InteractionExecutionSynchronizer" type="MultiplayerSynchronizer" parent="Interactive" node_paths=PackedStringArray("Interactive")]
+script = ExtResource("11_execution_sync")
+Interactive = NodePath("..")
+metadata/_custom_type_script = "uid://bh3lpwhoij01g"
 
 [node name="StatefulComponent" type="Node" parent="." unique_id=239787997]
 script = ExtResource("3_stateful")

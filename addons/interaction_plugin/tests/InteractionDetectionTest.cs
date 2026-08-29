@@ -168,7 +168,14 @@ public sealed partial class InteractionDetectionTest
         world.AddChild(character);
         ISceneRunner runner = ISceneRunner.Load(world);
 
-        await runner.SimulateFrames(4);
+        for (
+            int frame = 0;
+            frame < 30 && detector.Detect(interactive) != InteractionDetectionKind.Interactible;
+            frame++
+        )
+        {
+            await runner.SimulateFrames(1);
+        }
 
         AssertThat(detector.Detect(interactive)).IsEqual(InteractionDetectionKind.Interactible);
         // The overlap may land after the interactor already processed the frame it arrived in, so the

@@ -47,6 +47,11 @@ public partial class InteractionAction : Node
     [Export]
     public int Priority { get; set; }
 
+    /// <summary>Gets or sets which peers may observe this action while it executes.</summary>
+    [Export]
+    public InteractionExecutionVisibility ExecutionVisibility { get; set; } =
+        InteractionExecutionVisibility.RequesterOnly;
+
     /// <summary>
     /// Gets or sets the group of executions this action is exclusive with on its own target.
     /// </summary>

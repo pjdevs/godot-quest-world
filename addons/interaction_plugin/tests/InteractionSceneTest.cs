@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
+using InteractionPlugin.Editor;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Presentation.UI;
@@ -28,6 +29,7 @@ public sealed partial class InteractionSceneTest
     private const string IndicatorScenePath =
         "res://addons/interaction_plugin/scenes/InteractionIndicator.tscn";
     private const string ButtonScenePath = "res://quest_world/interactibles/button/Button.tscn";
+    private const string DoorScenePath = "res://quest_world/interactibles/door/Door.tscn";
     private const string LeverWallScenePath =
         "res://quest_world/interactibles/lever_wall/LeverWall.tscn";
 
@@ -77,6 +79,57 @@ public sealed partial class InteractionSceneTest
         AssertThat(synchronizer!.ReplicationConfig != null).IsTrue();
         AssertThat(actor.GetScript().AsGodotObject() == null).IsTrue();
         AssertThat(action.Executor is TimedTransitionStateInteractionExecutor).IsTrue();
+        AssertThat(action.ExecutionVisibility).IsEqual(InteractionExecutionVisibility.Replicated);
+        InteractionExecutionSynchronizer executionSynchronizer =
+            actor.GetNode<InteractionExecutionSynchronizer>(
+                "Interactive/InteractionExecutionSynchronizer"
+            );
+        AssertThat(executionSynchronizer.Interactive == interactive).IsTrue();
+        AssertThat(executionSynchronizer.RootPath).IsEqual(new NodePath("."));
+        AssertThat(executionSynchronizer.ReplicationConfig != null).IsTrue();
+    }
+
+    [TestCase]
+    public async Task DoorSynchronizationConvergesPresentationWithoutReplayingUnlockAudio()
+    {
+        Node3D door = GD.Load<PackedScene>(DoorScenePath).Instantiate<Node3D>();
+        ISceneRunner runner = ISceneRunner.Load(door);
+        await runner.SimulateFrames(1);
+        StatefulComponent stateful = door.GetNode<StatefulComponent>(
+            "Interaction/StatefulComponent"
+        );
+        AudioStreamPlayer3D audio = door.GetNode<AudioStreamPlayer3D>("AudioPlayer");
+        AnimationPlayer animation = door.GetNode<AnimationPlayer>("Visual/AnimationPlayer");
+
+        stateful.Set("ReplicatedState", new StringName("closed"));
+
+        AssertThat(audio.Playing).IsFalse();
+        AssertThat(animation.CurrentAnimation).IsEqual("RESET");
+    }
+
+    [TestCase]
+    public async Task GameplayTemplatesUseValidCurrentInteractionAuthoring()
+    {
+        Node3D root = new();
+        Node3D door = GD.Load<PackedScene>(DoorScenePath).Instantiate<Node3D>();
+        Node3D button = GD.Load<PackedScene>(ButtonScenePath).Instantiate<Node3D>();
+        Node3D longAction = GD.Load<PackedScene>(LongActionScenePath).Instantiate<Node3D>();
+        root.AddChild(door);
+        root.AddChild(button);
+        root.AddChild(longAction);
+        ISceneRunner runner = ISceneRunner.Load(root);
+        await runner.SimulateFrames(1);
+
+        InteractiveComponent[] templates =
+        {
+            door.GetNode<InteractiveComponent>("Interaction/InteractiveComponent"),
+            button.GetNode<InteractiveComponent>("InteractiveComponent"),
+            longAction.GetNode<InteractiveComponent>("Interactive"),
+        };
+        foreach (InteractiveComponent interactive in templates)
+        {
+            AssertThat(InteractionValidator.Validate(interactive).ToArray()).IsEmpty();
+        }
     }
 
     [TestCase]
