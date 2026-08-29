@@ -135,7 +135,7 @@ public partial class OpenDoorExecutor : InteractionActionExecutor
 | Member | Required | Called on | When |
 | --- | --- | --- | --- |
 | `Execute(context)` | Yes | Authority only | Once, synchronously, after rules pass and the execution is reserved |
-| `TimedInteractionExecutor.ComputeTimedDuration(context)` | No | Authority and owning client | Pure timed-feature query; a positive value predicts a linear sample, `0` leaves the execution open |
+| `TimedInteractionExecutor.ComputeTimedDuration(context)` | No | Authority and owning client | Pure timed-feature query; must return a positive finite duration |
 | `RequiresInteractorPresence` | No | Authority | Read after a running result; default `true` |
 | `OnExecutionCompleted(context)` | No | Authority only | Once when a previously running execution completes |
 | `OnExecutionCancelled(context, reason)` | No | Authority only | Once when a previously running execution is cancelled |
@@ -154,7 +154,13 @@ For timed authoring, inherit `TimedInteractionExecutor` and return `RunningTimed
 executor hierarchy is already required, compose the same policy directly: keep one `TimedExecution`, call
 `Start(context.Interactive, context.ExecutionId, duration)` and return `Running()` only when the helper
 started. Forward the three terminal callbacks to `TimedExecution.Stop(context.ExecutionId)`. One helper
-owns at most one active clock and refuses reuse instead of abandoning its first execution.
+owns at most one active clock and refuses reuse instead of abandoning its first execution. Its `Start`
+result distinguishes an active helper, invalid duration, stale execution, and missing scene tree.
+
+Timed duration is a strict contract: zero, negative, NaN, and infinity fail the accepted execution.
+Use `InteractionActionExecutor` (or `TransitionStateInteractionExecutor`) for open-ended gameplay. The
+clock uses monotonic real time on authority and presentation peers, so pausing one node's processing
+does not give the lifecycle and its extrapolated bar different time semantics.
 
 A timed running action delegates its clock to a composed `TimedExecution`, which publishes sparse linear samples and completes the generic execution on the authority. A presence-bound running action is also revalidated once per server process frame through its detector. Set `RequiresInteractorPresence = false` for work handed to the world; `CancelOnInputReleased` always keeps it presence-bound.
 

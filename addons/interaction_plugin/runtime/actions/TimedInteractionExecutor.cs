@@ -6,8 +6,8 @@ namespace QuestWorld.Interaction.Runtime.Actions;
 /// <remarks>
 /// The timed feature owns its clock here rather than in <see cref="InteractiveComponent"/>. The
 /// interaction core only sees a payload-free running result and the normal completion lifecycle. A
-/// positive duration emits an initial sample and sparse corrections; a zero duration remains a generic
-/// running execution completed by gameplay.
+/// positive finite duration emits an initial sample and sparse corrections. Invalid durations fail;
+/// open-ended actions must use or compose a generic executor explicitly.
 /// </remarks>
 [GlobalClass]
 public abstract partial class TimedInteractionExecutor : InteractionActionExecutor
@@ -24,7 +24,7 @@ public abstract partial class TimedInteractionExecutor : InteractionActionExecut
 
     /// <summary>Computes the duration for one action without changing gameplay.</summary>
     /// <param name="context">Pure context of the action being queried.</param>
-    /// <returns>Seconds to run, or zero to wait for an external completion.</returns>
+    /// <returns>A strictly positive finite number of seconds.</returns>
     public virtual float ComputeTimedDuration(in InteractionContext context) => Duration;
 
     /// <summary>Starts a timed or externally completed execution.</summary>
@@ -34,15 +34,15 @@ public abstract partial class TimedInteractionExecutor : InteractionActionExecut
     {
         InteractionContext query = new(context.Interactor, context.Interactive, context.Action);
         float duration = ComputeTimedDuration(query);
-        bool started = _timedExecution.Start(
+        TimedExecutionStartResult startResult = _timedExecution.Start(
             context.Interactive,
             context.ExecutionId,
             duration,
             CorrectionInterval
         );
-        return started || !float.IsFinite(duration) || duration <= 0.0f
+        return startResult == TimedExecutionStartResult.Started
             ? Running()
-            : new InteractionExecutionFailed("The timed executor is already active.");
+            : new InteractionExecutionFailed(StartFailureReason(startResult));
     }
 
     /// <inheritdoc />
@@ -77,4 +77,17 @@ public abstract partial class TimedInteractionExecutor : InteractionActionExecut
         _timedExecution.Stop(context.ExecutionId);
         base.OnExecutionFailed(context, reason);
     }
+
+    private static string StartFailureReason(TimedExecutionStartResult result) =>
+        result switch
+        {
+            TimedExecutionStartResult.AlreadyActive => "The timed executor is already active.",
+            TimedExecutionStartResult.InvalidDuration =>
+                "Timed execution duration must be finite and greater than zero.",
+            TimedExecutionStartResult.InvalidExecution =>
+                "The timed execution is no longer active.",
+            TimedExecutionStartResult.MissingSceneTree =>
+                "The timed execution requires an active scene tree.",
+            _ => "The timed execution could not start.",
+        };
 }

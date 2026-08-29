@@ -246,7 +246,7 @@ public sealed partial class InteractionNetworkTest
         try
         {
             session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
-            session.ClientA.Executor.Duration = 0.0f;
+            session.ClientA.Executor.Duration = null;
             session.Focus();
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
@@ -279,6 +279,7 @@ public sealed partial class InteractionNetworkTest
         try
         {
             session.Arm(new InteractionExecutionRunning(), duration: 0.0f);
+            session.Server.Executor.Duration = null;
             session.ClientA.Executor.Duration = 3600.0f;
             session.Focus();
 

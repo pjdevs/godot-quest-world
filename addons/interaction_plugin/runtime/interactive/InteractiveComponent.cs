@@ -37,25 +37,7 @@ internal sealed class InteractionExecutionPresentationSlot
 
     public StringName ActionId { get; }
 
-    public bool HasPublishedProgress { get; set; }
-
-    public float PublishedProgress { get; set; }
-
-    public bool HasTransportSample { get; set; }
-
-    public bool OwnsLinearProgress { get; set; }
-
-    public float ProgressBase { get; set; }
-
-    public float ProgressPerSecond { get; set; }
-
-    public long SampleRevision { get; set; }
-
-    public double SampleReceivedAt { get; set; }
-
-    public bool HasWarnedLinearProgressOverride { get; set; }
-
-    public Callable? ProgressSource { get; set; }
+    public InteractionExecutionProgressState Progress { get; } = new();
 }
 
 /// <summary>The hold progression the interactor reports, read once per presentation snapshot.</summary>
@@ -950,78 +932,12 @@ public partial class InteractiveComponent : Node
 
     private InteractionExecutionPresentation ResolveExecutionPresentation(
         InteractionExecutionPresentationSlot slot
-    )
-    {
-        if (slot.ProgressSource is Callable source)
-        {
-            if (!IsCallableUsable(source))
-            {
-                slot.ProgressSource = null;
-            }
-            else
-            {
-                bool clearSource = false;
-                try
-                {
-                    Variant value = source.Call();
-                    if (value.VariantType is Variant.Type.Float or Variant.Type.Int)
-                    {
-                        float numeric = (float)value.AsDouble();
-                        if (float.IsFinite(numeric))
-                        {
-                            return new InteractionExecutionPresentation(
-                                slot.ExecutionId,
-                                slot.ActionId,
-                                Mathf.Clamp(numeric, 0.0f, 1.0f)
-                            );
-                        }
-
-                        GD.PushWarning(
-                            $"{GetPath()}: execution progress source for '{slot.ActionId}' returned a non-finite value."
-                        );
-                        clearSource = true;
-                    }
-                    else if (value.VariantType != Variant.Type.Nil)
-                    {
-                        GD.PushWarning(
-                            $"{GetPath()}: execution progress source for '{slot.ActionId}' returned a non-numeric value."
-                        );
-                        clearSource = true;
-                    }
-                }
-                catch (Exception exception)
-                {
-                    GD.PushWarning(
-                        $"{GetPath()}: execution progress source for '{slot.ActionId}' failed: {exception.Message}"
-                    );
-                    clearSource = true;
-                }
-
-                if (clearSource)
-                {
-                    slot.ProgressSource = null;
-                }
-            }
-        }
-
-        if (slot.HasTransportSample)
-        {
-            double elapsed = Mathf.Max((float)(CurrentTimeSeconds() - slot.SampleReceivedAt), 0.0f);
-            return new InteractionExecutionPresentation(
-                slot.ExecutionId,
-                slot.ActionId,
-                Mathf.Clamp(slot.ProgressBase + slot.ProgressPerSecond * (float)elapsed, 0.0f, 1.0f)
-            );
-        }
-
-        return slot.HasPublishedProgress
-            ? new InteractionExecutionPresentation(
-                slot.ExecutionId,
-                slot.ActionId,
-                Mathf.Clamp(slot.PublishedProgress, 0.0f, 1.0f)
-            )
-            : new InteractionExecutionPresentation(slot.ExecutionId, slot.ActionId);
-    }
+    ) =>
+        new(
+            slot.ExecutionId,
+            slot.ActionId,
+            slot.Progress.Resolve(this, slot.ActionId, CurrentTimeSeconds())
+        );
 
     private void RemoveExecutionPresentation(in InteractionExecution execution)
     {
@@ -1068,33 +984,18 @@ public partial class InteractiveComponent : Node
         bool wasVisible = IsVisibleExecutionSlot(execution.Value.Action, executionId);
         InteractionExecutionPresentationSlot slot = GetProgressSlot(execution.Value);
 
-        if (slot.OwnsLinearProgress)
+        if (slot.Progress.RejectPublishedOverride(this, executionId))
         {
-            if (!slot.HasWarnedLinearProgressOverride)
-            {
-                GD.PushWarning(
-                    $"{GetPath()}: execution '{executionId}' already owns a linear progress source."
-                );
-                slot.HasWarnedLinearProgressOverride = true;
-            }
             return false;
         }
 
         float normalized = progress.HasValue ? Mathf.Clamp(progress.Value, 0.0f, 1.0f) : 0.0f;
-        if (
-            slot.HasPublishedProgress == progress.HasValue
-            && (!progress.HasValue || Mathf.IsEqualApprox(slot.PublishedProgress, normalized))
-        )
+        if (slot.Progress.MatchesPublished(progress))
         {
             return false;
         }
 
-        slot.HasTransportSample = false;
-        slot.OwnsLinearProgress = false;
-        slot.HasPublishedProgress = progress.HasValue;
-        slot.PublishedProgress = normalized;
-        slot.SampleRevision++;
-        slot.SampleReceivedAt = CurrentTimeSeconds();
+        slot.Progress.Publish(progress.HasValue ? normalized : null);
         if (wasVisible)
         {
             EmitSignal(SignalName.ExecutionPresentationChanged, slot.ActionId);
@@ -1118,7 +1019,7 @@ public partial class InteractiveComponent : Node
             return false;
         }
 
-        slot.ProgressSource = IsCallableUsable(source) ? source : null;
+        slot.Progress.SetSource(source);
         if (IsVisibleExecutionSlot(slot.ActionId, slot.ExecutionId))
         {
             EmitSignal(SignalName.ExecutionPresentationChanged, slot.ActionId);
@@ -1140,7 +1041,7 @@ public partial class InteractiveComponent : Node
             return false;
         }
 
-        slot.ProgressSource = null;
+        slot.Progress.ClearSource();
         if (IsVisibleExecutionSlot(slot.ActionId, slot.ExecutionId))
         {
             EmitSignal(SignalName.ExecutionPresentationChanged, slot.ActionId);
@@ -1163,13 +1064,7 @@ public partial class InteractiveComponent : Node
         bool wasVisible = IsVisibleExecutionSlot(execution.Value.Action, executionId);
         InteractionExecutionPresentationSlot slot = GetProgressSlot(execution.Value);
 
-        slot.HasTransportSample = true;
-        slot.OwnsLinearProgress = true;
-        slot.HasPublishedProgress = false;
-        slot.ProgressBase = Mathf.Clamp(progressBase, 0.0f, 1.0f);
-        slot.ProgressPerSecond = Mathf.Max(progressPerSecond, 0.0f);
-        slot.SampleRevision++;
-        slot.SampleReceivedAt = CurrentTimeSeconds();
+        slot.Progress.ReportLinear(progressBase, progressPerSecond, CurrentTimeSeconds());
         if (wasVisible)
         {
             EmitSignal(SignalName.ExecutionPresentationChanged, slot.ActionId);
@@ -1185,15 +1080,8 @@ public partial class InteractiveComponent : Node
             return false;
         }
 
-        InteractionExecutionPresentationSlot slot = new(0ul, actionId)
-        {
-            HasTransportSample = true,
-            OwnsLinearProgress = true,
-            ProgressBase = Mathf.Clamp(sample.ProgressBase, 0.0f, 1.0f),
-            ProgressPerSecond = Mathf.Max(sample.ProgressPerSecond, 0.0f),
-            SampleRevision = sample.Revision,
-            SampleReceivedAt = CurrentTimeSeconds(),
-        };
+        InteractionExecutionPresentationSlot slot = new(0ul, actionId);
+        slot.Progress.Predict(sample, CurrentTimeSeconds());
         _executionPresentations.Add(actionId, slot);
         EmitSignal(SignalName.ExecutionPresentationChanged, actionId);
         return true;
@@ -1224,7 +1112,7 @@ public partial class InteractiveComponent : Node
 
         if (slot is not null && slot.ExecutionId == executionId)
         {
-            if (hasSample && sample.Revision > slot.SampleRevision)
+            if (hasSample && sample.Revision > slot.Progress.Revision)
             {
                 ApplyRequesterProgress(actionId, executionId, true, sample);
             }
@@ -1238,44 +1126,8 @@ public partial class InteractiveComponent : Node
         }
 
         bool structuralChange = slot.ExecutionId != executionId;
-        bool hasPrediction = slot.ExecutionId == 0ul && slot.HasTransportSample;
-        float visibleProgress = hasPrediction
-            ? ResolveExecutionPresentation(slot).Progress ?? 0.0f
-            : 0.0f;
         slot.ExecutionId = executionId;
-        slot.ProgressSource = null;
-        if (hasSample && sample.ProgressPerSecond > 0.0f)
-        {
-            InteractionProgressSample reconciled = hasPrediction
-                ? sample.PreserveVisibleProgress(visibleProgress)
-                : sample;
-            slot.HasTransportSample = true;
-            slot.OwnsLinearProgress = true;
-            slot.HasPublishedProgress = false;
-            slot.ProgressBase = reconciled.ProgressBase;
-            slot.ProgressPerSecond = reconciled.ProgressPerSecond;
-            slot.SampleRevision = reconciled.Revision;
-            slot.SampleReceivedAt = CurrentTimeSeconds();
-        }
-        else if (hasSample)
-        {
-            slot.HasTransportSample = true;
-            slot.OwnsLinearProgress = false;
-            slot.HasPublishedProgress = true;
-            slot.ProgressBase = Mathf.Clamp(sample.ProgressBase, 0.0f, 1.0f);
-            slot.ProgressPerSecond = 0.0f;
-            slot.PublishedProgress = slot.ProgressBase;
-            slot.SampleRevision = sample.Revision;
-            slot.SampleReceivedAt = CurrentTimeSeconds();
-        }
-        else
-        {
-            slot.HasTransportSample = false;
-            slot.OwnsLinearProgress = false;
-            slot.HasPublishedProgress = false;
-            slot.SampleRevision = sample.Revision;
-            slot.SampleReceivedAt = CurrentTimeSeconds();
-        }
+        slot.Progress.Confirm(hasSample, sample, CurrentTimeSeconds(), this, actionId);
 
         if (structuralChange)
         {
@@ -1298,26 +1150,23 @@ public partial class InteractiveComponent : Node
                 out InteractionExecutionPresentationSlot? slot
             )
             || slot.ExecutionId != executionId
-            || sample.Revision <= slot.SampleRevision
         )
         {
             return false;
         }
 
-        if (hasProgress && sample.ProgressPerSecond > 0.0f)
+        if (
+            !slot.Progress.ApplyNewerSample(
+                hasProgress,
+                sample,
+                CurrentTimeSeconds(),
+                this,
+                actionId
+            )
+        )
         {
-            float visibleProgress = ResolveExecutionPresentation(slot).Progress ?? 0.0f;
-            sample = sample.PreserveVisibleProgress(visibleProgress);
+            return false;
         }
-
-        slot.SampleRevision = sample.Revision;
-        slot.SampleReceivedAt = CurrentTimeSeconds();
-        slot.HasTransportSample = hasProgress;
-        slot.OwnsLinearProgress = hasProgress && sample.ProgressPerSecond > 0.0f;
-        slot.HasPublishedProgress = hasProgress && !slot.OwnsLinearProgress;
-        slot.PublishedProgress = Mathf.Clamp(sample.ProgressBase, 0.0f, 1.0f);
-        slot.ProgressBase = slot.PublishedProgress;
-        slot.ProgressPerSecond = Mathf.Max(sample.ProgressPerSecond, 0.0f);
         EmitSignal(SignalName.ExecutionPresentationChanged, actionId);
         return true;
     }
@@ -1404,18 +1253,6 @@ public partial class InteractiveComponent : Node
         return false;
     }
 
-    private static bool IsCallableUsable(in Callable source)
-    {
-        if (source.Delegate is not null)
-        {
-            return true;
-        }
-
-        return source.Target is GodotObject target
-            && GodotObject.IsInstanceValid(target)
-            && !source.Method.IsEmpty;
-    }
-
     private bool IsVisibleExecutionSlot(InteractionAction action, ulong executionId)
     {
         return action.Definition is InteractionActionDefinition definition
@@ -1457,16 +1294,13 @@ public partial class InteractiveComponent : Node
     {
         if (IsRequesterUsable(execution) && !execution.Interactor.IsLocallyControlled)
         {
+            slot.Progress.TryGetSample(out _, out InteractionProgressSample sample);
             execution.Interactor.NotifyExecutionProgress(
                 this,
                 execution.Action,
                 execution.Id,
                 hasProgress,
-                new InteractionProgressSample(
-                    hasProgress ? slot.ProgressBase : 0.0f,
-                    hasProgress ? slot.ProgressPerSecond : 0.0f,
-                    slot.SampleRevision
-                )
+                hasProgress ? sample : new InteractionProgressSample(0.0f, 0.0f, sample.Revision)
             );
         }
     }
@@ -1487,26 +1321,7 @@ public partial class InteractiveComponent : Node
             return false;
         }
 
-        if (slot.HasTransportSample)
-        {
-            hasProgress = true;
-            sample = new InteractionProgressSample(
-                slot.ProgressBase,
-                slot.ProgressPerSecond,
-                slot.SampleRevision
-            );
-        }
-        else if (slot.HasPublishedProgress)
-        {
-            hasProgress = true;
-            sample = new InteractionProgressSample(
-                slot.PublishedProgress,
-                0.0f,
-                slot.SampleRevision
-            );
-        }
-
-        return true;
+        return slot.Progress.TryGetSample(out hasProgress, out sample);
     }
 
     /// <summary>Gets whether one execution is still reserved on this target.</summary>

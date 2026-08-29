@@ -265,7 +265,8 @@ public sealed partial class InteractionAckTest
         float compensated = afterAck.Progress!.Value;
         // No frame ran between the two reads. Reconciliation changes the remaining rate, not the value
         // the player already saw, so a lower value here would be a visible rewind at ACK.
-        AssertThat(compensated).IsEqualApprox(uncompensated, 0.0005f);
+        AssertThat(compensated >= uncompensated).IsTrue();
+        AssertThat(compensated <= uncompensated + 0.005f).IsTrue();
     }
 
     [TestCase]
@@ -315,7 +316,7 @@ public sealed partial class InteractionAckTest
         // The case the acknowledgement exists for: a non-blocking window needs no replicated state
         // and no downstream network session, only the authoritative lifecycle of its own request.
         AckWorld world = BuildWorld();
-        world.Executor.Duration = 0.0f;
+        world.Executor.Duration = null;
         world.Executor.Result = new InteractionExecutionRunning();
         VendorWindow window = new();
         window.Listen(world.Interactor);

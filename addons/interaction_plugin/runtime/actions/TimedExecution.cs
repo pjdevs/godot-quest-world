@@ -4,6 +4,16 @@ using QuestWorld.Interaction.Runtime.Interactive;
 
 namespace QuestWorld.Interaction.Runtime.Actions;
 
+/// <summary>Describes why a composable timed execution did or did not start.</summary>
+public enum TimedExecutionStartResult
+{
+    Started,
+    AlreadyActive,
+    InvalidDuration,
+    InvalidExecution,
+    MissingSceneTree,
+}
+
 /// <summary>Composable timing policy for one generic interaction execution.</summary>
 /// <remarks>
 /// This helper is not another interaction execution. It owns the authoritative time anchor, sparse
@@ -15,7 +25,7 @@ public sealed class TimedExecution : IDisposable
 {
     private InteractiveComponent? _interactive;
     private SceneTree? _sceneTree;
-    private float _elapsed;
+    private double _startedAt;
     private float _correctionInterval;
     private float _nextCorrection;
 
@@ -33,8 +43,8 @@ public sealed class TimedExecution : IDisposable
     /// <param name="executionId">Identifier allocated by the interaction core.</param>
     /// <param name="duration">Positive duration in seconds.</param>
     /// <param name="correctionInterval">Interval between sparse authority samples.</param>
-    /// <returns>False when no positive clock could be started.</returns>
-    public bool Start(
+    /// <returns>The exact outcome of the start attempt.</returns>
+    public TimedExecutionStartResult Start(
         InteractiveComponent interactive,
         ulong executionId,
         float duration,
@@ -46,38 +56,31 @@ public sealed class TimedExecution : IDisposable
             GD.PushWarning(
                 $"TimedExecution already owns execution '{ExecutionId}' and cannot start '{executionId}'."
             );
-            return false;
+            return TimedExecutionStartResult.AlreadyActive;
+        }
+
+        if (!float.IsFinite(duration) || duration <= 0.0f)
+        {
+            return TimedExecutionStartResult.InvalidDuration;
         }
 
         if (
             executionId == 0ul
             || !GodotObject.IsInstanceValid(interactive)
             || !interactive.IsExecutionActive(executionId)
-            || interactive.GetTree() is not SceneTree sceneTree
         )
         {
-            return false;
+            return TimedExecutionStartResult.InvalidExecution;
         }
 
-        if (!float.IsFinite(duration))
+        if (interactive.GetTree() is not SceneTree sceneTree)
         {
-            GD.PushWarning(
-                $"{interactive.GetPath()}: timed execution duration must be finite; the execution will wait for gameplay."
-            );
-            duration = 0.0f;
-        }
-        else
-        {
-            duration = Mathf.Max(duration, 0.0f);
-        }
-        if (duration <= 0.0f)
-        {
-            return false;
+            return TimedExecutionStartResult.MissingSceneTree;
         }
 
         _interactive = interactive;
         _sceneTree = sceneTree;
-        _elapsed = 0.0f;
+        _startedAt = CurrentTimeSeconds();
         _correctionInterval = Mathf.Max(correctionInterval, 0.0f);
         _nextCorrection = _correctionInterval > 0.0f ? _correctionInterval : float.PositiveInfinity;
         Duration = duration;
@@ -91,7 +94,7 @@ public sealed class TimedExecution : IDisposable
             progressPerSecond: 1.0f / duration
         );
         interactive.SetExecutionProgressSource(executionId, Callable.From(GetProgress));
-        return true;
+        return TimedExecutionStartResult.Started;
     }
 
     /// <summary>Stops this helper when it still belongs to <paramref name="executionId"/>.</summary>
@@ -124,7 +127,7 @@ public sealed class TimedExecution : IDisposable
 
         _interactive = null;
         _sceneTree = null;
-        _elapsed = 0.0f;
+        _startedAt = 0.0;
         _correctionInterval = 0.0f;
         _nextCorrection = 0.0f;
         Duration = 0.0f;
@@ -136,7 +139,9 @@ public sealed class TimedExecution : IDisposable
     /// <summary>Derives normalized progress locally from the synchronized time anchor.</summary>
     public float GetProgress()
     {
-        return IsActive && Duration > 0.0f ? Mathf.Clamp(_elapsed / Duration, 0.0f, 1.0f) : 0.0f;
+        return IsActive && Duration > 0.0f
+            ? Mathf.Clamp((float)(CurrentTimeSeconds() - _startedAt) / Duration, 0.0f, 1.0f)
+            : 0.0f;
     }
 
     /// <inheritdoc />
@@ -147,8 +152,9 @@ public sealed class TimedExecution : IDisposable
 
     internal static InteractionProgressSample? BuildPredictionSample(float duration)
     {
-        duration = float.IsFinite(duration) ? Mathf.Max(duration, 0.0f) : 0.0f;
-        return duration > 0.0f ? new InteractionProgressSample(0.0f, 1.0f / duration, 0L) : null;
+        return float.IsFinite(duration) && duration > 0.0f
+            ? new InteractionProgressSample(0.0f, 1.0f / duration, 0L)
+            : null;
     }
 
     private void OnProcessFrame()
@@ -163,13 +169,8 @@ public sealed class TimedExecution : IDisposable
             return;
         }
 
-        if (!_interactive.CanProcess())
-        {
-            return;
-        }
-
-        _elapsed += Mathf.Max((float)_interactive.GetProcessDeltaTime(), 0.0f);
-        if (_elapsed >= Duration)
+        float elapsed = Mathf.Max((float)(CurrentTimeSeconds() - _startedAt), 0.0f);
+        if (elapsed >= Duration)
         {
             InteractiveComponent interactive = _interactive;
             ulong executionId = ExecutionId;
@@ -178,16 +179,18 @@ public sealed class TimedExecution : IDisposable
             return;
         }
 
-        if (_elapsed < _nextCorrection)
+        if (elapsed < _nextCorrection)
         {
             return;
         }
 
-        _nextCorrection = _elapsed + _correctionInterval;
+        _nextCorrection = elapsed + _correctionInterval;
         _interactive.ReportExecutionLinearProgress(
             ExecutionId,
-            _elapsed / Duration,
+            elapsed / Duration,
             1.0f / Duration
         );
     }
+
+    private static double CurrentTimeSeconds() => Time.GetTicksMsec() / 1000.0;
 }

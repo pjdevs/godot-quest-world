@@ -1961,6 +1961,32 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
+    public async Task TimedExecutionUsesRealTimeWhenItsInteractiveStopsProcessing()
+    {
+        TestWorld testWorld = BuildWorld();
+        ActivationExecutorOf(testWorld.Action).Duration = 0.05f;
+        await testWorld.Runner.SimulateFrames(1);
+
+        testWorld.Interactive.ExecuteAction(
+            testWorld.Interactor,
+            testWorld.Action,
+            out ulong executionId
+        );
+        testWorld.Interactive.ProcessMode = Node.ProcessModeEnum.Disabled;
+
+        for (
+            int frame = 0;
+            frame < 300 && testWorld.Interactive.IsExecutionActive(executionId);
+            frame++
+        )
+        {
+            await testWorld.Runner.SimulateFrames(1);
+        }
+
+        AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsFalse();
+    }
+
+    [TestCase]
     public async Task TimedExecutionCanBeComposedByAGenericExecutor()
     {
         TestWorld testWorld = BuildWorld();
@@ -2028,53 +2054,51 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task AnExecutorWithoutDurationWaitsForAnExternalEvent()
+    public async Task AZeroDurationTimedExecutorFailsInsteadOfBecomingOpenEnded()
     {
         TestWorld testWorld = BuildWorld();
+        ActivationExecutorOf(testWorld.Action).Duration = 0.0f;
         await testWorld.Runner.SimulateFrames(1);
 
-        testWorld.Interactive.ExecuteAction(
+        InteractionExecutionResult result = testWorld.Interactive.ExecuteAction(
             testWorld.Interactor,
             testWorld.Action,
             out ulong executionId
         );
-        await testWorld.Runner.SimulateFrames(10);
 
-        AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsTrue();
+        AssertThat(result is InteractionExecutionFailed).IsTrue();
+        AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsFalse();
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
                     testWorld.Action.Definition!.Id,
-                    out InteractionExecutionPresentation presentation
+                    out _
                 )
             )
-            .IsTrue();
-        AssertThat(presentation.Progress.HasValue).IsFalse();
-        AssertThat(testWorld.Interactive.CompleteExecution(executionId)).IsTrue();
+            .IsFalse();
     }
 
     [TestCase]
-    public async Task NonFiniteTimedDurationFallsBackToGenericRunningWithoutProgress()
+    public async Task ANonFiniteTimedDurationFailsInsteadOfBecomingOpenEnded()
     {
         TestWorld testWorld = BuildWorld();
         ActivationExecutorOf(testWorld.Action).Duration = float.NaN;
         await testWorld.Runner.SimulateFrames(1);
 
-        testWorld.Interactive.ExecuteAction(
+        InteractionExecutionResult result = testWorld.Interactive.ExecuteAction(
             testWorld.Interactor,
             testWorld.Action,
             out ulong executionId
         );
 
-        AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsTrue();
+        AssertThat(result is InteractionExecutionFailed).IsTrue();
+        AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsFalse();
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
                     testWorld.Action.Definition!.Id,
-                    out InteractionExecutionPresentation presentation
+                    out _
                 )
             )
-            .IsTrue();
-        AssertThat(presentation.Progress.HasValue).IsFalse();
-        AssertThat(testWorld.Interactive.CompleteExecution(executionId)).IsTrue();
+            .IsFalse();
     }
 
     [TestCase]
@@ -2895,9 +2919,13 @@ public sealed partial class InteractionBehaviorTest
         }
     }
 
-    private sealed partial class TestActivationExecutor : TimedInteractionExecutor
+    private sealed partial class TestActivationExecutor : InteractionActionExecutor
     {
+        private readonly TimedExecution _timedExecution = new();
+
         public TestInteractiveActor? Actor { get; set; }
+
+        public float? Duration { get; set; }
 
         public bool RequiresPresence { get; set; } = true;
 
@@ -2910,11 +2938,36 @@ public sealed partial class InteractionBehaviorTest
                 return new InteractionExecutionFailed("No actor.");
             }
 
-            // The actor decides the outcome, this executor decides how long a running one lasts:
-            // a deadline now comes only from the query every peer may run.
             InteractionExecutionResult result = Actor.BeginActivation();
-            return result is InteractionExecutionRunning ? RunningTimed(context) : result;
+            if (result is not InteractionExecutionRunning || !Duration.HasValue)
+            {
+                return result;
+            }
+
+            return
+                _timedExecution.Start(context.Interactive, context.ExecutionId, Duration.Value)
+                == TimedExecutionStartResult.Started
+                ? Running()
+                : new InteractionExecutionFailed("The activation timer could not start.");
         }
+
+        internal override InteractionProgressSample? GetPredictionSample(
+            in InteractionContext context
+        ) => Duration.HasValue ? TimedExecution.BuildPredictionSample(Duration.Value) : null;
+
+        protected internal override void OnExecutionCompleted(
+            in InteractionExecutionContext context
+        ) => _timedExecution.Stop(context.ExecutionId);
+
+        protected internal override void OnExecutionCancelled(
+            in InteractionExecutionContext context,
+            string reason
+        ) => _timedExecution.Stop(context.ExecutionId);
+
+        protected internal override void OnExecutionFailed(
+            in InteractionExecutionContext context,
+            string reason
+        ) => _timedExecution.Stop(context.ExecutionId);
     }
 
     private sealed partial class ComposedTimedExecutor : InteractionActionExecutor
@@ -2925,13 +2978,15 @@ public sealed partial class InteractionBehaviorTest
 
         public override InteractionExecutionResult Execute(in InteractionExecutionContext context)
         {
-            return Timer.Start(context.Interactive, context.ExecutionId, Duration)
+            return
+                Timer.Start(context.Interactive, context.ExecutionId, Duration)
+                == TimedExecutionStartResult.Started
                 ? Running()
                 : new InteractionExecutionFailed("The timer could not start.");
         }
     }
 
-    private sealed partial class RecordingInteractionExecutor : TimedInteractionExecutor
+    private sealed partial class RecordingInteractionExecutor : InteractionActionExecutor
     {
         public InteractionExecutionResult Result { get; set; } =
             new InteractionExecutionCompleted();
@@ -2963,7 +3018,7 @@ public sealed partial class InteractionBehaviorTest
             LastAction = context.Action;
             LastExecutionId = context.ExecutionId;
             ReservedInteractorDuringExecute = context.Interactive.ActiveInteractor;
-            return Result is InteractionExecutionRunning ? RunningTimed(context) : Result;
+            return Result;
         }
 
         protected internal override void OnExecutionCompleted(

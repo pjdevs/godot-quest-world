@@ -32,19 +32,31 @@ public partial class TimedTransitionStateInteractionExecutor : TransitionStateIn
     {
         InteractionContext query = new(context.Interactor, context.Interactive, context.Action);
         float duration = ComputeTimedDuration(query);
-        bool started = _timedExecution.Start(
+        TimedExecutionStartResult startResult = _timedExecution.Start(
             context.Interactive,
             context.ExecutionId,
             duration,
             CorrectionInterval
         );
-        if (started || !float.IsFinite(duration) || duration <= 0.0f)
+        if (startResult == TimedExecutionStartResult.Started)
         {
             return base.StartRunning(context);
         }
 
         Stateful?.SetState(CancelledState);
-        return new InteractionExecutionFailed("The timed executor is already active.");
+        return new InteractionExecutionFailed(
+            startResult switch
+            {
+                TimedExecutionStartResult.AlreadyActive => "The timed executor is already active.",
+                TimedExecutionStartResult.InvalidDuration =>
+                    "Timed execution duration must be finite and greater than zero.",
+                TimedExecutionStartResult.InvalidExecution =>
+                    "The timed execution is no longer active.",
+                TimedExecutionStartResult.MissingSceneTree =>
+                    "The timed execution requires an active scene tree.",
+                _ => "The timed execution could not start.",
+            }
+        );
     }
 
     /// <inheritdoc />

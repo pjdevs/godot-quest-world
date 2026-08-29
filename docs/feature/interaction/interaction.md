@@ -468,6 +468,17 @@ n'importe quel executor. `TimedInteractionExecutor` garde l'ergonomie d'authorin
 `Duration`, `CorrectionInterval` et `RunningTimed(context)`. `InteractionExecutionRunning` reste sans
 payload et le core ne connaît ni durée ni type d'executor.
 
+La durée timed est un contrat strictement positif et fini. `0`, une valeur négative, `NaN` ou une
+infinité font échouer l'exécution acceptée ; le chemin open-ended utilise explicitement
+`InteractionActionExecutor` ou `TransitionStateInteractionExecutor`. `TimedExecution.Start` retourne
+un résultat détaillé au lieu d'un booléen ambigu. Son deadline et l'extrapolation utilisent tous deux
+le temps monotone réel : désactiver le processing d'un node ne désynchronise pas le chrono serveur de
+la barre distante.
+
+Le slot de présentation compose maintenant un `InteractionExecutionProgressState` interne. Cet objet
+encapsule callable, valeur publiée, sample linéaire, révision, réconciliation monotone et `Resolve()` ;
+`InteractiveComponent` ne calcule plus lui-même `ProgressBase + ProgressPerSecond * elapsed`.
+
 `TransitionStateInteractionExecutor` est la variante générique sans timer : elle attend une terminaison
 du gameplay. `TimedTransitionStateInteractionExecutor` réutilise le même cycle d'états et compose
 `TimedExecution`. Annulation et échec restaurent tous deux `CancelledState`, afin qu'aucune terminaison

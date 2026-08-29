@@ -266,8 +266,9 @@ public static class InteractionValidator
 
     private static IEnumerable<string> ValidateTimedTransitionStateExecutor(GodotObject obj)
     {
-        if (GetFloat(obj, "Duration") < 0.0f)
-            yield return "Duration must not be negative.";
+        float duration = GetFloat(obj, "Duration");
+        if (!float.IsFinite(duration) || duration <= 0.0f)
+            yield return "Duration must be finite and greater than zero.";
 
         foreach (string warning in ValidateTransitionStateExecutor(obj))
         {

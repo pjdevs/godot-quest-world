@@ -124,13 +124,13 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
-    public void TimedStateTransitionReportsANegativeDuration()
+    public void TimedStateTransitionRequiresAPositiveFiniteDuration()
     {
         TimedTransitionStateInteractionExecutor executor = new() { Duration = -1.0f };
 
         string[] warnings = InteractionValidator.Validate(executor).ToArray();
 
-        AssertThat(warnings.Contains("Duration must not be negative.")).IsTrue();
+        AssertThat(warnings.Contains("Duration must be finite and greater than zero.")).IsTrue();
         AssertThat(warnings.Contains("Stateful must be assigned.")).IsTrue();
     }
 
