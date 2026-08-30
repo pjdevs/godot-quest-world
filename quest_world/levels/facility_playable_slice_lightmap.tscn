@@ -1,0 +1,168 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://quest_world/levels/facility_playable_slice.tscn" id="1_base"]
+
+[sub_resource type="Environment" id="Environment_LightmapTest"]
+background_mode = 1
+background_color = Color(0.004, 0.006, 0.012, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.42, 0.48, 0.58, 1)
+ambient_light_energy = 0.02
+ambient_light_sky_contribution = 0.0
+reflected_light_source = 2
+tonemap_mode = 1
+ssao_enabled = true
+ssao_radius = 1.2
+ssao_intensity = 1.15
+ssao_power = 1.25
+ssil_enabled = false
+sdfgi_enabled = false
+
+[node name="test_world" instance=ExtResource("1_base")]
+
+; Pure LightmapGI comparison scene.
+; This intentionally starts from facility_playable_slice.tscn instead of the
+; previous SDFGI lighting pass so the A/B test changes the GI technique rather
+; than inheriting the widened real-time spots.
+;
+; IMPORTANT: LightmapGI cannot bake the CSGBox3D nodes directly. In Godot 4.7,
+; bake the CSG geometry to MeshInstance3D and unwrap UV2 before pressing
+; "Bake Lightmaps" on the LightmapGI node. Keep the original CSG hidden so the
+; source blockout remains editable.
+
+[node name="WorldEnvironment" parent="."]
+environment = SubResource("Environment_LightmapTest")
+
+[node name="LightmapGI" type="LightmapGI" parent="."]
+quality = 2
+bounces = 5
+bounce_indirect_energy = 1.0
+directional = true
+environment_mode = 0
+interior = true
+generate_probes_subdiv = 3
+supersampling = true
+supersampling_factor = 2.0
+texel_scale = 1.0
+use_denoiser = true
+use_texture_for_bounces = true
+
+; Entrance
+[node name="Light_CheckIn" parent="Level/FacilityBlockout/Entrance/Lighting"]
+light_bake_mode = 1
+light_size = 0.45
+
+[node name="Light_Generator" parent="Level/FacilityBlockout/Entrance/Lighting"]
+light_bake_mode = 1
+light_size = 0.5
+
+; Central Hub
+[node name="Light_NW" parent="Level/FacilityBlockout/CentralHub/Lighting"]
+light_bake_mode = 1
+light_size = 0.5
+
+[node name="Light_NE" parent="Level/FacilityBlockout/CentralHub/Lighting"]
+light_bake_mode = 1
+light_size = 0.5
+
+[node name="Light_SW" parent="Level/FacilityBlockout/CentralHub/Lighting"]
+light_bake_mode = 1
+light_size = 0.5
+
+[node name="Light_SE" parent="Level/FacilityBlockout/CentralHub/Lighting"]
+light_bake_mode = 1
+light_size = 0.5
+
+; Security
+[node name="Light_Checkpoint" parent="Level/FacilityBlockout/SecurityWing/Lighting"]
+light_bake_mode = 1
+light_size = 0.45
+
+[node name="Light_Monitoring" parent="Level/FacilityBlockout/SecurityWing/Lighting"]
+light_bake_mode = 1
+light_size = 0.45
+
+; Archives
+[node name="Light_Stacks" parent="Level/FacilityBlockout/ArchivesWing/Lighting"]
+light_bake_mode = 1
+light_size = 0.5
+
+[node name="Light_Reading" parent="Level/FacilityBlockout/ArchivesWing/Lighting"]
+light_bake_mode = 1
+light_size = 0.5
+
+; Water
+[node name="Light_Filtration" parent="Level/FacilityBlockout/WaterSystems/Lighting"]
+light_bake_mode = 1
+light_size = 0.5
+
+[node name="Light_Pumps" parent="Level/FacilityBlockout/WaterSystems/Lighting"]
+light_bake_mode = 1
+light_size = 0.5
+
+; Cooling
+[node name="Light_Chillers" parent="Level/FacilityBlockout/Cooling/Lighting"]
+light_bake_mode = 1
+light_size = 0.5
+
+[node name="Light_Bypass" parent="Level/FacilityBlockout/Cooling/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
+
+; Prototype Lab
+[node name="Light_NW" parent="Level/FacilityBlockout/PrototypeLab/Lighting"]
+light_bake_mode = 1
+light_size = 0.55
+
+[node name="Light_NE" parent="Level/FacilityBlockout/PrototypeLab/Lighting"]
+light_bake_mode = 1
+light_size = 0.55
+
+[node name="Light_SW" parent="Level/FacilityBlockout/PrototypeLab/Lighting"]
+light_bake_mode = 1
+light_size = 0.5
+
+[node name="Light_SE" parent="Level/FacilityBlockout/PrototypeLab/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
+
+; Connectors
+[node name="Light_A" parent="Level/FacilityBlockout/Connectors/EntranceToHub/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
+
+[node name="Light_B" parent="Level/FacilityBlockout/Connectors/EntranceToHub/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
+
+[node name="Light" parent="Level/FacilityBlockout/Connectors/HubToSecurity/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
+
+[node name="Light" parent="Level/FacilityBlockout/Connectors/HubToWater/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
+
+[node name="Light" parent="Level/FacilityBlockout/Connectors/SecurityToArchives/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
+
+[node name="Light" parent="Level/FacilityBlockout/Connectors/WaterToCooling/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
+
+[node name="Light_A" parent="Level/FacilityBlockout/Connectors/HubToPrototype/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
+
+[node name="Light_B" parent="Level/FacilityBlockout/Connectors/HubToPrototype/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
+
+[node name="Light" parent="Level/FacilityBlockout/Connectors/ArchivesToLab/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
+
+[node name="Light" parent="Level/FacilityBlockout/Connectors/CoolingToLab/Lighting"]
+light_bake_mode = 1
+light_size = 0.35
