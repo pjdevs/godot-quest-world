@@ -161,10 +161,15 @@ func _restructure_connectors(connectors: Node3D, scene_root: Node) -> int:
 func _ensure_combiner(parent: Node, combiner_name: StringName, scene_root: Node) -> CSGCombiner3D:
 	var existing := parent.get_node_or_null(NodePath(String(combiner_name))) as CSGCombiner3D
 	if existing != null:
+		# Once CSG primitives become children of a combiner, their own
+		# use_collision flags no longer define the collision of the final CSG
+		# result. The root combiner must own the generated static collision.
+		existing.use_collision = true
 		return existing
 
 	var combiner := CSGCombiner3D.new()
 	combiner.name = combiner_name
+	combiner.use_collision = true
 	parent.add_child(combiner)
 	combiner.owner = scene_root
 	return combiner
