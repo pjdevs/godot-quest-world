@@ -1,0 +1,102 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://quest_world/levels/facility_playable_slice_lightmap.tscn" id="1_base"]
+
+[sub_resource type="StandardMaterial3D" id="Material_TestGray"]
+albedo_color = Color(0.32, 0.35, 0.38, 1)
+roughness = 0.9
+
+[node name="test_world" instance=ExtResource("1_base")]
+
+[node name="LightmapGI" parent="."]
+light_data = null
+
+[node name="Architecture_Baked" parent="Level/FacilityBlockout/Entrance"]
+material_override = SubResource("Material_TestGray")
+[node name="Architecture_Baked" parent="Level/FacilityBlockout/CentralHub"]
+material_override = SubResource("Material_TestGray")
+[node name="Architecture_Baked" parent="Level/FacilityBlockout/SecurityWing"]
+material_override = SubResource("Material_TestGray")
+[node name="Architecture_Baked" parent="Level/FacilityBlockout/ArchivesWing"]
+material_override = SubResource("Material_TestGray")
+[node name="Architecture_Baked" parent="Level/FacilityBlockout/WaterSystems"]
+material_override = SubResource("Material_TestGray")
+[node name="Architecture_Baked" parent="Level/FacilityBlockout/Cooling"]
+material_override = SubResource("Material_TestGray")
+[node name="Architecture_Baked" parent="Level/FacilityBlockout/PrototypeLab"]
+material_override = SubResource("Material_TestGray")
+
+[node name="Light_CheckIn" parent="Level/FacilityBlockout/Entrance/Lighting"]
+light_bake_mode = 2
+[node name="Light_Generator" parent="Level/FacilityBlockout/Entrance/Lighting"]
+light_bake_mode = 2
+
+[node name="Light_NW" parent="Level/FacilityBlockout/CentralHub/Lighting"]
+light_bake_mode = 2
+shadow_enabled = true
+[node name="Light_NE" parent="Level/FacilityBlockout/CentralHub/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+[node name="Light_SW" parent="Level/FacilityBlockout/CentralHub/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+[node name="Light_SE" parent="Level/FacilityBlockout/CentralHub/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+
+[node name="Light_Checkpoint" parent="Level/FacilityBlockout/SecurityWing/Lighting"]
+light_bake_mode = 2
+[node name="Light_Monitoring" parent="Level/FacilityBlockout/SecurityWing/Lighting"]
+light_bake_mode = 2
+[node name="Light_Stacks" parent="Level/FacilityBlockout/ArchivesWing/Lighting"]
+light_bake_mode = 2
+[node name="Light_Reading" parent="Level/FacilityBlockout/ArchivesWing/Lighting"]
+light_bake_mode = 2
+[node name="Light_Filtration" parent="Level/FacilityBlockout/WaterSystems/Lighting"]
+light_bake_mode = 2
+[node name="Light_Pumps" parent="Level/FacilityBlockout/WaterSystems/Lighting"]
+light_bake_mode = 2
+[node name="Light_Chillers" parent="Level/FacilityBlockout/Cooling/Lighting"]
+light_bake_mode = 2
+[node name="Light_Bypass" parent="Level/FacilityBlockout/Cooling/Lighting"]
+light_bake_mode = 2
+
+[node name="Light_NW" parent="Level/FacilityBlockout/PrototypeLab/Lighting"]
+light_bake_mode = 2
+[node name="Light_NE" parent="Level/FacilityBlockout/PrototypeLab/Lighting"]
+light_bake_mode = 2
+[node name="Light_SW" parent="Level/FacilityBlockout/PrototypeLab/Lighting"]
+light_bake_mode = 2
+[node name="Light_SE" parent="Level/FacilityBlockout/PrototypeLab/Lighting"]
+light_bake_mode = 2
+
+[node name="Light_A" parent="Level/FacilityBlockout/Connectors/EntranceToHub/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+[node name="Light_B" parent="Level/FacilityBlockout/Connectors/EntranceToHub/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+[node name="Light" parent="Level/FacilityBlockout/Connectors/HubToSecurity/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+[node name="Light" parent="Level/FacilityBlockout/Connectors/HubToWater/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+[node name="Light" parent="Level/FacilityBlockout/Connectors/SecurityToArchives/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+[node name="Light" parent="Level/FacilityBlockout/Connectors/WaterToCooling/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+[node name="Light_A" parent="Level/FacilityBlockout/Connectors/HubToPrototype/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+[node name="Light_B" parent="Level/FacilityBlockout/Connectors/HubToPrototype/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+[node name="Light" parent="Level/FacilityBlockout/Connectors/ArchivesToLab/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false
+[node name="Light" parent="Level/FacilityBlockout/Connectors/CoolingToLab/Lighting"]
+light_bake_mode = 2
+shadow_enabled = false

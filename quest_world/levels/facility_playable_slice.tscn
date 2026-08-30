@@ -1,0 +1,307 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://quest_world/levels/facility.tscn" id="1_base"]
+
+[sub_resource type="StandardMaterial3D" id="MatInteractive"]
+albedo_color = Color(0.15, 0.72, 0.32, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="MatTechnical"]
+albedo_color = Color(0.08, 0.42, 0.9, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="MatMovable"]
+albedo_color = Color(0.86, 0.16, 0.16, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="MatTransition"]
+albedo_color = Color(0.96, 0.76, 0.08, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="MatObjective"]
+albedo_color = Color(0.62, 0.22, 0.86, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="MatHazard"]
+albedo_color = Color(1, 0.4, 0.06, 1)
+roughness = 0.8
+
+[node name="test_world" instance=ExtResource("1_base")]
+
+; Entrance — replace the parked prop with a real threshold/readable fire door blockout.
+[node name="AuxiliaryCellDock" parent="Level/FacilityBlockout/Entrance"]
+visible = false
+
+[node name="ParkedFireDoor" parent="Level/FacilityBlockout/Entrance"]
+visible = false
+
+[node name="FireDoor_OpenPanel" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.35, 1.75, 1.2)
+use_collision = true
+size = Vector3(2.8, 3.5, 0.32)
+material = SubResource("MatMovable")
+
+[node name="FireDoor_ClosedPoseMarker" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 3.85, 1.5)
+size = Vector3(2.9, 0.18, 0.4)
+material = SubResource("MatTransition")
+
+[node name="FireDoorLabel" type="Label3D" parent="Level/FacilityBlockout/Entrance"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 3.45, 1.0)
+pixel_size = 0.012
+text = "FIRE DOOR\ncloses after generator start"
+font_size = 40
+outline_size = 8
+
+; Central Hub — put the power decision on the island and the transit control at the objective.
+[node name="MainBreakerPanel" parent="Level/FacilityBlockout/CentralHub"]
+visible = false
+
+[node name="TransitConsole" parent="Level/FacilityBlockout/CentralHub"]
+visible = false
+
+[node name="TransitBlastDoor_Parked" parent="Level/FacilityBlockout/CentralHub"]
+visible = false
+
+[node name="LoadGauge" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.05, 2.82)
+use_collision = true
+size = Vector3(4.6, 0.9, 0.3)
+material = SubResource("MatTechnical")
+
+[node name="LoadGaugeLabel" type="Label3D" parent="Level/FacilityBlockout/CentralHub"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.08, 2.64)
+pixel_size = 0.012
+text = "EMERGENCY BUS  3 / 3"
+font_size = 42
+outline_size = 8
+
+[node name="Breaker_Cooling" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.65, 1.15, 2.9)
+use_collision = true
+size = Vector3(0.72, 1.25, 0.45)
+material = SubResource("MatInteractive")
+
+[node name="Breaker_Security" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.55, 1.15, 2.9)
+use_collision = true
+size = Vector3(0.72, 1.25, 0.45)
+material = SubResource("MatInteractive")
+
+[node name="Breaker_Transit" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.55, 1.15, 2.9)
+use_collision = true
+size = Vector3(0.72, 1.25, 0.45)
+material = SubResource("MatInteractive")
+
+[node name="Breaker_Archives" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.65, 1.15, 2.9)
+use_collision = true
+size = Vector3(0.72, 1.25, 0.45)
+material = SubResource("MatInteractive")
+
+[node name="BreakerLabels" type="Label3D" parent="Level/FacilityBlockout/CentralHub"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 3.13)
+pixel_size = 0.009
+text = "COOLING     SECURITY      TRANSIT      ARCHIVES\n    2             1             2             1"
+font_size = 34
+outline_size = 6
+
+[node name="EmergencyBusCoupler" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub"]
+transform = Transform3D(0.9848077, 0, 0.17364818, 0, 1, 0, -0.17364818, 0, 0.9848077, -5.7, 1.05, 5.7)
+use_collision = true
+size = Vector3(2.2, 2.1, 1.0)
+material = SubResource("MatInteractive")
+
+[node name="EmergencyBusCouplerLabel" type="Label3D" parent="Level/FacilityBlockout/CentralHub"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.7, 2.45, 5.2)
+pixel_size = 0.01
+text = "EMERGENCY BUS COUPLER\nHOLD +2 CAPACITY"
+font_size = 36
+outline_size = 7
+
+[node name="PrototypeTransitConsole" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.05, -7.7)
+use_collision = true
+size = Vector3(3.0, 2.1, 1.0)
+material = SubResource("MatInteractive")
+
+[node name="PrototypeTransitLabel" type="Label3D" parent="Level/FacilityBlockout/CentralHub"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.55, -7.2)
+pixel_size = 0.01
+text = "OPEN PROTOTYPE BLAST DOOR"
+font_size = 38
+outline_size = 7
+
+; Security — preserve a powered checkpoint but leave a real standing maintenance route when Security is unavailable.
+[node name="SecurityBreaker" parent="Level/FacilityBlockout/SecurityWing"]
+visible = false
+
+[node name="BlastDoor_Parked" parent="Level/FacilityBlockout/SecurityWing"]
+visible = false
+
+[node name="CheckpointGapMarker" parent="Level/FacilityBlockout/SecurityWing"]
+visible = false
+use_collision = false
+
+[node name="MaintenanceGapFrame" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing"]
+transform = Transform3D(0.9781476, 0, 0.2079117, 0, 1, 0, -0.2079117, 0, 0.9781476, -3.2, 3.35, 1.2)
+size = Vector3(1.8, 0.35, 1.5)
+material = SubResource("MatTransition")
+
+[node name="MaintenanceGapLabel" type="Label3D" parent="Level/FacilityBlockout/SecurityWing"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.2, 3.8, 1.2)
+pixel_size = 0.009
+text = "MAINTENANCE GAP"
+font_size = 34
+outline_size = 6
+
+[node name="OperationsConsoleLabel" type="Label3D" parent="Level/FacilityBlockout/SecurityWing"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.6, 2.25, -3.8)
+pixel_size = 0.009
+text = "OPERATIONS / TRANSIT AUTHORIZATION"
+font_size = 32
+outline_size = 6
+
+; Archives — make the data bus the visual focus and remove the purposeless movable cart.
+[node name="MobileArchiveCart" parent="Level/FacilityBlockout/ArchivesWing"]
+visible = false
+use_collision = false
+
+[node name="ArchiveDataBus" parent="Level/FacilityBlockout/ArchivesWing"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.35, 0.6)
+size = Vector3(3.2, 2.7, 2.0)
+
+[node name="ArchiveDataBusLabel" type="Label3D" parent="Level/FacilityBlockout/ArchivesWing"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.05, 0.6)
+pixel_size = 0.01
+text = "ARCHIVE DATA BUS\nREROUTE -> LAB SERVICE HATCH"
+font_size = 34
+outline_size = 7
+
+; Water — turn Pump B's cell into a visible machine component and move purge near Cooling.
+[node name="Pump_B" parent="Level/FacilityBlockout/WaterSystems"]
+visible = false
+
+[node name="WaterControl" parent="Level/FacilityBlockout/WaterSystems"]
+visible = false
+
+[node name="PumpBFixedBody" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems"]
+transform = Transform3D(0.99026805, 0, 0.1391731, 0, 1, 0, -0.1391731, 0, 0.99026805, -0.8, 0.75, 5)
+use_collision = true
+size = Vector3(2.6, 1.5, 2.0)
+material = SubResource("MatTechnical")
+
+[node name="PumpBCellSocket" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.8, 1.25, 3.95)
+use_collision = true
+size = Vector3(1.4, 0.8, 0.45)
+material = SubResource("MatInteractive")
+
+[node name="PumpBAuxiliaryCell" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.8, 1.25, 3.68)
+use_collision = true
+size = Vector3(1.05, 0.58, 0.55)
+material = SubResource("MatMovable")
+
+[node name="PumpBLabel" type="Label3D" parent="Level/FacilityBlockout/WaterSystems"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.8, 2.1, 4.1)
+pixel_size = 0.009
+text = "PUMP B\nAUX CELL INSTALLED"
+font_size = 34
+outline_size = 6
+
+[node name="PurgeControl" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.6, 1.05, -5.55)
+use_collision = true
+size = Vector3(2.2, 2.1, 1.0)
+material = SubResource("MatInteractive")
+
+[node name="PurgeCellSocket" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.6, 0.8, -4.98)
+use_collision = true
+size = Vector3(1.0, 0.6, 0.35)
+material = SubResource("MatTechnical")
+
+[node name="PurgeLabel" type="Label3D" parent="Level/FacilityBlockout/WaterSystems"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.6, 2.55, -5.0)
+pixel_size = 0.009
+text = "PURGE\nHOLD MANUAL / INSTALL CELL"
+font_size = 32
+outline_size = 6
+
+[node name="PressureGauge_Water" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.8, 2.25, -5.7)
+size = Vector3(1.4, 1.4, 0.25)
+material = SubResource("MatTechnical")
+
+; Cooling — mirror the shared pressure feedback and frame the bypass as the route-opening operation.
+[node name="ServiceFan" parent="Level/FacilityBlockout/Cooling"]
+visible = false
+use_collision = false
+
+[node name="PressureGauge_Cooling" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.25, 2.25, 5.5)
+size = Vector3(1.4, 1.4, 0.25)
+material = SubResource("MatTechnical")
+
+[node name="EmergencyBypassLabel" type="Label3D" parent="Level/FacilityBlockout/Cooling"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.8, 2.75, 5.0)
+pixel_size = 0.009
+text = "LAB COOLANT BYPASS\nREQUIRES LOW PRESSURE"
+font_size = 32
+outline_size = 6
+
+; Prototype Lab — all three routes converge on one diagnostic surface.
+[node name="ObservationConsole_West" parent="Level/FacilityBlockout/PrototypeLab"]
+visible = false
+
+[node name="ObservationConsole_East" parent="Level/FacilityBlockout/PrototypeLab"]
+visible = false
+
+[node name="MovableRecoveryCradle" parent="Level/FacilityBlockout/PrototypeLab"]
+visible = false
+use_collision = false
+
+[node name="CoolantEmergencyPanel" parent="Level/FacilityBlockout/PrototypeLab"]
+visible = false
+use_collision = false
+
+[node name="CognitiveDiagnosticConsole" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 6.65)
+use_collision = true
+size = Vector3(4.2, 2.0, 1.25)
+material = SubResource("MatInteractive")
+
+[node name="CognitiveDiagnosticLabel" type="Label3D" parent="Level/FacilityBlockout/PrototypeLab"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.55, 6.0)
+pixel_size = 0.011
+text = "COGNITIVE PROCESS DIAGNOSTIC"
+font_size = 38
+outline_size = 7
+
+; Direct route — complete double blast door instead of parked/upright placeholders.
+[node name="BlastDoor_LeftPanel" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.48, 1.7, 6.6)
+use_collision = true
+size = Vector3(2.9, 3.4, 0.42)
+material = SubResource("MatMovable")
+
+[node name="BlastDoor_RightPanel" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.48, 1.7, 6.6)
+use_collision = true
+size = Vector3(2.9, 3.4, 0.42)
+material = SubResource("MatMovable")
+
+; Archive and Cooling routes — complete hatch obstacles that fill their corridors.
+[node name="ArchiveServiceHatchPanel" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/ArchivesToLab"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.65, 0)
+use_collision = true
+size = Vector3(5.9, 3.3, 0.38)
+material = SubResource("MatTransition")
+
+[node name="CoolingServiceHatchPanel" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/CoolingToLab"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.65, 0)
+use_collision = true
+size = Vector3(5.9, 3.3, 0.38)
+material = SubResource("MatTransition")
