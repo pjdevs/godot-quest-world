@@ -81,5 +81,12 @@ interact={
 [rendering]
 
 rendering_device/driver.windows="d3d12"
+global_illumination/voxel_gi/quality=1
+environment/ssao/quality=3
+environment/ssil/quality=3
 anti_aliasing/quality/msaa_3d=3
+environment/screen_space_reflection/half_size=false
+environment/subsurface_scattering/subsurface_scattering_quality=3
+global_illumination/sdfgi/probe_ray_count=5
+global_illumination/sdfgi/frames_to_update_lights=4
 anti_aliasing/quality/screen_space_aa=2

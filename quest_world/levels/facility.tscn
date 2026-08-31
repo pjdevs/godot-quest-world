@@ -7,22 +7,26 @@
 
 [sub_resource type="Environment" id="Environment_20rw3"]
 background_mode = 1
-background_color = Color(0.004, 0.006, 0.012, 1)
-ambient_light_source = 2
-ambient_light_color = Color(0.42, 0.48, 0.58, 1)
-ambient_light_energy = 0.32
-reflected_light_source = 2
-tonemap_mode = 1
+ambient_light_source = 1
+reflected_light_source = 1
+tonemap_mode = 3
+ssr_enabled = true
 ssao_enabled = true
 ssao_radius = 1.2
 ssao_intensity = 1.35
 ssao_power = 1.35
+ssil_enabled = true
 sdfgi_enabled = true
-sdfgi_use_occlusion = true
 sdfgi_read_sky_light = false
-sdfgi_bounce_feedback = 0.55
-sdfgi_cascades = 3
-sdfgi_energy = 1.15
+glow_enabled = true
+glow_intensity = 0.15
+glow_bloom = 0.1
+fog_enabled = true
+fog_density = 0.005
+volumetric_fog_enabled = true
+
+[sub_resource type="CameraAttributesPractical" id="CameraAttributesPractical_r2hu2"]
+auto_exposure_min_sensitivity = 60.0
 
 [sub_resource type="StandardMaterial3D" id="Material_StaticGray"]
 resource_name = "BLOCKOUT_Static_Gray"
@@ -49,18 +53,13 @@ resource_name = "BLOCKOUT_Movable_Red"
 albedo_color = Color(0.86, 0.16, 0.16, 1)
 roughness = 0.8
 
-[sub_resource type="StandardMaterial3D" id="Material_Ceiling"]
-resource_name = "BLOCKOUT_Ceiling_DarkGray"
-albedo_color = Color(0.2, 0.22, 0.25, 1)
-roughness = 0.95
-
 [sub_resource type="StandardMaterial3D" id="Material_LightNeutral"]
 resource_name = "BLOCKOUT_Light_Neutral"
 albedo_color = Color(0.78, 0.86, 1, 1)
 roughness = 0.35
 emission_enabled = true
-emission = Color(0.78, 0.86, 1, 1)
-emission_energy_multiplier = 3.5
+emission = Color(1.0601147, 1.164808, 1.353256, 1)
+emission_energy_multiplier = 5.0
 
 [sub_resource type="StandardMaterial3D" id="Material_LightWarm"]
 resource_name = "BLOCKOUT_Light_Warm"
@@ -96,10 +95,11 @@ emission_enabled = true
 emission = Color(1, 0.05, 0.02, 1)
 emission_energy_multiplier = 4.0
 
-[node name="test_world" type="Node3D" unique_id=1604557493]
+[node name="Facility" type="Node3D" unique_id=1604557493]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=291661268]
 environment = SubResource("Environment_20rw3")
+camera_attributes = SubResource("CameraAttributesPractical_r2hu2")
 
 [node name="Level" type="Node3D" parent="." unique_id=746620120]
 
@@ -214,7 +214,7 @@ material = SubResource("Material_MovableRed")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(12.5, 0.5, 14.5)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Entrance" unique_id=32114733]
 
@@ -223,28 +223,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 3.5)
 size = Vector3(2.6, 0.12, 0.4)
 material = SubResource("Material_LightNeutral")
 
-[node name="Light_CheckIn" type="SpotLight3D" parent="Level/FacilityBlockout/Entrance/Lighting" unique_id=374438686]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 3.5)
-light_color = Color(0.78, 0.86, 1, 1)
-light_energy = 3.0
-shadow_enabled = true
-spot_range = 8.0
-spot_angle = 68.0
-spot_angle_attenuation = 0.65
-
 [node name="Fixture_Generator" type="CSGBox3D" parent="Level/FacilityBlockout/Entrance/Lighting" unique_id=1314268554 groups=["blockout_light_fixture"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, -3.5)
 size = Vector3(2.6, 0.12, 0.4)
 material = SubResource("Material_LightWarm")
-
-[node name="Light_Generator" type="SpotLight3D" parent="Level/FacilityBlockout/Entrance/Lighting" unique_id=1562514957]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, -3.5)
-light_color = Color(1, 0.72, 0.42, 1)
-light_energy = 2.6
-shadow_enabled = true
-spot_range = 8.0
-spot_angle = 68.0
-spot_angle_attenuation = 0.65
 
 [node name="CentralHub" type="Node3D" parent="Level/FacilityBlockout" unique_id=1446087549]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
@@ -292,7 +274,7 @@ size = Vector3(0.5, 5, 4)
 material = SubResource("Material_StaticGray")
 
 [node name="Wall_East_North" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=883210490]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.25, 2, -5.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.2274065, 2.1528845, -5.2731543)
 use_collision = true
 size = Vector3(0.5, 5, 4)
 material = SubResource("Material_StaticGray")
@@ -386,68 +368,40 @@ size = Vector3(2.6, 3, 0.6)
 material = SubResource("Material_MovableRed")
 
 [node name="Ceiling" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub" unique_id=2065179216 groups=["blockout_roof"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.011404991, 4.75, -0.001581192)
 use_collision = true
 size = Vector3(24.5, 0.5, 20.5)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/CentralHub" unique_id=1535676715]
 
 [node name="Fixture_NW" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=407379410 groups=["blockout_light_fixture"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 4.4, -4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 4.451937, -4)
 size = Vector3(2.8, 0.12, 0.4)
 material = SubResource("Material_LightNeutral")
-
-[node name="Light_NW" type="SpotLight3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=818519862]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -5, 4.2, -4)
-light_color = Color(0.78, 0.86, 1, 1)
-light_energy = 3.2
-shadow_enabled = true
-spot_range = 9.5
-spot_angle = 70.0
-spot_angle_attenuation = 0.6
 
 [node name="Fixture_NE" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=824244015 groups=["blockout_light_fixture"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 4.4, -4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 4.451937, -4)
 size = Vector3(2.8, 0.12, 0.4)
 material = SubResource("Material_LightNeutral")
-
-[node name="Light_NE" type="SpotLight3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=761124704]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 5, 4.2, -4)
-light_color = Color(0.78, 0.86, 1, 1)
-light_energy = 3.2
-shadow_enabled = true
-spot_range = 9.5
-spot_angle = 70.0
-spot_angle_attenuation = 0.6
 
 [node name="Fixture_SW" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=2026444481 groups=["blockout_light_fixture"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 4.4, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 4.451937, 4)
 size = Vector3(2.8, 0.12, 0.4)
 material = SubResource("Material_LightNeutral")
-
-[node name="Light_SW" type="SpotLight3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=1448030430]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -5, 4.2, 4)
-light_color = Color(0.78, 0.86, 1, 1)
-light_energy = 3.2
-shadow_enabled = true
-spot_range = 9.5
-spot_angle = 70.0
-spot_angle_attenuation = 0.6
 
 [node name="Fixture_SE" type="CSGBox3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=178366574 groups=["blockout_light_fixture"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 4.4, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 4.451937, 4)
 size = Vector3(2.8, 0.12, 0.4)
 material = SubResource("Material_LightNeutral")
 
-[node name="Light_SE" type="SpotLight3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=935509561]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 5, 4.2, 4)
-light_color = Color(0.78, 0.86, 1, 1)
-light_energy = 3.2
+[node name="Light_NW" type="AreaLight3D" parent="Level/FacilityBlockout/CentralHub/Lighting" unique_id=1139076245]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, -5, 4.362005, -4)
+light_indirect_energy = 3.0
 shadow_enabled = true
-spot_range = 9.5
-spot_angle = 70.0
-spot_angle_attenuation = 0.6
+area_range = 10.0
+area_attenuation = 0.5
+area_size = Vector2(2.8, 0.505)
 
 [node name="SecurityWing" type="Node3D" parent="Level/FacilityBlockout" unique_id=2062788921]
 transform = Transform3D(0.9848077, 0, -0.17364818, 0, 1, 0, 0.17364818, 0, 0.9848077, -31, 0, 6)
@@ -546,7 +500,7 @@ material = SubResource("Material_MovableRed")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(16.5, 0.5, 14.5)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/SecurityWing" unique_id=949237023]
 
@@ -555,28 +509,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 4.4, -3)
 size = Vector3(2.4, 0.12, 0.4)
 material = SubResource("Material_LightCool")
 
-[node name="Light_Checkpoint" type="SpotLight3D" parent="Level/FacilityBlockout/SecurityWing/Lighting" unique_id=1322769921]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -3, 4.2, -3)
-light_color = Color(0.48, 0.66, 1, 1)
-light_energy = 2.8
-shadow_enabled = true
-spot_range = 8.0
-spot_angle = 68.0
-spot_angle_attenuation = 0.65
-
 [node name="Fixture_Monitoring" type="CSGBox3D" parent="Level/FacilityBlockout/SecurityWing/Lighting" unique_id=1480297495 groups=["blockout_light_fixture"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 4.4, 3)
 size = Vector3(2.4, 0.12, 0.4)
 material = SubResource("Material_LightNeutral")
-
-[node name="Light_Monitoring" type="SpotLight3D" parent="Level/FacilityBlockout/SecurityWing/Lighting" unique_id=1592862214]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 3, 4.2, 3)
-light_color = Color(0.78, 0.86, 1, 1)
-light_energy = 2.8
-shadow_enabled = true
-spot_range = 8.0
-spot_angle = 68.0
-spot_angle_attenuation = 0.65
 
 [node name="ArchivesWing" type="Node3D" parent="Level/FacilityBlockout" unique_id=1713866926]
 transform = Transform3D(0.9945219, 0, 0.104528464, 0, 1, 0, -0.104528464, 0, 0.9945219, -29, 0, -16)
@@ -693,7 +629,7 @@ material = SubResource("Material_MovableRed")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(16.5, 0.5, 16.5)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/ArchivesWing" unique_id=1177489497]
 
@@ -702,28 +638,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 4.4, -3)
 size = Vector3(2.4, 0.12, 0.4)
 material = SubResource("Material_LightWarm")
 
-[node name="Light_Stacks" type="SpotLight3D" parent="Level/FacilityBlockout/ArchivesWing/Lighting" unique_id=1525452475]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -4, 4.2, -3)
-light_color = Color(1, 0.72, 0.42, 1)
-light_energy = 2.5
-shadow_enabled = true
-spot_range = 8.0
-spot_angle = 66.0
-spot_angle_attenuation = 0.7
-
 [node name="Fixture_Reading" type="CSGBox3D" parent="Level/FacilityBlockout/ArchivesWing/Lighting" unique_id=1971392834 groups=["blockout_light_fixture"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 4.4, 3)
 size = Vector3(2.4, 0.12, 0.4)
 material = SubResource("Material_LightWarm")
-
-[node name="Light_Reading" type="SpotLight3D" parent="Level/FacilityBlockout/ArchivesWing/Lighting" unique_id=674271337]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 4, 4.2, 3)
-light_color = Color(1, 0.72, 0.42, 1)
-light_energy = 2.5
-shadow_enabled = true
-spot_range = 8.0
-spot_angle = 66.0
-spot_angle_attenuation = 0.7
 
 [node name="Door" parent="Level/FacilityBlockout/ArchivesWing" unique_id=54710487 instance=ExtResource("1_r2hu2")]
 transform = Transform3D(-2.2351742e-08, 0, -1.0000001, 0, 1, 0, 1.0000001, 0, -2.2351742e-08, 8.178549, 0.1000005, -2.7785206)
@@ -830,7 +748,7 @@ material = SubResource("Material_HazardOrange")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(16.5, 0.5, 14.5)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/WaterSystems" unique_id=1907265946]
 
@@ -839,28 +757,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 4.4, -3)
 size = Vector3(2.4, 0.12, 0.4)
 material = SubResource("Material_LightNeutral")
 
-[node name="Light_Filtration" type="SpotLight3D" parent="Level/FacilityBlockout/WaterSystems/Lighting" unique_id=1970716697]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -3, 4.2, -3)
-light_color = Color(0.7, 0.86, 1, 1)
-light_energy = 2.9
-shadow_enabled = true
-spot_range = 8.0
-spot_angle = 68.0
-spot_angle_attenuation = 0.65
-
 [node name="Fixture_Pumps" type="CSGBox3D" parent="Level/FacilityBlockout/WaterSystems/Lighting" unique_id=75577063 groups=["blockout_light_fixture"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 4.4, 3)
 size = Vector3(2.4, 0.12, 0.4)
 material = SubResource("Material_LightCool")
-
-[node name="Light_Pumps" type="SpotLight3D" parent="Level/FacilityBlockout/WaterSystems/Lighting" unique_id=1650782299]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 3, 4.2, 3)
-light_color = Color(0.45, 0.68, 1, 1)
-light_energy = 2.7
-shadow_enabled = true
-spot_range = 8.0
-spot_angle = 68.0
-spot_angle_attenuation = 0.65
 
 [node name="Cooling" type="Node3D" parent="Level/FacilityBlockout" unique_id=2001256582]
 transform = Transform3D(0.9945219, 0, -0.104528464, 0, 1, 0, 0.104528464, 0, 0.9945219, 30, 0, -16)
@@ -957,7 +857,7 @@ material = SubResource("Material_HazardOrange")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(16.5, 0.5, 16.5)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Cooling" unique_id=819125733]
 
@@ -966,28 +866,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 4.4, -4)
 size = Vector3(2.4, 0.12, 0.4)
 material = SubResource("Material_LightCool")
 
-[node name="Light_Chillers" type="SpotLight3D" parent="Level/FacilityBlockout/Cooling/Lighting" unique_id=481551367]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -3, 4.2, -4)
-light_color = Color(0.4, 0.62, 1, 1)
-light_energy = 3.0
-shadow_enabled = true
-spot_range = 8.5
-spot_angle = 68.0
-spot_angle_attenuation = 0.65
-
 [node name="Fixture_Bypass" type="CSGBox3D" parent="Level/FacilityBlockout/Cooling/Lighting" unique_id=1025130371 groups=["blockout_light_fixture"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 4.4, 4)
 size = Vector3(2.4, 0.12, 0.4)
 material = SubResource("Material_LightEmergency")
-
-[node name="Light_Bypass" type="SpotLight3D" parent="Level/FacilityBlockout/Cooling/Lighting" unique_id=984574719]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 3, 4.2, 4)
-light_color = Color(1, 0.16, 0.08, 1)
-light_energy = 1.8
-shadow_enabled = true
-spot_range = 7.0
-spot_angle = 62.0
-spot_angle_attenuation = 0.75
 
 [node name="PrototypeLab" type="Node3D" parent="Level/FacilityBlockout" unique_id=334944335]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -29)
@@ -1140,7 +1022,7 @@ material = SubResource("Material_InteractiveGreen")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(24.5, 0.5, 18.5)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/PrototypeLab" unique_id=1967461418]
 
@@ -1149,56 +1031,20 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 4.4, -4)
 size = Vector3(2.8, 0.12, 0.4)
 material = SubResource("Material_LightCool")
 
-[node name="Light_NW" type="SpotLight3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=851653263]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -6, 4.2, -4)
-light_color = Color(0.45, 0.62, 1, 1)
-light_energy = 3.1
-shadow_enabled = true
-spot_range = 9.0
-spot_angle = 68.0
-spot_angle_attenuation = 0.65
-
 [node name="Fixture_NE" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=1222454520 groups=["blockout_light_fixture"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 4.4, -4)
 size = Vector3(2.8, 0.12, 0.4)
 material = SubResource("Material_LightCool")
-
-[node name="Light_NE" type="SpotLight3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=1776335650]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 6, 4.2, -4)
-light_color = Color(0.45, 0.62, 1, 1)
-light_energy = 3.1
-shadow_enabled = true
-spot_range = 9.0
-spot_angle = 68.0
-spot_angle_attenuation = 0.65
 
 [node name="Fixture_SW" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=839797895 groups=["blockout_light_fixture"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 4.4, 4)
 size = Vector3(2.8, 0.12, 0.4)
 material = SubResource("Material_LightNeutral")
 
-[node name="Light_SW" type="SpotLight3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=1905098585]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -6, 4.2, 4)
-light_color = Color(0.72, 0.82, 1, 1)
-light_energy = 2.8
-shadow_enabled = true
-spot_range = 9.0
-spot_angle = 68.0
-spot_angle_attenuation = 0.65
-
 [node name="Fixture_SE" type="CSGBox3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=668666429 groups=["blockout_light_fixture"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 4.4, 4)
 size = Vector3(2.8, 0.12, 0.4)
 material = SubResource("Material_LightEmergency")
-
-[node name="Light_SE" type="SpotLight3D" parent="Level/FacilityBlockout/PrototypeLab/Lighting" unique_id=686166905]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 6, 4.2, 4)
-light_color = Color(0.86, 0.2, 0.3, 1)
-light_energy = 1.6
-shadow_enabled = true
-spot_range = 7.0
-spot_angle = 62.0
-spot_angle_attenuation = 0.75
 
 [node name="Connectors" type="Node3D" parent="Level/FacilityBlockout" unique_id=1682291149]
 
@@ -1251,7 +1097,7 @@ material = SubResource("Material_TransitionYellow")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(7, 0.5, 16.7)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub" unique_id=902558194]
 
@@ -1260,26 +1106,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, -4.5)
 size = Vector3(1.8, 0.12, 0.35)
 material = SubResource("Material_LightNeutral")
 
-[node name="Light_A" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub/Lighting" unique_id=935639235]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, -4.5)
-light_color = Color(0.78, 0.86, 1, 1)
-light_energy = 2.4
-shadow_enabled = true
-spot_range = 7.0
-spot_angle = 64.0
-
 [node name="Fixture_B" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub/Lighting" unique_id=338222855 groups=["blockout_light_fixture"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 4.5)
 size = Vector3(1.8, 0.12, 0.35)
 material = SubResource("Material_LightNeutral")
-
-[node name="Light_B" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/EntranceToHub/Lighting" unique_id=267803274]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 4.5)
-light_color = Color(0.78, 0.86, 1, 1)
-light_energy = 2.4
-shadow_enabled = true
-spot_range = 7.0
-spot_angle = 64.0
 
 [node name="HubToSecurity" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=2080231173]
 transform = Transform3D(0.29237178, 0, -0.9563047, 0, 1, 0, 0.9563047, 0, 0.29237178, -17.6, 0, 5.7)
@@ -1318,7 +1148,7 @@ material = SubResource("Material_TransitionYellow")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(7, 0.5, 12.9)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/HubToSecurity" unique_id=1421572047]
 
@@ -1326,14 +1156,6 @@ material = SubResource("Material_Ceiling")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
 size = Vector3(1.8, 0.12, 0.35)
 material = SubResource("Material_LightCool")
-
-[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/HubToSecurity/Lighting" unique_id=1474289661]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
-light_color = Color(0.6, 0.74, 1, 1)
-light_energy = 2.4
-shadow_enabled = true
-spot_range = 7.5
-spot_angle = 64.0
 
 [node name="HubToWater" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=477457500]
 transform = Transform3D(0.35836798, 0, 0.9335804, 0, 1, 0, -0.9335804, 0, 0.35836798, 18.1, 0, 6.3)
@@ -1372,7 +1194,7 @@ material = SubResource("Material_TransitionYellow")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(7, 0.5, 14.3)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/HubToWater" unique_id=1059801951]
 
@@ -1380,14 +1202,6 @@ material = SubResource("Material_Ceiling")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
 size = Vector3(1.8, 0.12, 0.35)
 material = SubResource("Material_LightNeutral")
-
-[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/HubToWater/Lighting" unique_id=823414130]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
-light_color = Color(0.72, 0.84, 1, 1)
-light_energy = 2.4
-shadow_enabled = true
-spot_range = 8.0
-spot_angle = 64.0
 
 [node name="SecurityToArchives" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=1633468613]
 transform = Transform3D(0.97437006, 0, -0.22495104, 0, 1, 0, 0.22495104, 0, 0.97437006, -29, 0, -4.5)
@@ -1420,7 +1234,7 @@ material = SubResource("Material_TransitionYellow")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(7, 0.5, 8.6)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/SecurityToArchives" unique_id=1236286598]
 
@@ -1428,14 +1242,6 @@ material = SubResource("Material_Ceiling")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
 size = Vector3(1.8, 0.12, 0.35)
 material = SubResource("Material_LightWarm")
-
-[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/SecurityToArchives/Lighting" unique_id=739645269]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
-light_color = Color(1, 0.72, 0.42, 1)
-light_energy = 2.1
-shadow_enabled = true
-spot_range = 6.5
-spot_angle = 64.0
 
 [node name="WaterToCooling" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=1267142652]
 transform = Transform3D(0.985996, 0, 0.16676874, 0, 1, 0, -0.16676874, 0, 0.985996, 29.85, 0, -3.95)
@@ -1468,7 +1274,7 @@ material = SubResource("Material_TransitionYellow")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(7, 0.5, 9.6)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/WaterToCooling" unique_id=61297898]
 
@@ -1476,14 +1282,6 @@ material = SubResource("Material_Ceiling")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
 size = Vector3(1.8, 0.12, 0.35)
 material = SubResource("Material_LightCool")
-
-[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/WaterToCooling/Lighting" unique_id=1453893644]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
-light_color = Color(0.45, 0.68, 1, 1)
-light_energy = 2.3
-shadow_enabled = true
-spot_range = 6.5
-spot_angle = 64.0
 
 [node name="HubToPrototype" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=66400227]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -13)
@@ -1522,7 +1320,7 @@ material = SubResource("Material_TransitionYellow")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(7, 0.5, 15.2)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype" unique_id=106780148]
 
@@ -1531,26 +1329,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, -3.5)
 size = Vector3(1.8, 0.12, 0.35)
 material = SubResource("Material_LightCool")
 
-[node name="Light_A" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype/Lighting" unique_id=1285947372]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, -3.5)
-light_color = Color(0.48, 0.65, 1, 1)
-light_energy = 2.4
-shadow_enabled = true
-spot_range = 7.0
-spot_angle = 64.0
-
 [node name="Fixture_B" type="CSGBox3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype/Lighting" unique_id=1212854821 groups=["blockout_light_fixture"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 3.5)
 size = Vector3(1.8, 0.12, 0.35)
 material = SubResource("Material_LightNeutral")
-
-[node name="Light_B" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/HubToPrototype/Lighting" unique_id=422410541]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 3.5)
-light_color = Color(0.72, 0.82, 1, 1)
-light_energy = 2.4
-shadow_enabled = true
-spot_range = 7.0
-spot_angle = 64.0
 
 [node name="ArchivesToLab" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=659620042]
 transform = Transform3D(0.48480958, 0, -0.8746197, 0, 1, 0, 0.8746197, 0, 0.48480958, -16.7, 0, -22.4)
@@ -1583,7 +1365,7 @@ material = SubResource("Material_TransitionYellow")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(7, 0.5, 11.9)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/ArchivesToLab" unique_id=187344980]
 
@@ -1591,14 +1373,6 @@ material = SubResource("Material_Ceiling")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
 size = Vector3(1.8, 0.12, 0.35)
 material = SubResource("Material_LightWarm")
-
-[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/ArchivesToLab/Lighting" unique_id=305165511]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
-light_color = Color(0.95, 0.66, 0.42, 1)
-light_energy = 2.2
-shadow_enabled = true
-spot_range = 7.0
-spot_angle = 64.0
 
 [node name="CoolingToLab" type="Node3D" parent="Level/FacilityBlockout/Connectors" unique_id=1953534450]
 transform = Transform3D(0.44619778, 0, 0.89493436, 0, 1, 0, -0.89493436, 0, 0.44619778, 17.2, 0, -22.4)
@@ -1631,7 +1405,7 @@ material = SubResource("Material_TransitionYellow")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.75, 0)
 use_collision = true
 size = Vector3(7, 0.5, 12.8)
-material = SubResource("Material_Ceiling")
+material = SubResource("Material_StaticGray")
 
 [node name="Lighting" type="Node3D" parent="Level/FacilityBlockout/Connectors/CoolingToLab" unique_id=363784411]
 
@@ -1639,14 +1413,6 @@ material = SubResource("Material_Ceiling")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, 0)
 size = Vector3(1.8, 0.12, 0.35)
 material = SubResource("Material_LightCool")
-
-[node name="Light" type="SpotLight3D" parent="Level/FacilityBlockout/Connectors/CoolingToLab/Lighting" unique_id=849769513]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 4.2, 0)
-light_color = Color(0.42, 0.62, 1, 1)
-light_energy = 2.4
-shadow_enabled = true
-spot_range = 7.5
-spot_angle = 64.0
 
 [node name="Annotations" type="Node3D" parent="Level/FacilityBlockout" unique_id=1659826280]
 
