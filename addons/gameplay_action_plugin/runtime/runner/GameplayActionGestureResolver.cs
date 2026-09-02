@@ -138,6 +138,8 @@ internal sealed class GameplayActionGestureResolver(
         return false;
     }
 
+    public IReadOnlyList<StringName> GetConsumedInputs() => new List<StringName>(_consumedInputs);
+
     private bool ResolveReleased(GameplayActionGesturePlan gesture)
     {
         float longestReached = 0.0f;
