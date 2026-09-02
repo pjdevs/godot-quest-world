@@ -41,6 +41,12 @@ public enum GameplayActionExecutionVisibility
     AuthorityOnly,
 }
 
+public readonly record struct GameplayActionExecutionPresentation(
+    ulong ExecutionId,
+    StringName ActionId,
+    float? Progress = null
+);
+
 public sealed record GameplayActionExecutionCompleted();
 
 public sealed record GameplayActionExecutionRunning();

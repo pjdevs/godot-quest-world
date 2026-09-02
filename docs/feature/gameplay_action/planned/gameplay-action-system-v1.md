@@ -191,6 +191,10 @@ This is the only concrete host in V1. It:
 - optionally exposes those slots through a `GameplayActionExecutionSynchronizer`;
 - emits authoritative lifecycle notifications after mutations complete.
 
+The component remains the public owner of these responsibilities, but the slot collection,
+progress-resolution strategies, sample revisions, and snapshot codec live in a focused internal presentation
+store. This keeps the authoritative registry/dispatcher from absorbing transport and read-model algorithms.
+
 The component's network-relative `NodePath`, not its parent entity path and not an action node path, is the
 host identity transported by requests and acknowledgements. This permits an entity to own more than one
 component without ambiguity, even though the common topology has one. V1 may encapsulate path construction and
@@ -264,9 +268,10 @@ The APIs have intentionally different meanings:
 
 Unbinding prevents new activation but does not cancel an accepted execution. Removing an action immediately
 removes it from new resolution and activation. If it still has an active execution, it enters a retiring state
-and its node lifetime is deferred until that execution reaches a terminal result. V1 has this single safe
-policy rather than a configurable removal matrix. Gameplay that wants cancellation must explicitly cancel the
-execution before or while removing the action.
+and its node lifetime and local execution presentation are deferred until that execution reaches a terminal
+result. Removing a locally reconstructed action that only has replicated presentation purges that slot
+immediately. V1 has this single safe policy rather than a configurable removal matrix. Gameplay that wants
+cancellation must explicitly cancel the execution before or while removing the action.
 
 ## 7. Availability, access, and invocation context
 
@@ -465,6 +470,14 @@ callback. Executors never subscribe to global signals to discover whether their 
 If an executor throws, the component logs the complete exception, converts it to `Failed`, releases the
 reservation, and follows the same terminal callback path. An executor bug must not strand a host reservation.
 
+The authoritative component exposes past-tense Godot signals for `Started`, `Completed`, `Cancelled`, `Failed`,
+and `Rejected`. Each known-action notification carries the action, optional instigator/requester, and the
+execution identifier; cancellation, failure, and rejection also carry their reason. Because Godot `Variant`
+integers are signed, the signal transports the identifier as a non-negative `long` while runtime contexts keep
+the `ulong` component API capped to `long.MaxValue`. A refusal before reservation uses identifier zero; an
+executor-boundary rejection may report its short-lived allocated identifier. An unknown action cannot emit an
+action-bearing notification and is returned directly as a rejected result.
+
 ### 9.2 Reservation and concurrency
 
 Before calling an executor, the component reserves:
@@ -565,6 +578,10 @@ request state but does not clear its eligibility latch or schedule a retry.
 - `RequesterOnly` as the default;
 - `Replicated` through an explicitly wired `GameplayActionExecutionSynchronizer`;
 - `AuthorityOnly` while still sending lifecycle acknowledgements to the requester.
+
+The authoritative component creates and retains a local presentation slot for every accepted running
+execution. Visibility changes only which remote path may receive that slot; it does not erase the authority's
+read model.
 
 The synchronizer transports transient execution presentation samples, not execution authority or durable
 world state. Persistent truth remains in Stateful or another domain component.

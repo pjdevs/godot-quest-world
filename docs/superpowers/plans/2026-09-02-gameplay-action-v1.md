@@ -54,6 +54,7 @@
 **Files:**
 
 - Create: `addons/gameplay_action_plugin/runtime/execution/GameplayActionExecutionProgressState.cs`
+- Create: `addons/gameplay_action_plugin/runtime/execution/GameplayActionExecutionPresentationStore.cs`
 - Create: `addons/gameplay_action_plugin/runtime/execution/TimedExecution.cs`
 - Create: `addons/gameplay_action_plugin/runtime/actions/TimedGameplayActionExecutor.cs`
 - Create: `addons/gameplay_action_plugin/runtime/execution/GameplayActionExecutionSynchronizer.cs`
@@ -62,9 +63,12 @@
 - Modify: Task 1 generic action/component/type files
 - Update: `docs/feature/gameplay_action/gameplay-action.md`
 
-- [ ] Add failing tests for completed/running/rejected/failed/cancelled outcomes, terminal callback uniqueness, timed and discrete progress, visibility, stale samples, and late join.
-- [ ] Move the V4 execution read model and timing policy into the generic host without introducing Interaction types.
-- [ ] Run the mandatory gate and commit the complete host-side lifecycle checkpoint.
+- [x] Add failing tests for completed/running/rejected/failed/cancelled outcomes, terminal callback uniqueness, timed and discrete progress, visibility, stale samples, and late join.
+- [x] Move the V4 execution read model and timing policy into the generic host without introducing Interaction types.
+- [x] Run the mandatory gate and document the complete host-side lifecycle checkpoint. The
+  pre-existing `DoorSynchronizationConvergesPresentationWithoutReplayingUnlockAudio` failure remains;
+  all GameplayAction tests pass.
+- [ ] Commit the complete host-side lifecycle checkpoint after user review.
 
 ### Task 3: Runner, bindings, gestures, access, prediction, and acknowledgements
 

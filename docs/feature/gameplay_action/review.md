@@ -1,0 +1,1 @@
+- TrySetReplicated machin qui est prend un Godot array non typé -> louche red flag si pas de raison

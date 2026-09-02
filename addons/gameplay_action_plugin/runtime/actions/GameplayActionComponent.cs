@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.GameplayActions.Runtime.Rules;
 
 namespace QuestWorld.GameplayActions.Runtime.Actions;
@@ -7,15 +8,71 @@ namespace QuestWorld.GameplayActions.Runtime.Actions;
 [GlobalClass]
 public partial class GameplayActionComponent : Node
 {
+    [Signal]
+    public delegate void GameplayActionStartedEventHandler(
+        long executionId,
+        GameplayAction action,
+        Node? instigator,
+        Node? requester
+    );
+
+    [Signal]
+    public delegate void GameplayActionCompletedEventHandler(
+        long executionId,
+        GameplayAction action,
+        Node? instigator,
+        Node? requester
+    );
+
+    [Signal]
+    public delegate void GameplayActionCancelledEventHandler(
+        long executionId,
+        GameplayAction action,
+        Node? instigator,
+        Node? requester,
+        string reason
+    );
+
+    [Signal]
+    public delegate void GameplayActionFailedEventHandler(
+        long executionId,
+        GameplayAction action,
+        Node? instigator,
+        Node? requester,
+        string reason
+    );
+
+    [Signal]
+    public delegate void GameplayActionRejectedEventHandler(
+        long executionId,
+        GameplayAction action,
+        Node? instigator,
+        Node? requester,
+        string reason
+    );
+
+    [Signal]
+    public delegate void ExecutionPresentationChangedEventHandler(StringName actionId);
+
     private const string NotConfiguredReason = "Action is not configured.";
     private const string AlreadyRunningReason = "Action is already running.";
     private readonly Dictionary<StringName, GameplayAction> _actionsById = new();
     private readonly Dictionary<ulong, ActiveExecution> _executionsById = new();
+    private readonly GameplayActionExecutionPresentationStore _presentation;
     private readonly HashSet<GameplayAction> _retiringActions = new();
     private ulong _nextExecutionId = 1;
 
     [Export]
     public Godot.Collections.Array<GameplayAction> Actions { get; set; } = new();
+
+    public GameplayActionComponent()
+    {
+        _presentation = new GameplayActionExecutionPresentationStore(
+            this,
+            ResolveAction,
+            actionId => EmitSignal(SignalName.ExecutionPresentationChanged, actionId)
+        );
+    }
 
     private bool IsAuthoritative =>
         Multiplayer is null || Multiplayer.MultiplayerPeer is null || Multiplayer.IsServer();
@@ -61,12 +118,14 @@ public partial class GameplayActionComponent : Node
 
         _actionsById.Remove(actionId);
         Actions.Remove(action);
-        if (IsActionExecuting(actionId))
+        bool isExecuting = IsActionExecuting(actionId);
+        if (isExecuting)
         {
             _retiringActions.Add(action);
         }
         else
         {
+            _presentation.RemoveAction(actionId);
             FinalizeRemoval(action);
         }
 
@@ -119,12 +178,15 @@ public partial class GameplayActionComponent : Node
         );
         if (availability is not GameplayActionAllowed)
         {
-            return new GameplayActionExecutionRejected(availability.DescribeRefusal());
+            string reason = availability.DescribeRefusal();
+            DispatchRejected(0ul, action, instigator, requester, reason);
+            return new GameplayActionExecutionRejected(reason);
         }
 
         ActiveExecution? reservation = ReserveExecutionCore(action, instigator, requester);
         if (reservation is null)
         {
+            DispatchRejected(0ul, action, instigator, requester, AlreadyRunningReason);
             return new GameplayActionExecutionRejected(AlreadyRunningReason);
         }
 
@@ -159,6 +221,86 @@ public partial class GameplayActionComponent : Node
         return false;
     }
 
+    public bool IsExecutionActive(ulong executionId) => _executionsById.ContainsKey(executionId);
+
+    public IReadOnlyList<GameplayActionExecutionPresentation> GetExecutionPresentations()
+    {
+        List<GameplayAction> actions = new(_actionsById.Values);
+        actions.AddRange(_retiringActions);
+        return _presentation.GetPresentations(actions);
+    }
+
+    public bool TryGetExecutionPresentation(
+        StringName actionId,
+        out GameplayActionExecutionPresentation presentation
+    ) => _presentation.TryGet(actionId, out presentation);
+
+    public bool ReportExecutionProgress(ulong executionId, float? progress)
+    {
+        if (
+            !_executionsById.TryGetValue(executionId, out ActiveExecution execution)
+            || !IsAuthoritative
+        )
+        {
+            return false;
+        }
+
+        return _presentation.ReportPublished(executionId, execution.Action, progress);
+    }
+
+    public bool SetExecutionProgressSource(ulong executionId, Callable source) =>
+        _presentation.SetSource(executionId, source);
+
+    public bool ClearExecutionProgressSource(ulong executionId) =>
+        _presentation.ClearSource(executionId);
+
+    internal bool ReportExecutionLinearProgress(
+        ulong executionId,
+        float progressBase,
+        float progressPerSecond
+    )
+    {
+        if (
+            !_executionsById.TryGetValue(executionId, out ActiveExecution execution)
+            || !IsAuthoritative
+        )
+        {
+            return false;
+        }
+
+        return _presentation.ReportLinear(
+            executionId,
+            execution.Action,
+            progressBase,
+            progressPerSecond
+        );
+    }
+
+    internal bool TryGetProgressSample(
+        ulong executionId,
+        out bool hasProgress,
+        out GameplayActionProgressSample sample
+    )
+    {
+        return _presentation.TryGetSample(executionId, out hasProgress, out sample);
+    }
+
+    internal Godot.Collections.Array BuildReplicatedExecutionEntries()
+    {
+        List<GameplayActionExecutionPresentationSource> executions = new();
+        foreach (ActiveExecution execution in _executionsById.Values)
+        {
+            executions.Add(
+                new GameplayActionExecutionPresentationSource(execution.Id, execution.Action)
+            );
+        }
+
+        return _presentation.BuildReplicatedEntries(executions);
+    }
+
+    internal void ApplyReplicatedExecutionEntries(Godot.Collections.Array entries) =>
+        _presentation.ApplyReplicatedEntries(entries);
+
     public bool CompleteExecution(ulong executionId)
     {
         ActiveExecution? execution = EndExecutionCore(executionId);
@@ -170,6 +312,7 @@ public partial class GameplayActionComponent : Node
         GameplayActionExecutionContext context = BuildExecutionContext(execution.Value);
         execution.Value.Action.Executor?.OnExecutionCompleted(context);
         FinalizeRetiredAction(execution.Value.Action);
+        EmitCompleted(execution.Value);
         return true;
     }
 
@@ -184,6 +327,7 @@ public partial class GameplayActionComponent : Node
         GameplayActionExecutionContext context = BuildExecutionContext(execution.Value);
         execution.Value.Action.Executor?.OnExecutionCancelled(context, reason);
         FinalizeRetiredAction(execution.Value.Action);
+        EmitCancelled(execution.Value, reason);
         return true;
     }
 
@@ -198,6 +342,7 @@ public partial class GameplayActionComponent : Node
         GameplayActionExecutionContext context = BuildExecutionContext(execution.Value);
         execution.Value.Action.Executor?.OnExecutionFailed(context, reason);
         FinalizeRetiredAction(execution.Value.Action);
+        EmitFailed(execution.Value, reason);
         return true;
     }
 
@@ -330,35 +475,136 @@ public partial class GameplayActionComponent : Node
         switch (result)
         {
             case GameplayActionExecutionRunning:
+                AddExecutionPresentation(execution);
+                EmitStarted(execution);
                 return;
             case GameplayActionExecutionCompleted:
-                _executionsById.Remove(execution.Id);
+                ReleaseExecutionCore(execution.Id);
                 execution.Action.Executor?.OnExecutionCompleted(BuildExecutionContext(execution));
+                FinalizeRetiredAction(execution.Action);
+                EmitStarted(execution);
+                EmitCompleted(execution);
                 break;
             case GameplayActionExecutionFailed failed:
-                _executionsById.Remove(execution.Id);
+                ReleaseExecutionCore(execution.Id);
                 execution.Action.Executor?.OnExecutionFailed(
                     BuildExecutionContext(execution),
                     failed.Reason
                 );
+                FinalizeRetiredAction(execution.Action);
+                EmitStarted(execution);
+                EmitFailed(execution, failed.Reason);
                 break;
-            case GameplayActionExecutionRejected:
-                _executionsById.Remove(execution.Id);
+            case GameplayActionExecutionRejected rejected:
+                ReleaseExecutionCore(execution.Id);
+                FinalizeRetiredAction(execution.Action);
+                DispatchRejected(
+                    execution.Id,
+                    execution.Action,
+                    execution.Instigator,
+                    execution.Requester,
+                    rejected.Reason
+                );
                 break;
         }
-
-        FinalizeRetiredAction(execution.Action);
     }
 
     private ActiveExecution? EndExecutionCore(ulong executionId)
     {
-        if (!IsAuthoritative || !_executionsById.Remove(executionId, out ActiveExecution execution))
+        if (!IsAuthoritative)
         {
             return null;
         }
 
+        return ReleaseExecutionCore(executionId);
+    }
+
+    private ActiveExecution? ReleaseExecutionCore(ulong executionId)
+    {
+        if (!_executionsById.Remove(executionId, out ActiveExecution execution))
+        {
+            return null;
+        }
+
+        _presentation.RemoveExecution(executionId, execution.Action);
         return execution;
     }
+
+    private void AddExecutionPresentation(in ActiveExecution execution)
+    {
+        if (!IsAuthoritative)
+        {
+            return;
+        }
+
+        _presentation.AddExecution(execution.Id, execution.Action);
+    }
+
+    private void EmitStarted(in ActiveExecution execution)
+    {
+        EmitSignal(
+            SignalName.GameplayActionStarted,
+            checked((long)execution.Id),
+            execution.Action,
+            ToVariant(execution.Instigator),
+            ToVariant(execution.Requester)
+        );
+    }
+
+    private void EmitCompleted(in ActiveExecution execution)
+    {
+        EmitSignal(
+            SignalName.GameplayActionCompleted,
+            checked((long)execution.Id),
+            execution.Action,
+            ToVariant(execution.Instigator),
+            ToVariant(execution.Requester)
+        );
+    }
+
+    private void EmitCancelled(in ActiveExecution execution, string reason)
+    {
+        EmitSignal(
+            SignalName.GameplayActionCancelled,
+            checked((long)execution.Id),
+            execution.Action,
+            ToVariant(execution.Instigator),
+            ToVariant(execution.Requester),
+            reason
+        );
+    }
+
+    private void EmitFailed(in ActiveExecution execution, string reason)
+    {
+        EmitSignal(
+            SignalName.GameplayActionFailed,
+            checked((long)execution.Id),
+            execution.Action,
+            ToVariant(execution.Instigator),
+            ToVariant(execution.Requester),
+            reason
+        );
+    }
+
+    private void DispatchRejected(
+        ulong executionId,
+        GameplayAction action,
+        Node? instigator,
+        Node? requester,
+        string reason
+    )
+    {
+        EmitSignal(
+            SignalName.GameplayActionRejected,
+            checked((long)executionId),
+            action,
+            ToVariant(instigator),
+            ToVariant(requester),
+            reason
+        );
+    }
+
+    private static Variant ToVariant(Node? node) => node is null ? default : Variant.From(node);
 
     private GameplayActionExecutionContext BuildExecutionContext(in ActiveExecution execution) =>
         new(
