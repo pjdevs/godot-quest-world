@@ -1,2 +1,4 @@
 addons/interaction_plugin/runtime/InteractionStatus.cs
 addons/interaction_plugin/runtime/InteractionTypes.cs
+addons/gameplay_action_plugin/runtime/GameplayActionTypes.cs
+

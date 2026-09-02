@@ -32,7 +32,6 @@
 - Create: `addons/gameplay_action_plugin/plugin.cfg`
 - Create: `addons/gameplay_action_plugin/editor/GameplayActionEditorPlugin.cs`
 - Create: `addons/gameplay_action_plugin/runtime/GameplayActionTypes.cs`
-- Create: `addons/gameplay_action_plugin/runtime/actions/GameplayActionPresentationMetadata.cs`
 - Create: `addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs`
 - Create: `addons/gameplay_action_plugin/runtime/actions/GameplayAction.cs`
 - Create: `addons/gameplay_action_plugin/runtime/actions/GameplayActionExecutor.cs`
@@ -43,9 +42,9 @@
 - Modify: `project.godot`
 - Create/update: `docs/feature/gameplay_action/gameplay-action.md`
 
-- [ ] Write failing tests for registration, duplicate/missing IDs, multi-host ownership, rule order, programmatic execution, ActionId uniqueness, same-host/different-host concurrency, and retirement.
-- [ ] Implement the smallest generic contracts and component needed to pass them, keeping mutation and dispatch separate.
-- [ ] Run the mandatory format/build/full-test gate and document the delivered public API.
+- [x] Write failing tests for registration, duplicate/missing IDs, multi-host ownership, rule order, programmatic execution, ActionId uniqueness, same-host/different-host concurrency, and retirement.
+- [x] Implement the smallest generic contracts and component needed to pass them, keeping mutation and dispatch separate.
+- [x] Run the mandatory format/build/full-test gate and document the delivered public API. The pre-existing `DoorSynchronizationConvergesPresentationWithoutReplayingUnlockAudio` failure remains; all other tests pass.
 - [ ] Commit the independently usable authoritative-host checkpoint.
 
 ### Task 2: Generic execution lifecycle, progress, timing, and replication

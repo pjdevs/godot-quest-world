@@ -169,7 +169,6 @@ One action node is one occurrence owned by one `GameplayActionComponent`. It car
 - ordered `GameplayActionRule` resources;
 - `HostConcurrencyGroup`, defaulting to `default`;
 - execution visibility;
-- generic hooks used by specialized action types for access and additional availability evaluation.
 
 It does not carry runtime input state. Input name, activation mode, hold duration, sustain requirement, and
 input priority belong to bindings.
@@ -182,7 +181,7 @@ generic execution lifecycle.
 This is the only concrete host in V1. It:
 
 - registers authored and runtime action nodes;
-- rejects missing, empty, or duplicate IDs;
+- rejects missing definitions or executors and empty or duplicate IDs;
 - resolves actions by ID;
 - owns active execution records and allocates host-wide execution IDs;
 - enforces per-ActionId uniqueness and host-local concurrency groups;
@@ -291,10 +290,14 @@ component is enough for a heal or drop, and an attack executor may perform its o
 state. Rules return `Allowed`, `Blocked(reason)`, or `Hidden` and run during local presentation/prevalidation
 and again authoritatively on the server.
 
-Specialized actions may prepend additional rule layers. Interaction evaluates target rules before action
-rules, preserving its existing short-circuit order. Missing requester data during a programmatic invocation is
-not fabricated: a rule that requires a requester must return an appropriate unavailable result unless the
-caller supplied one.
+Every gameplay availability condition belongs to an explicit ordered rule collection; action subclasses have
+no additional availability hook. Integrations may evaluate their own explicit rule collection before the
+action rules. Interaction evaluates its target rules before the action rules, preserving its existing
+short-circuit order. Missing requester data during a programmatic invocation is not fabricated: a rule that
+requires a requester must return an appropriate unavailable result unless the caller supplied one.
+
+A null entry in a Godot rule array is ignored. This preserves the rest of the authored order while editor
+diagnostics remain responsible for reporting the empty slot.
 
 ### 7.3 Request access
 
@@ -454,8 +457,13 @@ than relying on source order.
 - `Rejected(reason)`: refused at the executor boundary before start; expected to remain rare;
 - `Failed(reason)`: accepted, started, then failed.
 
-Executors receive direct terminal callbacks for their own execution. They never subscribe to global signals to
-discover whether their work ended.
+Every accepted execution produces exactly one direct terminal callback to its executor after the component has
+released the reservation. This includes a synchronous `Completed` or `Failed` result as well as a later terminal
+call for an execution that returned `Running`. A `Rejected` result is not accepted and receives no terminal
+callback. Executors never subscribe to global signals to discover whether their work ended.
+
+If an executor throws, the component logs the complete exception, converts it to `Failed`, releases the
+reservation, and follows the same terminal callback path. An executor bug must not strand a host reservation.
 
 ### 9.2 Reservation and concurrency
 

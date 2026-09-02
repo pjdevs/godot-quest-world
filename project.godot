@@ -26,7 +26,7 @@ project/assembly_name="quest-world"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/interaction_plugin/plugin.cfg", "res://addons/inventory_plugin/plugin.cfg", "res://addons/stateful_plugin/plugin.cfg")
+enabled=PackedStringArray("res://addons/gameplay_action_plugin/plugin.cfg", "res://addons/interaction_plugin/plugin.cfg", "res://addons/inventory_plugin/plugin.cfg", "res://addons/stateful_plugin/plugin.cfg")
 
 [global_group]
 
