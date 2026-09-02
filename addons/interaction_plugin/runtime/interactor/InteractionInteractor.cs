@@ -1,6 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Runtime.Access;
+using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Bindings;
+using QuestWorld.GameplayActions.Runtime.Runner;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Detection;
 using QuestWorld.Interaction.Runtime.Interactive;
@@ -67,7 +72,7 @@ internal readonly record struct InteractionRequestKey(
 /// <see cref="OwnerPeerId"/>, while authoritative validation and gameplay dispatch run on the server.
 /// </remarks>
 [GlobalClass]
-public partial class InteractionInteractor : Node
+public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 {
     private const string ReleasedReason = "The interaction input was released.";
     private const string InteractorLostReason = "The interactor left the interaction.";
@@ -226,6 +231,12 @@ public partial class InteractionInteractor : Node
     [Export]
     public int OwnerPeerId { get; set; } = 1;
 
+    [ExportGroup("Actions")]
+    [Export]
+    public GameplayActionRunner? Runner { get; set; }
+
+    private static readonly Dictionary<ulong, InteractionInteractor> _runnerOwners = new();
+
     private readonly HashSet<InteractiveComponent> _detectedInteractives = new();
 
     // A set on both sides of the reconcile, because both sides are membership questions: the pass
@@ -288,6 +299,13 @@ public partial class InteractionInteractor : Node
             return;
         }
 
+        if (Runner is null)
+        {
+            GD.PushError($"{GetPath()}: InteractionInteractor requires a GameplayActionRunner.");
+            SetProcess(false);
+            return;
+        }
+
         if (OwnerPeerId <= 0)
         {
             OwnerPeerId =
@@ -297,6 +315,12 @@ public partial class InteractionInteractor : Node
         }
 
         SetMultiplayerAuthority(ServerPeerId);
+        Runner.ServerPeerId = ServerPeerId;
+        Runner.OwnerPeerId = OwnerPeerId;
+        Runner.Instigator ??= this;
+        Runner.RegisterAccessProvider(InteractionAction.InteractionAccessProviderId, this);
+        _runnerOwners[Runner.GetInstanceId()] = this;
+        ConnectRunnerSignals();
         SubscribeToPeerDisconnected();
     }
 
@@ -309,11 +333,6 @@ public partial class InteractionInteractor : Node
     /// </remarks>
     public override void _Process(double delta)
     {
-        if (IsAuthoritative)
-        {
-            ValidateSustainedExecutions();
-        }
-
         // The detector is told, and not asked to guess: a source that costs something must be able to
         // stop paying for it on the copies of this character that nobody controls.
         bool locallyControlled = IsLocallyControlled;
@@ -324,7 +343,34 @@ public partial class InteractionInteractor : Node
         }
 
         RecalculateFocus();
-        AdvanceGesture((float)delta);
+        if (_focusedInteractive is not null)
+        {
+            Runner?.InvalidateSource(_focusedInteractive);
+        }
+    }
+
+    internal static InteractionInteractor? FindByRunner(GameplayActionRunner? runner)
+    {
+        return
+            runner is not null
+            && _runnerOwners.TryGetValue(runner.GetInstanceId(), out InteractionInteractor? owner)
+            && IsInstanceValid(owner)
+                ? owner
+                : null;
+    }
+
+    public bool CanRequest(in GameplayActionAccessContext context) =>
+        HasInteractionAccess(context.Action);
+
+    public bool HasSustainedAccess(in GameplayActionAccessContext context) =>
+        HasInteractionAccess(context.Action);
+
+    private bool HasInteractionAccess(GameplayAction action)
+    {
+        return
+            action is InteractionAction interactionAction
+            && interactionAction.Interactive is InteractiveComponent interactive
+            && Detector?.Detect(interactive) == InteractionDetectionKind.Interactible;
     }
 
     /// <summary>Reads how far the hold in progress is towards selecting its action.</summary>
@@ -338,9 +384,14 @@ public partial class InteractionInteractor : Node
     /// <returns><see langword="true"/> while an input is being held towards a threshold.</returns>
     public bool TryGetGestureProgress(out StringName inputActionName, out float progress)
     {
-        inputActionName = _gesture?.Input ?? new StringName(string.Empty);
-        progress = _gesture?.Progress ?? 0.0f;
-        return _gesture is not null;
+        if (Runner is not null)
+        {
+            return Runner.TryGetGestureProgress(out inputActionName, out progress);
+        }
+
+        inputActionName = new StringName();
+        progress = 0.0f;
+        return false;
     }
 
     /// <summary>Reads how long the input has been held, in seconds.</summary>
@@ -354,9 +405,20 @@ public partial class InteractionInteractor : Node
     /// <returns><see langword="true"/> while an input is being held towards a threshold.</returns>
     public bool TryGetGestureElapsed(out StringName inputActionName, out float seconds)
     {
-        inputActionName = _gesture?.Input ?? new StringName(string.Empty);
-        seconds = _gesture?.Elapsed ?? 0.0f;
-        return _gesture is not null;
+        if (
+            Runner is not null
+            && Runner.TryGetGestureProgress(out inputActionName, out float progress)
+        )
+        {
+            seconds =
+                (_focusedInteractive?.GetLongestHoldThreshold(this, inputActionName) ?? 0.0f)
+                * progress;
+            return true;
+        }
+
+        inputActionName = new StringName();
+        seconds = 0.0f;
+        return false;
     }
 
     private void AdvanceGesture(float delta)
@@ -395,6 +457,7 @@ public partial class InteractionInteractor : Node
     /// </remarks>
     internal void NotifyInteractiveRemoved(InteractiveComponent interactive)
     {
+        Runner?.UnbindSource(interactive);
         _pendingRequests.RemoveWhere(request => request.Target == interactive);
         Detector?.Forget(interactive);
         if (_detectedInteractives.Remove(interactive))
@@ -488,9 +551,18 @@ public partial class InteractionInteractor : Node
     {
         if (result.Changed)
         {
+            if (result.Previous is not null)
+            {
+                Runner?.UnbindSource(result.Previous);
+            }
+
+            if (result.Current is not null)
+            {
+                BindFocusedActions(result.Current);
+            }
+
             Variant focusedInteractive = result.Current is null ? new Variant() : result.Current;
             EmitSignal(SignalName.FocusedInteractiveChanged, focusedInteractive);
-            ForgetAutomaticRequest();
         }
 
         if (result.Current is not null)
@@ -500,10 +572,31 @@ public partial class InteractionInteractor : Node
                 EmitStatusFor(result.Current);
             }
 
-            // Retried on every focused frame, not only when focus moves: an automatic action that
-            // becomes allowed while the player already looks at the target must start by itself.
-            // The request is remembered so a still-allowed action is not re-sent every frame.
-            TryStartAutomaticInteraction(result.Current);
+            Runner?.InvalidateSource(result.Current);
+        }
+    }
+
+    private void BindFocusedActions(InteractiveComponent interactive)
+    {
+        if (Runner is null || interactive.ActionComponent is null)
+        {
+            return;
+        }
+
+        foreach (InteractionAction action in interactive.Actions)
+        {
+            if (action?.InteractionDefinition is null)
+            {
+                continue;
+            }
+
+            Runner.BindAction(
+                interactive.ActionComponent,
+                action.InteractionDefinition.Id,
+                interactive,
+                action.BuildBindingConfig(),
+                Variant.From(interactive)
+            );
         }
     }
 
@@ -594,36 +687,20 @@ public partial class InteractionInteractor : Node
     public IReadOnlyList<StringName> GetRelevantInputs()
     {
         _relevantInputs.Clear();
-        if (!IsLocallyControlled)
+        if (!IsLocallyControlled || Runner is null)
         {
             return _relevantInputs;
         }
 
-        if (_focusedInteractive is not null && IsUsable(_focusedInteractive))
+        foreach (GameplayActionBinding binding in Runner.GetBindings())
         {
-            foreach (InteractionAction action in _focusedInteractive.Actions)
+            if (
+                binding.Source == _focusedInteractive
+                && binding.ActivationMode != GameplayActionActivationMode.Automatic
+            )
             {
-                if (
-                    action?.Definition is null
-                    || action.Automatic
-                    || _focusedInteractive.EvaluateAvailability(this, action) is InteractionHidden
-                )
-                {
-                    continue;
-                }
-
-                AddRelevantInput(action.Definition.InputActionName);
+                AddRelevantInput(binding.InputActionName);
             }
-        }
-
-        foreach (StringName sustained in _sustainedInputs)
-        {
-            AddRelevantInput(sustained);
-        }
-
-        foreach (StringName consumed in _consumedInputs)
-        {
-            AddRelevantInput(consumed);
         }
 
         return _relevantInputs;
@@ -659,40 +736,13 @@ public partial class InteractionInteractor : Node
     /// <returns>Whether a locally valid request was dispatched, or a hold towards one started.</returns>
     public bool TryStartInteractionInput(StringName inputActionName)
     {
-        if (
-            inputActionName is null
-            || inputActionName.IsEmpty
-            || _consumedInputs.Contains(inputActionName)
-        )
+        if (inputActionName is null || inputActionName.IsEmpty || Runner is null)
         {
             return false;
         }
 
         RecalculateFocus();
-        InteractiveComponent? target = _focusedInteractive;
-        if (target is null)
-        {
-            return false;
-        }
-
-        _consumedInputs.Add(inputActionName);
-
-        // A threshold only exists to tell apart several actions sharing one input, so pressing an
-        // input nobody asks to hold still selects immediately.
-        float threshold = target.GetLongestHoldThreshold(this, inputActionName);
-        if (threshold <= 0.0f)
-        {
-            bool requested = RequestResolvedAction(target, inputActionName, heldSeconds: 0.0f);
-            if (!requested)
-            {
-                _consumedInputs.Remove(inputActionName);
-            }
-
-            return requested;
-        }
-
-        _gesture = new InteractionGesture(target, inputActionName, threshold, 0.0f);
-        return true;
+        return _focusedInteractive is not null && Runner.TryStartActionInput(inputActionName);
     }
 
     private bool RequestResolvedAction(
@@ -706,7 +756,7 @@ public partial class InteractionInteractor : Node
             inputActionName,
             heldSeconds
         );
-        if (action?.Definition is null)
+        if (action?.InteractionDefinition is null)
         {
             return false;
         }
@@ -728,39 +778,10 @@ public partial class InteractionInteractor : Node
     /// </returns>
     public bool TryEndInteractionInput(StringName inputActionName)
     {
-        if (inputActionName is null || inputActionName.IsEmpty)
-        {
-            return false;
-        }
-
-        bool consumed = _consumedInputs.Remove(inputActionName);
-
-        // Releasing before the threshold selects the action that asked for no hold, which is how
-        // "tap to open, hold to force" resolves without the two ever competing.
-        bool handled = false;
-        if (_gesture is InteractionGesture gesture && gesture.Input == inputActionName)
-        {
-            _gesture = null;
-            handled =
-                IsUsable(gesture.Target)
-                && _focusedInteractive == gesture.Target
-                && RequestResolvedAction(gesture.Target, inputActionName, gesture.Elapsed);
-        }
-
-        if (!_sustainedInputs.Remove(inputActionName))
-        {
-            return handled || consumed;
-        }
-
-        ClearPendingPredictionsForInput(inputActionName);
-
-        if (!IsAuthoritative)
-        {
-            RpcId(ServerPeerId, nameof(ServerTryEndInteraction), inputActionName);
-            return true;
-        }
-
-        return EndInteractionInputAuthoritatively(OwnerPeerId, inputActionName) > 0 || consumed;
+        return
+            inputActionName is not null
+            && !inputActionName.IsEmpty
+            && Runner?.TryEndActionInput(inputActionName) == true;
     }
 
     private void TryStartAutomaticInteraction(InteractiveComponent target)
@@ -825,7 +846,7 @@ public partial class InteractionInteractor : Node
         StringName? inputActionName
     )
     {
-        StringName actionId = action.Definition!.Id;
+        StringName actionId = action.InteractionDefinition!.Id;
         InteractionRequestKey request = new(target, actionId);
         if (
             _pendingRequests.Contains(request)
@@ -899,12 +920,12 @@ public partial class InteractionInteractor : Node
     // initial sample. The interactor does not know whether that sample came from a timed producer.
     private void PredictExecution(InteractiveComponent target, InteractionAction action)
     {
-        InteractionProgressSample? sample = action.Executor?.GetPredictionSample(
+        InteractionProgressSample? sample = action.InteractionExecutor?.GetInteractionPredictionSample(
             new InteractionContext(this, target, action)
         );
         if (sample is InteractionProgressSample initial)
         {
-            target.AddPendingExecutionPresentation(action.Definition!.Id, initial);
+            target.AddPendingExecutionPresentation(action.InteractionDefinition!.Id, initial);
         }
     }
 
@@ -931,7 +952,7 @@ public partial class InteractionInteractor : Node
         if (
             inputActionName is not null
             && !inputActionName.IsEmpty
-            && action.Definition?.CancelOnInputReleased == true
+            && action.InteractionDefinition?.CancelOnInputReleased == true
         )
         {
             _sustainedInputs.Add(inputActionName);
@@ -968,15 +989,120 @@ public partial class InteractionInteractor : Node
 
         if (interactive == _focusedInteractive)
         {
+            Runner?.InvalidateSource(interactive);
             EmitStatusFor(interactive);
         }
 
         RecalculateFocus();
     }
 
+    private void ConnectRunnerSignals()
+    {
+        if (Runner is null)
+        {
+            return;
+        }
+
+        Runner.GameplayActionRequested += OnGameplayActionRequested;
+        Runner.GameplayActionRejected += OnGameplayActionRejected;
+        Runner.GameplayActionStarted += OnGameplayActionStarted;
+        Runner.GameplayActionCompleted += OnGameplayActionCompleted;
+        Runner.GameplayActionCancelled += OnGameplayActionCancelled;
+        Runner.GameplayActionFailed += OnGameplayActionFailed;
+        Runner.GameplayActionBindingInvalidated += OnGameplayActionBindingInvalidated;
+    }
+
+    private void DisconnectRunnerSignals()
+    {
+        if (Runner is null)
+        {
+            return;
+        }
+
+        Runner.GameplayActionRequested -= OnGameplayActionRequested;
+        Runner.GameplayActionRejected -= OnGameplayActionRejected;
+        Runner.GameplayActionStarted -= OnGameplayActionStarted;
+        Runner.GameplayActionCompleted -= OnGameplayActionCompleted;
+        Runner.GameplayActionCancelled -= OnGameplayActionCancelled;
+        Runner.GameplayActionFailed -= OnGameplayActionFailed;
+        Runner.GameplayActionBindingInvalidated -= OnGameplayActionBindingInvalidated;
+    }
+
+    private static InteractiveComponent? ResolveInteractive(Node? component) =>
+        InteractiveComponent.FindByActionComponent(component as GameplayActionComponent);
+
+    private void OnGameplayActionRequested(Node component, StringName actionId)
+    {
+        if (ResolveInteractive(component) is { } interactive)
+        {
+            EmitSignal(SignalName.InteractionRequested, interactive, actionId);
+        }
+    }
+
+    private void OnGameplayActionRejected(Node component, StringName actionId, string reason)
+    {
+        Variant interactive = ResolveInteractive(component) is { } target ? target : default;
+        EmitSignal(SignalName.InteractionRejected, interactive, actionId, reason);
+    }
+
+    private void OnGameplayActionStarted(Node component, StringName actionId, long executionId)
+    {
+        Variant interactive = ResolveInteractive(component) is { } target ? target : default;
+        EmitSignal(SignalName.InteractionStarted, interactive, actionId, executionId);
+    }
+
+    private void OnGameplayActionCompleted(Node component, StringName actionId, long executionId)
+    {
+        Variant interactive = ResolveInteractive(component) is { } target ? target : default;
+        EmitSignal(SignalName.InteractionCompleted, interactive, actionId);
+    }
+
+    private void OnGameplayActionCancelled(
+        Node component,
+        StringName actionId,
+        long executionId,
+        string reason
+    )
+    {
+        Variant interactive = ResolveInteractive(component) is { } target ? target : default;
+        EmitSignal(SignalName.InteractionCancelled, interactive, actionId, reason);
+    }
+
+    private void OnGameplayActionFailed(
+        Node component,
+        StringName actionId,
+        long executionId,
+        string reason
+    )
+    {
+        Variant interactive = ResolveInteractive(component) is { } target ? target : default;
+        EmitSignal(SignalName.InteractionFailed, interactive, actionId, reason);
+    }
+
+    private void OnGameplayActionBindingInvalidated(long bindingId)
+    {
+        if (_focusedInteractive is not null)
+        {
+            EmitStatusFor(_focusedInteractive);
+        }
+    }
+
     /// <summary>Godot callback that releases server reservations and unregisters detected targets.</summary>
     public override void _ExitTree()
     {
+        if (Runner is not null && IsInstanceValid(Runner))
+        {
+            Runner.UnbindSource(this);
+            if (_focusedInteractive is not null)
+            {
+                Runner.UnbindSource(_focusedInteractive);
+            }
+
+            Runner.UnregisterAccessProvider(InteractionAction.InteractionAccessProviderId, this);
+            DisconnectRunnerSignals();
+            _runnerOwners.Remove(Runner.GetInstanceId());
+        }
+
         UnsubscribeFromPeerDisconnected();
         if (IsAuthoritative)
         {
@@ -1550,7 +1676,7 @@ public partial class InteractionInteractor : Node
         }
 
         targetPath = GetNetworkPath(interactive);
-        actionId = action.Definition.Id;
+        actionId = action.InteractionDefinition!.Id;
         return true;
     }
 
@@ -1679,8 +1805,8 @@ public partial class InteractionInteractor : Node
     // Holding the key that started an action is a way of being present, so a definition that cancels
     // on release keeps the execution bound to the interactor whatever its executor claims.
     private static bool RequiresInteractorPresence(InteractionAction action) =>
-        action.Definition?.CancelOnInputReleased == true
-        || action.Executor?.RequiresInteractorPresence != false;
+        action.InteractionDefinition?.CancelOnInputReleased == true
+        || action.InteractionExecutor?.RequiresInteractorPresence != false;
 
     /// <summary>Ends the executions this interactor owns that match an optional target and input.</summary>
     /// <remarks>

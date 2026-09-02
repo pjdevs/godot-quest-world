@@ -41,7 +41,7 @@ internal sealed partial class TestScriptedExecutor : InteractionActionExecutor
             : new InteractionExecutionFailed("The scripted timer could not start.");
     }
 
-    internal override InteractionProgressSample? GetPredictionSample(
+    internal override InteractionProgressSample? GetInteractionPredictionSample(
         in InteractionContext context
     ) => Duration.HasValue ? TimedExecution.BuildPredictionSample(Duration.Value) : null;
 

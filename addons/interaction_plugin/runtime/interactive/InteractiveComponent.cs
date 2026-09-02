@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Rules;
+using QuestWorld.GameplayActions.Runtime.Runner;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Detection;
 using QuestWorld.Interaction.Runtime.Interactor;
@@ -243,6 +247,9 @@ public partial class InteractiveComponent : Node
     /// </remarks>
     [ExportGroup("Actions")]
     [Export]
+    public GameplayActionComponent? ActionComponent { get; set; }
+
+    [Export]
     public Godot.Collections.Array<InteractionAction> Actions { get; set; } = new();
 
     /// <summary>
@@ -271,6 +278,7 @@ public partial class InteractiveComponent : Node
     // like the signals the target connects to those very areas: swapping one at runtime is already
     // outside the contract.
     private static readonly Dictionary<ulong, InteractiveComponent> _areaOwners = new();
+    private static readonly Dictionary<ulong, InteractiveComponent> _actionComponentOwners = new();
 
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
     private readonly HashSet<InteractionInteractor> _interactionOverlaps = new();
@@ -321,6 +329,21 @@ public partial class InteractiveComponent : Node
             : null;
     }
 
+    internal static InteractiveComponent? FindByActionComponent(
+        GameplayActionComponent? component
+    )
+    {
+        return
+            component is not null
+            && _actionComponentOwners.TryGetValue(
+                component.GetInstanceId(),
+                out InteractiveComponent? owner
+            )
+            && IsInstanceValid(owner)
+                ? owner
+                : null;
+    }
+
     /// <summary>Godot callback that joins the registry the sourceless detectors read.</summary>
     public override void _EnterTree()
     {
@@ -350,6 +373,18 @@ public partial class InteractiveComponent : Node
             GD.PushError($"{GetPath()}: InteractiveComponent requires at least one Action.");
         }
 
+        if (ActionComponent is null)
+        {
+            GD.PushError($"{GetPath()}: InteractiveComponent requires a GameplayActionComponent.");
+        }
+
+        foreach (InteractionAction action in Actions)
+        {
+            PrepareAction(action);
+        }
+
+        ConnectActionComponent();
+
         if (InteractionArea is not null)
         {
             InteractionArea.BodyEntered += OnInteractionAreaBodyEntered;
@@ -362,6 +397,104 @@ public partial class InteractiveComponent : Node
             IndicationArea.BodyExited += OnIndicationAreaBodyExited;
         }
     }
+
+    private void PrepareAction(InteractionAction? action)
+    {
+        if (action is not null)
+        {
+            action.PrepareForInteractive(this, TargetRules);
+        }
+    }
+
+    private void ConnectActionComponent()
+    {
+        if (ActionComponent is null)
+        {
+            return;
+        }
+
+        _actionComponentOwners[ActionComponent.GetInstanceId()] = this;
+        ActionComponent.GameplayActionStarted += OnGameplayActionStarted;
+        ActionComponent.GameplayActionCompleted += OnGameplayActionCompleted;
+        ActionComponent.GameplayActionCancelled += OnGameplayActionCancelled;
+        ActionComponent.GameplayActionFailed += OnGameplayActionFailed;
+        ActionComponent.GameplayActionRejected += OnGameplayActionRejected;
+        ActionComponent.ExecutionPresentationChanged += OnExecutionPresentationChanged;
+    }
+
+    private static InteractionInteractor? ResolveInteractor(Node? requester) =>
+        InteractionInteractor.FindByRunner(requester as GameplayActionRunner);
+
+    private void OnGameplayActionStarted(
+        long executionId,
+        GameplayAction action,
+        Node? instigator,
+        Node? requester
+    )
+    {
+        if (action is InteractionAction interactionAction && ResolveInteractor(requester) is { } interactor)
+        {
+            EmitSignal(SignalName.InteractionActionStarted, interactor, interactionAction);
+        }
+    }
+
+    private void OnGameplayActionCompleted(
+        long executionId,
+        GameplayAction action,
+        Node? instigator,
+        Node? requester
+    )
+    {
+        if (action is InteractionAction interactionAction && ResolveInteractor(requester) is { } interactor)
+        {
+            EmitSignal(SignalName.InteractionActionCompleted, interactor, interactionAction);
+        }
+    }
+
+    private void OnGameplayActionCancelled(
+        long executionId,
+        GameplayAction action,
+        Node? instigator,
+        Node? requester,
+        string reason
+    )
+    {
+        if (action is InteractionAction interactionAction && ResolveInteractor(requester) is { } interactor)
+        {
+            EmitSignal(SignalName.InteractionActionCancelled, interactor, interactionAction, reason);
+        }
+    }
+
+    private void OnGameplayActionFailed(
+        long executionId,
+        GameplayAction action,
+        Node? instigator,
+        Node? requester,
+        string reason
+    )
+    {
+        if (action is InteractionAction interactionAction && ResolveInteractor(requester) is { } interactor)
+        {
+            EmitSignal(SignalName.InteractionActionFailed, interactor, interactionAction, reason);
+        }
+    }
+
+    private void OnGameplayActionRejected(
+        long executionId,
+        GameplayAction action,
+        Node? instigator,
+        Node? requester,
+        string reason
+    )
+    {
+        if (action is InteractionAction interactionAction && ResolveInteractor(requester) is { } interactor)
+        {
+            EmitSignal(SignalName.InteractionActionRejected, interactor, interactionAction, reason);
+        }
+    }
+
+    private void OnExecutionPresentationChanged(StringName actionId) =>
+        EmitSignal(SignalName.ExecutionPresentationChanged, actionId);
 
     /// <summary>
     /// Evaluates configuration, reservation, target rules, and action rules for one action.
@@ -384,22 +517,25 @@ public partial class InteractiveComponent : Node
             || InteractionArea is null
             || InteractionAnchor is null
             || action is null
-            || action.Definition is null
-            || action.Executor is null
+            || action.InteractionDefinition is null
+            || action.InteractionExecutor is null
             || !Actions.Contains(action)
+            || ActionComponent is null
+            || action.Component != ActionComponent
         )
         {
             return new InteractionBlocked(NotConfiguredReason);
         }
 
-        InteractionContext context = new(interactor, this, action);
-        InteractionAvailability targetAvailability = EvaluateRules(TargetRules, context);
-        if (targetAvailability is not InteractionAllowed)
-        {
-            return targetAvailability;
-        }
-
-        InteractionAvailability actionAvailability = EvaluateRules(action.Rules, context);
+        PrepareAction(action);
+        InteractionAvailability actionAvailability = ActionComponent
+            .EvaluateAction(
+                action.InteractionDefinition.Id,
+                interactor,
+                interactor.Runner,
+                GameplayActionInvocationKind.PlayerRequest
+            )
+            .ToInteractionAvailability();
         if (actionAvailability is not InteractionAllowed)
         {
             return actionAvailability;
@@ -413,13 +549,11 @@ public partial class InteractiveComponent : Node
         // allowed for the owner would make a prompt claim an action the target would immediately
         // refuse; blocked keeps the action presented, with the reason, which is what a prompt needs.
         if (
-            TryGetActionExecution(action, out InteractionExecution running)
-            || TryGetGroupExecution(action, out running)
+            ActionComponent.IsActionExecuting(action.InteractionDefinition.Id)
+            || ActionComponent.IsConcurrencyGroupExecuting(action.GetConcurrencyGroup())
         )
         {
-            return new InteractionBlocked(
-                running.Interactor == interactor ? AlreadyRunningReason : SomeoneElseReason
-            );
+            return new InteractionBlocked(AlreadyRunningReason);
         }
 
         return new InteractionAllowed();
@@ -496,7 +630,10 @@ public partial class InteractiveComponent : Node
 
         foreach (InteractionAction action in Actions)
         {
-            if (action?.Definition is not null && action.Definition.Id == actionId)
+            if (
+                action?.InteractionDefinition is not null
+                && action.InteractionDefinition.Id == actionId
+            )
             {
                 return action;
             }
@@ -529,12 +666,15 @@ public partial class InteractiveComponent : Node
         int bestRank = 0;
         foreach (InteractionAction action in Actions)
         {
-            if (action?.Definition is null || action.Definition.InputActionName != inputActionName)
+            if (
+                action?.InteractionDefinition is null
+                || action.InteractionDefinition.InputActionName != inputActionName
+            )
             {
                 continue;
             }
 
-            if (action.Definition.HoldThreshold > heldSeconds)
+            if (action.InteractionDefinition.HoldThreshold > heldSeconds)
             {
                 continue;
             }
@@ -571,17 +711,20 @@ public partial class InteractiveComponent : Node
         float longest = 0.0f;
         foreach (InteractionAction action in Actions)
         {
-            if (action?.Definition is null || action.Definition.InputActionName != inputActionName)
+            if (
+                action?.InteractionDefinition is null
+                || action.InteractionDefinition.InputActionName != inputActionName
+            )
             {
                 continue;
             }
 
             if (
-                action.Definition.HoldThreshold > longest
+                action.InteractionDefinition.HoldThreshold > longest
                 && TryRankAction(interactor, action, out _)
             )
             {
-                longest = action.Definition.HoldThreshold;
+                longest = action.InteractionDefinition.HoldThreshold;
             }
         }
 
@@ -645,8 +788,8 @@ public partial class InteractiveComponent : Node
     {
         // A hold is a deliberate selection, so the action the player held for wins over one asking
         // for no hold. Without this, holding could never reach the action the threshold exists for.
-        float threshold = action.Definition!.HoldThreshold;
-        float bestThreshold = best.Definition!.HoldThreshold;
+        float threshold = action.InteractionDefinition!.HoldThreshold;
+        float bestThreshold = best.InteractionDefinition!.HoldThreshold;
         if (threshold != bestThreshold)
         {
             return threshold > bestThreshold;
@@ -663,8 +806,8 @@ public partial class InteractiveComponent : Node
         }
 
         return string.CompareOrdinal(
-                action.Definition!.Id.ToString(),
-                best.Definition!.Id.ToString()
+                action.InteractionDefinition!.Id.ToString(),
+                best.InteractionDefinition!.Id.ToString()
             ) < 0;
     }
 
@@ -744,7 +887,7 @@ public partial class InteractiveComponent : Node
     )
     {
         presentation = default;
-        if (action?.Definition is null)
+        if (action?.InteractionDefinition is null)
         {
             return false;
         }
@@ -756,15 +899,15 @@ public partial class InteractiveComponent : Node
         }
 
         presentation = new InteractionActionPresentation(
-            action.Definition.Id,
-            action.Definition.Label,
-            action.Definition.Description,
-            action.Definition.InputActionName,
+            action.InteractionDefinition.Id,
+            action.InteractionDefinition.Label,
+            action.InteractionDefinition.Description,
+            action.InteractionDefinition.InputActionName,
             availability,
             action.Automatic,
-            action.Definition.HoldThreshold > 0.0f,
-            progress.HoldOf(action.Definition),
-            progress.HoldElapsedOf(action.Definition)
+            action.InteractionDefinition.HoldThreshold > 0.0f,
+            progress.HoldOf(action.InteractionDefinition),
+            progress.HoldElapsedOf(action.InteractionDefinition)
         );
         return true;
     }
@@ -778,20 +921,20 @@ public partial class InteractiveComponent : Node
     public IReadOnlyList<InteractionExecutionPresentation> GetExecutionPresentations()
     {
         List<InteractionExecutionPresentation> presentations = new();
-        HashSet<StringName> addedActionIds = new();
-        foreach (InteractionAction action in Actions)
+        if (ActionComponent is null)
         {
-            if (
-                action?.Definition is not null
-                && addedActionIds.Add(action.Definition.Id)
-                && _executionPresentations.TryGetValue(
-                    action.Definition.Id,
-                    out InteractionExecutionPresentationSlot? slot
+            return presentations;
+        }
+
+        foreach (GameplayActionExecutionPresentation presentation in ActionComponent.GetExecutionPresentations())
+        {
+            presentations.Add(
+                new InteractionExecutionPresentation(
+                    presentation.ExecutionId,
+                    presentation.ActionId,
+                    presentation.Progress
                 )
-            )
-            {
-                presentations.Add(ResolveExecutionPresentation(slot));
-            }
+            );
         }
 
         return presentations;
@@ -808,18 +951,21 @@ public partial class InteractiveComponent : Node
     {
         presentation = default;
         if (
-            actionId is null
-            || actionId.IsEmpty
-            || !_executionPresentations.TryGetValue(
+            ActionComponent is null
+            || !ActionComponent.TryGetExecutionPresentation(
                 actionId,
-                out InteractionExecutionPresentationSlot? slot
+                out GameplayActionExecutionPresentation current
             )
         )
         {
             return false;
         }
 
-        presentation = ResolveExecutionPresentation(slot);
+        presentation = new InteractionExecutionPresentation(
+            current.ExecutionId,
+            current.ActionId,
+            current.Progress
+        );
         return true;
     }
 
@@ -859,35 +1005,20 @@ public partial class InteractiveComponent : Node
     )
     {
         executionId = 0;
-        if (!IsAuthoritative)
+        if (ActionComponent is null || action.InteractionDefinition is null)
         {
-            // No notification here: this component only reports what happened authoritatively.
-            GD.PushWarning($"{GetPath()}: only the server may execute an interaction action.");
-            return new InteractionExecutionRejected(NotAuthoritativeReason);
+            return new InteractionExecutionRejected(NotConfiguredReason);
         }
 
-        InteractionAvailability availability = EvaluateAvailability(interactor, action);
-        if (availability is not InteractionAllowed)
-        {
-            return RefuseExecution(interactor, action, availability.DescribeRefusal());
-        }
-
-        InteractionExecution? reservation = ReserveExecutionCore(interactor, action);
-        if (reservation is null)
-        {
-            return RefuseExecution(interactor, action, NotConfiguredReason);
-        }
-
-        executionId = reservation.Value.Id;
-
-        // The reservation is complete and every invariant holds before arbitrary gameplay runs.
-        InteractionExecutionResult result = action.Executor!.Execute(
-            BuildExecutionContext(reservation.Value)
-        );
-
-        InteractionExecutionDispatch dispatch = ApplyExecutionResultCore(reservation.Value, result);
-        DispatchExecutionResult(dispatch);
-        return result;
+        PrepareAction(action);
+        return ActionComponent
+            .ExecuteProgrammatic(
+                action.InteractionDefinition.Id,
+                out executionId,
+                interactor,
+                interactor.Runner
+            )
+            .ToInteractionExecutionResult();
     }
 
     private void AddExecutionPresentation(in InteractionExecution execution)
@@ -970,39 +1101,7 @@ public partial class InteractiveComponent : Node
     /// <returns>False for stale executions or invalid values.</returns>
     public bool ReportExecutionProgress(ulong executionId, float? progress)
     {
-        InteractionExecution? execution = FindExecution(executionId);
-        if (execution is null || !IsAuthoritative)
-        {
-            return false;
-        }
-
-        if (progress.HasValue && !float.IsFinite(progress.Value))
-        {
-            GD.PushWarning($"{GetPath()}: execution progress must be finite.");
-            return false;
-        }
-
-        bool wasVisible = IsVisibleExecutionSlot(execution.Value.Action, executionId);
-        InteractionExecutionPresentationSlot slot = GetProgressSlot(execution.Value);
-
-        if (slot.Progress.RejectPublishedOverride(this, executionId))
-        {
-            return false;
-        }
-
-        float normalized = progress.HasValue ? Mathf.Clamp(progress.Value, 0.0f, 1.0f) : 0.0f;
-        if (slot.Progress.MatchesPublished(progress))
-        {
-            return false;
-        }
-
-        slot.Progress.Publish(progress.HasValue ? normalized : null);
-        if (wasVisible)
-        {
-            EmitSignal(SignalName.ExecutionPresentationChanged, slot.ActionId);
-            NotifyRequesterProgress(execution.Value, slot, progress.HasValue);
-        }
-        return true;
+        return ActionComponent?.ReportExecutionProgress(executionId, progress) == true;
     }
 
     /// <summary>Registers a local callable that derives progress for an existing presentation slot.</summary>
@@ -1011,21 +1110,7 @@ public partial class InteractiveComponent : Node
     /// <returns>False for the prediction sentinel or an unknown execution.</returns>
     public bool SetExecutionProgressSource(ulong executionId, Callable source)
     {
-        if (
-            executionId == 0ul
-            || !TryGetProgressSlot(executionId, out InteractionExecutionPresentationSlot? slot)
-            || slot is null
-        )
-        {
-            return false;
-        }
-
-        slot.Progress.SetSource(source);
-        if (IsVisibleExecutionSlot(slot.ActionId, slot.ExecutionId))
-        {
-            EmitSignal(SignalName.ExecutionPresentationChanged, slot.ActionId);
-        }
-        return true;
+        return ActionComponent?.SetExecutionProgressSource(executionId, source) == true;
     }
 
     /// <summary>Clears a local callable progress source.</summary>
@@ -1033,21 +1118,7 @@ public partial class InteractiveComponent : Node
     /// <returns>False when no matching local slot exists.</returns>
     public bool ClearExecutionProgressSource(ulong executionId)
     {
-        if (
-            executionId == 0ul
-            || !TryGetProgressSlot(executionId, out InteractionExecutionPresentationSlot? slot)
-            || slot is null
-        )
-        {
-            return false;
-        }
-
-        slot.Progress.ClearSource();
-        if (IsVisibleExecutionSlot(slot.ActionId, slot.ExecutionId))
-        {
-            EmitSignal(SignalName.ExecutionPresentationChanged, slot.ActionId);
-        }
-        return true;
+        return ActionComponent?.ClearExecutionProgressSource(executionId) == true;
     }
 
     internal bool ReportExecutionLinearProgress(
@@ -1524,7 +1595,7 @@ public partial class InteractiveComponent : Node
     /// <returns><see langword="true"/> while the execution holds its reservation.</returns>
     public bool IsExecutionActive(ulong executionId)
     {
-        return IndexOfExecution(executionId) >= 0;
+        return ActionComponent?.IsExecutionActive(executionId) == true;
     }
 
     internal InteractionExecution? ReserveExecutionCore(
@@ -1591,15 +1662,7 @@ public partial class InteractiveComponent : Node
     /// <returns><see langword="true"/> when a running execution was completed.</returns>
     public bool CompleteExecution(ulong executionId)
     {
-        InteractionExecution? execution = EndExecutionCore(executionId);
-        if (execution is null)
-        {
-            return false;
-        }
-
-        NotifyExecutorCompleted(execution.Value);
-        DispatchExecutionCompletion(execution.Value);
-        return true;
+        return ActionComponent?.CompleteExecution(executionId) == true;
     }
 
     /// <summary>Cancels the execution an executor left running.</summary>
@@ -1612,15 +1675,7 @@ public partial class InteractiveComponent : Node
     /// <returns><see langword="true"/> when a running execution was cancelled.</returns>
     public bool CancelExecution(ulong executionId, string reason = "")
     {
-        InteractionExecution? execution = EndExecutionCore(executionId);
-        if (execution is null)
-        {
-            return false;
-        }
-
-        NotifyExecutorCancelled(execution.Value, reason);
-        DispatchExecutionCancellation(execution.Value, reason);
-        return true;
+        return ActionComponent?.CancelExecution(executionId, reason) == true;
     }
 
     /// <summary>Fails the execution an executor left running.</summary>
@@ -1633,15 +1688,7 @@ public partial class InteractiveComponent : Node
     /// <returns><see langword="true"/> when a running execution was failed.</returns>
     public bool FailExecution(ulong executionId, string reason)
     {
-        InteractionExecution? execution = EndExecutionCore(executionId);
-        if (execution is null)
-        {
-            return false;
-        }
-
-        NotifyExecutorFailed(execution.Value, reason);
-        DispatchExecutionFailure(execution.Value, reason);
-        return true;
+        return ActionComponent?.FailExecution(executionId, reason) == true;
     }
 
     internal InteractionExecution? EndExecutionCore(ulong executionId)
@@ -1974,6 +2021,17 @@ public partial class InteractiveComponent : Node
     /// <summary>Godot callback that disconnects state and interactor registrations.</summary>
     public override void _ExitTree()
     {
+        if (ActionComponent is not null && IsInstanceValid(ActionComponent))
+        {
+            ActionComponent.GameplayActionStarted -= OnGameplayActionStarted;
+            ActionComponent.GameplayActionCompleted -= OnGameplayActionCompleted;
+            ActionComponent.GameplayActionCancelled -= OnGameplayActionCancelled;
+            ActionComponent.GameplayActionFailed -= OnGameplayActionFailed;
+            ActionComponent.GameplayActionRejected -= OnGameplayActionRejected;
+            ActionComponent.ExecutionPresentationChanged -= OnExecutionPresentationChanged;
+            _actionComponentOwners.Remove(ActionComponent.GetInstanceId());
+        }
+
         _registered.Remove(this);
         ForgetArea(InteractionArea);
         ForgetArea(IndicationArea);

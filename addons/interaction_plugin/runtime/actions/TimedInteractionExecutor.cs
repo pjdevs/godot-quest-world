@@ -1,4 +1,5 @@
 using Godot;
+using GameplayActionExecution = QuestWorld.GameplayActions.Runtime.Execution;
 
 namespace QuestWorld.Interaction.Runtime.Actions;
 
@@ -20,7 +21,7 @@ public abstract partial class TimedInteractionExecutor : InteractionActionExecut
     [Export]
     public float CorrectionInterval { get; set; } = 0.5f;
 
-    private readonly TimedExecution _timedExecution = new();
+    private readonly GameplayActionExecution.TimedExecution _timedExecution = new();
 
     /// <summary>Computes the duration for one action without changing gameplay.</summary>
     /// <param name="context">Pure context of the action being queried.</param>
@@ -34,21 +35,34 @@ public abstract partial class TimedInteractionExecutor : InteractionActionExecut
     {
         InteractionContext query = new(context.Interactor, context.Interactive, context.Action);
         float duration = ComputeTimedDuration(query);
-        TimedExecutionStartResult startResult = _timedExecution.Start(
-            context.Interactive,
+        GameplayActionExecution.TimedExecutionStartResult startResult =
+            _timedExecution.Start(
+            context.Interactive.ActionComponent!,
             context.ExecutionId,
             duration,
             CorrectionInterval
         );
-        return startResult == TimedExecutionStartResult.Started
+        return startResult == GameplayActionExecution.TimedExecutionStartResult.Started
             ? Running()
             : new InteractionExecutionFailed(StartFailureReason(startResult));
     }
 
     /// <inheritdoc />
-    internal override InteractionProgressSample? GetPredictionSample(in InteractionContext context)
+    internal override InteractionProgressSample? GetInteractionPredictionSample(
+        in InteractionContext context
+    )
     {
-        return TimedExecution.BuildPredictionSample(ComputeTimedDuration(context));
+        GameplayActionExecution.GameplayActionProgressSample? sample =
+            GameplayActionExecution.TimedExecution.BuildPredictionSample(
+                ComputeTimedDuration(context)
+            );
+        return sample is GameplayActionExecution.GameplayActionProgressSample value
+            ? new InteractionProgressSample(
+                value.ProgressBase,
+                value.ProgressPerSecond,
+                value.Revision
+            )
+            : null;
     }
 
     /// <inheritdoc />
@@ -78,15 +92,18 @@ public abstract partial class TimedInteractionExecutor : InteractionActionExecut
         base.OnExecutionFailed(context, reason);
     }
 
-    private static string StartFailureReason(TimedExecutionStartResult result) =>
+    private static string StartFailureReason(
+        GameplayActionExecution.TimedExecutionStartResult result
+    ) =>
         result switch
         {
-            TimedExecutionStartResult.AlreadyActive => "The timed executor is already active.",
-            TimedExecutionStartResult.InvalidDuration =>
+            GameplayActionExecution.TimedExecutionStartResult.AlreadyActive =>
+                "The timed executor is already active.",
+            GameplayActionExecution.TimedExecutionStartResult.InvalidDuration =>
                 "Timed execution duration must be finite and greater than zero.",
-            TimedExecutionStartResult.InvalidExecution =>
+            GameplayActionExecution.TimedExecutionStartResult.InvalidExecution =>
                 "The timed execution is no longer active.",
-            TimedExecutionStartResult.MissingSceneTree =>
+            GameplayActionExecution.TimedExecutionStartResult.MissingSceneTree =>
                 "The timed execution requires an active scene tree.",
             _ => "The timed execution could not start.",
         };

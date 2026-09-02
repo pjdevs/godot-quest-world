@@ -1,4 +1,9 @@
 using Godot;
+using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Runtime.Rules;
+using QuestWorld.GameplayActions.Runtime.Runner;
+using QuestWorld.Interaction.Runtime.Actions;
+using QuestWorld.Interaction.Runtime.Interactor;
 
 namespace QuestWorld.Interaction.Runtime.Rules;
 
@@ -11,7 +16,7 @@ namespace QuestWorld.Interaction.Runtime.Rules;
 /// runtime state.
 /// </remarks>
 [GlobalClass]
-public abstract partial class InteractionRule : Resource
+public abstract partial class InteractionRule : GameplayActionRule
 {
     /// <summary>
     /// Evaluates one synchronous, side-effect-free gameplay condition for one action.
@@ -22,4 +27,20 @@ public abstract partial class InteractionRule : Resource
     /// An allowed availability, or the hidden or blocked result that stops the rule pipeline.
     /// </returns>
     public abstract InteractionAvailability Evaluate(in InteractionContext context);
+
+    public sealed override GameplayActionAvailability Evaluate(in GameplayActionContext context)
+    {
+        if (
+            context.Action is not InteractionAction action
+            || action.Interactive is null
+            || context.Requester is not GameplayActionRunner runner
+            || InteractionInteractor.FindByRunner(runner) is not InteractionInteractor interactor
+        )
+        {
+            return new GameplayActionBlocked(InteractionAvailabilityExtensions.UnavailableReason);
+        }
+
+        return Evaluate(new InteractionContext(interactor, action.Interactive, action))
+            .ToGameplayActionAvailability();
+    }
 }

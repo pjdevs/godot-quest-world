@@ -1,4 +1,9 @@
 using Godot;
+using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Bindings;
+using QuestWorld.GameplayActions.Runtime.Rules;
+using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Rules;
 
 namespace QuestWorld.Interaction.Runtime.Actions;
@@ -12,30 +17,40 @@ namespace QuestWorld.Interaction.Runtime.Actions;
 /// node never mutates gameplay and never evaluates itself.
 /// </remarks>
 [GlobalClass]
-public partial class InteractionAction : Node
+public partial class InteractionAction : GameplayAction
 {
+    public static readonly StringName InteractionAccessProviderId = new("interaction");
+
     /// <summary>Concurrency group used by an action that declares none.</summary>
-    public static readonly StringName DefaultConcurrencyGroup = new("default");
+    public static readonly StringName DefaultConcurrencyGroup = DefaultHostConcurrencyGroup;
 
-    /// <summary>Gets or sets the required shared definition providing identity, label, and input.</summary>
-    [Export]
-    public InteractionActionDefinition? Definition { get; set; }
+    public override StringName AccessProviderId => InteractionAccessProviderId;
 
-    /// <summary>Gets or sets the required single owner of the gameplay mutation of this action.</summary>
-    /// <remarks>
-    /// Add the executor node to the target scene, conventionally as a child of this action, and
-    /// reference it here. An action without executor is a configuration error and stays blocked: the
-    /// core never falls back to a signal that some subscriber might handle.
-    /// </remarks>
-    [Export]
-    public InteractionActionExecutor? Executor { get; set; }
+    public new InteractionActionDefinition? Definition
+    {
+        get => base.Definition as InteractionActionDefinition;
+        set => base.Definition = value;
+    }
 
-    /// <summary>
-    /// Gets or sets the ordered gameplay conditions of this action. Evaluation stops at the first
-    /// hidden or blocked result.
-    /// </summary>
-    [Export]
-    public Godot.Collections.Array<InteractionRule> Rules { get; set; } = new();
+    public InteractionActionDefinition? InteractionDefinition => Definition;
+
+    public new InteractionActionExecutor? Executor
+    {
+        get => base.Executor as InteractionActionExecutor;
+        set => base.Executor = value;
+    }
+
+    public InteractionActionExecutor? InteractionExecutor => Executor;
+
+    public new InteractionExecutionVisibility ExecutionVisibility
+    {
+        get => (InteractionExecutionVisibility)base.ExecutionVisibility;
+        set => base.ExecutionVisibility = (GameplayActionExecutionVisibility)value;
+    }
+
+    public InteractiveComponent? Interactive { get; internal set; }
+
+    private Godot.Collections.Array<GameplayActionRule>? _authoredRules;
 
     /// <summary>
     /// Gets or sets the local weight used when several actions of this target share one input.
@@ -48,10 +63,6 @@ public partial class InteractionAction : Node
     public int Priority { get; set; }
 
     /// <summary>Gets or sets which peers may observe this action while it executes.</summary>
-    [Export]
-    public InteractionExecutionVisibility ExecutionVisibility { get; set; } =
-        InteractionExecutionVisibility.RequesterOnly;
-
     /// <summary>
     /// Gets or sets the group of executions this action is exclusive with on its own target.
     /// </summary>
@@ -62,9 +73,6 @@ public partial class InteractionAction : Node
     /// one, for example an inspection staying available during a hack. Exclusivity never crosses
     /// targets: this is not a lock manager.
     /// </remarks>
-    [Export]
-    public StringName ConcurrencyGroup { get; set; } = DefaultConcurrencyGroup;
-
     /// <summary>Gets or sets whether local focus requests this action without any player input.</summary>
     /// <remarks>
     /// An automatic action still goes through the authoritative command path and is still presented,
@@ -75,22 +83,78 @@ public partial class InteractionAction : Node
 
     /// <summary>Gets the group this action is exclusive with, falling back to the default group.</summary>
     /// <returns>The authored group, or <see cref="DefaultConcurrencyGroup"/> when none is set.</returns>
-    public StringName GetConcurrencyGroup() =>
-        ConcurrencyGroup is null || ConcurrencyGroup.IsEmpty
-            ? DefaultConcurrencyGroup
-            : ConcurrencyGroup;
+    public StringName GetConcurrencyGroup() => GetHostConcurrencyGroup();
+
+    internal GameplayActionBindingConfig BuildBindingConfig()
+    {
+        InteractionActionDefinition? definition = InteractionDefinition;
+        if (Automatic)
+        {
+            return new InteractionActionBindingConfig
+            {
+                ActivationMode = GameplayActionActivationMode.Automatic,
+            };
+        }
+
+        float holdThreshold = definition?.HoldThreshold ?? 0.0f;
+        return new InteractionActionBindingConfig
+        {
+            InputActionName = definition?.InputActionName ?? new StringName(),
+            ActivationMode =
+                holdThreshold > 0.0f
+                    ? GameplayActionActivationMode.Hold
+                    : GameplayActionActivationMode.Press,
+            HoldDuration = holdThreshold,
+            InputRequirement =
+                definition?.CancelOnInputReleased == true
+                    ? GameplayActionInputRequirement.Pressed
+                    : GameplayActionInputRequirement.None,
+            Priority = Priority,
+        };
+    }
+
+    internal void PrepareForInteractive(
+        InteractiveComponent interactive,
+        Godot.Collections.Array<InteractionRule> targetRules
+    )
+    {
+        Interactive = interactive;
+        if (_authoredRules is null)
+        {
+            _authoredRules = new Godot.Collections.Array<GameplayActionRule>();
+            foreach (GameplayActionRule rule in Rules)
+            {
+                _authoredRules.Add(rule);
+            }
+        }
+
+        Godot.Collections.Array<GameplayActionRule> combined = new();
+        foreach (InteractionRule rule in targetRules)
+        {
+            combined.Add(rule);
+        }
+
+        foreach (GameplayActionRule rule in _authoredRules)
+        {
+            combined.Add(rule);
+        }
+
+        Rules = combined;
+    }
 
     /// <summary>Godot callback that reports a missing definition or executor.</summary>
     public override void _Ready()
     {
-        if (Definition is null)
+        base._Ready();
+
+        if (Definition is not null && InteractionDefinition is null)
         {
-            GD.PushError($"{GetPath()}: InteractionAction requires a Definition.");
+            GD.PushError($"{GetPath()}: InteractionAction requires an InteractionActionDefinition.");
         }
 
-        if (Executor is null)
+        if (Executor is not null && InteractionExecutor is null)
         {
-            GD.PushError($"{GetPath()}: InteractionAction requires an Executor.");
+            GD.PushError($"{GetPath()}: InteractionAction requires an InteractionActionExecutor.");
         }
     }
 }

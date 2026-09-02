@@ -260,6 +260,19 @@ public partial class GameplayActionComponent : Node
         return false;
     }
 
+    public bool IsConcurrencyGroupExecuting(StringName concurrencyGroup)
+    {
+        foreach (ActiveExecution execution in _executionsById.Values)
+        {
+            if (execution.Action.GetHostConcurrencyGroup() == concurrencyGroup)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public bool IsExecutionActive(ulong executionId) => _executionsById.ContainsKey(executionId);
 
     public IReadOnlyList<GameplayActionExecutionPresentation> GetExecutionPresentations()

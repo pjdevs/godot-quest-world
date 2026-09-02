@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.GameplayActions;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
@@ -46,6 +47,26 @@ public static class InteractionAvailabilityExtensions
             InteractionAllowed => string.Empty,
             InteractionBlocked blocked => blocked.Reason,
             InteractionHidden => UnavailableReason,
+        };
+
+    public static GameplayActionAvailability ToGameplayActionAvailability(
+        this InteractionAvailability availability
+    ) =>
+        availability switch
+        {
+            InteractionAllowed => new GameplayActionAllowed(),
+            InteractionBlocked blocked => new GameplayActionBlocked(blocked.Reason),
+            _ => new GameplayActionHidden(),
+        };
+
+    public static InteractionAvailability ToInteractionAvailability(
+        this GameplayActionAvailability availability
+    ) =>
+        availability switch
+        {
+            GameplayActionAllowed => new InteractionAllowed(),
+            GameplayActionBlocked blocked => new InteractionBlocked(blocked.Reason),
+            _ => new InteractionHidden(),
         };
 }
 
@@ -211,6 +232,33 @@ public readonly union InteractionExecutionResult(
     InteractionExecutionRejected,
     InteractionExecutionFailed
 );
+
+public static class InteractionExecutionResultExtensions
+{
+    public static GameplayActionExecutionResult ToGameplayActionExecutionResult(
+        this InteractionExecutionResult result
+    ) =>
+        result switch
+        {
+            InteractionExecutionCompleted => new GameplayActionExecutionCompleted(),
+            InteractionExecutionRunning => new GameplayActionExecutionRunning(),
+            InteractionExecutionRejected rejected =>
+                new GameplayActionExecutionRejected(rejected.Reason),
+            InteractionExecutionFailed failed => new GameplayActionExecutionFailed(failed.Reason),
+        };
+
+    public static InteractionExecutionResult ToInteractionExecutionResult(
+        this GameplayActionExecutionResult result
+    ) =>
+        result switch
+        {
+            GameplayActionExecutionCompleted => new InteractionExecutionCompleted(),
+            GameplayActionExecutionRunning => new InteractionExecutionRunning(),
+            GameplayActionExecutionRejected rejected =>
+                new InteractionExecutionRejected(rejected.Reason),
+            GameplayActionExecutionFailed failed => new InteractionExecutionFailed(failed.Reason),
+        };
+}
 
 /// <summary>Read-only inputs supplied to the executor of an authoritative action.</summary>
 /// <remarks>
