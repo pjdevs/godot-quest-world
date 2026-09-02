@@ -101,12 +101,12 @@ public partial class InteractionAction : GameplayAction
     {
         base._Ready();
 
-        if (Definition is not null && InteractionDefinition is null)
+        if (base.Definition is not null && base.Definition is not InteractionActionDefinition)
         {
             GD.PushError($"{GetPath()}: InteractionAction requires an InteractionActionDefinition.");
         }
 
-        if (Executor is not null && InteractionExecutor is null)
+        if (base.Executor is not null && base.Executor is not InteractionActionExecutor)
         {
             GD.PushError($"{GetPath()}: InteractionAction requires an InteractionActionExecutor.");
         }
