@@ -273,7 +273,7 @@ public sealed partial class GameplayActionRunnerTest
 
         AssertThat(executor.CancelledCount).IsEqual(1);
         AssertThat(external.IsActionExecuting("channel")).IsFalse();
-        AssertThat(provider.SustainedChecks).IsEqual(1);
+        AssertThat(provider.RequestChecks).IsEqual(3);
     }
 
     [TestCase]
@@ -441,17 +441,9 @@ public sealed partial class GameplayActionRunnerTest
 
         public int RequestChecks { get; private set; }
 
-        public int SustainedChecks { get; private set; }
-
         public bool CanRequest(in GameplayActionAccessContext context)
         {
             RequestChecks++;
-            return Allowed;
-        }
-
-        public bool HasSustainedAccess(in GameplayActionAccessContext context)
-        {
-            SustainedChecks++;
             return Allowed;
         }
     }
