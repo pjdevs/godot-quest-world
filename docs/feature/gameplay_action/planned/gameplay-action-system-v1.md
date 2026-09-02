@@ -34,6 +34,11 @@ not introduce an `ActionHost` class, interface, or extra scene node.
 - Preserve pure gameplay rules for both player-requested and programmatic execution.
 - Preserve instant, open-ended, timed, and externally progressed executions.
 - Preserve requester-only, replicated, and authority-only execution presentation.
+- Preserve optional intrinsic action labels/descriptions so non-Interaction bindings can be presented without
+  inventing a spatial target.
+- Allow integrations to attach opaque presentation context to bindings without making the generic core own a
+  HUD or presentation policy.
+- Make `Automatic` activation edge-triggered and explicitly invalidated rather than globally polled.
 - Preserve Interaction's current behavior, multiplayer guarantees, presentation, and authoring capabilities.
 - Keep ownership, access, rules, input, execution, and presentation as separate concepts.
 - Expose primitive nodes and APIs directly so game code can build custom integrations without privileged
@@ -48,7 +53,7 @@ V1 does not implement:
 - requester-wide or cross-host concurrency locks;
 - generic replication of dynamically added action nodes or action specifications;
 - a global ability catalog, action-spec serializer, or generic grant synchronizer;
-- a generic action HUD, prompt system, or opinionated presentation policy;
+- a generic action HUD, prompt system, standardized presenter model, or opinionated presentation policy;
 - Inventory rules, pickup/drop gameplay, or the real `DropBattery` action;
 - compatibility aliases whose only purpose is to preserve Interaction-owned names for generic primitives.
 
@@ -75,13 +80,19 @@ system when real gameplay requires them. V1 must not pre-build them.
    action through this request path. Rules answer whether gameplay currently permits it.
 9. **Programmatic execution bypasses access, not rules.** A locked door remains locked when opened remotely
    unless authoritative gameplay explicitly changes or bypasses that lock outside the normal API.
-10. **Presentation is optional and consumer-relative.** The core exposes queryable state but never decides
-    that an action is globally presentable.
-11. **Mutation finishes before callbacks.** Core state is reserved or transitioned before executors, signals,
+10. **Presentation is optional and consumer-relative.** Definitions may expose intrinsic label/description
+    metadata and bindings may expose integration-owned context, but the core never decides that an action is
+    globally presentable or how it must be rendered.
+11. **Automatic activation is invalidation-driven and latched.** An automatic binding evaluates when bound and
+    again only when explicitly invalidated. It requests at most once for one continuous eligibility window.
+12. **Automatic eligibility excludes execution availability.** Access and gameplay rules determine whether an
+    automatic binding is eligible. Its own active execution, ActionId reservation, or concurrency group cannot
+    re-arm it by temporarily making execution unavailable.
+13. **Mutation finishes before callbacks.** Core state is reserved or transitioned before executors, signals,
     RPC acknowledgements, or integration callbacks run.
-12. **An accepted execution has one terminal outcome.** `Started` is followed exactly once by `Completed`,
+14. **An accepted execution has one terminal outcome.** `Started` is followed exactly once by `Completed`,
     `Cancelled`, or `Failed`. A rejection never emits `Started`.
-13. **Dynamic action replication is cause-driven in V1.** Inventory, equipment, quest state, or other
+15. **Dynamic action replication is cause-driven in V1.** Inventory, equipment, quest state, or other
     authoritative systems replicate their own state; integrations reconstruct matching local action nodes.
 
 ## 5. Package boundaries
@@ -93,6 +104,7 @@ The new add-on owns only generic mechanics:
 - action definitions and action occurrences;
 - action components and runtime registration;
 - local bindings and input gesture resolution;
+- automatic-binding eligibility caching and explicit invalidation;
 - player request routing and authority validation;
 - availability rules;
 - executors and execution lifecycle;
@@ -112,8 +124,9 @@ Interaction depends on `gameplay_action_plugin` and retains only spatially speci
 - detection, focus, distance, angle, line of sight, areas, and anchors;
 - interaction request access and sustained-presence validation;
 - target-level interaction rules and interaction-specific typed contexts where still valuable;
-- construction and removal of contextual bindings on the local runner;
-- interaction labels, descriptions, prompt data, world widgets, and indicators;
+- construction, invalidation, and removal of contextual bindings on the local runner;
+- target-level labels/descriptions, prompt data, world widgets, indicators, and any Interaction-specific
+  action presentation overrides/context;
 - interaction-specific editor validation and authoring facade.
 
 Generic execution code must not depend back on Interaction.
@@ -121,19 +134,28 @@ Generic execution code must not depend back on Interaction.
 ### 5.3 Other integrations
 
 Inventory and later gameplay systems may add or remove actions from a player's component and may create local
-bindings for them. They are not part of this implementation. Stateful executors that are no longer spatially
-specific should move to a generic GameplayAction/Stateful integration rather than remain Interaction
-primitives under a misleading name.
+bindings for them. They are not part of this implementation. Such integrations may invalidate their bindings
+from domain events instead of polling. Stateful executors that are no longer spatially specific should move to
+a generic GameplayAction/Stateful integration rather than remain Interaction primitives under a misleading
+name.
 
 ## 6. Runtime model
 
 ### 6.1 `GameplayActionDefinition : Resource`
 
-The base definition contains the stable `Id` and only data that is intrinsic to the action definition.
-It contains no input mapping and no generic presentation fields.
+The base definition contains only data intrinsic to the action definition:
 
-Specialized frameworks may derive definitions. `InteractionActionDefinition` can retain label, description,
-and interaction authoring data, while its stable identity comes from the generic base definition.
+- stable `Id`;
+- optional player-facing `Label`;
+- optional player-facing `Description`.
+
+It contains no input mapping and no presentation policy. Label and description are descriptive metadata, not a
+promise that every consumer must render the action. V1 deliberately stops there; icons and richer standardized
+presentation data may be added later only if concrete consumers justify them.
+
+Specialized frameworks may derive definitions. `InteractionActionDefinition` can retain Interaction-specific
+authoring data while inheriting stable identity and generic label/description metadata from the base
+definition.
 
 V1 definitions do not describe how to instantiate or replicate an action. A future V2 catalog may associate a
 stable definition ID with a scene or factory, but V1 makes no such contract.
@@ -172,12 +194,15 @@ This is the only concrete host in V1. It:
 
 The component's network-relative `NodePath`, not its parent entity path and not an action node path, is the
 host identity transported by requests and acknowledgements. This permits an entity to own more than one
-component without ambiguity, even though the common topology has one.
+component without ambiguity, even though the common topology has one. V1 may encapsulate path construction and
+resolution behind host-address helpers so a later networking layer can replace the concrete address without
+changing action/rule/executor contracts.
 
 Authored action nodes are conventionally direct children of the component and are listed in its explicit
 authored action collection; the component does not recursively discover actions from the scene tree. Runtime
-`AddAction` accepts an unowned action node, establishes the same component ownership, and places it under the
-component when necessary. An action cannot be registered with two components.
+`AddAction` accepts an unowned action node, establishes component ownership, and places it under the component
+when necessary. It must reject an action already owned/registered elsewhere rather than arbitrarily reparent a
+live authored occurrence. An action cannot be registered with two components.
 
 ### 6.4 `GameplayActionRunner : Node`
 
@@ -187,6 +212,8 @@ The runner belongs to one requester/player and owns:
 - local runtime bindings;
 - input gesture state and deterministic conflict resolution;
 - local rule/access prevalidation;
+- cached eligibility/latch state for `Automatic` bindings;
+- explicit invalidation APIs for one binding, one source, or one hosted action;
 - requester prediction and pending requests;
 - reliable request RPCs and lifecycle acknowledgements;
 - requester-owned execution tracking;
@@ -195,26 +222,35 @@ The runner belongs to one requester/player and owns:
 The runner never becomes the owner of externally hosted actions. A door execution stays in the door's action
 component even when the player's runner requested it.
 
+Invalidation means only that cached local eligibility may be stale and must be recomputed. It never directly
+means "execute this action". Integrations decide when their state warrants invalidation; the generic runner does
+not poll every action or rule each frame.
+
 ### 6.5 `GameplayActionBinding`
 
 A binding is a lightweight local runtime record, not a node and not replicated state. It contains at least:
 
 - binding identity;
 - the referenced `GameplayActionComponent` and `ActionId`;
-- a source identity used for scoped cleanup;
+- a source identity used for scoped cleanup and invalidation;
 - `InputActionName`;
 - `ActivationMode`;
 - `HoldDuration` when applicable;
 - `InputRequirement` for an accepted running execution;
 - absolute authored `Priority`;
-- optional source-specific presentation metadata or an opaque reference owned by the integration.
+- optional `PresentationContext` owned by the integration that created the binding.
+
+`PresentationContext` is intentionally opaque to the Gameplay Action core. The core stores and exposes it but
+never switches on its type or interprets its contents. An Inventory integration may point at carried-item data;
+Interaction may expose spatial/target authoring context. A generic consumer may ignore the context and use only
+the definition's label/description, while a specialized consumer may combine both.
 
 A generic `GameplayActionBindingConfig : Resource` may provide reusable authoring data. Integrations may also
 expose their own higher-level facade and copy its values into the runtime binding. In every case the runtime
 input mapping belongs to the binding, never to the action.
 
 Binding sources can add and remove their own bindings without disturbing other sources. The source is a
-lifecycle/cleanup identity only; it grants no authority and adds no hidden priority bonus.
+lifecycle/cleanup/invalidation identity only; it grants no authority and adds no hidden priority bonus.
 
 ### 6.6 Add/remove versus bind/unbind
 
@@ -279,7 +315,29 @@ sustained-presence checks for running executions.
 This seam is intentionally minimal. It is not a generic permission policy graph, and access providers are not
 authorable gameplay rules.
 
-### 7.4 Programmatic execution
+### 7.4 Local eligibility and invalidation
+
+For local binding selection and `Automatic` latching, **eligibility** means the result of request access plus
+normal gameplay rules. Host execution availability is deliberately separate: active ActionId reservations and
+concurrency groups are checked when requesting/executing but do not define a new eligibility window.
+
+The runner exposes explicit invalidation operations conceptually equivalent to:
+
+- invalidate one binding;
+- invalidate every binding from one source;
+- invalidate bindings referencing one `(GameplayActionComponent, ActionId)`.
+
+Exact public method names may differ, but the contract is fixed: invalidation marks cached eligibility stale,
+re-evaluates affected bindings, emits the appropriate local presentation/invalidation notifications, and may
+produce an `Automatic` eligibility edge. It never bypasses the normal request pipeline.
+
+Ordinary owned actions need no generic polling. An Inventory/equipment integration can invalidate bindings when
+its domain state changes. Interaction is intentionally different because spatial access and presentation can
+change continuously: its process/detector loop remains responsible for noticing relevant focus, detection,
+access, or rule changes and invalidating the corresponding Interaction binding source. The generic runner only
+performs the requested re-evaluation; it never learns about distance, line of sight, focus, or detectors.
+
+### 7.5 Programmatic execution
 
 `GameplayActionComponent` exposes an authority-only programmatic entry point. It:
 
@@ -311,7 +369,28 @@ GameplayActionActivationMode
 - `Press` activates on the press edge when no hold disambiguation is needed.
 - `Hold` activates once `HoldDuration` is reached. `HoldDuration` must be finite and strictly positive.
 - `Release` activates on the release edge if the gesture has not already been consumed.
-- `Automatic` activates on the edge where a binding becomes locally eligible, not every frame.
+- `Automatic` has no input edge. It evaluates immediately when the binding is created, then only after explicit
+  invalidation of that binding/source/action.
+
+An `Automatic` binding keeps a local latch over one continuous eligibility window:
+
+```text
+bind -> evaluate
+not eligible -> eligible     => request once and latch
+eligible -> eligible         => no request
+eligible -> not eligible     => re-arm
+not eligible -> not eligible => no request
+```
+
+If a binding is already eligible when first bound, the initial evaluation is the first `not present ->
+eligible` edge and requests once. A server rejection keeps the current window latched; it does not create a
+retry timer or immediate retry. A later explicit invalidation can only request again after eligibility has
+actually left and re-entered an allowed window, or after the binding has been removed and newly created.
+
+The latch observes eligibility from section 7.4, not final execution availability. Therefore starting the
+action, reserving its ActionId/concurrency group, completing it, receiving acknowledgements, or reconciling
+prediction cannot by themselves re-arm an automatic binding. This prevents an automatic action from looping
+simply because its own completion makes execution available again.
 
 To preserve Interaction's tap-versus-hold behavior, the presence of competing `Hold` bindings defers a
 `Press` candidate for that input. The runner snapshots a deterministic gesture-resolution plan at the press
@@ -334,8 +413,8 @@ GameplayActionInputRequirement
 ```
 
 `Pressed` means an accepted running execution is cancelled when the input that activated it is released.
-`None` means release does nothing to that execution. Additional required states are deferred until a real use
-case exists.
+`None` means release does nothing to that execution. `Automatic` bindings must use `None`. Additional required
+states are deferred until a real use case exists.
 
 The resolved requirement and originating input are captured into the execution at acceptance. Losing or
 replacing the binding later cannot erase the execution's input-lifetime contract.
@@ -357,6 +436,12 @@ The candidate plan and, once resolved, the winning binding are captured for the 
 re-query the live binding set every frame. If the winning/candidate binding disappears before activation, it
 is removed from that fixed plan; the gesture aborts when no candidate remains. If execution was already
 accepted, binding loss alone does not cancel it.
+
+Automatic bindings do not enter the pressed-input conflict plan. When invalidation produces multiple newly
+eligible automatic bindings in one batch, the runner applies the same allowed/priority/stable-identity ordering
+within the affected automatic set and requests at most one winner for that resolution pass. Integrations that
+want independent automatic actions should use separate invalidation moments or explicit priorities rather
+than relying on source order.
 
 ## 9. Execution lifecycle
 
@@ -425,7 +510,7 @@ linear timer. Presentation consumes the same nullable generic progress slot in b
 ### 10.1 Player request flow
 
 ```text
-local input edge
+local input or automatic eligibility edge
 → resolve and capture one binding
 → local access/rule prevalidation
 → create optional prediction
@@ -462,7 +547,8 @@ The migration preserves the current Interaction guarantees:
 - late or stale acknowledgements cannot end a newer execution.
 
 The existing request correlation assumption remains valid because one ActionId may have only one active or
-pending requester execution in the supported pipeline.
+pending requester execution in the supported pipeline. A rejected automatic request clears prediction/pending
+request state but does not clear its eligibility latch or schedule a retry.
 
 ### 10.3 Execution visibility
 
@@ -497,20 +583,26 @@ that is an optimization/convenience layer, not a V1 correctness requirement.
 
 The generic core provides no widgets and no global `IsPresentable` flag. It exposes:
 
-- the runner's current bindings;
+- optional intrinsic `Label` and `Description` from `GameplayActionDefinition`;
+- the runner's current bindings and each binding's optional opaque `PresentationContext`;
 - availability query APIs;
 - hold/gesture progress for bindings;
 - host execution presentation by ActionId;
 - lifecycle and invalidation notifications.
 
-A consumer decides which subset to render. `Heal` may remain permanently input-bound and never appear in a
-HUD. `DropBattery` may appear while the battery action exists. A radial menu may present the same action that a
-minimal HUD hides.
+A consumer decides which subset to render. A simple generic presenter can choose to render bindings whose
+definition exposes useful descriptive metadata, for example `DropBattery` while the player carries a battery.
+A specialized Inventory presenter may combine the definition's `Drop` label with the binding's carried-item
+context to render `Drop Industrial Battery`. `Heal` may remain permanently input-bound and never appear in a
+HUD. A radial menu may present the same action that a minimal HUD hides.
+
+The core does not inspect `PresentationContext` types and does not require a presenter to use every binding.
+Presentation remains a consumer decision rather than an action-level `IsPresentable` property.
 
 Interaction retains its opinionated world presentation because it owns meaningful spatial behavior: focused
-prompt containers, per-target indicators, projection from an anchor, distance, action labels, and interaction
-widget scenes. It may read generic binding and execution state, but those widgets do not move into the generic
-add-on.
+prompt containers, per-target indicators, projection from an anchor, distance, target labels/descriptions,
+and interaction widget scenes. It may combine generic definition metadata, binding context, and generic
+execution state, but those widgets and policies do not move into the generic add-on.
 
 ## 12. Interaction migration
 
@@ -545,8 +637,13 @@ Player
 
 The runner explicitly references the player's action component. The interactor explicitly references the
 runner and retains its detector. On local focus it binds the focused target's interaction actions; on focus
-loss it removes only bindings from that interaction source. It also registers the server-verifiable
-Interaction access provider used by `InteractionAction`.
+loss it removes only bindings from that interaction source. While focused/detected state is active, the
+interactor is responsible for invalidating that source whenever its detector/access/rule inputs may have
+changed. It also registers the server-verifiable Interaction access provider used by `InteractionAction`.
+
+This preserves Interaction's current need for continuous spatial observation without forcing the generic
+runner to poll. Interaction's process loop notices world changes; the runner owns the generic re-evaluation and
+automatic-edge semantics.
 
 ### 12.3 Functional equivalence
 
@@ -575,13 +672,18 @@ authoring possible without hidden generated runtime graphs.
 
 Specialized frameworks may later add a higher-level authoring facade:
 
-- Interaction may group prompt data and a binding template on `InteractionAction` or its definition;
-- Inventory may expose a declarative item-to-action grant;
+- Interaction may group prompt data, target data, presentation context, and a binding template on
+  `InteractionAction` or its definition;
+- Inventory may expose a declarative item-to-action grant plus binding presentation context;
 - a combat framework may expose skill-specific configuration.
 
 Those facades must adapt one-way into generic runtime actions and bindings. They must not maintain a second
 competing execution state. Runtime bindings remain records; only objects that need Godot identity, lifecycle,
 scene references, or replication become nodes.
+
+Generic definition label/description metadata and opaque binding presentation context are the only V1 seams
+for non-spatial action presentation. Adding icons, categories, ordering groups, standardized menus, or other
+presentation schema requires a demonstrated consumer rather than speculative expansion of the core.
 
 ## 14. Diagnostics and failure behavior
 
@@ -594,8 +696,10 @@ Editor/runtime diagnostics must cover at least:
 - invalid input map names;
 - invalid hold durations or irrelevant hold values on non-hold modes;
 - automatic bindings carrying an input requirement;
+- invalid/stale binding references during invalidation;
 - ambiguous same-input/same-phase bindings with equal authored priority;
 - ambiguous hold bindings sharing one input and threshold;
+- ambiguous newly eligible automatic bindings with equal authored priority;
 - Interaction actions hosted without a matching Interactive integration;
 - replicated visibility without an explicitly wired execution synchronizer.
 
@@ -617,7 +721,14 @@ Tests must prove the abstraction independently from Interaction:
 - unbind before activation, unbind after acceptance, and remove while running;
 - player-requested versus programmatic invocation;
 - programmatic access bypass with normal rules still enforced;
-- `Press`, `Hold`, `Release`, and edge-triggered `Automatic` activation;
+- `Press`, `Hold`, `Release`, and invalidation-driven `Automatic` activation;
+- automatic binding evaluates immediately on bind and fires once when initially eligible;
+- automatic `Allowed -> Allowed` invalidation does not retrigger;
+- automatic eligibility loss re-arms and a later `not eligible -> Allowed` invalidation retriggers once;
+- action/concurrency reservation and execution completion do not re-arm an automatic binding;
+- server rejection clears pending prediction but does not retry or re-arm the same automatic eligibility
+  window;
+- binding-, source-, and action-scoped invalidation affect only the intended cached eligibility state;
 - tap-versus-hold disambiguation and consumed-gesture behavior;
 - `InputRequirement.None` and `Pressed` captured into executions;
 - `Allowed > Blocked > Priority > stable tie` conflict resolution;
@@ -627,7 +738,9 @@ Tests must prove the abstraction independently from Interaction:
 - completed, running, rejected, failed, cancelled, timed, and discrete-progress executions;
 - requester teardown/disconnect and world-owned execution survival;
 - prediction, started/rejected ACKs, correction, and every terminal ACK;
-- requester-only, replicated, and authority-only presentation;
+- requester-only, replicated, and authority-only execution presentation;
+- intrinsic definition label/description can describe a non-Interaction binding;
+- opaque binding presentation context is preserved/exposed without interpretation by the core;
 - late join and stale-sample behavior for replicated presentation.
 
 Fake actions, rules, executors, access providers, and two-host scenes are preferred to an Interaction fixture for
@@ -640,17 +753,23 @@ retained or migrated. Their assertions should remain behaviorally equivalent. Ad
 must prove:
 
 - focus creates contextual bindings and focus loss removes them;
+- Interaction invalidates focused/source bindings when spatial access or rule inputs may have changed rather
+  than relying on generic polling;
+- an automatic Interaction binding fires once on entry/focus, stays latched while continuously eligible, and
+  may fire again only after leaving and re-entering an eligible window;
 - the door action remains owned and concurrent on the door component;
 - the authority rejects an out-of-range request even if the client fabricated a binding;
 - authority-only programmatic door execution ignores distance but keeps door/state rules;
 - sustained Interaction access cancels requester-owned long executions;
-- Interaction presentation reads the generic hold and execution state without moving UI into the core.
+- Interaction presentation combines generic binding/execution state with its spatial presentation without
+  moving UI into the core.
 
 ### 15.3 Manual acceptance
 
 A later hand-authored action invoked without an Interactive is a useful project smoke test, but it is not a
 deliverable of this migration. The automated generic suite must already demonstrate that the system is more
-than an Interaction rename.
+than an Interaction rename. In particular, a fake owned action with definition label/description must be
+bindable and presentable without any `InteractiveComponent`.
 
 ## 16. Implementation scope and sequencing constraints
 
@@ -658,8 +777,8 @@ The implementation plan may split the work into checkpoints, but the final migra
 
 1. establish generic contracts and behavior tests;
 2. move the execution host, rules, executors, timing, presentation state, and synchronization;
-3. add the runner, binding, access-provider, and input gesture layers;
-4. rebuild Interaction on the generic primitives;
+3. add the runner, binding, access-provider, input gesture, automatic latch, and invalidation layers;
+4. rebuild Interaction on the generic primitives and make its spatial loop drive binding invalidation;
 5. migrate existing scenes, integrations, documentation, editor diagnostics, and tests;
 6. remove superseded Interaction-owned generic runtime code and verify no legacy parallel lifecycle remains.
 
@@ -678,11 +797,18 @@ V1 is complete when:
 - access, rules, and concurrency follow the specified authoritative order;
 - programmatic execution ignores access while preserving rules;
 - bindings remain local and action grants remain component ownership changes;
+- definitions can provide optional intrinsic label/description metadata and bindings can preserve opaque
+  integration-owned presentation context without introducing a generic HUD/presentation policy;
+- a non-Interaction owned binding can be described/presented from generic action metadata alone;
+- `Automatic` evaluates on bind and explicit invalidation only, fires at most once per continuous eligibility
+  window, and is not re-armed by its own concurrency/execution lifecycle;
+- Interaction explicitly drives invalidation from its spatial process/events while non-spatial integrations may
+  remain entirely event-driven;
 - every current Interaction feature listed in section 12.3 still passes;
-- generic tests cover non-Interaction actions, dynamic add/remove, every input mode, network lifecycle, and
-  host-local concurrency;
+- generic tests cover non-Interaction actions, dynamic add/remove, every input mode, automatic invalidation,
+  network lifecycle, and host-local concurrency;
 - the public documentation clearly marks tag systems, cross-host locks, target data, Inventory integration,
-  and generic grant replication as deferred rather than partially implemented.
+  richer presentation schema, and generic grant replication as deferred rather than partially implemented.
 
 ## 18. Deferred V2 directions
 
@@ -693,7 +819,7 @@ Real gameplay may later justify:
 - a definition catalog and generic replicated grant synchronizer;
 - costs, cooldowns, effects, attributes, and richer failure reasons;
 - arbitrary target data or invocation payloads;
-- reusable presenter models or standardized action menus;
+- richer standardized presentation metadata, reusable presenter models, or standardized action menus;
 - multiple concurrent executions for one ActionId.
 
 Each addition must start from an observed use case and preserve the V1 ownership, authority, and lifecycle
