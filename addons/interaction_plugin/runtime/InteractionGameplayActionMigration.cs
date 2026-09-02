@@ -2,8 +2,6 @@ using Godot;
 using QuestWorld.GameplayActions.Runtime.Actions;
 using QuestWorld.GameplayActions.Runtime.Runner;
 using QuestWorld.Interaction.Runtime.Actions;
-using QuestWorld.Interaction.Runtime.Interactive;
-using QuestWorld.Interaction.Runtime.Interactor;
 
 namespace QuestWorld.Interaction.Runtime.Interactive
 {
@@ -20,7 +18,7 @@ namespace QuestWorld.Interaction.Runtime.Interactive
             {
                 GameplayActionComponent component = new() { Name = "GameplayActions" };
                 ActionComponent = component;
-                CallDeferred(MethodName.InstallMigrationActionComponent);
+                Callable.From(InstallMigrationActionComponent).CallDeferred();
             }
         }
 
@@ -55,8 +53,8 @@ namespace QuestWorld.Interaction.Runtime.Interactor
 {
     /// <summary>
     /// Temporary V1 migration bridge for Interaction scenes that have not yet authored an explicit
-    /// GameplayActionRunner. The runner is still the only request/execution pipeline used by normal
-    /// Interaction input; this only supplies the missing node until Task 5 migrates scenes.
+    /// GameplayActionRunner. The runner is still the normal Interaction request/execution pipeline;
+    /// this bridge only supplies the missing node until Task 5 migrates scenes.
     /// </summary>
     public partial class InteractionInteractor
     {
@@ -73,7 +71,7 @@ namespace QuestWorld.Interaction.Runtime.Interactor
                     Instigator = this,
                 };
                 Runner = runner;
-                CallDeferred(MethodName.InstallMigrationRunner);
+                Callable.From(InstallMigrationRunner).CallDeferred();
             }
         }
 
