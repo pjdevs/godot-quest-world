@@ -16,6 +16,42 @@ using static GdUnit4.Assertions;
 public sealed partial class GameplayActionExecutionTest
 {
     [TestCase]
+    public void ReplicatedExecutionCodecExposesTypedEntries()
+    {
+        GameplayActionComponent component = AutoFree(new GameplayActionComponent());
+
+        Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>> entries =
+            component.BuildReplicatedExecutionEntries();
+
+        AssertThat(entries).IsEmpty();
+    }
+
+    [TestCase]
+    public void MalformedTypedSnapshotDoesNotConsumeItsRevision()
+    {
+        GameplayActionComponent authority = CreateRunningComponent("replicated");
+        authority.ResolveAction("replicated")!.ExecutionVisibility =
+            GameplayActionExecutionVisibility.Replicated;
+        GameplayActionExecutionSynchronizer source = AutoFree(
+            new GameplayActionExecutionSynchronizer { Component = authority }
+        );
+        authority.ExecuteProgrammatic("replicated", out _);
+        Godot.Collections.Dictionary valid = source.CaptureSnapshot();
+        GameplayActionComponent receiver = CreateRunningComponent("replicated");
+        GameplayActionExecutionSynchronizer destination = AutoFree(
+            new GameplayActionExecutionSynchronizer { Component = receiver }
+        );
+        Godot.Collections.Dictionary malformed = new()
+        {
+            ["revision"] = valid["revision"],
+            ["entries"] = new Godot.Collections.Array { 42 },
+        };
+
+        AssertThat(destination.ApplySnapshot(malformed)).IsFalse();
+        AssertThat(destination.ApplySnapshot(valid)).IsTrue();
+    }
+
+    [TestCase]
     public void CompletedExecutionNotifiesItsOwnerThenEmitsStartedAndCompletedAfterRelease()
     {
         List<string> calls = new();

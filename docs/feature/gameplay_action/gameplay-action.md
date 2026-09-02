@@ -2,10 +2,10 @@
 
 ## Status
 
-V1 extraction is in progress. Tranches 1 and 2 provide the standalone authoritative host, its full
-execution lifecycle, generic progress/timing, and optional replicated presentation. Input bindings,
-the runner, player-request access, prediction, and acknowledgements remain intentionally deferred to
-the following tranches.
+V1 extraction is in progress. Tranches 1 to 3 provide the standalone authoritative host, its full
+execution lifecycle, generic progress/timing, optional replicated presentation, local bindings and
+gestures, typed access validation, requester prediction, and lifecycle acknowledgements. Rebuilding
+Interaction on these generic primitives remains deferred to the following tranche.
 
 The approved design is in
 [`planned/gameplay-action-system-v1.md`](planned/gameplay-action-system-v1.md).
@@ -18,7 +18,10 @@ Stateful, Character, Quest, Dialog, or persistence.
 
 Its public namespace is `QuestWorld.GameplayActions`, with action nodes under
 `QuestWorld.GameplayActions.Runtime.Actions`, execution helpers under
-`QuestWorld.GameplayActions.Runtime.Execution`, and rules under
+`QuestWorld.GameplayActions.Runtime.Execution`, bindings under
+`QuestWorld.GameplayActions.Runtime.Bindings`, requester routing under
+`QuestWorld.GameplayActions.Runtime.Runner`, typed access contracts under
+`QuestWorld.GameplayActions.Runtime.Access`, and rules under
 `QuestWorld.GameplayActions.Runtime.Rules`.
 
 ## Tranche 1 runtime model
@@ -157,3 +160,74 @@ running-slot creation/removal, callable and discrete progress, visibility filter
 and stale sample handling, replicated-action removal, active retirement presentation, invalid timed
 durations, monotonic timed completion, real ENet observer replication, and late join. Client copies
 prove that replication never invokes their executors.
+
+## Tranche 3 requester pipeline
+
+### Bindings and gestures
+
+`GameplayActionBinding` is a local runtime reference to an action still owned by its original
+`GameplayActionComponent`. It carries its cleanup source, input name, `Press | Hold | Release |
+Automatic` activation mode, optional hold threshold, `None | Pressed` input requirement, priority,
+and opaque presentation context. It is neither replicated nor accepted by the authority as proof of
+access.
+
+`GameplayActionRunner` exposes bind, unbind, source cleanup, availability query, and binding/source/
+action invalidation APIs. Invalidation re-evaluates only the requested cached bindings and emits
+`GameplayActionBindingInvalidated`; automatic bindings latch one continuous eligibility window and
+competing edges select at most one deterministic winner.
+
+Gesture resolution snapshots candidates at the press edge. A competing hold delays press/release
+selection, the longest reached captured threshold wins, and a consumed gesture cannot trigger a
+second action before release. `HoldDuration` is only the local selection delay. Gameplay duration is
+owned by an executor: a timed action is accepted as `Running`, then completes later from the
+authoritative `TimedGameplayActionExecutor` or `TimedExecution` clock.
+
+`GameplayActionInputRequirement.Pressed` is also local. It remembers which accepted request should
+receive a cancel command when the originating input is released, even if its binding has since been
+removed. Neither the requirement nor the input name crosses the network.
+
+### Access and authoritative execution
+
+Owned actions are requestable through the runner's explicit `OwnedActionComponent`. External actions
+must select a named `IGameplayActionAccessProvider` through their authoritative action type. The
+server resolves its own component and action, validates the RPC sender against `OwnerPeerId`, asks its
+own provider for access, then lets the component re-run gameplay rules and reservations before the
+executor.
+
+Long-running player requests are tracked by the authoritative runner. Executors require requester
+presence by default; while such an external execution is running, the provider's sustained access is
+checked by the server and loss cancels it. Requester teardown or peer disconnection follows the same
+executor policy. An executor that overrides `RequiresRequesterPresence` to `false` makes its work
+world-owned, so spatial loss and requester departure do not cancel it.
+
+### Network, prediction, and acknowledgements
+
+The reliable request payload contains only the component path and stable `ActionId`. Bindings,
+activation modes, hold durations, input requirements, providers, and gameplay rules are never client
+claims. The authority returns requester-only started, progress, rejected, completed, cancelled, and
+failed acknowledgements.
+
+A timed executor can seed a local progress prediction before the round trip. The started ACK replaces
+that prediction with the authoritative execution ID and sample; rejection clears it. Active ACK IDs
+also guard `AuthorityOnly` actions, which intentionally expose no requester presentation, against
+duplicate local requests. Terminal reconciliation is correlated by component, ActionId, and
+ExecutionId, so a duplicate or stale terminal ACK cannot close a newer execution.
+
+The replicated execution codec now uses
+`Array<Dictionary<string, Variant>>` internally. An untyped Godot array exists only for the immediate
+`Variant` deserialization boundary in `GameplayActionExecutionSynchronizer`, where every element is
+validated before conversion; malformed input does not consume its snapshot revision.
+
+## Tranche 3 verification coverage
+
+The focused generic tests cover binding ownership and cleanup, strict input configuration, all four
+activation modes, tap/hold snapshots, deterministic conflicts, automatic latching and batched
+competition, scoped invalidation notifications, release cancellation after binding loss, external
+access and sustained-access loss, requester teardown with world-owned survival, prediction,
+AuthorityOnly deduplication, stale terminal ACKs, sender spoof rejection, authoritative access
+rejection, release cancellation, peer disconnection, and real ENet requester/observer separation.
+
+The tranche gate formats all C# sources and builds with zero warnings or errors. The complete test run
+passes 290 of 291 tests; its sole failure is the already tracked Interaction scene regression
+`DoorSynchronizationConvergesPresentationWithoutReplayingUnlockAudio`, which expects `RESET` but
+receives an empty animation name. No GameplayAction test fails in that run.

@@ -220,7 +220,7 @@ The runner belongs to one requester/player and owns:
 - requester prediction and pending requests;
 - reliable request RPCs and lifecycle acknowledgements;
 - requester-owned execution tracking;
-- cancellation caused by input requirements, requester teardown, or specialized sustained-access loss.
+- local release-to-cancel correlation plus authoritative requester teardown and sustained-access loss.
 
 The runner never becomes the owner of externally hosted actions. A door execution stays in the door's action
 component even when the player's runner requested it.
@@ -239,7 +239,7 @@ A binding is a lightweight local runtime record, not a node and not replicated s
 - `InputActionName`;
 - `ActivationMode`;
 - `HoldDuration` when applicable;
-- `InputRequirement` for an accepted running execution;
+- local `InputRequirement` used to decide whether release sends a cancel intention;
 - absolute authored `Priority`;
 - optional `PresentationContext` owned by the integration that created the binding.
 
@@ -420,12 +420,15 @@ GameplayActionInputRequirement
 └── Pressed
 ```
 
-`Pressed` means an accepted running execution is cancelled when the input that activated it is released.
-`None` means release does nothing to that execution. `Automatic` bindings must use `None`. Additional required
-states are deferred until a real use case exists.
+`Pressed` means the local runner sends a cancel intention when the input that activated an accepted running
+execution is released. `None` means release sends nothing. `Automatic` bindings must use `None`, and
+`Release + Pressed` is invalid because the input is already released at activation. Additional required states
+are deferred until a real use case exists.
 
-The resolved requirement and originating input are captured into the execution at acceptance. Losing or
-replacing the binding later cannot erase the execution's input-lifetime contract.
+The requirement and originating input remain local and are correlated with the accepted request. Losing or
+replacing the binding later cannot erase that local release behavior. Neither value is serialized in the
+request; the authority knows the executions accepted for this runner and validates the sender before applying
+a cancel intention.
 
 ### 8.3 Conflict resolution
 
@@ -485,7 +488,7 @@ Before calling an executor, the component reserves:
 - the action's `ActionId`;
 - the action's `HostConcurrencyGroup`;
 - a new host-wide `ExecutionId`;
-- requester/input/sustained-access lifecycle data;
+- requester and authoritative sustained-access lifecycle data;
 - the initial execution presentation slot when one exists.
 
 An execution starts only when both conditions hold:
@@ -503,12 +506,14 @@ explicit exclusion between different actions on one host. Group names never coor
 
 A running executor may require the requester to remain present. Player-requested executions with this policy
 are tracked by the authoritative runner. Interaction supplies sustained detection through its access provider,
-preserving cancellation when the player leaves the valid interaction window. An executor may declare the work
-world-owned, in which case requester departure and access loss do not cancel it.
+preserving cancellation when the player leaves the valid interaction window. Peer disconnection and requester
+teardown use the same executor policy. An executor may declare the work world-owned, in which case requester
+departure and access loss do not cancel it.
 
-`GameplayActionInputRequirement.Pressed` always keeps the execution requester-owned until release, regardless
-of the executor's world-owned preference. Peer disconnection and requester teardown cancel requester-owned
-executions exactly as Interaction does today.
+`GameplayActionInputRequirement.Pressed` remains a local input-lifetime policy. Release sends a reliable cancel
+intention addressed by component path and ActionId; the server validates its sender and only cancels an
+execution previously accepted for that runner. It is not an authoritative presence claim and does not override
+the executor's requester-presence policy.
 
 Programmatic invocations do not acquire Interaction presence or input requirements.
 
@@ -535,7 +540,7 @@ local input or automatic eligibility edge
 → resolve and capture one binding
 → local access/rule prevalidation
 → create optional prediction
-→ reliable request to the requester's GameplayActionRunner
+→ reliable request carrying only component path + ActionId to the requester's GameplayActionRunner
 → authority validates sender and resolves host path + ActionId
 → authority validates request access
 → authority evaluates gameplay rules
@@ -568,8 +573,9 @@ The migration preserves the current Interaction guarantees:
 - late or stale acknowledgements cannot end a newer execution.
 
 The existing request correlation assumption remains valid because one ActionId may have only one active or
-pending requester execution in the supported pipeline. A rejected automatic request clears prediction/pending
-request state but does not clear its eligibility latch or schedule a retry.
+pending requester execution in the supported pipeline. Local input metadata is unnecessary in the request.
+A rejected automatic request clears prediction/pending request state but does not clear its eligibility latch
+or schedule a retry.
 
 ### 10.3 Execution visibility
 
@@ -755,7 +761,7 @@ Tests must prove the abstraction independently from Interaction:
   window;
 - binding-, source-, and action-scoped invalidation affect only the intended cached eligibility state;
 - tap-versus-hold disambiguation and consumed-gesture behavior;
-- `InputRequirement.None` and `Pressed` captured into executions;
+- local `InputRequirement.None` and `Pressed` release correlation without serializing binding metadata;
 - `Allowed > Blocked > Priority > stable tie` conflict resolution;
 - deterministic equal-priority behavior plus diagnostics;
 - one active execution per ActionId;

@@ -18,6 +18,10 @@ public abstract partial class TimedGameplayActionExecutor : GameplayActionExecut
 
     public virtual float ComputeTimedDuration(in GameplayActionContext context) => Duration;
 
+    internal override GameplayActionProgressSample? GetPredictionSample(
+        in GameplayActionContext context
+    ) => TimedExecution.BuildPredictionSample(ComputeTimedDuration(context));
+
     protected GameplayActionExecutionResult RunningTimed(in GameplayActionExecutionContext context)
     {
         GameplayActionContext query = new(

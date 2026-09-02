@@ -41,6 +41,20 @@ public enum GameplayActionExecutionVisibility
     AuthorityOnly,
 }
 
+public enum GameplayActionActivationMode
+{
+    Press,
+    Hold,
+    Release,
+    Automatic,
+}
+
+public enum GameplayActionInputRequirement
+{
+    None,
+    Pressed,
+}
+
 public readonly record struct GameplayActionExecutionPresentation(
     ulong ExecutionId,
     StringName ActionId,

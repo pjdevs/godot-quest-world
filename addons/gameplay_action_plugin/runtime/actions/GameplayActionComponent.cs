@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Godot;
 using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.GameplayActions.Runtime.Rules;
+using QuestWorld.GameplayActions.Runtime.Runner;
 
 namespace QuestWorld.GameplayActions.Runtime.Actions;
 
@@ -156,6 +157,39 @@ public partial class GameplayActionComponent : Node
         Node? requester = null
     )
     {
+        return ExecuteCore(
+            actionId,
+            out executionId,
+            instigator,
+            requester,
+            GameplayActionInvocationKind.Programmatic
+        );
+    }
+
+    internal GameplayActionExecutionResult ExecutePlayerRequest(
+        StringName actionId,
+        out ulong executionId,
+        Node? instigator,
+        GameplayActionRunner requester
+    )
+    {
+        return ExecuteCore(
+            actionId,
+            out executionId,
+            instigator,
+            requester,
+            GameplayActionInvocationKind.PlayerRequest
+        );
+    }
+
+    private GameplayActionExecutionResult ExecuteCore(
+        StringName actionId,
+        out ulong executionId,
+        Node? instigator,
+        Node? requester,
+        GameplayActionInvocationKind invocationKind
+    )
+    {
         executionId = 0;
         if (!IsAuthoritative)
         {
@@ -174,7 +208,7 @@ public partial class GameplayActionComponent : Node
             actionId,
             instigator,
             requester,
-            GameplayActionInvocationKind.Programmatic
+            invocationKind
         );
         if (availability is not GameplayActionAllowed)
         {
@@ -183,7 +217,12 @@ public partial class GameplayActionComponent : Node
             return new GameplayActionExecutionRejected(reason);
         }
 
-        ActiveExecution? reservation = ReserveExecutionCore(action, instigator, requester);
+        ActiveExecution? reservation = ReserveExecutionCore(
+            action,
+            instigator,
+            requester,
+            invocationKind
+        );
         if (reservation is null)
         {
             DispatchRejected(0ul, action, instigator, requester, AlreadyRunningReason);
@@ -235,6 +274,37 @@ public partial class GameplayActionComponent : Node
         out GameplayActionExecutionPresentation presentation
     ) => _presentation.TryGet(actionId, out presentation);
 
+    internal bool AddPendingExecutionPresentation(
+        StringName actionId,
+        GameplayActionProgressSample sample
+    ) => _presentation.AddPrediction(actionId, sample);
+
+    internal bool ConfirmRequesterExecution(
+        StringName actionId,
+        ulong executionId,
+        bool hasSample,
+        GameplayActionProgressSample sample
+    ) => _presentation.ConfirmRequesterExecution(actionId, executionId, hasSample, sample);
+
+    internal bool ApplyRequesterProgress(
+        StringName actionId,
+        ulong executionId,
+        bool hasProgress,
+        GameplayActionProgressSample sample
+    ) => _presentation.ApplyRequesterProgress(actionId, executionId, hasProgress, sample);
+
+    internal bool RemovePendingExecution(StringName actionId) =>
+        _presentation.RemovePending(actionId);
+
+    internal bool RemoveRequesterExecution(StringName actionId, ulong executionId) =>
+        _presentation.RemoveRequesterExecution(actionId, executionId);
+
+    internal bool HasLocalExecution(GameplayAction action) =>
+        _presentation.HasLocalExecution(action);
+
+    internal bool HasLocalExecutionInGroup(StringName group) =>
+        _presentation.HasLocalExecutionInGroup(group);
+
     public bool ReportExecutionProgress(ulong executionId, float? progress)
     {
         if (
@@ -245,7 +315,13 @@ public partial class GameplayActionComponent : Node
             return false;
         }
 
-        return _presentation.ReportPublished(executionId, execution.Action, progress);
+        bool changed = _presentation.ReportPublished(executionId, execution.Action, progress);
+        if (changed)
+        {
+            NotifyRequesterProgress(execution);
+        }
+
+        return changed;
     }
 
     public bool SetExecutionProgressSource(ulong executionId, Callable source) =>
@@ -268,12 +344,18 @@ public partial class GameplayActionComponent : Node
             return false;
         }
 
-        return _presentation.ReportLinear(
+        bool changed = _presentation.ReportLinear(
             executionId,
             execution.Action,
             progressBase,
             progressPerSecond
         );
+        if (changed)
+        {
+            NotifyRequesterProgress(execution);
+        }
+
+        return changed;
     }
 
     internal bool TryGetProgressSample(
@@ -285,7 +367,10 @@ public partial class GameplayActionComponent : Node
         return _presentation.TryGetSample(executionId, out hasProgress, out sample);
     }
 
-    internal Godot.Collections.Array BuildReplicatedExecutionEntries()
+    internal Godot.Collections.Array<Godot.Collections.Dictionary<
+        string,
+        Variant
+    >> BuildReplicatedExecutionEntries()
     {
         List<GameplayActionExecutionPresentationSource> executions = new();
         foreach (ActiveExecution execution in _executionsById.Values)
@@ -298,8 +383,9 @@ public partial class GameplayActionComponent : Node
         return _presentation.BuildReplicatedEntries(executions);
     }
 
-    internal void ApplyReplicatedExecutionEntries(Godot.Collections.Array entries) =>
-        _presentation.ApplyReplicatedEntries(entries);
+    internal void ApplyReplicatedExecutionEntries(
+        Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>> entries
+    ) => _presentation.ApplyReplicatedEntries(entries);
 
     public bool CompleteExecution(ulong executionId)
     {
@@ -436,7 +522,8 @@ public partial class GameplayActionComponent : Node
     private ActiveExecution? ReserveExecutionCore(
         GameplayAction action,
         Node? instigator,
-        Node? requester
+        Node? requester,
+        GameplayActionInvocationKind invocationKind
     )
     {
         StringName actionId = action.Definition!.Id;
@@ -461,7 +548,7 @@ public partial class GameplayActionComponent : Node
             group,
             instigator,
             requester,
-            GameplayActionInvocationKind.Programmatic
+            invocationKind
         );
         _executionsById.Add(execution.Id, execution);
         return execution;
@@ -549,6 +636,13 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Instigator),
             ToVariant(execution.Requester)
         );
+        if (
+            execution.InvocationKind == GameplayActionInvocationKind.PlayerRequest
+            && execution.Requester is GameplayActionRunner runner
+        )
+        {
+            runner.NotifyExecutionStarted(this, execution.Action, execution.Id);
+        }
     }
 
     private void EmitCompleted(in ActiveExecution execution)
@@ -560,6 +654,13 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Instigator),
             ToVariant(execution.Requester)
         );
+        if (
+            execution.InvocationKind == GameplayActionInvocationKind.PlayerRequest
+            && execution.Requester is GameplayActionRunner runner
+        )
+        {
+            runner.NotifyExecutionCompleted(this, execution.Action, execution.Id);
+        }
     }
 
     private void EmitCancelled(in ActiveExecution execution, string reason)
@@ -572,6 +673,13 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Requester),
             reason
         );
+        if (
+            execution.InvocationKind == GameplayActionInvocationKind.PlayerRequest
+            && execution.Requester is GameplayActionRunner runner
+        )
+        {
+            runner.NotifyExecutionCancelled(this, execution.Action, execution.Id, reason);
+        }
     }
 
     private void EmitFailed(in ActiveExecution execution, string reason)
@@ -584,6 +692,13 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Requester),
             reason
         );
+        if (
+            execution.InvocationKind == GameplayActionInvocationKind.PlayerRequest
+            && execution.Requester is GameplayActionRunner runner
+        )
+        {
+            runner.NotifyExecutionFailed(this, execution.Action, execution.Id, reason);
+        }
     }
 
     private void DispatchRejected(
@@ -602,6 +717,21 @@ public partial class GameplayActionComponent : Node
             ToVariant(requester),
             reason
         );
+        if (requester is GameplayActionRunner runner && runner.IsAuthoritativeRunner)
+        {
+            runner.NotifyExecutionRejected(this, action, reason);
+        }
+    }
+
+    private void NotifyRequesterProgress(in ActiveExecution execution)
+    {
+        if (
+            execution.InvocationKind == GameplayActionInvocationKind.PlayerRequest
+            && execution.Requester is GameplayActionRunner runner
+        )
+        {
+            runner.NotifyExecutionProgress(this, execution.Action, execution.Id);
+        }
     }
 
     private static Variant ToVariant(Node? node) => node is null ? default : Variant.From(node);

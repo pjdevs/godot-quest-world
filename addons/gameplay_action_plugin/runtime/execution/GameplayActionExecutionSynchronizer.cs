@@ -83,8 +83,9 @@ public partial class GameplayActionExecutionSynchronizer : MultiplayerSynchroniz
 
     internal Godot.Collections.Dictionary CaptureSnapshot()
     {
-        Godot.Collections.Array entries =
-            Component?.BuildReplicatedExecutionEntries() ?? new Godot.Collections.Array();
+        Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>> entries =
+            Component?.BuildReplicatedExecutionEntries()
+            ?? new Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>>();
         return new Godot.Collections.Dictionary
         {
             [RevisionKey] = ++_outgoingRevision,
@@ -111,8 +112,29 @@ public partial class GameplayActionExecutionSynchronizer : MultiplayerSynchroniz
             return false;
         }
 
+        Godot.Collections.Array rawEntries = entriesValue.AsGodotArray();
+        foreach (Variant entry in rawEntries)
+        {
+            if (entry.VariantType != Variant.Type.Dictionary)
+            {
+                return false;
+            }
+        }
+
+        Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>> entries;
+        try
+        {
+            entries = new Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>>(
+                rawEntries
+            );
+        }
+        catch (System.InvalidOperationException)
+        {
+            return false;
+        }
+
         _lastAppliedRevision = revision;
-        Component.ApplyReplicatedExecutionEntries(entriesValue.AsGodotArray());
+        Component.ApplyReplicatedExecutionEntries(entries);
         return true;
     }
 

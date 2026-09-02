@@ -86,10 +86,12 @@
 - Create: `addons/gameplay_action_plugin/tests/GameplayActionRunnerNetworkTest.cs`
 - Update: `docs/feature/gameplay_action/gameplay-action.md`
 
-- [ ] Add failing tests for bind/unbind/source cleanup, all four activation modes, gesture snapshots, conflict order, input requirements, automatic invalidation/latching, owned/external access, fabricated bindings, prediction, ACKs, and teardown.
-- [ ] Implement local bindings and deterministic gesture resolution before adding the request/ACK transport.
-- [ ] Add the minimal typed access registry and the single reliable request protocol addressed by host path plus ActionId.
-- [ ] Run the mandatory gate and commit the complete generic requester pipeline.
+- [x] Add failing tests for bind/unbind/source cleanup, all four activation modes, gesture snapshots, conflict order, input requirements, automatic invalidation/latching, owned/external access, fabricated bindings, prediction, ACKs, and teardown.
+- [x] Implement local bindings and deterministic gesture resolution before adding the request/ACK transport.
+- [x] Add the minimal typed access registry and the single reliable request protocol addressed by host path plus ActionId.
+- [x] Run the mandatory gate; 290/291 tests pass and the pre-existing
+  `DoorSynchronizationConvergesPresentationWithoutReplayingUnlockAudio` failure remains. Leave the
+  commit to user review as requested.
 
 ### Task 4: Rebuild Interaction as a generic-action integration
 

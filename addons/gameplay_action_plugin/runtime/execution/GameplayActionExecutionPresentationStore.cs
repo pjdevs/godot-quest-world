@@ -59,6 +59,112 @@ internal sealed class GameplayActionExecutionPresentationStore(
         return true;
     }
 
+    public bool AddPrediction(StringName actionId, GameplayActionProgressSample sample)
+    {
+        if (actionId is null || actionId.IsEmpty || _visible.ContainsKey(actionId))
+        {
+            return false;
+        }
+
+        GameplayActionExecutionPresentationSlot slot = new(0ul, actionId);
+        slot.Progress.Predict(sample, CurrentTimeSeconds());
+        _visible.Add(actionId, slot);
+        notifyChanged(actionId);
+        return true;
+    }
+
+    public bool ConfirmRequesterExecution(
+        StringName actionId,
+        ulong executionId,
+        bool hasSample,
+        GameplayActionProgressSample sample
+    )
+    {
+        if (executionId == 0ul || actionId is null || actionId.IsEmpty)
+        {
+            return false;
+        }
+
+        _visible.TryGetValue(actionId, out GameplayActionExecutionPresentationSlot? slot);
+        if (slot is not null && slot.ExecutionId != 0ul && slot.ExecutionId != executionId)
+        {
+            return false;
+        }
+
+        if (slot is not null && slot.ExecutionId == executionId)
+        {
+            if (hasSample && sample.Revision > slot.Progress.Revision)
+            {
+                ApplyRequesterProgress(actionId, executionId, true, sample);
+            }
+
+            return true;
+        }
+
+        if (slot is null)
+        {
+            slot = new GameplayActionExecutionPresentationSlot(executionId, actionId);
+            _visible.Add(actionId, slot);
+        }
+
+        bool structuralChange = slot.ExecutionId != executionId;
+        slot.ExecutionId = executionId;
+        slot.Progress.Confirm(hasSample, sample, CurrentTimeSeconds(), owner, actionId);
+        if (structuralChange)
+        {
+            notifyChanged(actionId);
+        }
+
+        return true;
+    }
+
+    public bool ApplyRequesterProgress(
+        StringName actionId,
+        ulong executionId,
+        bool hasProgress,
+        GameplayActionProgressSample sample
+    )
+    {
+        if (
+            !_visible.TryGetValue(actionId, out GameplayActionExecutionPresentationSlot? slot)
+            || slot.ExecutionId != executionId
+            || !slot.Progress.ApplyNewerSample(
+                hasProgress,
+                sample,
+                CurrentTimeSeconds(),
+                owner,
+                actionId
+            )
+        )
+        {
+            return false;
+        }
+
+        notifyChanged(actionId);
+        return true;
+    }
+
+    public bool RemovePending(StringName actionId) => RemoveVisible(actionId, 0ul);
+
+    public bool RemoveRequesterExecution(StringName actionId, ulong executionId) =>
+        RemoveVisible(actionId, executionId);
+
+    public bool HasLocalExecution(GameplayAction action) =>
+        action.Definition is not null && _visible.ContainsKey(action.Definition.Id);
+
+    public bool HasLocalExecutionInGroup(StringName group)
+    {
+        foreach (GameplayActionExecutionPresentationSlot slot in _visible.Values)
+        {
+            if (resolveAction(slot.ActionId)?.GetHostConcurrencyGroup() == group)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public void AddExecution(ulong executionId, GameplayAction action)
     {
         if (action.Definition is null)
@@ -113,6 +219,22 @@ internal sealed class GameplayActionExecutionPresentationStore(
         {
             notifyChanged(actionId);
         }
+    }
+
+    private bool RemoveVisible(StringName actionId, ulong executionId)
+    {
+        if (
+            actionId is null
+            || !_visible.TryGetValue(actionId, out GameplayActionExecutionPresentationSlot? slot)
+            || slot.ExecutionId != executionId
+        )
+        {
+            return false;
+        }
+
+        _visible.Remove(actionId);
+        notifyChanged(actionId);
+        return true;
     }
 
     public bool ReportPublished(ulong executionId, GameplayAction action, float? progress)
@@ -216,11 +338,12 @@ internal sealed class GameplayActionExecutionPresentationStore(
             && slot.Progress.TryGetSample(out hasProgress, out sample);
     }
 
-    public Godot.Collections.Array BuildReplicatedEntries(
-        IEnumerable<GameplayActionExecutionPresentationSource> executions
-    )
+    public Godot.Collections.Array<Godot.Collections.Dictionary<
+        string,
+        Variant
+    >> BuildReplicatedEntries(IEnumerable<GameplayActionExecutionPresentationSource> executions)
     {
-        Godot.Collections.Array entries = new();
+        Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>> entries = new();
         foreach (GameplayActionExecutionPresentationSource execution in executions)
         {
             GameplayAction action = execution.Action;
@@ -241,7 +364,7 @@ internal sealed class GameplayActionExecutionPresentationStore(
                 out GameplayActionProgressSample sample
             );
             entries.Add(
-                new Godot.Collections.Dictionary
+                new Godot.Collections.Dictionary<string, Variant>
                 {
                     ["action_id"] = definition.Id,
                     ["execution_id"] = checked((long)execution.ExecutionId),
@@ -256,17 +379,13 @@ internal sealed class GameplayActionExecutionPresentationStore(
         return entries;
     }
 
-    public void ApplyReplicatedEntries(Godot.Collections.Array entries)
+    public void ApplyReplicatedEntries(
+        Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>> entries
+    )
     {
         HashSet<StringName> presentActions = new();
-        foreach (Variant entryValue in entries)
+        foreach (Godot.Collections.Dictionary<string, Variant> entry in entries)
         {
-            if (entryValue.VariantType != Variant.Type.Dictionary)
-            {
-                continue;
-            }
-
-            Godot.Collections.Dictionary entry = entryValue.AsGodotDictionary();
             if (!TryReadReplicatedEntry(entry, out ReplicatedExecutionEntry decoded))
             {
                 continue;
@@ -411,7 +530,7 @@ internal sealed class GameplayActionExecutionPresentationStore(
     }
 
     private static bool TryReadReplicatedEntry(
-        Godot.Collections.Dictionary entry,
+        Godot.Collections.Dictionary<string, Variant> entry,
         out ReplicatedExecutionEntry decoded
     )
     {

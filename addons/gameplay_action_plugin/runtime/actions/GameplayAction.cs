@@ -24,6 +24,8 @@ public partial class GameplayAction : Node
     public GameplayActionExecutionVisibility ExecutionVisibility { get; set; } =
         GameplayActionExecutionVisibility.RequesterOnly;
 
+    public virtual StringName AccessProviderId => new();
+
     public GameplayActionComponent? Component { get; internal set; }
 
     public StringName GetHostConcurrencyGroup() =>
