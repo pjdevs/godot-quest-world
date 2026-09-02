@@ -206,6 +206,8 @@ public partial class GameplayActionRunner : Node
     public bool TryGetGestureProgress(out StringName inputActionName, out float progress) =>
         _gestures.TryGetProgress(out inputActionName, out progress);
 
+    public IReadOnlyCollection<StringName> GetConsumedInputs() => _gestures.GetConsumedInputs();
+
     public void ValidateSustainedExecutions() => _requests.ValidateSustainedExecutions();
 
     public override void _Process(double delta)
@@ -259,7 +261,7 @@ public partial class GameplayActionRunner : Node
         }
 
         GameplayActionAccessContext context = new(this, component, action);
-        return sustained ? provider.HasSustainedAccess(context) : provider.CanRequest(context);
+        return provider.CanRequest(context);
     }
 
     private void RequestAutomaticEdges(IReadOnlyList<GameplayActionBindingCandidate> automaticEdges)
