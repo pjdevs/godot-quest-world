@@ -369,8 +369,6 @@ public sealed partial class GameplayActionRunnerNetworkTest
         public bool Allowed { get; set; }
 
         public bool CanRequest(in GameplayActionAccessContext context) => Allowed;
-
-        public bool HasSustainedAccess(in GameplayActionAccessContext context) => Allowed;
     }
 
     private sealed partial class NetworkRecordingExecutor : GameplayActionExecutor
