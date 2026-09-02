@@ -87,6 +87,11 @@ public partial class InteractionAction : GameplayAction
     )
     {
         Interactive = interactive;
+        if (InteractionExecutor is { } executor)
+        {
+            executor.InteractionAction = this;
+        }
+
         _targetRulesAdapter ??= new InteractionTargetRulesAdapter();
         _targetRulesAdapter.Interactive = interactive;
 
