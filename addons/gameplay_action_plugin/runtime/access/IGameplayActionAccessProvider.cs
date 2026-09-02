@@ -11,5 +11,7 @@ public readonly record struct GameplayActionAccessContext(
 
 public interface IGameplayActionAccessProvider
 {
-    bool CanAccess(in GameplayActionAccessContext context);
+    bool CanRequest(in GameplayActionAccessContext context);
+
+    bool HasSustainedAccess(in GameplayActionAccessContext context) => CanRequest(context);
 }
