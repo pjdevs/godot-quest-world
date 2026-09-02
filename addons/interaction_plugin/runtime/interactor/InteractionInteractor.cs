@@ -186,9 +186,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
     public bool CanRequest(in GameplayActionAccessContext context) =>
         HasInteractionAccess(context.Action);
 
-    public bool HasSustainedAccess(in GameplayActionAccessContext context) =>
-        HasInteractionAccess(context.Action);
-
     private bool HasInteractionAccess(GameplayAction action)
     {
         return
@@ -533,19 +530,27 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
     private void OnGameplayActionRejected(Node component, StringName actionId, string reason)
     {
-        Variant interactive = ResolveInteractive(component) is { } target ? Variant.From(target) : default;
+        Variant interactive =
+            ResolveInteractive(component) is { } target ? Variant.From(target) : default;
         EmitSignal(SignalName.InteractionRejected, interactive, actionId, reason);
     }
 
     private void OnGameplayActionStarted(Node component, StringName actionId, long executionId)
     {
-        Variant interactive = ResolveInteractive(component) is { } target ? Variant.From(target) : default;
-        EmitSignal(SignalName.InteractionStarted, interactive, actionId, checked((ulong)executionId));
+        Variant interactive =
+            ResolveInteractive(component) is { } target ? Variant.From(target) : default;
+        EmitSignal(
+            SignalName.InteractionStarted,
+            interactive,
+            actionId,
+            checked((ulong)executionId)
+        );
     }
 
     private void OnGameplayActionCompleted(Node component, StringName actionId, long executionId)
     {
-        Variant interactive = ResolveInteractive(component) is { } target ? Variant.From(target) : default;
+        Variant interactive =
+            ResolveInteractive(component) is { } target ? Variant.From(target) : default;
         EmitSignal(SignalName.InteractionCompleted, interactive, actionId);
     }
 
@@ -556,7 +561,8 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         string reason
     )
     {
-        Variant interactive = ResolveInteractive(component) is { } target ? Variant.From(target) : default;
+        Variant interactive =
+            ResolveInteractive(component) is { } target ? Variant.From(target) : default;
         EmitSignal(SignalName.InteractionCancelled, interactive, actionId, reason);
     }
 
@@ -567,7 +573,8 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         string reason
     )
     {
-        Variant interactive = ResolveInteractive(component) is { } target ? Variant.From(target) : default;
+        Variant interactive =
+            ResolveInteractive(component) is { } target ? Variant.From(target) : default;
         EmitSignal(SignalName.InteractionFailed, interactive, actionId, reason);
     }
 
