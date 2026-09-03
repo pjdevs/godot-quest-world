@@ -9,7 +9,8 @@
 [ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_adxal"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_bhqfo"]
 [ext_resource type="Script" uid="uid://cpbt7qansaxqx" path="res://addons/stateful_plugin/runtime/StatefulComponent.cs" id="7_bhqfo"]
-[ext_resource type="Script" uid="uid://bw02qn7pyxpy4" path="res://addons/interaction_plugin/integration/stateful/SetStateInteractionExecutor.cs" id="7_wx55h"]
+[ext_resource type="Script" uid="uid://bw02qn7pyxpy4" path="res://addons/gameplay_action_plugin/integration/stateful/SetStateGameplayActionExecutor.cs" id="7_wx55h"]
+[ext_resource type="Script" uid="uid://dwmqsp6eyk4gd" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="9_actions"]
 [ext_resource type="Script" uid="uid://bncq4bgetbnu7" path="res://addons/stateful_plugin/runtime/StateSchema.cs" id="8_j1fib"]
 [ext_resource type="AudioStream" uid="uid://dh5ssj12f4ily" path="res://quest_world/interactibles/door/door_unlock.mp3" id="12_c4v56"]
 
@@ -193,31 +194,25 @@ debug_color = Color(0.8980768, 0.22753963, 0.5545721, 0.41960785)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 shape = SubResource("BoxShape3D_mokd0")
 
-[node name="InteractiveComponent" type="Node" parent="Interaction" unique_id=1375300189 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Actions")]
-script = ExtResource("1_vodtj")
-InteractionArea = NodePath("../InteractionArea")
-IndicationArea = NodePath("../IndicationArea")
-InteractionAnchor = NodePath("../../Visual/Pivot/DoorMesh/HandleMesh")
-DisplayName = "Door"
-ActionPromptScene = ExtResource("2_wx55h")
-IndicationScene = ExtResource("4_qkbub")
+[node name="GameplayActions" type="Node" parent="Interaction" unique_id=1375300190 node_paths=PackedStringArray("Actions")]
+script = ExtResource("9_actions")
 Actions = [NodePath("OpenAction"), NodePath("CloseAction"), NodePath("UnlockAction")]
-metadata/_custom_type_script = "uid://dip8gc8uyuju"
+metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
 
-[node name="OpenAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=395259595 node_paths=PackedStringArray("Executor")]
+[node name="OpenAction" type="Node" parent="Interaction/GameplayActions" unique_id=395259595 node_paths=PackedStringArray("Executor")]
 script = ExtResource("3_llf4b")
 Definition = SubResource("Resource_mokd0")
 Executor = NodePath("OpenExecutor")
 Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_ii2gm")])
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
-[node name="OpenExecutor" type="Node" parent="Interaction/InteractiveComponent/OpenAction" unique_id=1352586469 node_paths=PackedStringArray("Stateful")]
+[node name="OpenExecutor" type="Node" parent="Interaction/GameplayActions/OpenAction" unique_id=1352586469 node_paths=PackedStringArray("Stateful")]
 script = ExtResource("7_wx55h")
 Stateful = NodePath("../../../StatefulComponent")
 TargetState = &"opened"
 metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
 
-[node name="CloseAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=1558009407 node_paths=PackedStringArray("Executor")]
+[node name="CloseAction" type="Node" parent="Interaction/GameplayActions" unique_id=1558009407 node_paths=PackedStringArray("Executor")]
 script = ExtResource("3_llf4b")
 Definition = SubResource("Resource_wx55h")
 Executor = NodePath("CloseExecutor")
@@ -225,13 +220,13 @@ Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_6xdtw")])
 Priority = 1
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
-[node name="CloseExecutor" type="Node" parent="Interaction/InteractiveComponent/CloseAction" unique_id=1929747493 node_paths=PackedStringArray("Stateful")]
+[node name="CloseExecutor" type="Node" parent="Interaction/GameplayActions/CloseAction" unique_id=1929747493 node_paths=PackedStringArray("Stateful")]
 script = ExtResource("7_wx55h")
 Stateful = NodePath("../../../StatefulComponent")
 TargetState = &"closed"
 metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
 
-[node name="UnlockAction" type="Node" parent="Interaction/InteractiveComponent" unique_id=37820192 node_paths=PackedStringArray("Executor")]
+[node name="UnlockAction" type="Node" parent="Interaction/GameplayActions" unique_id=37820192 node_paths=PackedStringArray("Executor")]
 script = ExtResource("3_llf4b")
 Definition = SubResource("Resource_qkbub")
 Executor = NodePath("UnlockExecutor")
@@ -239,11 +234,23 @@ Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_c4v56")])
 Priority = 2
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
-[node name="UnlockExecutor" type="Node" parent="Interaction/InteractiveComponent/UnlockAction" unique_id=491570712 node_paths=PackedStringArray("Stateful")]
+[node name="UnlockExecutor" type="Node" parent="Interaction/GameplayActions/UnlockAction" unique_id=491570712 node_paths=PackedStringArray("Stateful")]
 script = ExtResource("7_wx55h")
 Stateful = NodePath("../../../StatefulComponent")
 TargetState = &"closed"
 metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
+
+[node name="InteractiveComponent" type="Node" parent="Interaction" unique_id=1375300189 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "ActionComponent", "Actions")]
+script = ExtResource("1_vodtj")
+InteractionArea = NodePath("../InteractionArea")
+IndicationArea = NodePath("../IndicationArea")
+InteractionAnchor = NodePath("../../Visual/Pivot/DoorMesh/HandleMesh")
+DisplayName = "Door"
+ActionPromptScene = ExtResource("2_wx55h")
+IndicationScene = ExtResource("4_qkbub")
+ActionComponent = NodePath("../GameplayActions")
+Actions = [NodePath("../GameplayActions/OpenAction"), NodePath("../GameplayActions/CloseAction"), NodePath("../GameplayActions/UnlockAction")]
+metadata/_custom_type_script = "uid://dip8gc8uyuju"
 
 [node name="StatefulComponent" type="Node" parent="Interaction" unique_id=957633712]
 script = ExtResource("7_bhqfo")

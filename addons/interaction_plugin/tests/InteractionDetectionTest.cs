@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
+using QuestWorld.GameplayActions;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Detection;
@@ -163,6 +164,7 @@ public sealed partial class InteractionDetectionTest
         AreaInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
         interactor.AddChild(detector);
         interactor.Detector = detector;
+        interactor.ConfigureActionRunner();
         character.AddChild(interactor);
         world.AddChild(target);
         world.AddChild(character);
@@ -357,6 +359,7 @@ public sealed partial class InteractionDetectionTest
         ProximityInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
         interactor.AddChild(detector);
         interactor.Detector = detector;
+        interactor.ConfigureActionRunner();
         world.AddChild(target);
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
@@ -392,6 +395,7 @@ public sealed partial class InteractionDetectionTest
         AimInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
         interactor.AddChild(detector);
         interactor.Detector = detector;
+        interactor.ConfigureActionRunner();
         world.AddChild(target);
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
@@ -426,6 +430,7 @@ public sealed partial class InteractionDetectionTest
         AreaInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
         interactor.AddChild(detector);
         interactor.Detector = detector;
+        interactor.ConfigureActionRunner();
         world.AddChild(target);
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
@@ -445,6 +450,7 @@ public sealed partial class InteractionDetectionTest
         interactor.AddChild(view);
         interactor.AddChild(detector);
         interactor.Detector = detector;
+        interactor.ConfigureActionRunner();
         character.AddChild(interactor);
         world.AddChild(character);
         return detector;
@@ -488,7 +494,7 @@ public sealed partial class InteractionDetectionTest
         action.AddChild(executor);
         action.Executor = executor;
         interactive.Actions.Add(action);
-        interactive.AddChild(action);
+        interactive.ConfigureActionHost();
         return interactive;
     }
 
@@ -502,8 +508,8 @@ public sealed partial class InteractionDetectionTest
 
     private sealed partial class NoopInteractionExecutor : InteractionActionExecutor
     {
-        public override InteractionExecutionResult Execute(
+        public override GameplayActionExecutionResult Execute(
             in InteractionExecutionContext context
-        ) => new InteractionExecutionCompleted();
+        ) => new GameplayActionExecutionCompleted();
     }
 }

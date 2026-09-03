@@ -6,7 +6,7 @@ Addon Godot C# réutilisable pour les interactions offline et multiplayer high-l
 
 Le code runtime et ses contrats sont dans le namespace `QuestWorld.Interaction`.
 
-## Architecture courante — intégration Gameplay Action (tranche 4)
+## Architecture courante — intégration Gameplay Action (tranche 5)
 
 Interaction conserve la sélection spatiale, le focus, ses règles contextuelles et l'adaptation de
 présentation. Il ne constitue plus le moteur d'exécution actif : toutes les actions passent par
@@ -20,18 +20,43 @@ présentation. Il ne constitue plus le moteur d'exécution actif : toutes les ac
 - Le focus construit des bindings génériques contextuels ; sa perte nettoie leur source. La portée
   est revérifiée sur l'autorité et pendant une exécution longue qui exige la présence du requester.
 - Les signaux et snapshots Interaction sont des projections du lifecycle, des ACK et du store de
-  présentation génériques. Le synchroniseur Interaction transporte ce même store.
+  présentation génériques. `GameplayActionExecutionSynchronizer` transporte ce même store.
 
-Pour préserver les scènes actuelles jusqu'à leur migration, une passerelle temporaire installe de
-façon différée les composants génériques absents, rattache les actions existantes et rafraîchit les
-bindings déjà focusés. `InteractionAction.ConcurrencyGroup` reste temporairement un alias de
-`HostConcurrencyGroup`. La tranche 5 doit authorer explicitement la topologie finale, migrer les
-intégrations Stateful et diagnostics, puis supprimer cette passerelle et l'ancien lifecycle interne.
+### Topologie authorée
 
-Les tests de la tranche 4 couvrent notamment le bind/unbind de focus, le refus autoritaire hors
-portée, le bypass spatial programmatique avec rules, l'annulation sur perte d'accès soutenu, les ACK,
-la réplication requester/observer/late joiner et les lectures de présentation issues du composant
-générique.
+La tranche 5 supprime la passerelle de migration différée et l'alias `ConcurrencyGroup` : plus
+aucune installation implicite, la scène déclare la topologie finale. Le host générique est un nœud
+**frère** de l'`InteractiveComponent`, et les actions sont ses **enfants directs** :
+
+```
+Interaction/
+  GameplayActions/                     # GameplayActionComponent : Actions = [OpenAction, ...]
+    OpenAction/                        # InteractionAction
+      OpenExecutor                     # SetStateGameplayActionExecutor, Stateful = ../../../...
+  GameplayActionExecutionSynchronizer  # Component = ../GameplayActions
+  InteractiveComponent                 # ActionComponent = ../GameplayActions
+                                       # Actions = [../GameplayActions/OpenAction, ...]
+  StatefulComponent
+```
+
+Deux contraintes découlent de cette forme, et le validateur les signale :
+
+- une action authorée doit être enfant direct de son `GameplayActionComponent`, sinon le host refuse
+  de l'enregistrer et la cible se présente comme non configurée ;
+- l'`ActionComponent` doit être assigné avant l'entrée dans l'arbre, parce que l'`InteractiveComponent`
+  s'abonne à son host au `_Ready`.
+
+Le host frère — plutôt qu'enfant de l'interactive — garde à chaque action la profondeur qu'elle avait
+avant l'extraction : tout `NodePath` relatif authoré depuis une action ou son executor reste valable
+sans réécriture.
+
+Côté demandeur, `Character.tscn` authore de même `GameplayActions` et `GameplayActionRunner` à côté
+de l'`InteractionInteractor`, dont la propriété `Runner` les désigne explicitement.
+
+Les tests couvrent notamment le bind/unbind de focus, le refus autoritaire hors portée, le bypass
+spatial programmatique avec rules, l'annulation sur perte d'accès soutenu, les ACK, la réplication
+requester/observer/late joiner, les lectures de présentation issues du composant générique, et la
+topologie authorée des scènes du projet.
 
 ### NodePath des rules d'etat
 

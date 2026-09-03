@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.GameplayActions;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
@@ -238,10 +239,10 @@ public partial class InteractionPresenter : CanvasLayer
         for (int index = 0; index < _promptActions.Count; index++)
         {
             InteractionActionPresentation action = _promptedActions[index];
-            InteractionExecutionPresentation? execution =
+            GameplayActionExecutionPresentation? execution =
                 presentation.Interactive.TryGetExecutionPresentation(
                     action.ActionId,
-                    out InteractionExecutionPresentation currentExecution
+                    out GameplayActionExecutionPresentation currentExecution
                 )
                     ? currentExecution
                     : null;

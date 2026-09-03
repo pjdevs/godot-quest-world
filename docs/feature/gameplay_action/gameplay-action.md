@@ -2,12 +2,12 @@
 
 ## Status
 
-V1 extraction is in progress. Tranches 1 to 4 provide the standalone authoritative host, its full
+V1 extraction is complete. Tranches 1 to 4 provide the standalone authoritative host, its full
 execution lifecycle, generic progress/timing, optional replicated presentation, local bindings and
 gestures, typed access validation, requester prediction, lifecycle acknowledgements, and the
-functional migration of Interaction onto these primitives. Tranche 5 remains the authoring and
-cleanup closeout: migrate scenes and integrations to the final topology, then delete the temporary
-Interaction compatibility lifecycle.
+functional migration of Interaction onto these primitives. Tranche 5 closes the extraction: scenes,
+Stateful integrations, and editor diagnostics author only the final topology, and the temporary
+Interaction compatibility lifecycle is gone.
 
 The approved design is in
 [`planned/gameplay-action-system-v1.md`](planned/gameplay-action-system-v1.md).
@@ -245,6 +245,9 @@ presentation storage to `GameplayActionComponent`; `InteractionInteractor` deleg
 gesture resolution, request transport, acknowledgements, and sustained execution tracking to
 `GameplayActionRunner`.
 
+> Superseded by tranche 5: the bridge and the alias described below no longer exist. This subsection
+> records the tranche-4 checkpoint.
+
 Existing scenes are deliberately still accepted during this checkpoint. When an authored
 `GameplayActionComponent` or `GameplayActionRunner` is absent, a small deferred migration bridge
 installs it and moves/registers the existing action nodes. The bridge refreshes an already-focused
@@ -288,3 +291,77 @@ At the tranche checkpoint, formatting and compilation succeed with zero warnings
 complete suite passes. The previously tracked door synchronization test now asserts the observable
 closed pose rather than `AnimationPlayer.CurrentAnimation`, which is empty after seeking past the
 very short `RESET` clip on the current Godot runtime.
+
+## Tranche 5 — authored topology and closeout
+
+### Final scene topology
+
+Nothing is installed implicitly any more. The deferred migration bridge and the
+`InteractionAction.ConcurrencyGroup` alias are removed, so a scene declares what it uses:
+
+```
+Interaction/
+  GameplayActions/                     # GameplayActionComponent
+    OpenAction/                        # GameplayAction (or InteractionAction)
+      OpenExecutor                     # GameplayActionExecutor
+  GameplayActionExecutionSynchronizer  # Component = ../GameplayActions
+  InteractiveComponent                 # ActionComponent = ../GameplayActions
+```
+
+Two host invariants shape that layout, and both are diagnosed rather than guessed:
+
+- an authored action must be a **direct child** of its `GameplayActionComponent`; the host refuses to
+  register an action parented elsewhere instead of silently hosting it;
+- a consumer that subscribes to the host on `_Ready` — `InteractiveComponent` does — needs the host
+  assigned before it enters the tree, which an exported `NodePath` guarantees.
+
+The host is authored **beside** its consumer rather than below it. That is not cosmetic: it keeps
+every action at the depth it had before the extraction, so authored relative paths — a
+`StatefulStateInteractionRule.StatefulPath`, a stateful executor's `Stateful` — survive the migration
+unchanged.
+
+### Stateful integration and diagnostics
+
+The generic Stateful executors moved to `addons/gameplay_action_plugin/integration/stateful` as
+`SetStateGameplayActionExecutor`, `TransitionStateGameplayActionExecutor`, and
+`TimedTransitionStateGameplayActionExecutor`; nothing about applying a state is spatial. Interaction
+keeps only `StatefulStateInteractionRule`, which is a spatial-context rule.
+
+`GameplayActionValidator` owns their diagnostics, including the schema checks the Interaction
+validator used to carry: a `TargetState`, `RunningState`, `CompletedState`, or `CancelledState`
+absent from the assigned `StateSchema` is reported at authoring time.
+
+### Tranche 5 verification coverage
+
+Configuration and scene suites assert the final topology directly: the project scenes host their
+actions under `GameplayActions`, the level still overrides the button's cross-scene `Stateful` paths,
+and every required diagnostic is covered. One requester-side lifecycle rule was restored with its
+test: a refusal clears a prediction only, and never the bar of an execution the authority already
+acknowledged and is still driving.
+
+At the tranche checkpoint, `csharpier format .` and `dotnet build` succeed with zero warnings or
+errors, the complete GdUnit4 suite passes (285/285), and the project boots headless with no error or
+warning.
+
+## Deferred, not partially implemented
+
+V1 deliberately stops at the invariants above. The following are **not** present in any partial form,
+and nothing in the current API should be read as a first step towards them:
+
+- **Gameplay tag systems** — granted or required tags consumed by rules. Rules are plain synchronous
+  predicates; there is no tag container, no tag matching, and no tag replication.
+- **Cross-host locks** — concurrency and reservations are strictly host-local, per `ActionId` and per
+  concurrency group. There is no lock spanning two hosts, and no cross-requester cancellation policy.
+- **Target data and invocation payloads** — an execution carries an id, an instigator, a requester,
+  its host, and its action. It carries no arbitrary target or payload.
+- **Inventory integration** — there is none, in either direction. An inventory condition is authored
+  today as an ordinary rule in the consuming feature.
+- **Richer presentation schema** — a definition offers optional intrinsic label/description metadata
+  and a binding preserves opaque integration-owned context. That is the whole contract: no generic
+  HUD policy, no presenter model, no standardized action menu.
+- **Generic grant replication** — a binding is local and never a grant. Granting stays a component
+  ownership change, and no replicated grant synchronizer exists.
+- **Multiple concurrent executions for one `ActionId`** — one active execution maximum, by design.
+
+Each of these must start from an observed use case and preserve the V1 ownership, authority, and
+lifecycle invariants. Their listing here is documentation of a boundary, not a roadmap commitment.

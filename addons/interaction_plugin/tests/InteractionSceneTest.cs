@@ -6,6 +6,10 @@ using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
 using InteractionPlugin.Editor;
+using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Integration.Stateful;
+using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Presentation.UI;
@@ -64,7 +68,7 @@ public sealed partial class InteractionSceneTest
         AssertThat(action.Executor != null).IsTrue();
         AssertThat(
                 action.Executor
-                    == actor.GetNode<InteractionActionExecutor>(
+                    == actor.GetNode<GameplayActionExecutor>(
                         "GameplayActions/ActivateAction/ActivateExecutor"
                     )
             )
@@ -79,13 +83,14 @@ public sealed partial class InteractionSceneTest
         AssertThat(synchronizer != null).IsTrue();
         AssertThat(synchronizer!.ReplicationConfig != null).IsTrue();
         AssertThat(actor.GetScript().AsGodotObject() == null).IsTrue();
-        AssertThat(action.Executor is TimedTransitionStateInteractionExecutor).IsTrue();
-        AssertThat(action.ExecutionVisibility).IsEqual(InteractionExecutionVisibility.Replicated);
-        InteractionExecutionSynchronizer executionSynchronizer =
-            actor.GetNode<InteractionExecutionSynchronizer>(
-                "Interactive/InteractionExecutionSynchronizer"
+        AssertThat(action.Executor is TimedTransitionStateGameplayActionExecutor).IsTrue();
+        AssertThat(action.ExecutionVisibility)
+            .IsEqual(GameplayActionExecutionVisibility.Replicated);
+        GameplayActionExecutionSynchronizer executionSynchronizer =
+            actor.GetNode<GameplayActionExecutionSynchronizer>(
+                "GameplayActionExecutionSynchronizer"
             );
-        AssertThat(executionSynchronizer.Interactive == interactive).IsTrue();
+        AssertThat(executionSynchronizer.Component == interactive.ActionComponent).IsTrue();
         AssertThat(executionSynchronizer.RootPath).IsEqual(new NodePath("."));
         AssertThat(executionSynchronizer.ReplicationConfig != null).IsTrue();
     }
@@ -444,12 +449,12 @@ public sealed partial class InteractionSceneTest
         world.Interactive.InteractionActionCompleted += (_, _) => completedCount++;
         world.Interactive.InteractionActionCancelled += (_, _, _) => cancelledCount++;
 
-        InteractionExecutionResult result = world.Interactive.ExecuteAction(
+        GameplayActionExecutionResult result = world.Interactive.ExecuteAction(
             world.Interactor,
             world.Action
         );
 
-        AssertThat(result is InteractionExecutionRunning).IsTrue();
+        AssertThat(result is GameplayActionExecutionRunning).IsTrue();
         AssertThat(world.State.State.ToString()).IsEqual("activating");
         AssertThat(world.Interactive.ActiveInteractor == world.Interactor).IsTrue();
 
@@ -503,7 +508,7 @@ public sealed partial class InteractionSceneTest
             interactor,
             actor.GetNode<StatefulComponent>("StatefulComponent"),
             interactive.Actions[0],
-            (TimedTransitionStateInteractionExecutor)interactive.Actions[0].Executor!
+            (TimedTransitionStateGameplayActionExecutor)interactive.Actions[0].Executor!
         );
     }
 
@@ -513,7 +518,7 @@ public sealed partial class InteractionSceneTest
         InteractionInteractor Interactor,
         StatefulComponent State,
         InteractionAction Action,
-        TimedTransitionStateInteractionExecutor Executor
+        TimedTransitionStateGameplayActionExecutor Executor
     );
 
     [TestCase]
@@ -603,12 +608,12 @@ public sealed partial class InteractionSceneTest
         AssertThat(world.WallState.State.ToString()).IsEqual("lowered");
         AssertThat(Presented(world)).IsEqual("[interact] Raise wall");
 
-        InteractionExecutionResult raise = world.Interactive.ExecuteAction(
+        GameplayActionExecutionResult raise = world.Interactive.ExecuteAction(
             world.Interactor,
             world.Interactive.ResolveActionForInput(world.Interactor, new StringName("interact"))!
         );
 
-        AssertThat(raise is InteractionExecutionCompleted).IsTrue();
+        AssertThat(raise is GameplayActionExecutionCompleted).IsTrue();
         AssertThat(world.WallState.State).IsEqual(RaisingState);
         AssertThat(Presented(world)).IsEqual("Raise wall: The wall is moving.");
 
@@ -616,12 +621,12 @@ public sealed partial class InteractionSceneTest
 
         AssertThat(Presented(world)).IsEqual("[interact] Lower wall");
 
-        InteractionExecutionResult lower = world.Interactive.ExecuteAction(
+        GameplayActionExecutionResult lower = world.Interactive.ExecuteAction(
             world.Interactor,
             world.Interactive.ResolveActionForInput(world.Interactor, new StringName("interact"))!
         );
 
-        AssertThat(lower is InteractionExecutionCompleted).IsTrue();
+        AssertThat(lower is GameplayActionExecutionCompleted).IsTrue();
         AssertThat(world.WallState.State).IsEqual(LoweringState);
         AssertThat(Presented(world)).IsEqual("Lower wall: The wall is moving.");
     }
@@ -700,7 +705,7 @@ public sealed partial class InteractionSceneTest
         StringName movingState
     )
     {
-        ((SetStateInteractionExecutor)action.Executor!).Stateful = wallState;
+        ((SetStateGameplayActionExecutor)action.Executor!).Stateful = wallState;
         NodePath statefulPath = new("../../../LeverWall/StatefulComponent");
         action.Rules.Add(
             new StatefulStateInteractionRule
@@ -735,6 +740,7 @@ public sealed partial class InteractionSceneTest
         TestInteractionDetector detector = new() { Name = "Detector", ViewOrigin = viewOrigin };
         interactor.AddChild(detector);
         interactor.Detector = detector;
+        interactor.ConfigureActionRunner();
         return detector;
     }
 
@@ -769,7 +775,7 @@ public sealed partial class InteractionSceneTest
                 },
             };
             interactive.Actions.Add(action);
-            interactive.AddChild(action);
+            interactive.ConfigureActionHost();
             NoopInteractionExecutor executor = new() { Name = $"{actionId}Executor" };
             action.AddChild(executor);
             action.Executor = executor;
@@ -793,8 +799,8 @@ public sealed partial class InteractionSceneTest
 
     private sealed partial class NoopInteractionExecutor : InteractionActionExecutor
     {
-        public override InteractionExecutionResult Execute(
+        public override GameplayActionExecutionResult Execute(
             in InteractionExecutionContext context
-        ) => new InteractionExecutionCompleted();
+        ) => new GameplayActionExecutionCompleted();
     }
 }

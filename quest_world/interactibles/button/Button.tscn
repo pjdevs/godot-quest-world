@@ -5,7 +5,8 @@
 [ext_resource type="PackedScene" uid="uid://mknaynw5h20v" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="3_6nsmd"]
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="3_action"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="4_actiondef"]
-[ext_resource type="Script" uid="uid://bw02qn7pyxpy4" path="res://addons/interaction_plugin/integration/stateful/SetStateInteractionExecutor.cs" id="5_setstate"]
+[ext_resource type="Script" uid="uid://bw02qn7pyxpy4" path="res://addons/gameplay_action_plugin/integration/stateful/SetStateGameplayActionExecutor.cs" id="5_setstate"]
+[ext_resource type="Script" uid="uid://dwmqsp6eyk4gd" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="6_actions"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_mokd0"]
 size = Vector3(0.25, 0.25, 0.25)
@@ -40,7 +41,35 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14235857, 0)
 mesh = SubResource("BoxMesh_mokd0")
 surface_material_override/0 = SubResource("StandardMaterial3D_f0qss")
 
-[node name="InteractiveComponent" type="Node" parent="." unique_id=745842554 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Actions")]
+[node name="GameplayActions" type="Node" parent="." unique_id=745842555 node_paths=PackedStringArray("Actions")]
+script = ExtResource("6_actions")
+Actions = [NodePath("RaiseAction"), NodePath("LowerAction")]
+metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
+
+[node name="RaiseAction" type="Node" parent="GameplayActions" unique_id=1667473628 node_paths=PackedStringArray("Executor")]
+script = ExtResource("3_action")
+Definition = SubResource("Resource_raise_definition")
+Executor = NodePath("RaiseExecutor")
+Priority = 1
+metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+
+[node name="RaiseExecutor" type="Node" parent="GameplayActions/RaiseAction" unique_id=1426697339]
+script = ExtResource("5_setstate")
+TargetState = &"raising"
+metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
+
+[node name="LowerAction" type="Node" parent="GameplayActions" unique_id=1721581751 node_paths=PackedStringArray("Executor")]
+script = ExtResource("3_action")
+Definition = SubResource("Resource_lower_definition")
+Executor = NodePath("LowerExecutor")
+metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+
+[node name="LowerExecutor" type="Node" parent="GameplayActions/LowerAction" unique_id=913228593]
+script = ExtResource("5_setstate")
+TargetState = &"lowering"
+metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
+
+[node name="InteractiveComponent" type="Node" parent="." unique_id=745842554 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "ActionComponent", "Actions")]
 script = ExtResource("1_lq42h")
 InteractionArea = NodePath("../InteractionArea")
 IndicationArea = NodePath("../IndicationArea")
@@ -48,31 +77,9 @@ InteractionAnchor = NodePath("../InteractionAnchor")
 DisplayName = "Wall control"
 ActionPromptScene = ExtResource("2_2ck07")
 IndicationScene = ExtResource("3_6nsmd")
-Actions = [NodePath("RaiseAction"), NodePath("LowerAction")]
+ActionComponent = NodePath("../GameplayActions")
+Actions = [NodePath("../GameplayActions/RaiseAction"), NodePath("../GameplayActions/LowerAction")]
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
-
-[node name="RaiseAction" type="Node" parent="InteractiveComponent" unique_id=1667473628 node_paths=PackedStringArray("Executor")]
-script = ExtResource("3_action")
-Definition = SubResource("Resource_raise_definition")
-Executor = NodePath("RaiseExecutor")
-Priority = 1
-metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
-
-[node name="RaiseExecutor" type="Node" parent="InteractiveComponent/RaiseAction" unique_id=1426697339]
-script = ExtResource("5_setstate")
-TargetState = &"raising"
-metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
-
-[node name="LowerAction" type="Node" parent="InteractiveComponent" unique_id=1721581751 node_paths=PackedStringArray("Executor")]
-script = ExtResource("3_action")
-Definition = SubResource("Resource_lower_definition")
-Executor = NodePath("LowerExecutor")
-metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
-
-[node name="LowerExecutor" type="Node" parent="InteractiveComponent/LowerAction" unique_id=913228593]
-script = ExtResource("5_setstate")
-TargetState = &"lowering"
-metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
 
 [node name="InteractionArea" type="Area3D" parent="." unique_id=2064253587]
 

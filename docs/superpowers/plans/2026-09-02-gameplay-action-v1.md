@@ -129,9 +129,12 @@
 - Finalize: `docs/feature/gameplay_action/gameplay-action.md`
 - Update: `docs/feature/interaction/interaction.md`
 
-- [ ] Add failing configuration/scene tests for the final topology and every required diagnostic.
-- [ ] Migrate `.tscn` resources and Stateful helpers without compatibility aliases for generic primitives.
-- [ ] Delete the old host/runner lifecycle only after all consumers use the generic path.
-- [ ] Search for obsolete Interaction execution types, paths, comments, and two-pipeline adapters; remove every active occurrence.
-- [ ] Run formatter, build, the complete macOS Godot test command, and a headless project smoke check.
-- [ ] Re-read the spec acceptance criteria line by line, update feature docs, and commit the V1 closeout.
+- [x] Add failing configuration/scene tests for the final topology and every required diagnostic. The
+  missing `GameplayActionValidator` StateSchema diagnostics were ported from the Interaction validator.
+- [x] Migrate `.tscn` resources and Stateful helpers without compatibility aliases for generic primitives.
+- [x] Delete the old host/runner lifecycle only after all consumers use the generic path.
+- [x] Search for obsolete Interaction execution types, paths, comments, and two-pipeline adapters; remove every active occurrence.
+- [x] Run formatter, build, the complete macOS Godot test command, and a headless project smoke check.
+  285/285 tests pass; the project boots headless with zero error or warning.
+- [x] Re-read the spec acceptance criteria line by line and update feature docs. The deferred-scope
+  section required by §17 was missing and has been added. Commit left to user review.

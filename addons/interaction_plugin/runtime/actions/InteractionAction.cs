@@ -14,8 +14,6 @@ namespace QuestWorld.Interaction.Runtime.Actions;
 public partial class InteractionAction : GameplayAction
 {
     public static readonly StringName InteractionAccessProviderId = new("interaction");
-    public static readonly StringName DefaultConcurrencyGroup = DefaultHostConcurrencyGroup;
-
     public override StringName AccessProviderId => InteractionAccessProviderId;
 
     public new InteractionActionDefinition? Definition
@@ -26,20 +24,6 @@ public partial class InteractionAction : GameplayAction
 
     public InteractionActionDefinition? InteractionDefinition => Definition;
 
-    public new InteractionActionExecutor? Executor
-    {
-        get => base.Executor as InteractionActionExecutor;
-        set => base.Executor = value;
-    }
-
-    public InteractionActionExecutor? InteractionExecutor => Executor;
-
-    public new InteractionExecutionVisibility ExecutionVisibility
-    {
-        get => (InteractionExecutionVisibility)base.ExecutionVisibility;
-        set => base.ExecutionVisibility = (GameplayActionExecutionVisibility)value;
-    }
-
     public InteractiveComponent? Interactive { get; internal set; }
 
     private InteractionTargetRulesAdapter? _targetRulesAdapter;
@@ -49,19 +33,6 @@ public partial class InteractionAction : GameplayAction
 
     [Export]
     public bool Automatic { get; set; }
-
-    /// <summary>
-    /// Preserves the Interaction authoring property while the final scene migration is deferred to
-    /// tranche 5.
-    /// </summary>
-    [Export]
-    public StringName ConcurrencyGroup
-    {
-        get => HostConcurrencyGroup;
-        set => HostConcurrencyGroup = value;
-    }
-
-    public StringName GetConcurrencyGroup() => GetHostConcurrencyGroup();
 
     internal GameplayActionBindingConfig BuildBindingConfig()
     {
@@ -98,7 +69,7 @@ public partial class InteractionAction : GameplayAction
     )
     {
         Interactive = interactive;
-        if (InteractionExecutor is { } executor)
+        if (Executor is InteractionActionExecutor executor)
         {
             executor.InteractionAction = this;
         }
@@ -122,11 +93,6 @@ public partial class InteractionAction : GameplayAction
             GD.PushError(
                 $"{GetPath()}: InteractionAction requires an InteractionActionDefinition."
             );
-        }
-
-        if (base.Executor is not null && base.Executor is not InteractionActionExecutor)
-        {
-            GD.PushError($"{GetPath()}: InteractionAction requires an InteractionActionExecutor.");
         }
     }
 }

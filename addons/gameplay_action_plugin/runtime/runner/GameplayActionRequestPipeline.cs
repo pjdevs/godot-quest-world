@@ -137,7 +137,7 @@ internal sealed class GameplayActionRequestPipeline(
         {
             if (!_owner.IsAuthoritativeRunner)
             {
-                ClearLocalRequestPresentation(request);
+                ClearLocalRequestPresentation(request, includeAcknowledged: true);
                 _owner.RpcId(
                     _owner.ServerPeerId,
                     nameof(ServerTryCancelAction),
@@ -261,7 +261,18 @@ internal sealed class GameplayActionRequestPipeline(
         return false;
     }
 
-    private void ClearLocalRequestPresentation(in GameplayActionRequestKey request)
+    /// <summary>Drops the local presentation of one request.</summary>
+    /// <remarks>
+    /// A prediction is always dropped: nothing acknowledged it. An acknowledged execution is only
+    /// dropped when the requester itself gave the action up, such as releasing a sustained input. A
+    /// refusal must leave it alone, because the refusal answers the latest request and not the
+    /// execution already running — a player pressing again mid-action would otherwise erase a bar
+    /// the authority is still driving.
+    /// </remarks>
+    private void ClearLocalRequestPresentation(
+        in GameplayActionRequestKey request,
+        bool includeAcknowledged
+    )
     {
         _pendingRequests.Remove(request);
         if (
@@ -275,7 +286,7 @@ internal sealed class GameplayActionRequestPipeline(
             {
                 request.Component.RemovePendingExecution(request.ActionId);
             }
-            else
+            else if (includeAcknowledged)
             {
                 request.Component.RemoveRequesterExecution(
                     request.ActionId,
@@ -337,7 +348,10 @@ internal sealed class GameplayActionRequestPipeline(
             ResolveNetworkPath(componentPath) as GameplayActionComponent;
         if (component is not null)
         {
-            ClearLocalRequestPresentation(new GameplayActionRequestKey(component, actionId));
+            ClearLocalRequestPresentation(
+                new GameplayActionRequestKey(component, actionId),
+                includeAcknowledged: false
+            );
             RemoveSustainedRequest(component, actionId);
         }
 

@@ -2,19 +2,63 @@ namespace QuestWorld.Tests.GameplayActions;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
 using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Editor;
 using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Bindings;
+using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.GameplayActions.Runtime.Rules;
+using QuestWorld.GameplayActions.Runtime.Runner;
 using static GdUnit4.Assertions;
 
 [TestSuite]
 [RequireGodotRuntime]
 public sealed partial class GameplayActionComponentTest
 {
+    [TestCase]
+    public void ValidatorReportsIncompleteActionHostTopology()
+    {
+        GameplayActionComponent component = AutoFree(new GameplayActionComponent());
+        GameplayAction first = CreateAction("heal");
+        GameplayAction duplicate = CreateAction("heal");
+        duplicate.HostConcurrencyGroup = new StringName();
+        duplicate.ExecutionVisibility = GameplayActionExecutionVisibility.Replicated;
+        component.Actions.Add(first);
+        component.Actions.Add(duplicate);
+
+        string[] warnings = GameplayActionValidator.Validate(component).ToArray();
+
+        AssertThat(warnings.Any(warning => warning.Contains("more than once"))).IsTrue();
+        AssertThat(warnings.Any(warning => warning.Contains("HostConcurrencyGroup"))).IsTrue();
+        AssertThat(warnings.Any(warning => warning.Contains("Synchronizer"))).IsTrue();
+    }
+
+    [TestCase]
+    public void ValidatorReportsInvalidBindingModesAndMissingRunnerOwnership()
+    {
+        GameplayActionBindingConfig automatic = new()
+        {
+            ActivationMode = GameplayActionActivationMode.Automatic,
+            InputRequirement = GameplayActionInputRequirement.Pressed,
+            HoldDuration = 1.0f,
+        };
+        GameplayActionRunner runner = AutoFree(new GameplayActionRunner());
+
+        string[] bindingWarnings = GameplayActionValidator.Validate(automatic).ToArray();
+        string[] runnerWarnings = GameplayActionValidator.Validate(runner).ToArray();
+
+        AssertThat(bindingWarnings.Contains("Automatic bindings must not require pressed input."))
+            .IsTrue();
+        AssertThat(bindingWarnings.Contains("HoldDuration is only used by Hold bindings."))
+            .IsTrue();
+        AssertThat(runnerWarnings.Contains("OwnedActionComponent must be assigned.")).IsTrue();
+    }
+
     [TestCase]
     public void AvailabilityHasNoActionHookOutsideTheRulesCollection()
     {

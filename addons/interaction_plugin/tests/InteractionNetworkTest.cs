@@ -5,6 +5,10 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
+using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Integration.Stateful;
+using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Runtime.Actions;
@@ -46,7 +50,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 2.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 2.0f);
             session.Focus();
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
@@ -75,7 +79,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 2.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 2.0f);
             session.Focus();
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
             await session.Pump(RoundTripFrames);
@@ -98,7 +102,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 2.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 2.0f);
             session.Focus();
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
             await session.Pump(RoundTripFrames);
@@ -129,7 +133,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionFailed("The socket is welded shut."), 0.0f);
+            session.Arm(new GameplayActionExecutionFailed("The socket is welded shut."), 0.0f);
             session.Focus();
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
@@ -151,7 +155,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRejected("The till is closed."), 0.0f);
+            session.Arm(new GameplayActionExecutionRejected("The till is closed."), 0.0f);
             session.Focus();
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
@@ -178,7 +182,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 5.0f);
             session.Focus();
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
@@ -207,7 +211,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 5.0f);
             session.Focus();
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
@@ -215,7 +219,7 @@ public sealed partial class InteractionNetworkTest
             AssertThat(
                     session.ClientA.Interactive.TryGetExecutionPresentation(
                         ActivateAction,
-                        out InteractionExecutionPresentation presentation
+                        out GameplayActionExecutionPresentation presentation
                     )
                 )
                 .IsTrue();
@@ -245,7 +249,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 5.0f);
             session.ClientA.Executor.Duration = null;
             session.Focus();
 
@@ -278,7 +282,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 0.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 0.0f);
             session.Server.Executor.Duration = null;
             session.ClientA.Executor.Duration = 3600.0f;
             session.Focus();
@@ -296,7 +300,7 @@ public sealed partial class InteractionNetworkTest
             AssertThat(
                     session.ClientA.Interactive.TryGetExecutionPresentation(
                         ActivateAction,
-                        out InteractionExecutionPresentation presentation
+                        out GameplayActionExecutionPresentation presentation
                     )
                 )
                 .IsTrue();
@@ -314,7 +318,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 5.0f);
             session.Focus();
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
             await session.Pump(RoundTripFrames);
@@ -347,7 +351,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 5.0f);
             session.Focus();
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
             await session.Pump(RoundTripFrames);
@@ -375,7 +379,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 5.0f);
             session.Focus();
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
             await session.Pump(RoundTripFrames);
@@ -401,7 +405,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 5.0f);
             session.Focus();
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
             await session.Pump(RoundTripFrames);
@@ -426,7 +430,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 5.0f);
             session.FocusA(session.Server.Interactive, session.ClientA.Interactive);
             session.FocusB(session.Server.SecondInteractive, session.ClientB.SecondInteractive);
 
@@ -453,7 +457,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 5.0f);
             session.Focus();
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
@@ -477,7 +481,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 0.2f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 0.2f);
             session.Focus();
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
@@ -770,8 +774,8 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.SetExecutionVisibility(InteractionExecutionVisibility.Replicated);
-            session.Arm(new InteractionExecutionRunning(), 3600.0f);
+            session.SetExecutionVisibility(GameplayActionExecutionVisibility.Replicated);
+            session.Arm(new GameplayActionExecutionRunning(), 3600.0f);
             session.Focus();
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
@@ -780,14 +784,14 @@ public sealed partial class InteractionNetworkTest
             AssertThat(
                     session.ClientA.Interactive.TryGetExecutionPresentation(
                         ActivateAction,
-                        out InteractionExecutionPresentation requester
+                        out GameplayActionExecutionPresentation requester
                     )
                 )
                 .IsTrue();
             AssertThat(
                     session.ClientB.Interactive.TryGetExecutionPresentation(
                         ActivateAction,
-                        out InteractionExecutionPresentation observer
+                        out GameplayActionExecutionPresentation observer
                     )
                 )
                 .IsTrue();
@@ -797,7 +801,7 @@ public sealed partial class InteractionNetworkTest
             AssertThat(
                     late.Scene.Interactive.TryGetExecutionPresentation(
                         ActivateAction,
-                        out InteractionExecutionPresentation joined
+                        out GameplayActionExecutionPresentation joined
                     )
                 )
                 .IsTrue();
@@ -830,8 +834,8 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.SetExecutionVisibility(InteractionExecutionVisibility.AuthorityOnly);
-            session.Arm(new InteractionExecutionRunning(), 3600.0f);
+            session.SetExecutionVisibility(GameplayActionExecutionVisibility.AuthorityOnly);
+            session.Arm(new GameplayActionExecutionRunning(), 3600.0f);
             session.Focus();
 
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
@@ -863,8 +867,8 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.SetExecutionVisibility(InteractionExecutionVisibility.Replicated);
-            session.Arm(new InteractionExecutionRunning(), 3600.0f);
+            session.SetExecutionVisibility(GameplayActionExecutionVisibility.Replicated);
+            session.Arm(new GameplayActionExecutionRunning(), 3600.0f);
             session.Focus();
             int observerPeerId = session.Server.InteractorB.OwnerPeerId;
             AssertThat(observerPeerId).IsEqual(session.ClientB.Root.Multiplayer.GetUniqueId());
@@ -917,7 +921,7 @@ public sealed partial class InteractionNetworkTest
         Session session = await Connect();
         try
         {
-            session.Arm(new InteractionExecutionRunning(), duration: 5.0f);
+            session.Arm(new GameplayActionExecutionRunning(), duration: 5.0f);
             session.Focus();
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
             await session.Pump(RoundTripFrames);
@@ -1051,7 +1055,7 @@ public sealed partial class InteractionNetworkTest
             first.Interactive,
             ActivateAction,
             InteractInput,
-            InteractionAction.DefaultConcurrencyGroup,
+            GameplayAction.DefaultHostConcurrencyGroup,
             sustained: true
         );
         TestScriptedExecutor tune = AddScriptedAction(
@@ -1068,7 +1072,7 @@ public sealed partial class InteractionNetworkTest
             second.Interactive,
             ActivateAction,
             InteractInput,
-            InteractionAction.DefaultConcurrencyGroup,
+            GameplayAction.DefaultHostConcurrencyGroup,
             sustained: true
         );
 
@@ -1115,18 +1119,21 @@ public sealed partial class InteractionNetworkTest
             InteractionArea = area,
             InteractionAnchor = actor,
         };
-        InteractionExecutionSynchronizer executionSynchronizer = new()
-        {
-            Name = "InteractionExecutionSynchronizer",
-            Interactive = interactive,
-        };
-        interactive.AddChild(executionSynchronizer);
         actor.AddChild(area);
         if (stateful is not null)
         {
             actor.AddChild(stateful);
         }
 
+        // The host and its synchronizer sit beside the interactive, exactly like the authored
+        // scenes, and both are wired before the interactive enters the live tree.
+        interactive.ConfigureActionHost(actor);
+        GameplayActionExecutionSynchronizer executionSynchronizer = new()
+        {
+            Name = "GameplayActionExecutionSynchronizer",
+            Component = interactive.ActionComponent,
+        };
+        actor.AddChild(executionSynchronizer);
         actor.AddChild(interactive);
         root.AddChild(actor);
         return new Target(actor, interactive, executionSynchronizer);
@@ -1145,7 +1152,7 @@ public sealed partial class InteractionNetworkTest
         action.AddChild(executor);
         action.Executor = executor;
         interactive.Actions.Add(action);
-        interactive.AddChild(action);
+        interactive.ConfigureActionHost();
         return executor;
     }
 
@@ -1172,7 +1179,7 @@ public sealed partial class InteractionNetworkTest
                 BlockReason = "Somebody is already using this.",
             }
         );
-        SetStateInteractionExecutor executor = new()
+        SetStateGameplayActionExecutor executor = new()
         {
             Name = "SwitchExecutor",
             Stateful = stateful,
@@ -1181,7 +1188,7 @@ public sealed partial class InteractionNetworkTest
         action.AddChild(executor);
         action.Executor = executor;
         interactive.Actions.Add(action);
-        interactive.AddChild(action);
+        interactive.ConfigureActionHost();
     }
 
     private static InteractionAction NewAction(
@@ -1193,7 +1200,7 @@ public sealed partial class InteractionNetworkTest
         new()
         {
             Name = $"{id}Action",
-            ConcurrencyGroup = concurrencyGroup,
+            HostConcurrencyGroup = concurrencyGroup,
             Definition = new InteractionActionDefinition
             {
                 Id = id,
@@ -1211,6 +1218,7 @@ public sealed partial class InteractionNetworkTest
         TestInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
         interactor.AddChild(detector);
         interactor.Detector = detector;
+        interactor.ConfigureActionRunner();
         root.AddChild(interactor);
         return new PeerInteractor(interactor, detector);
     }
@@ -1218,7 +1226,7 @@ public sealed partial class InteractionNetworkTest
     private sealed record Target(
         Node3D Actor,
         InteractiveComponent Interactive,
-        InteractionExecutionSynchronizer ExecutionSynchronizer
+        GameplayActionExecutionSynchronizer ExecutionSynchronizer
     );
 
     private sealed record LatePeer(PeerScene Scene, StateLog Log);
@@ -1270,7 +1278,7 @@ public sealed partial class InteractionNetworkTest
     private sealed record PeerScene(
         Node3D Root,
         InteractiveComponent Interactive,
-        InteractionExecutionSynchronizer ExecutionSynchronizer,
+        GameplayActionExecutionSynchronizer ExecutionSynchronizer,
         InteractiveComponent SecondInteractive,
         StatefulComponent Stateful,
         TestScriptedExecutor Executor,
@@ -1297,8 +1305,8 @@ public sealed partial class InteractionNetworkTest
         List<Ack> AcksB
     )
     {
-        private InteractionExecutionVisibility _executionVisibility =
-            InteractionExecutionVisibility.RequesterOnly;
+        private GameplayActionExecutionVisibility _executionVisibility =
+            GameplayActionExecutionVisibility.RequesterOnly;
 
         /// <summary>Tells every copy of an interactor which peer is allowed to drive it.</summary>
         public void Own(int peerA, int peerB)
@@ -1317,7 +1325,7 @@ public sealed partial class InteractionNetworkTest
         }
 
         /// <summary>Gives the same outcome to every copy, so the clients predict what the server runs.</summary>
-        public void Arm(InteractionExecutionResult result, float duration)
+        public void Arm(GameplayActionExecutionResult result, float duration)
         {
             foreach (PeerScene scene in new[] { Server, ClientA, ClientB })
             {
@@ -1330,7 +1338,7 @@ public sealed partial class InteractionNetworkTest
             }
         }
 
-        public void SetExecutionVisibility(InteractionExecutionVisibility visibility)
+        public void SetExecutionVisibility(GameplayActionExecutionVisibility visibility)
         {
             _executionVisibility = visibility;
             foreach (PeerScene scene in new[] { Server, ClientA, ClientB })
@@ -1409,7 +1417,7 @@ public sealed partial class InteractionNetworkTest
 
         private static void SetExecutionVisibility(
             PeerScene scene,
-            InteractionExecutionVisibility visibility
+            GameplayActionExecutionVisibility visibility
         )
         {
             scene.Interactive.ResolveAction(ActivateAction)!.ExecutionVisibility = visibility;

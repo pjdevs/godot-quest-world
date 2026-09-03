@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
+using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
@@ -55,7 +57,7 @@ public sealed partial class InteractionAckTest
     {
         AckWorld world = BuildWorld();
         world.Executor.Duration = 2.0f;
-        world.Executor.Result = new InteractionExecutionRunning();
+        world.Executor.Result = new GameplayActionExecutionRunning();
         await world.Runner.SimulateFrames(1);
         world.Focus();
 
@@ -65,7 +67,7 @@ public sealed partial class InteractionAckTest
         AssertThat(
                 world.Interactive.TryGetExecutionPresentation(
                     world.Definition.Id,
-                    out InteractionExecutionPresentation presentation
+                    out GameplayActionExecutionPresentation presentation
                 )
             )
             .IsTrue();
@@ -82,7 +84,7 @@ public sealed partial class InteractionAckTest
             world.Interactive.GetPath(),
             world.Definition.Id,
             42ul,
-            InteractionExecutionVisibility.AuthorityOnly,
+            GameplayActionExecutionVisibility.AuthorityOnly,
             false,
             0.0f,
             0.0f,
@@ -99,7 +101,7 @@ public sealed partial class InteractionAckTest
     {
         AckWorld world = BuildWorld();
         world.Executor.Duration = 2.0f;
-        world.Executor.Result = new InteractionExecutionRunning();
+        world.Executor.Result = new GameplayActionExecutionRunning();
         await world.Runner.SimulateFrames(1);
         world.Focus();
         world.Interactor.TryStartInteractionInput(InteractInput);
@@ -114,7 +116,7 @@ public sealed partial class InteractionAckTest
     {
         AckWorld world = BuildWorld();
         world.Executor.Duration = 2.0f;
-        world.Executor.Result = new InteractionExecutionRunning();
+        world.Executor.Result = new GameplayActionExecutionRunning();
         await world.Runner.SimulateFrames(1);
         world.Focus();
         world.Interactor.TryStartInteractionInput(InteractInput);
@@ -131,7 +133,7 @@ public sealed partial class InteractionAckTest
         // The authority accepted the command and only then discovered the error, so reporting a
         // rejection would tell the owner that nothing ever ran.
         AckWorld world = BuildWorld();
-        world.Executor.Result = new InteractionExecutionFailed("The socket is welded shut.");
+        world.Executor.Result = new GameplayActionExecutionFailed("The socket is welded shut.");
         await world.Runner.SimulateFrames(1);
         world.Focus();
 
@@ -145,7 +147,7 @@ public sealed partial class InteractionAckTest
     public async Task AnActionRefusedAtTheExecutionBoundaryIsRejectedAndNeverStarted()
     {
         AckWorld world = BuildWorld();
-        world.Executor.Result = new InteractionExecutionRejected("The till is closed.");
+        world.Executor.Result = new GameplayActionExecutionRejected("The till is closed.");
         await world.Runner.SimulateFrames(1);
         world.Focus();
 
@@ -161,7 +163,7 @@ public sealed partial class InteractionAckTest
         // The host requests like any other peer: it must not be the one player who learns nothing
         // when the authoritative half of its own process refuses.
         AckWorld world = BuildWorld();
-        world.Executor.Result = new InteractionExecutionRejected("The till is closed.");
+        world.Executor.Result = new GameplayActionExecutionRejected("The till is closed.");
         await world.Runner.SimulateFrames(1);
         world.Focus();
 
@@ -175,7 +177,7 @@ public sealed partial class InteractionAckTest
     {
         AckWorld world = BuildWorld();
         world.Executor.Duration = 2.0f;
-        world.Executor.Result = new InteractionExecutionRejected("The till is closed.");
+        world.Executor.Result = new GameplayActionExecutionRejected("The till is closed.");
         await world.Runner.SimulateFrames(1);
         world.Focus();
 
@@ -194,7 +196,7 @@ public sealed partial class InteractionAckTest
         AckWorld world = BuildWorld();
         world.Definition.CancelOnInputReleased = true;
         world.Executor.Duration = 2.0f;
-        world.Executor.Result = new InteractionExecutionRunning();
+        world.Executor.Result = new GameplayActionExecutionRunning();
         await world.Runner.SimulateFrames(1);
         world.Focus();
         world.Interactor.TryStartInteractionInput(InteractInput);
@@ -217,7 +219,7 @@ public sealed partial class InteractionAckTest
         // rejection is played on the same identifier on purpose: that is the pair that used to match.
         AckWorld world = BuildWorld();
         world.Executor.Duration = 2.0f;
-        world.Executor.Result = new InteractionExecutionRunning();
+        world.Executor.Result = new GameplayActionExecutionRunning();
         await world.Runner.SimulateFrames(1);
         world.Focus();
         world.Interactor.TryStartInteractionInput(InteractInput);
@@ -241,7 +243,7 @@ public sealed partial class InteractionAckTest
         // has been counting since the press, and that is exactly the delay to add.
         AckWorld world = BuildWorld();
         world.Executor.Duration = 1.0f;
-        world.Executor.Result = new InteractionExecutionRunning();
+        world.Executor.Result = new GameplayActionExecutionRunning();
         await world.Runner.SimulateFrames(1);
         world.Focus();
         world.Interactor.TryStartInteractionInput(InteractInput);
@@ -255,13 +257,13 @@ public sealed partial class InteractionAckTest
             .IsTrue();
         world.Interactive.AddPendingExecutionPresentation(
             world.Definition.Id,
-            new InteractionProgressSample(0.0f, 1.0f, 0L)
+            new GameplayActionProgressSample(0.0f, 1.0f, 0L)
         );
         await world.Runner.SimulateFrames(30);
         AssertThat(
                 world.Interactive.TryGetExecutionPresentation(
                     world.Definition.Id,
-                    out InteractionExecutionPresentation beforeAck
+                    out GameplayActionExecutionPresentation beforeAck
                 )
             )
             .IsTrue();
@@ -271,7 +273,7 @@ public sealed partial class InteractionAckTest
             world.Interactive.GetPath(),
             world.Definition.Id,
             world.Executor.LastExecutionId + 1ul,
-            InteractionExecutionVisibility.RequesterOnly,
+            GameplayActionExecutionVisibility.RequesterOnly,
             true,
             0.0f,
             1.0f,
@@ -281,7 +283,7 @@ public sealed partial class InteractionAckTest
         AssertThat(
                 world.Interactive.TryGetExecutionPresentation(
                     world.Definition.Id,
-                    out InteractionExecutionPresentation afterAck
+                    out GameplayActionExecutionPresentation afterAck
                 )
             )
             .IsTrue();
@@ -300,7 +302,7 @@ public sealed partial class InteractionAckTest
         // no longer exists.
         AckWorld world = BuildWorld();
         world.Executor.Duration = 3600.0f;
-        world.Executor.Result = new InteractionExecutionRunning();
+        world.Executor.Result = new GameplayActionExecutionRunning();
         await world.Runner.SimulateFrames(1);
         world.Focus();
         world.Interactor.TryStartInteractionInput(InteractInput);
@@ -321,7 +323,7 @@ public sealed partial class InteractionAckTest
         AckWorld world = BuildWorld();
         world.Definition.CancelOnInputReleased = true;
         world.Executor.Duration = 2.0f;
-        world.Executor.Result = new InteractionExecutionRunning();
+        world.Executor.Result = new GameplayActionExecutionRunning();
         await world.Runner.SimulateFrames(1);
         world.Focus();
         world.Interactor.TryStartInteractionInput(InteractInput);
@@ -340,7 +342,7 @@ public sealed partial class InteractionAckTest
         // and no downstream network session, only the authoritative lifecycle of its own request.
         AckWorld world = BuildWorld();
         world.Executor.Duration = null;
-        world.Executor.Result = new InteractionExecutionRunning();
+        world.Executor.Result = new GameplayActionExecutionRunning();
         VendorWindow window = new();
         window.Listen(world.Interactor);
         await world.Runner.SimulateFrames(1);
@@ -359,7 +361,7 @@ public sealed partial class InteractionAckTest
     public async Task AVendorWindowNeverOpensOnARefusedRequest()
     {
         AckWorld world = BuildWorld();
-        world.Executor.Result = new InteractionExecutionRejected("The till is closed.");
+        world.Executor.Result = new GameplayActionExecutionRejected("The till is closed.");
         VendorWindow window = new();
         window.Listen(world.Interactor);
         await world.Runner.SimulateFrames(1);
@@ -375,7 +377,7 @@ public sealed partial class InteractionAckTest
     public async Task AVendorWindowOpenedByAnAcknowledgementClosesOnAFailure()
     {
         AckWorld world = BuildWorld();
-        world.Executor.Result = new InteractionExecutionFailed("The socket is welded shut.");
+        world.Executor.Result = new GameplayActionExecutionFailed("The socket is welded shut.");
         VendorWindow window = new();
         window.Listen(world.Interactor);
         await world.Runner.SimulateFrames(1);
@@ -394,7 +396,7 @@ public sealed partial class InteractionAckTest
         // re-send the very same request on the very next frame, turning one refusal into a flood.
         AckWorld world = BuildWorld();
         world.Action.Automatic = true;
-        world.Executor.Result = new InteractionExecutionRejected("The till is closed.");
+        world.Executor.Result = new GameplayActionExecutionRejected("The till is closed.");
         await world.Runner.SimulateFrames(1);
 
         world.Focus();
@@ -413,7 +415,7 @@ public sealed partial class InteractionAckTest
         // first makes it unavailable and then available again.
         AckWorld world = BuildWorld();
         world.Action.Automatic = true;
-        world.Executor.Result = new InteractionExecutionRejected("The till is closed.");
+        world.Executor.Result = new GameplayActionExecutionRejected("The till is closed.");
         await world.Runner.SimulateFrames(1);
         world.Focus();
 
@@ -427,7 +429,7 @@ public sealed partial class InteractionAckTest
     {
         AckWorld world = BuildWorld();
         world.Action.Automatic = true;
-        world.Executor.Result = new InteractionExecutionRejected("The till is closed.");
+        world.Executor.Result = new GameplayActionExecutionRejected("The till is closed.");
         await world.Runner.SimulateFrames(1);
         world.Focus();
 
@@ -462,7 +464,7 @@ public sealed partial class InteractionAckTest
         interactive.Actions.Add(action);
         actor.AddChild(area);
         actor.AddChild(interactive);
-        interactive.AddChild(action);
+        interactive.ConfigureActionHost();
 
         Node3D view = new() { Name = "ViewOrigin" };
         InteractionInteractor interactor = new() { Name = "Interactor", OwnerPeerId = 1 };
@@ -470,6 +472,7 @@ public sealed partial class InteractionAckTest
         TestInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
         interactor.AddChild(detector);
         interactor.Detector = detector;
+        interactor.ConfigureActionRunner();
         world.AddChild(actor);
         world.AddChild(interactor);
 

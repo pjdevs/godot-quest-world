@@ -15,7 +15,7 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
 {
     internal InteractionAction? InteractionAction { get; set; }
 
-    public abstract InteractionExecutionResult Execute(in InteractionExecutionContext context);
+    public abstract GameplayActionExecutionResult Execute(in InteractionExecutionContext context);
 
     public sealed override GameplayActionExecutionResult Execute(
         in GameplayActionExecutionContext context
@@ -28,7 +28,7 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
             );
         }
 
-        return Execute(interactionContext).ToGameplayActionExecutionResult();
+        return Execute(interactionContext);
     }
 
     public virtual bool RequiresInteractorPresence => true;
@@ -81,7 +81,7 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
         }
     }
 
-    internal virtual InteractionProgressSample? GetInteractionPredictionSample(
+    internal virtual GameplayActionProgressSample? GetInteractionPredictionSample(
         in InteractionContext context
     ) => null;
 
@@ -102,19 +102,13 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
             return null;
         }
 
-        InteractionProgressSample? sample = GetInteractionPredictionSample(
+        return GetInteractionPredictionSample(
             new InteractionContext(interactor, action.Interactive, action)
         );
-        return sample is InteractionProgressSample value
-            ? new GameplayActionProgressSample(
-                value.ProgressBase,
-                value.ProgressPerSecond,
-                value.Revision
-            )
-            : null;
     }
 
-    protected static InteractionExecutionResult Running() => new InteractionExecutionRunning();
+    protected static GameplayActionExecutionResult Running() =>
+        new GameplayActionExecutionRunning();
 
     private static bool TryAdapt(
         in GameplayActionExecutionContext context,

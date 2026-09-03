@@ -5,7 +5,10 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
+using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Integration.Stateful;
 using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Examples.Rules;
 using QuestWorld.Interaction.Integration.Stateful;
@@ -44,7 +47,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
                     new StringName("activate"),
-                    out InteractionExecutionPresentation presentation
+                    out GameplayActionExecutionPresentation presentation
                 )
             )
             .IsTrue();
@@ -78,7 +81,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
                     new StringName("activate"),
-                    out InteractionExecutionPresentation presentation
+                    out GameplayActionExecutionPresentation presentation
                 )
             )
             .IsTrue();
@@ -232,9 +235,9 @@ public sealed partial class InteractionBehaviorTest
 
         try
         {
-            InteractionExecutionResult result = interactive.ExecuteAction(interactor, action);
+            GameplayActionExecutionResult result = interactive.ExecuteAction(interactor, action);
 
-            AssertThat(result is InteractionExecutionCompleted).IsTrue();
+            AssertThat(result is GameplayActionExecutionCompleted).IsTrue();
         }
         finally
         {
@@ -265,7 +268,7 @@ public sealed partial class InteractionBehaviorTest
         interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
-        interactive.AddChild(action);
+        interactive.ConfigureActionHost();
         InteractionInteractor interactor = new();
         Node3D view = new() { Name = "ViewOrigin" };
         interactor.AddChild(view);
@@ -303,7 +306,7 @@ public sealed partial class InteractionBehaviorTest
         interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
-        interactive.AddChild(action);
+        interactive.ConfigureActionHost();
         InteractionInteractor interactor = new();
         Node3D world = new();
         world.AddChild(owner);
@@ -330,7 +333,7 @@ public sealed partial class InteractionBehaviorTest
         interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
-        interactive.AddChild(action);
+        interactive.ConfigureActionHost();
         InteractionInteractor interactor = new();
         Node3D world = new();
         world.AddChild(owner);
@@ -389,13 +392,13 @@ public sealed partial class InteractionBehaviorTest
                     testWorld.Interactor,
                     testWorld.Action,
                     out ulong executionId
-                ) is InteractionExecutionRunning
+                ) is GameplayActionExecutionRunning
             )
             .IsTrue();
         AssertThat(testWorld.Stateful.State).IsEqual(ActivatingState);
         AssertThat(
                 testWorld.Interactive.ExecuteAction(secondInteractor, testWorld.Action)
-                    is InteractionExecutionRejected
+                    is GameplayActionExecutionRejected
             )
             .IsTrue();
 
@@ -427,12 +430,12 @@ public sealed partial class InteractionBehaviorTest
             door.Interactive.InteractionActionRejected += (_, _, _) => { };
         }
 
-        InteractionExecutionResult result = door.Interactive.ExecuteAction(
+        GameplayActionExecutionResult result = door.Interactive.ExecuteAction(
             door.Interactor,
             door.Open
         );
 
-        AssertThat(result is InteractionExecutionCompleted).IsTrue();
+        AssertThat(result is GameplayActionExecutionCompleted).IsTrue();
         AssertThat(executor.ExecuteCount).IsEqual(1);
         AssertThat(startedCount).IsEqual(3);
         AssertThat(completedCount).IsEqual(3);
@@ -480,12 +483,12 @@ public sealed partial class InteractionBehaviorTest
         testWorld.Interactive.InteractionActionRejected += (_, _, reason) =>
             rejectedReason = reason;
 
-        InteractionExecutionResult result = testWorld.Interactive.ExecuteAction(
+        GameplayActionExecutionResult result = testWorld.Interactive.ExecuteAction(
             testWorld.Interactor,
             inspect
         );
 
-        AssertThat(result is InteractionExecutionRejected).IsTrue();
+        AssertThat(result is GameplayActionExecutionRejected).IsTrue();
         AssertThat(rejectedReason).IsEqual("This is already in use.");
         AssertThat(ExecutorOf(inspect).ExecuteCount).IsEqual(0);
         AssertThat(testWorld.Owner.StartCount).IsEqual(1);
@@ -509,7 +512,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        ExecutorOf(door.Open).Result = new InteractionExecutionRejected("The hinges are stuck.");
+        ExecutorOf(door.Open).Result = new GameplayActionExecutionRejected("The hinges are stuck.");
         List<string> notifications = new();
         string rejectedReason = string.Empty;
         door.Interactive.InteractionActionStarted += (_, _) => notifications.Add("started");
@@ -521,12 +524,12 @@ public sealed partial class InteractionBehaviorTest
             rejectedReason = reason;
         };
 
-        InteractionExecutionResult result = door.Interactive.ExecuteAction(
+        GameplayActionExecutionResult result = door.Interactive.ExecuteAction(
             door.Interactor,
             door.Open
         );
 
-        AssertThat(result is InteractionExecutionRejected).IsTrue();
+        AssertThat(result is GameplayActionExecutionRejected).IsTrue();
         AssertThat(string.Join(",", notifications)).IsEqual("rejected");
         AssertThat(rejectedReason).IsEqual("The hinges are stuck.");
         AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
@@ -537,7 +540,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        ExecutorOf(door.Open).Result = new InteractionExecutionFailed("The door came off.");
+        ExecutorOf(door.Open).Result = new GameplayActionExecutionFailed("The door came off.");
         List<string> notifications = new();
         string failedReason = string.Empty;
         door.Interactive.InteractionActionStarted += (_, _) => notifications.Add("started");
@@ -549,12 +552,12 @@ public sealed partial class InteractionBehaviorTest
             failedReason = reason;
         };
 
-        InteractionExecutionResult result = door.Interactive.ExecuteAction(
+        GameplayActionExecutionResult result = door.Interactive.ExecuteAction(
             door.Interactor,
             door.Open
         );
 
-        AssertThat(result is InteractionExecutionFailed).IsTrue();
+        AssertThat(result is GameplayActionExecutionFailed).IsTrue();
         AssertThat(string.Join(",", notifications)).IsEqual("started,failed");
         AssertThat(failedReason).IsEqual("The door came off.");
         AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
@@ -565,7 +568,7 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        InteractionActionExecutor executor = door.Open.Executor!;
+        GameplayActionExecutor executor = door.Open.Executor!;
         door.Open.Executor = null;
         int rejectedCount = 0;
         int startedCount = 0;
@@ -576,13 +579,13 @@ public sealed partial class InteractionBehaviorTest
             door.Interactor,
             door.Open
         );
-        InteractionExecutionResult result = door.Interactive.ExecuteAction(
+        GameplayActionExecutionResult result = door.Interactive.ExecuteAction(
             door.Interactor,
             door.Open
         );
 
         AssertThat(Describe(availability)).IsEqual("Interaction is not configured.");
-        AssertThat(result is InteractionExecutionRejected).IsTrue();
+        AssertThat(result is GameplayActionExecutionRejected).IsTrue();
         AssertThat(((RecordingInteractionExecutor)executor).ExecuteCount).IsEqual(0);
         AssertThat(rejectedCount).IsEqual(1);
         AssertThat(startedCount).IsEqual(0);
@@ -617,7 +620,7 @@ public sealed partial class InteractionBehaviorTest
         testWorld.Stateful.SetState(IdleState);
         AssertThat(
                 testWorld.Interactive.ExecuteAction(secondInteractor, testWorld.Action)
-                    is InteractionExecutionRunning
+                    is GameplayActionExecutionRunning
             )
             .IsTrue();
     }
@@ -636,7 +639,7 @@ public sealed partial class InteractionBehaviorTest
         interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
-        interactive.AddChild(action);
+        interactive.ConfigureActionHost();
         owner.Interactive = interactive;
         InteractionInteractor interactor = new();
         Node3D world = new();
@@ -648,7 +651,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(interactive.EvaluateAvailability(interactor) is InteractionAllowed).IsTrue();
         AssertThat(
                 interactive.ExecuteAction(interactor, action, out ulong executionId)
-                    is InteractionExecutionCompleted
+                    is GameplayActionExecutionCompleted
             )
             .IsTrue();
         AssertThat(interactive.ActiveInteractor == null).IsTrue();
@@ -906,7 +909,8 @@ public sealed partial class InteractionBehaviorTest
             AssertThat(interactive.EvaluateAvailability(interactor) is InteractionHidden).IsTrue();
             AssertThat(interactive.ResolveAction(new StringName("foreign")) == null).IsTrue();
             AssertThat(
-                    interactive.ExecuteAction(interactor, foreign) is InteractionExecutionRejected
+                    interactive.ExecuteAction(interactor, foreign)
+                        is GameplayActionExecutionRejected
                 )
                 .IsTrue();
             AssertThat(ExecutorOf(foreign).ExecuteCount).IsEqual(0);
@@ -1201,7 +1205,7 @@ public sealed partial class InteractionBehaviorTest
         InteractionAction alternative = CreateAction("alternative");
         // A group of its own, so the running execution leaves it available and a fresh resolution
         // really would pick it. Sharing the default group would block it like everything else.
-        alternative.ConcurrencyGroup = new StringName("inspection");
+        alternative.HostConcurrencyGroup = new StringName("inspection");
         AddAction(testWorld.Interactive, alternative);
         testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
@@ -1403,13 +1407,13 @@ public sealed partial class InteractionBehaviorTest
             door.Interactor,
             InteractInput
         );
-        InteractionExecutionResult openResult = door.Interactive.ExecuteAction(
+        GameplayActionExecutionResult openResult = door.Interactive.ExecuteAction(
             door.Interactor,
             first!
         );
 
         AssertThat(first == door.Open).IsTrue();
-        AssertThat(openResult is InteractionExecutionCompleted).IsTrue();
+        AssertThat(openResult is GameplayActionExecutionCompleted).IsTrue();
         AssertThat(door.State.State.ToString()).IsEqual("open");
         AssertThat(stateChanges).IsEqual(1);
 
@@ -1417,13 +1421,13 @@ public sealed partial class InteractionBehaviorTest
             door.Interactor,
             InteractInput
         );
-        InteractionExecutionResult closeResult = door.Interactive.ExecuteAction(
+        GameplayActionExecutionResult closeResult = door.Interactive.ExecuteAction(
             door.Interactor,
             second!
         );
 
         AssertThat(second == door.Close).IsTrue();
-        AssertThat(closeResult is InteractionExecutionCompleted).IsTrue();
+        AssertThat(closeResult is GameplayActionExecutionCompleted).IsTrue();
         AssertThat(door.State.State.ToString()).IsEqual("closed");
         AssertThat(stateChanges).IsEqual(2);
         AssertThat(door.Interactive.ActiveInteractor == null).IsTrue();
@@ -1434,17 +1438,15 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        SetStateInteractionExecutor executor = new()
+        SetStateGameplayActionExecutor executor = new()
         {
             Stateful = door.State,
             TargetState = new StringName("closed"),
         };
 
-        InteractionExecutionResult result = executor.Execute(
-            new InteractionExecutionContext(1, door.Interactor, door.Interactive, door.Open)
-        );
+        GameplayActionExecutionResult result = executor.Execute(DoorContext(door));
 
-        AssertThat(result is InteractionExecutionFailed).IsTrue();
+        AssertThat(result is GameplayActionExecutionFailed).IsTrue();
         AssertThat(door.State.State.ToString()).IsEqual("closed");
         executor.Free();
     }
@@ -1454,17 +1456,17 @@ public sealed partial class InteractionBehaviorTest
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        SetStateInteractionExecutor orphan = new() { TargetState = new StringName("open") };
+        SetStateGameplayActionExecutor orphan = new() { TargetState = new StringName("open") };
         door.State.Schema = new StateSchema { States = States("closed", "open") };
-        SetStateInteractionExecutor undeclared = new()
+        SetStateGameplayActionExecutor undeclared = new()
         {
             Stateful = door.State,
             TargetState = new StringName("melted"),
         };
-        InteractionExecutionContext context = new(1, door.Interactor, door.Interactive, door.Open);
+        GameplayActionExecutionContext context = DoorContext(door);
 
-        AssertThat(orphan.Execute(context) is InteractionExecutionFailed).IsTrue();
-        AssertThat(undeclared.Execute(context) is InteractionExecutionFailed).IsTrue();
+        AssertThat(orphan.Execute(context) is GameplayActionExecutionFailed).IsTrue();
+        AssertThat(undeclared.Execute(context) is GameplayActionExecutionFailed).IsTrue();
         AssertThat(door.State.State.ToString()).IsEqual("closed");
         orphan.Free();
         undeclared.Free();
@@ -1479,7 +1481,7 @@ public sealed partial class InteractionBehaviorTest
             States = States("idle", "working", "completed"),
         };
         InteractionAction action = NewAction("transition", Array.Empty<InteractionRule>());
-        TransitionStateInteractionExecutor executor = new()
+        TransitionStateGameplayActionExecutor executor = new()
         {
             Name = "TransitionExecutor",
             Stateful = testWorld.Stateful,
@@ -1500,7 +1502,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
                     action.Definition!.Id,
-                    out InteractionExecutionPresentation presentation
+                    out GameplayActionExecutionPresentation presentation
                 )
             )
             .IsTrue();
@@ -1516,7 +1518,7 @@ public sealed partial class InteractionBehaviorTest
         TestWorld testWorld = BuildWorld();
         testWorld.Stateful.Schema = new StateSchema { States = States("idle", "working") };
         InteractionAction action = NewAction("transition", Array.Empty<InteractionRule>());
-        TransitionStateInteractionExecutor executor = new()
+        TransitionStateGameplayActionExecutor executor = new()
         {
             Name = "TransitionExecutor",
             Stateful = testWorld.Stateful,
@@ -1543,7 +1545,7 @@ public sealed partial class InteractionBehaviorTest
         TestWorld testWorld = BuildWorld();
         InteractionAction inspect = CreateAction("inspect");
         inspect.Definition!.InputActionName = new StringName("inspect");
-        inspect.ConcurrencyGroup = new StringName("inspection");
+        inspect.HostConcurrencyGroup = new StringName("inspection");
         InteractionAction pickup = CreateAction("pickup");
         pickup.Automatic = true;
         AddAction(testWorld.Interactive, inspect);
@@ -1584,7 +1586,7 @@ public sealed partial class InteractionBehaviorTest
 
         // The shape of a dialogue: the executor opens it and holds the execution with no deadline,
         // until whatever owns the conversation completes it.
-        ExecutorOf(door.Open).Result = new InteractionExecutionRunning();
+        ExecutorOf(door.Open).Result = new GameplayActionExecutionRunning();
         door.Interactive.ExecuteAction(door.Interactor, door.Open, out ulong executionId);
 
         InteractionTargetPresentation owner = door.Interactive.GetPresentation(
@@ -1626,24 +1628,24 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
-        testWorld.Action.ConcurrencyGroup = new StringName("controls");
+        testWorld.Action.HostConcurrencyGroup = new StringName("controls");
         testWorld.Interactive.ExecuteAction(
             testWorld.Interactor,
             testWorld.Action,
             out ulong controls
         );
         InteractionAction inspect = CreateAction("inspect");
-        inspect.ConcurrencyGroup = new StringName("inspection");
+        inspect.HostConcurrencyGroup = new StringName("inspection");
         AddAction(testWorld.Interactive, inspect);
-        ExecutorOf(inspect).Result = new InteractionExecutionRunning();
+        ExecutorOf(inspect).Result = new GameplayActionExecutionRunning();
 
-        InteractionExecutionResult result = testWorld.Interactive.ExecuteAction(
+        GameplayActionExecutionResult result = testWorld.Interactive.ExecuteAction(
             testWorld.Interactor,
             inspect,
             out ulong inspection
         );
 
-        AssertThat(result is InteractionExecutionRunning).IsTrue();
+        AssertThat(result is GameplayActionExecutionRunning).IsTrue();
         AssertThat(testWorld.Interactive.IsExecutionActive(controls)).IsTrue();
         AssertThat(testWorld.Interactive.IsExecutionActive(inspection)).IsTrue();
         AssertThat(inspection == controls).IsFalse();
@@ -1656,12 +1658,12 @@ public sealed partial class InteractionBehaviorTest
         await testWorld.Runner.SimulateFrames(1);
         InteractionAction hack = CreateAction("hack");
         InteractionAction inspect = CreateAction("inspect");
-        hack.ConcurrencyGroup = new StringName("controls");
-        inspect.ConcurrencyGroup = new StringName("inspection");
+        hack.HostConcurrencyGroup = new StringName("controls");
+        inspect.HostConcurrencyGroup = new StringName("inspection");
         AddAction(testWorld.Interactive, hack);
         AddAction(testWorld.Interactive, inspect);
-        ExecutorOf(hack).Result = new InteractionExecutionRunning();
-        ExecutorOf(inspect).Result = new InteractionExecutionRunning();
+        ExecutorOf(hack).Result = new GameplayActionExecutionRunning();
+        ExecutorOf(inspect).Result = new GameplayActionExecutionRunning();
         testWorld.Interactive.ExecuteAction(testWorld.Interactor, hack, out ulong hackId);
         testWorld.Interactive.ExecuteAction(testWorld.Interactor, inspect, out ulong inspectId);
 
@@ -1763,7 +1765,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
                     testWorld.Action.Definition!.Id,
-                    out InteractionExecutionPresentation startedPresentation
+                    out GameplayActionExecutionPresentation startedPresentation
                 )
             )
             .IsTrue();
@@ -1848,23 +1850,23 @@ public sealed partial class InteractionBehaviorTest
         TestActivationExecutor executor = ActivationExecutorOf(testWorld.Action);
         executor.Duration = 0.05f;
         InteractionAction second = NewAction("second", Array.Empty<InteractionRule>());
-        second.ConcurrencyGroup = new StringName("other");
+        second.HostConcurrencyGroup = new StringName("other");
         second.Executor = executor;
         AddAction(testWorld.Interactive, second);
         await testWorld.Runner.SimulateFrames(1);
 
-        InteractionExecutionResult firstResult = testWorld.Interactive.ExecuteAction(
+        GameplayActionExecutionResult firstResult = testWorld.Interactive.ExecuteAction(
             testWorld.Interactor,
             testWorld.Action,
             out ulong firstExecutionId
         );
-        InteractionExecutionResult secondResult = testWorld.Interactive.ExecuteAction(
+        GameplayActionExecutionResult secondResult = testWorld.Interactive.ExecuteAction(
             testWorld.Interactor,
             second
         );
 
-        AssertThat(firstResult is InteractionExecutionRunning).IsTrue();
-        AssertThat(secondResult is InteractionExecutionFailed).IsTrue();
+        AssertThat(firstResult is GameplayActionExecutionRunning).IsTrue();
+        AssertThat(secondResult is GameplayActionExecutionFailed).IsTrue();
 
         for (
             int frame = 0;
@@ -1885,13 +1887,13 @@ public sealed partial class InteractionBehaviorTest
         ActivationExecutorOf(testWorld.Action).Duration = 0.0f;
         await testWorld.Runner.SimulateFrames(1);
 
-        InteractionExecutionResult result = testWorld.Interactive.ExecuteAction(
+        GameplayActionExecutionResult result = testWorld.Interactive.ExecuteAction(
             testWorld.Interactor,
             testWorld.Action,
             out ulong executionId
         );
 
-        AssertThat(result is InteractionExecutionFailed).IsTrue();
+        AssertThat(result is GameplayActionExecutionFailed).IsTrue();
         AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsFalse();
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
@@ -1909,13 +1911,13 @@ public sealed partial class InteractionBehaviorTest
         ActivationExecutorOf(testWorld.Action).Duration = float.NaN;
         await testWorld.Runner.SimulateFrames(1);
 
-        InteractionExecutionResult result = testWorld.Interactive.ExecuteAction(
+        GameplayActionExecutionResult result = testWorld.Interactive.ExecuteAction(
             testWorld.Interactor,
             testWorld.Action,
             out ulong executionId
         );
 
-        AssertThat(result is InteractionExecutionFailed).IsTrue();
+        AssertThat(result is GameplayActionExecutionFailed).IsTrue();
         AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsFalse();
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
@@ -1932,7 +1934,7 @@ public sealed partial class InteractionBehaviorTest
         TestWorld testWorld = BuildWorld();
         InteractionAction action = CreateAction("hack");
         AddAction(testWorld.Interactive, action);
-        ExecutorOf(action).Result = new InteractionExecutionRunning();
+        ExecutorOf(action).Result = new GameplayActionExecutionRunning();
         await testWorld.Runner.SimulateFrames(1);
 
         testWorld.Interactive.ExecuteAction(testWorld.Interactor, action, out ulong executionId);
@@ -1947,7 +1949,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
                     action.Definition!.Id,
-                    out InteractionExecutionPresentation sourcedPresentation
+                    out GameplayActionExecutionPresentation sourcedPresentation
                 )
             )
             .IsTrue();
@@ -1958,7 +1960,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
                     action.Definition!.Id,
-                    out InteractionExecutionPresentation presentation
+                    out GameplayActionExecutionPresentation presentation
                 )
             )
             .IsTrue();
@@ -1992,11 +1994,11 @@ public sealed partial class InteractionBehaviorTest
     public async Task ReplicatedSnapshotAppliesCurrentProgressRejectsStaleStateAndRemovesAbsence()
     {
         TestWorld authority = BuildWorld();
-        authority.Action.ExecutionVisibility = InteractionExecutionVisibility.Replicated;
+        authority.Action.ExecutionVisibility = GameplayActionExecutionVisibility.Replicated;
         InteractiveComponent receiver = AddPresentationReceiver(
             authority.World,
             authority.Action.Definition!.Id,
-            InteractionExecutionVisibility.Replicated
+            GameplayActionExecutionVisibility.Replicated
         );
         await authority.Runner.SimulateFrames(1);
         authority.Interactive.ExecuteAction(
@@ -2004,15 +2006,21 @@ public sealed partial class InteractionBehaviorTest
             authority.Action,
             out ulong executionId
         );
-        InteractionExecutionSynchronizer source = new() { Interactive = authority.Interactive };
-        InteractionExecutionSynchronizer destination = new() { Interactive = receiver };
+        GameplayActionExecutionSynchronizer source = new()
+        {
+            Component = authority.Interactive.ActionComponent,
+        };
+        GameplayActionExecutionSynchronizer destination = new()
+        {
+            Component = receiver.ActionComponent,
+        };
 
         Godot.Collections.Dictionary started = source.CaptureSnapshot();
         AssertThat(destination.ApplySnapshot(started)).IsTrue();
         AssertThat(
                 receiver.TryGetExecutionPresentation(
                     authority.Action.Definition.Id,
-                    out InteractionExecutionPresentation initial
+                    out GameplayActionExecutionPresentation initial
                 )
             )
             .IsTrue();
@@ -2025,7 +2033,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(
                 receiver.TryGetExecutionPresentation(
                     authority.Action.Definition.Id,
-                    out InteractionExecutionPresentation current
+                    out GameplayActionExecutionPresentation current
                 )
             )
             .IsTrue();
@@ -2043,7 +2051,7 @@ public sealed partial class InteractionBehaviorTest
         TestWorld testWorld = BuildWorld();
         InteractionAction repair = CreateAction("repair");
         AddAction(testWorld.Interactive, repair);
-        ExecutorOf(repair).Result = new InteractionExecutionRunning();
+        ExecutorOf(repair).Result = new GameplayActionExecutionRunning();
         Node participantA = new() { Name = "ParticipantA" };
         Node participantB = new() { Name = "ParticipantB" };
         testWorld.World.AddChild(participantA);
@@ -2075,7 +2083,7 @@ public sealed partial class InteractionBehaviorTest
         InteractionAction action = CreateAction("fail");
         AddAction(testWorld.Interactive, action);
         RecordingInteractionExecutor executor = ExecutorOf(action);
-        executor.Result = new InteractionExecutionRunning();
+        executor.Result = new GameplayActionExecutionRunning();
         await testWorld.Runner.SimulateFrames(1);
         List<string> notifications = new();
         testWorld.Interactive.InteractionActionFailed += (_, _, reason) =>
@@ -2189,7 +2197,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
                     testWorld.Action.Definition!.Id,
-                    out InteractionExecutionPresentation presentation
+                    out GameplayActionExecutionPresentation presentation
                 )
             )
             .IsTrue();
@@ -2307,7 +2315,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(
                 testWorld.Interactive.TryGetExecutionPresentation(
                     new StringName("activate"),
-                    out InteractionExecutionPresentation activation
+                    out GameplayActionExecutionPresentation activation
                 )
             )
             .IsTrue();
@@ -2366,8 +2374,8 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(doorsOpened).IsEqual(1);
 
         // The two phases differ only by authored data: same generic executor, same generic rules.
-        AssertThat(core.Activate.Executor is TimedTransitionStateInteractionExecutor).IsTrue();
-        AssertThat(core.Reactivate.Executor is TimedTransitionStateInteractionExecutor).IsTrue();
+        AssertThat(core.Activate.Executor is TimedTransitionStateGameplayActionExecutor).IsTrue();
+        AssertThat(core.Reactivate.Executor is TimedTransitionStateGameplayActionExecutor).IsTrue();
     }
 
     private static async Task WaitUntilExecutionEnds(CoreWorld core, ulong executionId)
@@ -2431,8 +2439,7 @@ public sealed partial class InteractionBehaviorTest
         reactor.AddChild(area);
         reactor.AddChild(state);
         reactor.AddChild(interactive);
-        interactive.AddChild(activate);
-        interactive.AddChild(reactivate);
+        interactive.ConfigureActionHost();
 
         Node3D view = new() { Name = "ViewOrigin" };
         InteractionInteractor interactor = new() { Name = "Interactor" };
@@ -2466,7 +2473,7 @@ public sealed partial class InteractionBehaviorTest
     )
     {
         InteractionAction action = NewAction(id, rules);
-        TimedTransitionStateInteractionExecutor executor = new()
+        TimedTransitionStateGameplayActionExecutor executor = new()
         {
             Name = $"{id}Executor",
             Stateful = stateful,
@@ -2515,7 +2522,7 @@ public sealed partial class InteractionBehaviorTest
         owner.AddChild(area);
         owner.AddChild(stateful);
         owner.AddChild(interactive);
-        interactive.AddChild(action);
+        interactive.ConfigureActionHost();
         interactive.InteractionActionCancelled += owner.OnInteractionActionCancelled;
         stateful.StateChangedAuthority += owner.OnStateChangedAuthority;
         stateful.StateChangedPresentation += owner.OnStateChangedPresentation;
@@ -2549,29 +2556,20 @@ public sealed partial class InteractionBehaviorTest
         TestInteractionDetector detector = new() { Name = "Detector", ViewOrigin = viewOrigin };
         interactor.AddChild(detector);
         interactor.Detector = detector;
+        interactor.ConfigureActionRunner();
         return detector;
     }
 
     private static void AddAction(InteractiveComponent interactive, InteractionAction action)
     {
         interactive.Actions.Add(action);
-        if (
-            interactive.ActionComponent is GameplayActionComponent component
-            && component.IsInsideTree()
-        )
-        {
-            action.PrepareForInteractive(interactive, interactive.TargetRules);
-            component.AddAction(action);
-            return;
-        }
-
-        interactive.AddChild(action);
+        interactive.ConfigureActionHost();
     }
 
     private static InteractiveComponent AddPresentationReceiver(
         Node parent,
         StringName actionId,
-        InteractionExecutionVisibility visibility
+        GameplayActionExecutionVisibility visibility
     )
     {
         Node3D actor = new() { Name = "PresentationReceiver" };
@@ -2588,7 +2586,7 @@ public sealed partial class InteractionBehaviorTest
         interactive.Actions.Add(action);
         actor.AddChild(area);
         actor.AddChild(interactive);
-        interactive.AddChild(action);
+        interactive.ConfigureActionHost();
         parent.AddChild(actor);
         return interactive;
     }
@@ -2665,13 +2663,23 @@ public sealed partial class InteractionBehaviorTest
         return array;
     }
 
+    private static GameplayActionExecutionContext DoorContext(DoorWorld door) =>
+        new(
+            1,
+            door.Interactor,
+            door.Interactor.Runner,
+            door.Interactive.ActionComponent!,
+            door.Open,
+            GameplayActionInvocationKind.Programmatic
+        );
+
     private static void BindSetStateExecutor(
         InteractionAction action,
         StatefulComponent stateful,
         string targetState
     )
     {
-        SetStateInteractionExecutor executor = new()
+        SetStateGameplayActionExecutor executor = new()
         {
             Name = $"{action.Name}SetState",
             Stateful = stateful,
@@ -2738,8 +2746,7 @@ public sealed partial class InteractionBehaviorTest
         door.AddChild(area);
         door.AddChild(state);
         door.AddChild(interactive);
-        interactive.AddChild(open);
-        interactive.AddChild(close);
+        interactive.ConfigureActionHost();
 
         Node3D view = new() { Name = "ViewOrigin" };
         InteractionInteractor interactor = new() { Name = "Interactor" };
@@ -2830,16 +2837,16 @@ public sealed partial class InteractionBehaviorTest
         public int AuthorityStateChanges { get; private set; }
         public int PresentationStateChanges { get; private set; }
 
-        public InteractionExecutionResult BeginActivation()
+        public GameplayActionExecutionResult BeginActivation()
         {
             StartCount++;
             if (Stateful is null)
             {
-                return new InteractionExecutionCompleted();
+                return new GameplayActionExecutionCompleted();
             }
 
             Stateful.SetState(ActivatingState);
-            return new InteractionExecutionRunning();
+            return new GameplayActionExecutionRunning();
         }
 
         public void OnInteractionActionCancelled(
@@ -2879,27 +2886,32 @@ public sealed partial class InteractionBehaviorTest
 
         public override bool RequiresInteractorPresence => RequiresPresence;
 
-        public override InteractionExecutionResult Execute(in InteractionExecutionContext context)
+        public override GameplayActionExecutionResult Execute(
+            in InteractionExecutionContext context
+        )
         {
             if (Actor is null)
             {
-                return new InteractionExecutionFailed("No actor.");
+                return new GameplayActionExecutionFailed("No actor.");
             }
 
-            InteractionExecutionResult result = Actor.BeginActivation();
-            if (result is not InteractionExecutionRunning || !Duration.HasValue)
+            GameplayActionExecutionResult result = Actor.BeginActivation();
+            if (result is not GameplayActionExecutionRunning || !Duration.HasValue)
             {
                 return result;
             }
 
             return
-                _timedExecution.Start(context.Interactive, context.ExecutionId, Duration.Value)
-                == TimedExecutionStartResult.Started
+                _timedExecution.Start(
+                    context.Interactive.ActionComponent!,
+                    context.ExecutionId,
+                    Duration.Value
+                ) == TimedExecutionStartResult.Started
                 ? Running()
-                : new InteractionExecutionFailed("The activation timer could not start.");
+                : new GameplayActionExecutionFailed("The activation timer could not start.");
         }
 
-        internal override InteractionProgressSample? GetInteractionPredictionSample(
+        internal override GameplayActionProgressSample? GetInteractionPredictionSample(
             in InteractionContext context
         ) => Duration.HasValue ? TimedExecution.BuildPredictionSample(Duration.Value) : null;
 
@@ -2924,20 +2936,22 @@ public sealed partial class InteractionBehaviorTest
 
         public TimedExecution Timer { get; } = new();
 
-        public override InteractionExecutionResult Execute(in InteractionExecutionContext context)
+        public override GameplayActionExecutionResult Execute(
+            in InteractionExecutionContext context
+        )
         {
             return
-                Timer.Start(context.Interactive, context.ExecutionId, Duration)
+                Timer.Start(context.Interactive.ActionComponent!, context.ExecutionId, Duration)
                 == TimedExecutionStartResult.Started
                 ? Running()
-                : new InteractionExecutionFailed("The timer could not start.");
+                : new GameplayActionExecutionFailed("The timer could not start.");
         }
     }
 
     private sealed partial class RecordingInteractionExecutor : InteractionActionExecutor
     {
-        public InteractionExecutionResult Result { get; set; } =
-            new InteractionExecutionCompleted();
+        public GameplayActionExecutionResult Result { get; set; } =
+            new GameplayActionExecutionCompleted();
 
         public int ExecuteCount { get; private set; }
 
@@ -2959,7 +2973,9 @@ public sealed partial class InteractionBehaviorTest
 
         public string LastFailureReason { get; private set; } = string.Empty;
 
-        public override InteractionExecutionResult Execute(in InteractionExecutionContext context)
+        public override GameplayActionExecutionResult Execute(
+            in InteractionExecutionContext context
+        )
         {
             ExecuteCount++;
             LastInteractor = context.Interactor;
@@ -3033,7 +3049,7 @@ public sealed partial class InteractionBehaviorTest
         public float Read() =>
             _interactive.TryGetExecutionPresentation(
                 _actionId,
-                out InteractionExecutionPresentation presentation
+                out GameplayActionExecutionPresentation presentation
             )
                 ? presentation.Progress ?? 0.0f
                 : 0.0f;

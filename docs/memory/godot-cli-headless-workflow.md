@@ -23,6 +23,10 @@ dotnet build quest-world.sln
 - When that access is required, request escalated `dotnet build`, `dotnet test` or Godot execution directly instead of creating repository-local NuGet or CLI workarounds.
 - Godot headless may fail while opening `user://logs`; always pass a writable `--log-file` for scripted validation.
 - Headless runs can return code `0` while printing non-fatal environment errors such as the root certificate-store warning or editor-settings write errors. Inspect the output and log, not only the exit code.
+- macOS has no `timeout` command. Wrapping a headless run in `timeout ...` fails with
+  `command not found`, and piping that through a `grep -i error` filter hides the failure: the check
+  reports clean while never having run. Redirect the run to a log file, assert on the exit code, then
+  inspect the log — never conclude from a filtered stream alone.
 - Do not commit temporary NuGet or dotnet-home workarounds used only to get around the managed environment.
 
 ## GdUnit4 C# projects

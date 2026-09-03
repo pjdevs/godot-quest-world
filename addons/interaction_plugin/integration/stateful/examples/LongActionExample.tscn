@@ -10,8 +10,9 @@
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="7_action"]
 [ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="8_actiondef"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="9_staterule"]
-[ext_resource type="Script" path="res://addons/interaction_plugin/integration/stateful/TimedTransitionStateInteractionExecutor.cs" id="10_executor"]
-[ext_resource type="Script" uid="uid://bh3lpwhoij01g" path="res://addons/interaction_plugin/runtime/interactive/InteractionExecutionSynchronizer.cs" id="11_execution_sync"]
+[ext_resource type="Script" uid="uid://bir8pc65gbklo" path="res://addons/gameplay_action_plugin/integration/stateful/TimedTransitionStateGameplayActionExecutor.cs" id="10_executor"]
+[ext_resource type="Script" uid="uid://bma1jjw2w4xn3" path="res://addons/gameplay_action_plugin/runtime/execution/GameplayActionExecutionSynchronizer.cs" id="11_execution_sync"]
+[ext_resource type="Script" uid="uid://dwmqsp6eyk4gd" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="12_actions"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
 
@@ -80,7 +81,29 @@ debug_color = Color(0, 0.56349266, 0.8623485, 0.41960785)
 
 [node name="InteractionAnchor" type="Marker3D" parent="." unique_id=818464048]
 
-[node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "Actions")]
+[node name="GameplayActions" type="Node" parent="." unique_id=1343342869 node_paths=PackedStringArray("Actions")]
+script = ExtResource("12_actions")
+Actions = [NodePath("ActivateAction")]
+metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
+
+[node name="ActivateAction" type="Node" parent="GameplayActions" node_paths=PackedStringArray("Executor")]
+script = ExtResource("7_action")
+Definition = SubResource("Resource_activate_definition")
+Executor = NodePath("ActivateExecutor")
+Rules = Array[ExtResource("5_ll77h")]([SubResource("Resource_activate_phase_rule"), SubResource("Resource_activate_ready_rule")])
+ExecutionVisibility = 1
+metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+
+[node name="ActivateExecutor" type="Node" parent="GameplayActions/ActivateAction" node_paths=PackedStringArray("Stateful")]
+script = ExtResource("10_executor")
+Stateful = NodePath("../../../StatefulComponent")
+RunningState = &"activating"
+CompletedState = &"activated"
+CancelledState = &"idle"
+Duration = 1.5
+metadata/_custom_type_script = "uid://bir8pc65gbklo"
+
+[node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "ActionComponent", "Actions")]
 script = ExtResource("2_interactive")
 InteractionArea = NodePath("../InteractionArea")
 IndicationArea = NodePath("../IndicationArea")
@@ -89,30 +112,14 @@ DisplayName = "Super Interactive"
 Description = "Interact"
 ActionPromptScene = ExtResource("4_prompt")
 IndicationScene = ExtResource("5_indicator")
-Actions = [NodePath("ActivateAction")]
+ActionComponent = NodePath("../GameplayActions")
+Actions = [NodePath("../GameplayActions/ActivateAction")]
 TargetRules = Array[ExtResource("5_ll77h")]([SubResource("Resource_ll77h")])
 
-[node name="ActivateAction" type="Node" parent="Interactive" node_paths=PackedStringArray("Executor")]
-script = ExtResource("7_action")
-Definition = SubResource("Resource_activate_definition")
-Executor = NodePath("ActivateExecutor")
-Rules = Array[ExtResource("5_ll77h")]([SubResource("Resource_activate_phase_rule"), SubResource("Resource_activate_ready_rule")])
-ExecutionVisibility = 1
-metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
-
-[node name="ActivateExecutor" type="Node" parent="Interactive/ActivateAction" node_paths=PackedStringArray("Stateful")]
-script = ExtResource("10_executor")
-Stateful = NodePath("../../../StatefulComponent")
-RunningState = &"activating"
-CompletedState = &"activated"
-CancelledState = &"idle"
-Duration = 1.5
-metadata/_custom_type_script = "uid://dafaivn8exu7s"
-
-[node name="InteractionExecutionSynchronizer" type="MultiplayerSynchronizer" parent="Interactive" node_paths=PackedStringArray("Interactive")]
+[node name="GameplayActionExecutionSynchronizer" type="MultiplayerSynchronizer" parent="." node_paths=PackedStringArray("Component")]
 script = ExtResource("11_execution_sync")
-Interactive = NodePath("..")
-metadata/_custom_type_script = "uid://bh3lpwhoij01g"
+Component = NodePath("../GameplayActions")
+metadata/_custom_type_script = "uid://bma1jjw2w4xn3"
 
 [node name="StatefulComponent" type="Node" parent="." unique_id=239787997]
 script = ExtResource("3_stateful")

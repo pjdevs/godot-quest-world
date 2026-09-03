@@ -6,6 +6,11 @@ using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
 using InteractionPlugin.Editor;
+using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Editor;
+using QuestWorld.GameplayActions.Integration.Stateful;
+using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Presentation.UI;
@@ -116,9 +121,9 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void LongActionExecutorRequiresTheStateComponentItDrives()
     {
-        TransitionStateInteractionExecutor executor = new();
+        TransitionStateGameplayActionExecutor executor = new();
 
-        string[] warnings = InteractionValidator.Validate(executor).ToArray();
+        string[] warnings = GameplayActionValidator.Validate(executor).ToArray();
 
         AssertThat(warnings.Contains("Stateful must be assigned.")).IsTrue();
     }
@@ -126,9 +131,9 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void TimedStateTransitionRequiresAPositiveFiniteDuration()
     {
-        TimedTransitionStateInteractionExecutor executor = new() { Duration = -1.0f };
+        TimedTransitionStateGameplayActionExecutor executor = new() { Duration = -1.0f };
 
-        string[] warnings = InteractionValidator.Validate(executor).ToArray();
+        string[] warnings = GameplayActionValidator.Validate(executor).ToArray();
 
         AssertThat(warnings.Contains("Duration must be finite and greater than zero.")).IsTrue();
         AssertThat(warnings.Contains("Stateful must be assigned.")).IsTrue();
@@ -181,33 +186,33 @@ public sealed partial class InteractionConfigurationTest
         InteractionAction action = new();
 
         AssertThat(action.ExecutionVisibility)
-            .IsEqual(InteractionExecutionVisibility.RequesterOnly);
+            .IsEqual(GameplayActionExecutionVisibility.RequesterOnly);
     }
 
     [TestCase]
     public void ReplicatedActionRequiresAMatchingExecutionSynchronizer()
     {
         InteractiveComponent interactive = NewConfiguredInteractive();
-        interactive.Actions[0].ExecutionVisibility = InteractionExecutionVisibility.Replicated;
+        interactive.Actions[0].ExecutionVisibility = GameplayActionExecutionVisibility.Replicated;
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
         AssertThat(
                 warnings.Contains(
-                    "Replicated actions require a child InteractionExecutionSynchronizer targeting this InteractiveComponent."
+                    "Replicated actions require a GameplayActionExecutionSynchronizer targeting the assigned ActionComponent."
                 )
             )
             .IsTrue();
     }
 
     [TestCase]
-    public void ExecutionSynchronizerRequiresAnInteractiveTarget()
+    public void ExecutionSynchronizerRequiresAComponent()
     {
-        InteractionExecutionSynchronizer synchronizer = new();
+        GameplayActionExecutionSynchronizer synchronizer = new();
 
-        string[] warnings = InteractionValidator.Validate(synchronizer).ToArray();
+        string[] warnings = GameplayActionValidator.Validate(synchronizer).ToArray();
 
-        AssertThat(warnings.Contains("Interactive must be assigned.")).IsTrue();
+        AssertThat(warnings.Contains("Component must be assigned.")).IsTrue();
     }
 
     [TestCase]
@@ -248,7 +253,8 @@ public sealed partial class InteractionConfigurationTest
         AssertThat(parameters.Length).IsEqual(2);
         AssertThat(parameters[0].ParameterType)
             .IsEqual(typeof(InteractionActionPresentation).MakeByRefType());
-        AssertThat(parameters[1].ParameterType).IsEqual(typeof(InteractionExecutionPresentation?));
+        AssertThat(parameters[1].ParameterType)
+            .IsEqual(typeof(GameplayActionExecutionPresentation?));
     }
 
     [TestCase]
@@ -260,12 +266,13 @@ public sealed partial class InteractionConfigurationTest
                     System.Reflection.BindingFlags.Public
                         | System.Reflection.BindingFlags.Instance
                         | System.Reflection.BindingFlags.DeclaredOnly
-                ) != null
+                ) == null
             )
             .IsTrue();
+        AssertThat(typeof(GameplayAction).GetProperty("Executor") != null).IsTrue();
         AssertThat(typeof(InteractiveComponent).GetMethods().Any(m => m.Name == "ExecuteAction"))
-            .IsTrue();
-        AssertThat(typeof(InteractiveComponent).GetMethod("CompleteExecution") != null).IsTrue();
+            .IsFalse();
+        AssertThat(typeof(InteractiveComponent).GetMethod("CompleteExecution") == null).IsTrue();
         AssertThat(typeof(InteractiveComponent).GetMethod("StartInteraction") == null).IsTrue();
         AssertThat(typeof(InteractiveComponent).GetMethod("StartInteractionPhase") == null)
             .IsTrue();
@@ -277,7 +284,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void LevelWiresTheWallControlButtonToTheStateOfAnotherScene()
     {
-        const string buttonPath = "./Level/Button/InteractiveComponent";
+        const string buttonPath = "./Level/Button/GameplayActions";
         SceneState level = GD.Load<PackedScene>("res://quest_world/levels/test_world.tscn")
             .GetState();
 
@@ -488,7 +495,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void ShortActionExecutorReportsAStateOutsideTheSchema()
     {
-        SetStateInteractionExecutor executor = new()
+        SetStateGameplayActionExecutor executor = new()
         {
             Stateful = new StatefulComponent
             {
@@ -497,7 +504,7 @@ public sealed partial class InteractionConfigurationTest
             TargetState = "open",
         };
 
-        string[] warnings = InteractionValidator.Validate(executor).ToArray();
+        string[] warnings = GameplayActionValidator.Validate(executor).ToArray();
 
         AssertThat(warnings.Contains("TargetState 'open' is absent from the assigned StateSchema."))
             .IsTrue();
@@ -505,16 +512,22 @@ public sealed partial class InteractionConfigurationTest
 
     private static InteractiveComponent NewConfiguredInteractive()
     {
-        return new()
+        InteractionAction action = NewAction(new InteractionActionDefinition { Id = "open" });
+        GameplayActionComponent component = new() { Actions = { action } };
+        InteractiveComponent interactive = new()
         {
             InteractionArea = new Area3D(),
             InteractionAnchor = new Node3D(),
-            Actions = new() { NewAction(new InteractionActionDefinition { Id = "open" }) },
+            ActionComponent = component,
+            Actions = new() { action },
         };
+        action.PrepareForInteractive(interactive, interactive.TargetRules);
+        component.AddAction(action);
+        return interactive;
     }
 
     private static InteractionAction NewAction(InteractionActionDefinition definition)
     {
-        return new() { Definition = definition, Executor = new SetStateInteractionExecutor() };
+        return new() { Definition = definition, Executor = new SetStateGameplayActionExecutor() };
     }
 }

@@ -54,13 +54,16 @@ Door
 ├── IndicationArea           optional wider Area3D
 │   └── CollisionShape3D
 ├── InteractionAnchor        Marker3D
-├── Interactive              InteractiveComponent
+├── GameplayActions          GameplayActionComponent; hosts every action
 │   └── OpenAction           InteractionAction
 │       └── OpenExecutor     InteractionActionExecutor
+├── Interactive              InteractiveComponent
 └── StatefulComponent        optional world state
 ```
 
-On `InteractiveComponent`, assign `InteractionArea`, `InteractionAnchor`, and every `InteractionAction` explicitly in `Actions`. Nothing is discovered by node name or tree search.
+Execution is owned by the generic `gameplay_action_plugin` add-on: the host is a `GameplayActionComponent` and every action is one of its **direct children**. The host is authored as a **sibling** of `InteractiveComponent`, not below it, so a `NodePath` written from an action or its executor keeps the depth it would have had under the interactive.
+
+On `InteractiveComponent`, assign `InteractionArea`, `InteractionAnchor`, `ActionComponent`, and every `InteractionAction` explicitly in `Actions`. Nothing is discovered by node name or tree search. The host must be assigned before the target enters the tree, because the interactive subscribes to it on `_Ready`; authoring it as an exported `NodePath` does that. A replicated action also needs a `GameplayActionExecutionSynchronizer` beside the host, pointing at it.
 
 `InteractionAnchor` is the single world point used for distance, focus, LOS, and UI projection. `InteractionArea` is currently required for every target: the area detector consumes its body overlaps, the aim detector casts against its collision shape, and the proximity detector ignores its geometry. Configure collision layers/masks accordingly.
 
@@ -75,7 +78,7 @@ An action has two layers:
 
 Keep `Id` stable across builds because it crosses the network, and declare `InputActionName` in the project Input Map. `HoldThreshold` only selects between actions sharing an input; it is not execution duration. `CancelOnInputReleased` makes a running execution depend on that input.
 
-Actions sharing a `ConcurrencyGroup` are mutually exclusive on their own target. The default group makes all actions of a target exclusive. `Automatic` actions request themselves when focused and do not appear as input prompts.
+Actions sharing a `HostConcurrencyGroup` are mutually exclusive on their own target. The default group makes all actions of a target exclusive. `Automatic` actions request themselves when focused and do not appear as input prompts.
 
 ## Write a rule
 
@@ -122,12 +125,12 @@ Subclass `InteractionActionExecutor` for the one object that mutates gameplay:
 ```csharp
 public partial class OpenDoorExecutor : InteractionActionExecutor
 {
-    public override InteractionExecutionResult Execute(
+    public override GameplayActionExecutionResult Execute(
         in InteractionExecutionContext context
     )
     {
         OpenDoor();
-        return new InteractionExecutionCompleted();
+        return new GameplayActionExecutionCompleted();
     }
 }
 ```
@@ -135,7 +138,7 @@ public partial class OpenDoorExecutor : InteractionActionExecutor
 | Member | Required | Called on | When |
 | --- | --- | --- | --- |
 | `Execute(context)` | Yes | Authority only | Once, synchronously, after rules pass and the execution is reserved |
-| `TimedInteractionExecutor.ComputeTimedDuration(context)` | No | Authority and owning client | Pure timed-feature query; must return a positive finite duration |
+| `TimedGameplayActionExecutor.ComputeTimedDuration(context)` | No | Authority and owning client | Pure timed-feature query; must return a positive finite duration |
 | `RequiresInteractorPresence` | No | Authority | Read after a running result; default `true` |
 | `OnExecutionCompleted(context)` | No | Authority only | Once when a previously running execution completes |
 | `OnExecutionCancelled(context, reason)` | No | Authority only | Once when a previously running execution is cancelled |
@@ -143,22 +146,23 @@ public partial class OpenDoorExecutor : InteractionActionExecutor
 
 `Execute` returns one of:
 
-- `InteractionExecutionCompleted`: mutation finished now.
-- `InteractionExecutionRunning`: keep the reservation. Return the payload-free result through the protected `Running()` helper. A timed executor uses `RunningTimed(context)` to register its authoritative clock and linear presentation sample; a generic executor leaves completion to gameplay.
-- `InteractionExecutionRejected(reason)`: nothing started. Use this rarely; ordinary conditions belong in rules.
-- `InteractionExecutionFailed(reason)`: it started but failed, so observers receive started then failed.
+- `GameplayActionExecutionCompleted`: mutation finished now.
+- `GameplayActionExecutionRunning`: keep the reservation. Return the payload-free result through the protected `Running()` helper. A timed executor uses `RunningTimed(context)` to register its authoritative clock and linear presentation sample; a generic executor leaves completion to gameplay.
+- `GameplayActionExecutionRejected(reason)`: nothing started. Use this rarely; ordinary conditions belong in rules.
+- `GameplayActionExecutionFailed(reason)`: it started but failed, so observers receive started then failed.
 
-For an event-driven action such as dialogue, return `Running()`, keep `context.ExecutionId`, and later call `context.Interactive.CompleteExecution(id)`, `CancelExecution(id)` or `FailExecution(id, reason)` from authoritative gameplay.
+For an event-driven action such as dialogue, return `Running()`, keep `context.ExecutionId`, and later call `CompleteExecution(id)`, `CancelExecution(id)` or `FailExecution(id, reason)` on the host — `context.Interactive.ActionComponent` — from authoritative gameplay. The lifecycle belongs to the host: `InteractiveComponent` no longer exposes it.
 
-For timed authoring, inherit `TimedInteractionExecutor` and return `RunningTimed(context)`. When another
-executor hierarchy is already required, compose the same policy directly: keep one `TimedExecution`, call
-`Start(context.Interactive, context.ExecutionId, duration)` and return `Running()` only when the helper
-started. Forward the three terminal callbacks to `TimedExecution.Stop(context.ExecutionId)`. One helper
+For timed authoring, inherit the generic `TimedGameplayActionExecutor` and return `RunningTimed(context)`;
+its context is the generic one, so use it when the executor needs no spatial vocabulary. When an
+`InteractionActionExecutor` is already required, compose the same policy directly: keep one
+`TimedExecution`, call `Start(context.Interactive.ActionComponent!, context.ExecutionId, duration)` and
+return `Running()` only when the helper started. Forward the three terminal callbacks to `TimedExecution.Stop(context.ExecutionId)`. One helper
 owns at most one active clock and refuses reuse instead of abandoning its first execution. Its `Start`
 result distinguishes an active helper, invalid duration, stale execution, and missing scene tree.
 
 Timed duration is a strict contract: zero, negative, NaN, and infinity fail the accepted execution.
-Use `InteractionActionExecutor` (or `TransitionStateInteractionExecutor`) for open-ended gameplay. The
+Use `InteractionActionExecutor` (or `TransitionStateGameplayActionExecutor`) for open-ended gameplay. The
 clock uses monotonic real time on authority and presentation peers, so pausing one node's processing
 does not give the lifecycle and its extrapolated bar different time semantics.
 
@@ -168,9 +172,13 @@ A timed running action delegates its clock to a composed `TimedExecution`, which
 
 | Executor | Use | Cost / trade-off |
 | --- | --- | --- |
-| `SetStateInteractionExecutor` | Apply one state instantly | Constant, event-driven work; fails on a no-op, so pair it with a rule that hides or blocks the already-applied state |
-| `TransitionStateInteractionExecutor` | Apply running/completed/cancelled states until gameplay ends the execution | No timer or progress producer; requiring presence adds one detector validation per server frame. Failure restores the cancelled state. |
-| `TimedTransitionStateInteractionExecutor` | Apply the same three-state transition with timed completion | Composes `TimedExecution`; exports duration and sparse correction interval. |
+These live in the generic add-on, under `addons/gameplay_action_plugin/integration/stateful`, because nothing about them is spatial.
+
+| Executor | Use | Cost / trade-off |
+| --- | --- | --- |
+| `SetStateGameplayActionExecutor` | Apply one state instantly | Constant, event-driven work; fails on a no-op, so pair it with a rule that hides or blocks the already-applied state |
+| `TransitionStateGameplayActionExecutor` | Apply running/completed/cancelled states until gameplay ends the execution | No timer or progress producer; requiring presence adds one detector validation per server frame. Failure restores the cancelled state. |
+| `TimedTransitionStateGameplayActionExecutor` | Apply the same three-state transition with timed completion | Composes `TimedExecution`; exports duration and sparse correction interval. |
 | `TimedExecution` | Add authoritative timing to a custom generic executor | Plain composable helper; owns one active execution clock, local derived progress, sparse samples, and automatic completion. |
 
 ## Choose or write a detector
@@ -296,7 +304,7 @@ selects who receives that transient slot:
 
 - `RequesterOnly` (default) keeps it on the authority and requesting peer;
 - `Replicated` publishes it to visible peers through an explicitly wired child
-  `InteractionExecutionSynchronizer`, including late joiners;
+  `GameplayActionExecutionSynchronizer`, including late joiners;
 - `AuthorityOnly` keeps it on the authority while lifecycle acknowledgements still reach the requester.
 
 The synchronizer replicates presentation samples, not execution authority. Keep persistent world truth in a
@@ -319,4 +327,4 @@ Required references are never guessed from parents, siblings, names, or recursiv
 
 The core is namespaced under `QuestWorld.Interaction` and has no Quest, Inventory, Dialog, Character, Stateful, persistence, or transport abstraction dependency. The optional integration depends on the [`stateful_plugin`](../stateful_plugin/README.md), never the reverse.
 
-[`integration/stateful/examples/LongActionExample.tscn`](integration/stateful/examples/LongActionExample.tscn) is the duplicable reference scene: explicit areas and anchor, default widgets, a replicated `StatefulComponent`, pure state rules, a replicated action with `InteractionExecutionSynchronizer`, and a `TimedTransitionStateInteractionExecutor`, with no script on the scene root. Instant project templates such as Door and Button keep the default requester-only execution presentation because their durable result is already carried by Stateful.
+[`integration/stateful/examples/LongActionExample.tscn`](integration/stateful/examples/LongActionExample.tscn) is the duplicable reference scene: explicit areas and anchor, default widgets, a replicated `StatefulComponent`, pure state rules, a replicated action with `GameplayActionExecutionSynchronizer`, and a `TimedTransitionStateGameplayActionExecutor`, with no script on the scene root. Instant project templates such as Door and Button keep the default requester-only execution presentation because their durable result is already carried by Stateful.

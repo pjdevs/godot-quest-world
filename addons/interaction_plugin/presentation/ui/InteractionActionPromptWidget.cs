@@ -1,5 +1,6 @@
 using System.Linq;
 using Godot;
+using QuestWorld.GameplayActions;
 
 namespace QuestWorld.Interaction.Presentation.UI;
 
@@ -20,7 +21,7 @@ public partial class InteractionActionPromptWidget : PanelContainer, IInteractio
     /// <inheritdoc />
     public void Bind(
         in InteractionActionPresentation presentation,
-        InteractionExecutionPresentation? execution
+        GameplayActionExecutionPresentation? execution
     )
     {
         string actionKey =

@@ -2,6 +2,9 @@
 
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
 using QuestWorld.Interaction.Presentation.UI;
@@ -23,11 +26,7 @@ public static class InteractionValidator
         AreaInteractionDetector,
         InteractionPresenter,
         InteractionAction,
-        InteractionExecutionSynchronizer,
         InteractionActionDefinition,
-        SetStateInteractionExecutor,
-        TransitionStateInteractionExecutor,
-        TimedTransitionStateInteractionExecutor,
         StatefulStateInteractionRule,
     }
 
@@ -49,16 +48,8 @@ public static class InteractionValidator
                 return ValidatePresenter(obj);
             case InspectableType.InteractionAction:
                 return ValidateAction(obj);
-            case InspectableType.InteractionExecutionSynchronizer:
-                return ValidateExecutionSynchronizer(obj);
             case InspectableType.InteractionActionDefinition:
                 return ValidateActionDefinition(obj);
-            case InspectableType.SetStateInteractionExecutor:
-                return ValidateSetStateExecutor(obj);
-            case InspectableType.TransitionStateInteractionExecutor:
-                return ValidateTransitionStateExecutor(obj);
-            case InspectableType.TimedTransitionStateInteractionExecutor:
-                return ValidateTimedTransitionStateExecutor(obj);
             case InspectableType.StatefulStateInteractionRule:
                 return ValidateStatefulRule(obj);
             default:
@@ -75,6 +66,10 @@ public static class InteractionValidator
             yield return "InteractionAnchor must be assigned.";
 
         Godot.Collections.Array actions = GetArray(obj, "Actions");
+        GodotObject? actionComponent = GetObject(obj, "ActionComponent");
+        if (actionComponent is null)
+            yield return "ActionComponent must be assigned.";
+
         if (actions.Count == 0)
             yield return "Actions must declare at least one action.";
 
@@ -101,9 +96,16 @@ public static class InteractionValidator
             if (GetObject(action, "Executor") is null)
                 yield return $"Actions[{index}] has no Executor.";
 
+            if (
+                actionComponent is GameplayActionComponent component
+                && action is InteractionAction interactionAction
+                && interactionAction.Component != component
+            )
+                yield return $"Actions[{index}] must be hosted by the assigned ActionComponent.";
+
             hasReplicatedAction |=
                 GetInt(action, "ExecutionVisibility")
-                == (int)InteractionExecutionVisibility.Replicated;
+                == (int)GameplayActionExecutionVisibility.Replicated;
 
             string id = GetName(definition, "Id");
             if (id.Length == 0)
@@ -141,7 +143,7 @@ public static class InteractionValidator
 
         if (hasReplicatedAction && !HasMatchingExecutionSynchronizer(obj))
         {
-            yield return "Replicated actions require a child InteractionExecutionSynchronizer targeting this InteractiveComponent.";
+            yield return "Replicated actions require a GameplayActionExecutionSynchronizer targeting the assigned ActionComponent.";
         }
 
         foreach (string warning in ValidateRules(obj, obj, "TargetRules"))
@@ -167,6 +169,9 @@ public static class InteractionValidator
         // missing detector is a configuration error rather than a silent fallback.
         if (GetObject(obj, "Detector") is null)
             yield return "Detector must be assigned.";
+
+        if (GetObject(obj, "Runner") is null)
+            yield return "Runner must be assigned.";
     }
 
     private static IEnumerable<string> ValidateDetector(GodotObject obj)
@@ -209,8 +214,11 @@ public static class InteractionValidator
         if (GetObject(obj, "Executor") is null)
             yield return "Executor must be assigned.";
 
-        if (GetName(obj, "ConcurrencyGroup").Length == 0)
-            yield return "ConcurrencyGroup must not be empty.";
+        if (GetName(obj, "HostConcurrencyGroup").Length == 0)
+            yield return "HostConcurrencyGroup must not be empty.";
+
+        if (obj is InteractionAction action && action.Interactive is null)
+            yield return "InteractionAction must be hosted by a matching InteractiveComponent.";
 
         // The rule paths are relative to the owning action, which only that one can resolve.
         foreach (string warning in ValidateRules(obj, null, "Rules"))
@@ -219,24 +227,22 @@ public static class InteractionValidator
         }
     }
 
-    private static IEnumerable<string> ValidateExecutionSynchronizer(GodotObject obj)
-    {
-        if (GetObject(obj, "Interactive") is null)
-            yield return "Interactive must be assigned.";
-    }
-
     private static bool HasMatchingExecutionSynchronizer(GodotObject interactive)
     {
-        if (interactive is not Node node)
+        if (
+            interactive is not Node node
+            || GetObject(interactive, "ActionComponent") is not GameplayActionComponent component
+            || node.GetParent() is not Node parent
+        )
         {
             return false;
         }
 
-        foreach (Node child in node.GetChildren())
+        foreach (Node child in parent.GetChildren())
         {
             if (
-                ResolveType(child) == InspectableType.InteractionExecutionSynchronizer
-                && GetObject(child, "Interactive") == interactive
+                child is GameplayActionExecutionSynchronizer synchronizer
+                && synchronizer.Component == component
             )
             {
                 return true;
@@ -257,64 +263,6 @@ public static class InteractionValidator
 
         if (GetFloat(obj, "HoldThreshold") < 0.0f)
             yield return "HoldThreshold must not be negative.";
-    }
-
-    private static IEnumerable<string> ValidateSetStateExecutor(GodotObject obj)
-    {
-        GodotObject? stateful = GetObject(obj, "Stateful");
-        if (stateful is null)
-        {
-            yield return "Stateful must be assigned.";
-            yield break;
-        }
-
-        string state = GetName(obj, "TargetState");
-        if (state.Length == 0)
-        {
-            yield return "TargetState must be assigned.";
-            yield break;
-        }
-
-        List<string>? states = GetSchemaStates(stateful);
-        if (states is not null && !states.Contains(state))
-            yield return $"TargetState '{state}' is absent from the assigned StateSchema.";
-    }
-
-    private static IEnumerable<string> ValidateTransitionStateExecutor(GodotObject obj)
-    {
-        GodotObject? stateful = GetObject(obj, "Stateful");
-        if (stateful is null)
-        {
-            yield return "Stateful must be assigned.";
-            yield break;
-        }
-
-        List<string>? states = GetSchemaStates(stateful);
-
-        foreach (string property in new[] { "RunningState", "CompletedState", "CancelledState" })
-        {
-            string state = GetName(obj, property);
-            if (state.Length == 0)
-            {
-                yield return $"{property} must be assigned.";
-                continue;
-            }
-
-            if (states is not null && !states.Contains(state))
-                yield return $"{property} '{state}' is absent from the assigned StateSchema.";
-        }
-    }
-
-    private static IEnumerable<string> ValidateTimedTransitionStateExecutor(GodotObject obj)
-    {
-        float duration = GetFloat(obj, "Duration");
-        if (!float.IsFinite(duration) || duration <= 0.0f)
-            yield return "Duration must be finite and greater than zero.";
-
-        foreach (string warning in ValidateTransitionStateExecutor(obj))
-        {
-            yield return warning;
-        }
     }
 
     private static IEnumerable<string> ValidateStatefulRule(GodotObject obj)
@@ -414,13 +362,7 @@ public static class InteractionValidator
             InteractionDetector => InspectableType.InteractionDetector,
             InteractionPresenter => InspectableType.InteractionPresenter,
             InteractionAction => InspectableType.InteractionAction,
-            InteractionExecutionSynchronizer => InspectableType.InteractionExecutionSynchronizer,
             InteractionActionDefinition => InspectableType.InteractionActionDefinition,
-            SetStateInteractionExecutor => InspectableType.SetStateInteractionExecutor,
-            TimedTransitionStateInteractionExecutor =>
-                InspectableType.TimedTransitionStateInteractionExecutor,
-            TransitionStateInteractionExecutor =>
-                InspectableType.TransitionStateInteractionExecutor,
             StatefulStateInteractionRule => InspectableType.StatefulStateInteractionRule,
             _ => InspectableType.None,
         };
@@ -441,14 +383,7 @@ public static class InteractionValidator
             nameof(InteractionDetector) => InspectableType.InteractionDetector,
             nameof(InteractionPresenter) => InspectableType.InteractionPresenter,
             nameof(InteractionAction) => InspectableType.InteractionAction,
-            nameof(InteractionExecutionSynchronizer) =>
-                InspectableType.InteractionExecutionSynchronizer,
             nameof(InteractionActionDefinition) => InspectableType.InteractionActionDefinition,
-            nameof(SetStateInteractionExecutor) => InspectableType.SetStateInteractionExecutor,
-            nameof(TimedTransitionStateInteractionExecutor) =>
-                InspectableType.TimedTransitionStateInteractionExecutor,
-            nameof(TransitionStateInteractionExecutor) =>
-                InspectableType.TransitionStateInteractionExecutor,
             nameof(StatefulStateInteractionRule) => InspectableType.StatefulStateInteractionRule,
             _ => ResolveTypeFromPath(script?.ResourcePath),
         };
@@ -474,16 +409,8 @@ public static class InteractionValidator
                 InspectableType.InteractionPresenter,
             "res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" =>
                 InspectableType.InteractionAction,
-            "res://addons/interaction_plugin/runtime/interactive/InteractionExecutionSynchronizer.cs" =>
-                InspectableType.InteractionExecutionSynchronizer,
             "res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" =>
                 InspectableType.InteractionActionDefinition,
-            "res://addons/interaction_plugin/integration/stateful/SetStateInteractionExecutor.cs" =>
-                InspectableType.SetStateInteractionExecutor,
-            "res://addons/interaction_plugin/integration/stateful/TimedTransitionStateInteractionExecutor.cs" =>
-                InspectableType.TimedTransitionStateInteractionExecutor,
-            "res://addons/interaction_plugin/integration/stateful/TransitionStateInteractionExecutor.cs" =>
-                InspectableType.TransitionStateInteractionExecutor,
             "res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" =>
                 InspectableType.StatefulStateInteractionRule,
             _ => InspectableType.None,
