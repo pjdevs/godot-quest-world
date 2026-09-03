@@ -30,11 +30,14 @@ public abstract partial class InteractionRule : GameplayActionRule
 
     public sealed override GameplayActionAvailability Evaluate(in GameplayActionContext context)
     {
+        InteractionInteractor? interactor = context.Requester is GameplayActionRunner runner
+            ? InteractionInteractor.FindByRunner(runner)
+            : null;
+        interactor ??= context.Instigator as InteractionInteractor;
         if (
             context.Action is not InteractionAction action
             || action.Interactive is null
-            || context.Requester is not GameplayActionRunner runner
-            || InteractionInteractor.FindByRunner(runner) is not InteractionInteractor interactor
+            || interactor is null
         )
         {
             return new GameplayActionBlocked(InteractionAvailabilityExtensions.UnavailableReason);

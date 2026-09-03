@@ -50,6 +50,17 @@ public partial class InteractionAction : GameplayAction
     [Export]
     public bool Automatic { get; set; }
 
+    /// <summary>
+    /// Preserves the Interaction authoring property while the final scene migration is deferred to
+    /// tranche 5.
+    /// </summary>
+    [Export]
+    public StringName ConcurrencyGroup
+    {
+        get => HostConcurrencyGroup;
+        set => HostConcurrencyGroup = value;
+    }
+
     public StringName GetConcurrencyGroup() => GetHostConcurrencyGroup();
 
     internal GameplayActionBindingConfig BuildBindingConfig()
@@ -108,7 +119,9 @@ public partial class InteractionAction : GameplayAction
 
         if (base.Definition is not null && base.Definition is not InteractionActionDefinition)
         {
-            GD.PushError($"{GetPath()}: InteractionAction requires an InteractionActionDefinition.");
+            GD.PushError(
+                $"{GetPath()}: InteractionAction requires an InteractionActionDefinition."
+            );
         }
 
         if (base.Executor is not null && base.Executor is not InteractionActionExecutor)

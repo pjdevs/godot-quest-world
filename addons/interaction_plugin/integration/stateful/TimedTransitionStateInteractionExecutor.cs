@@ -60,7 +60,7 @@ public partial class TimedTransitionStateInteractionExecutor : TransitionStateIn
     }
 
     /// <inheritdoc />
-    internal override InteractionProgressSample? GetPredictionSample(
+    internal override InteractionProgressSample? GetInteractionPredictionSample(
         in InteractionContext context
     ) => TimedExecution.BuildPredictionSample(ComputeTimedDuration(context));
 

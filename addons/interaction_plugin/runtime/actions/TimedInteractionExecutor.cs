@@ -35,8 +35,7 @@ public abstract partial class TimedInteractionExecutor : InteractionActionExecut
     {
         InteractionContext query = new(context.Interactor, context.Interactive, context.Action);
         float duration = ComputeTimedDuration(query);
-        GameplayActionExecution.TimedExecutionStartResult startResult =
-            _timedExecution.Start(
+        GameplayActionExecution.TimedExecutionStartResult startResult = _timedExecution.Start(
             context.Interactive.ActionComponent!,
             context.ExecutionId,
             duration,

@@ -109,10 +109,10 @@
 - Modify: all Interaction tests while retaining their behavior-level assertions
 - Update: `docs/feature/interaction/interaction.md`
 
-- [ ] Add/adjust failing integration tests for focus bindings, focus cleanup, out-of-range authority rejection, programmatic distance bypass with rules, sustained access cancellation, and generic presentation reads.
-- [ ] Make Interaction action/definition types thin specializations and register the interactor as their access provider.
-- [ ] Move target rules, contextual binding construction/invalidation, and spatial presentation adaptation behind Interaction-only APIs.
-- [ ] Run every existing Interaction suite plus the mandatory full gate and commit the functional-equivalence checkpoint.
+- [x] Add/adjust failing integration tests for focus bindings, focus cleanup, out-of-range authority rejection, programmatic distance bypass with rules, sustained access cancellation, and generic presentation reads.
+- [x] Make Interaction action/definition types thin specializations and register the interactor as their access provider.
+- [x] Move target rules, contextual binding construction/invalidation, and spatial presentation adaptation behind Interaction-only APIs.
+- [x] Run every existing Interaction suite plus the mandatory full gate. Leave the functional-equivalence checkpoint uncommitted for user review.
 
 ### Task 5: Migrate authoring/integrations and remove the parallel lifecycle
 

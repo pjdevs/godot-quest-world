@@ -125,7 +125,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         {
             GD.PushError($"{GetPath()}: InteractionInteractor requires a Detector.");
             SetProcess(false);
-            return;
         }
 
         if (Runner is null)
@@ -158,6 +157,10 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         if (locallyControlled)
         {
             RecalculateFocus();
+            if (_focusedInteractive is not null)
+            {
+                Runner?.InvalidateSource(_focusedInteractive);
+            }
         }
     }
 
@@ -177,10 +180,11 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
     {
         return
             runner is not null
+            && IsInstanceValid(runner)
             && _runnerOwners.TryGetValue(runner.GetInstanceId(), out InteractionInteractor? owner)
             && IsInstanceValid(owner)
-                ? owner
-                : null;
+            ? owner
+            : null;
     }
 
     public bool CanRequest(in GameplayActionAccessContext context) =>
@@ -188,8 +192,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
     private bool HasInteractionAccess(GameplayAction action)
     {
-        return
-            action is InteractionAction interactionAction
+        return action is InteractionAction interactionAction
             && interactionAction.Interactive is InteractiveComponent interactive
             && Detector?.Detect(interactive) == InteractionDetectionKind.Interactible;
     }
@@ -324,7 +327,9 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             BindFocusedActions(result.Current);
         }
 
-        Variant focusedInteractive = result.Current is null ? default : Variant.From(result.Current);
+        Variant focusedInteractive = result.Current is null
+            ? default
+            : Variant.From(result.Current);
         EmitSignal(SignalName.FocusedInteractiveChanged, focusedInteractive);
         if (result.Current is not null)
         {
@@ -354,6 +359,17 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
                 Variant.From(interactive)
             );
         }
+    }
+
+    internal void RefreshFocusedBindings(InteractiveComponent interactive)
+    {
+        if (_focusedInteractive != interactive || Runner is null)
+        {
+            return;
+        }
+
+        Runner.UnbindSource(interactive);
+        BindFocusedActions(interactive);
     }
 
     private void ReconcileDetectedInteractives()
@@ -463,6 +479,10 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         }
 
         RecalculateFocus();
+        if (_focusedInteractive is not null)
+        {
+            Runner.InvalidateSource(_focusedInteractive);
+        }
         return _focusedInteractive is not null && Runner.TryStartActionInput(inputActionName);
     }
 
@@ -530,15 +550,25 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
     private void OnGameplayActionRejected(Node component, StringName actionId, string reason)
     {
-        Variant interactive =
-            ResolveInteractive(component) is { } target ? Variant.From(target) : default;
+        InteractiveComponent? target = ResolveInteractive(component);
+        if (target?.ResolveAction(actionId) is InteractionAction action)
+        {
+            reason = target.AdaptRejectionReason(this, action, reason);
+        }
+        else if (reason == GameplayActionAvailabilityExtensions.UnavailableReason)
+        {
+            reason = InteractionAvailabilityExtensions.UnavailableReason;
+        }
+
+        Variant interactive = target is null ? default : Variant.From(target);
         EmitSignal(SignalName.InteractionRejected, interactive, actionId, reason);
     }
 
     private void OnGameplayActionStarted(Node component, StringName actionId, long executionId)
     {
-        Variant interactive =
-            ResolveInteractive(component) is { } target ? Variant.From(target) : default;
+        Variant interactive = ResolveInteractive(component) is { } target
+            ? Variant.From(target)
+            : default;
         EmitSignal(
             SignalName.InteractionStarted,
             interactive,
@@ -549,8 +579,9 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
     private void OnGameplayActionCompleted(Node component, StringName actionId, long executionId)
     {
-        Variant interactive =
-            ResolveInteractive(component) is { } target ? Variant.From(target) : default;
+        Variant interactive = ResolveInteractive(component) is { } target
+            ? Variant.From(target)
+            : default;
         EmitSignal(SignalName.InteractionCompleted, interactive, actionId);
     }
 
@@ -561,8 +592,9 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         string reason
     )
     {
-        Variant interactive =
-            ResolveInteractive(component) is { } target ? Variant.From(target) : default;
+        Variant interactive = ResolveInteractive(component) is { } target
+            ? Variant.From(target)
+            : default;
         EmitSignal(SignalName.InteractionCancelled, interactive, actionId, reason);
     }
 
@@ -573,8 +605,9 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         string reason
     )
     {
-        Variant interactive =
-            ResolveInteractive(component) is { } target ? Variant.From(target) : default;
+        Variant interactive = ResolveInteractive(component) is { } target
+            ? Variant.From(target)
+            : default;
         EmitSignal(SignalName.InteractionFailed, interactive, actionId, reason);
     }
 
@@ -698,11 +731,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
                     actionId,
                     executionId,
                     hasProgress,
-                    new GameplayActionProgressSample(
-                        progressBase,
-                        progressPerSecond,
-                        revision
-                    )
+                    new GameplayActionProgressSample(progressBase, progressPerSecond, revision)
                 );
             }
         }
@@ -840,7 +869,11 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
     {
         if (action.InteractionDefinition is not null)
         {
-            EmitSignal(SignalName.InteractionCompleted, interactive, action.InteractionDefinition.Id);
+            EmitSignal(
+                SignalName.InteractionCompleted,
+                interactive,
+                action.InteractionDefinition.Id
+            );
         }
     }
 

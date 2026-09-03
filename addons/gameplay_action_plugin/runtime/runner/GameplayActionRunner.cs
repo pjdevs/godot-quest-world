@@ -206,8 +206,6 @@ public partial class GameplayActionRunner : Node
     public bool TryGetGestureProgress(out StringName inputActionName, out float progress) =>
         _gestures.TryGetProgress(out inputActionName, out progress);
 
-    public IReadOnlyCollection<StringName> GetConsumedInputs() => _gestures.GetConsumedInputs();
-
     public void ValidateSustainedExecutions() => _requests.ValidateSustainedExecutions();
 
     public override void _Process(double delta)

@@ -2,10 +2,12 @@
 
 ## Status
 
-V1 extraction is in progress. Tranches 1 to 3 provide the standalone authoritative host, its full
+V1 extraction is in progress. Tranches 1 to 4 provide the standalone authoritative host, its full
 execution lifecycle, generic progress/timing, optional replicated presentation, local bindings and
-gestures, typed access validation, requester prediction, and lifecycle acknowledgements. Rebuilding
-Interaction on these generic primitives remains deferred to the following tranche.
+gestures, typed access validation, requester prediction, lifecycle acknowledgements, and the
+functional migration of Interaction onto these primitives. Tranche 5 remains the authoring and
+cleanup closeout: migrate scenes and integrations to the final topology, then delete the temporary
+Interaction compatibility lifecycle.
 
 The approved design is in
 [`planned/gameplay-action-system-v1.md`](planned/gameplay-action-system-v1.md).
@@ -231,3 +233,58 @@ The tranche gate formats all C# sources and builds with zero warnings or errors.
 passes 290 of 291 tests; its sole failure is the already tracked Interaction scene regression
 `DoorSynchronizationConvergesPresentationWithoutReplayingUnlockAudio`, which expects `RESET` but
 receives an empty animation name. No GameplayAction test fails in that run.
+
+## Tranche 4 — Interaction integration
+
+### Ownership and compatibility bridge
+
+`InteractionActionDefinition`, `InteractionAction`, `InteractionRule`, and
+`InteractionActionExecutor` are now typed specializations/adapters of the generic contracts.
+`InteractiveComponent` delegates authoritative evaluation, reservations, execution, progress, and
+presentation storage to `GameplayActionComponent`; `InteractionInteractor` delegates bindings,
+gesture resolution, request transport, acknowledgements, and sustained execution tracking to
+`GameplayActionRunner`.
+
+Existing scenes are deliberately still accepted during this checkpoint. When an authored
+`GameplayActionComponent` or `GameplayActionRunner` is absent, a small deferred migration bridge
+installs it and moves/registers the existing action nodes. The bridge refreshes an already-focused
+interactor after registration, and the Interaction execution synchronizer initializes after that
+deferred installation. These are temporary runtime accommodations, not the final authoring model;
+tranche 5 replaces them with explicit scene nodes and removes the parallel legacy lifecycle.
+
+`InteractionAction.ConcurrencyGroup` remains as a tranche-4 compatibility alias for the generic
+`HostConcurrencyGroup`. It is removed with the migrated scene properties in tranche 5.
+
+### Spatial access, rules, and bindings
+
+Interaction owns only its domain-specific policy:
+
+- the detector and focus model decide which targets are locally relevant;
+- the registered `interaction` access provider revalidates authoritative range/candidate access and
+  sustained access for long-running player requests;
+- programmatic execution bypasses spatial access while still evaluating target and action rules;
+- one dynamic target-rule adapter runs before the authored action rules without copying either
+  collection;
+- focus creates contextual generic bindings, focus loss cleans their source, and Interaction
+  invalidates focused bindings as its pull-style rules change;
+- Interaction presentation converts generic availability, lifecycle, progress, and rejection reasons
+  without owning a second execution store.
+
+The generic runner is the sole request path. An input release, lost authoritative access, requester
+teardown, or peer departure cancels a sustained execution according to the executor's requester
+presence policy.
+
+### Tranche 4 verification coverage
+
+The Interaction suites retain behavior-level coverage of focus binding and cleanup, authoritative
+out-of-range refusal, programmatic spatial bypass with rule preservation, sustained-access
+cancellation, requester/observer visibility, late join, progress, prediction, acknowledgements,
+automatic actions, concurrency, and presentation reads projected from the generic store. Obsolete
+unit tests that invoked the former private Interaction execution core directly were removed; the
+generic component suites now own those lifecycle invariants, while Interaction tests cover the
+adapter boundary.
+
+At the tranche checkpoint, formatting and compilation succeed with zero warnings or errors and the
+complete suite passes. The previously tracked door synchronization test now asserts the observable
+closed pose rather than `AnimationPlayer.CurrentAnimation`, which is empty after seeking past the
+very short `RESET` clip on the current Godot runtime.

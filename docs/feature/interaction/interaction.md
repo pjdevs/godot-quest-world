@@ -6,6 +6,33 @@ Addon Godot C# réutilisable pour les interactions offline et multiplayer high-l
 
 Le code runtime et ses contrats sont dans le namespace `QuestWorld.Interaction`.
 
+## Architecture courante — intégration Gameplay Action (tranche 4)
+
+Interaction conserve la sélection spatiale, le focus, ses règles contextuelles et l'adaptation de
+présentation. Il ne constitue plus le moteur d'exécution actif : toutes les actions passent par
+`GameplayActionComponent` côté cible et `GameplayActionRunner` côté demandeur, documentés dans
+[gameplay-action.md](../gameplay_action/gameplay-action.md).
+
+- `InteractionActionDefinition`, `InteractionAction`, `InteractionRule` et
+  `InteractionActionExecutor` spécialisent les contrats génériques sans recréer de pipeline.
+- Les `TargetRules` sont évaluées par un adaptateur placé avant les rules propres à l'action. Les
+  exécutions programmatiques ignorent l'accès spatial, mais conservent toutes ces rules.
+- Le focus construit des bindings génériques contextuels ; sa perte nettoie leur source. La portée
+  est revérifiée sur l'autorité et pendant une exécution longue qui exige la présence du requester.
+- Les signaux et snapshots Interaction sont des projections du lifecycle, des ACK et du store de
+  présentation génériques. Le synchroniseur Interaction transporte ce même store.
+
+Pour préserver les scènes actuelles jusqu'à leur migration, une passerelle temporaire installe de
+façon différée les composants génériques absents, rattache les actions existantes et rafraîchit les
+bindings déjà focusés. `InteractionAction.ConcurrencyGroup` reste temporairement un alias de
+`HostConcurrencyGroup`. La tranche 5 doit authorer explicitement la topologie finale, migrer les
+intégrations Stateful et diagnostics, puis supprimer cette passerelle et l'ancien lifecycle interne.
+
+Les tests de la tranche 4 couvrent notamment le bind/unbind de focus, le refus autoritaire hors
+portée, le bypass spatial programmatique avec rules, l'annulation sur perte d'accès soutenu, les ACK,
+la réplication requester/observer/late joiner et les lectures de présentation issues du composant
+générique.
+
 ### NodePath des rules d'etat
 
 `StatefulPath` est resolu relativement a l'`InteractionAction` proprietaire de la rule. Le selecteur

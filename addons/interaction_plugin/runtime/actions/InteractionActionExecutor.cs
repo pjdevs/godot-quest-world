@@ -23,7 +23,9 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
     {
         if (!TryAdapt(context, out InteractionExecutionContext interactionContext))
         {
-            return new GameplayActionExecutionFailed("The interaction execution context is invalid.");
+            return new GameplayActionExecutionFailed(
+                "The interaction execution context is invalid."
+            );
         }
 
         return Execute(interactionContext).ToGameplayActionExecutionResult();
@@ -87,11 +89,14 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
         in GameplayActionContext context
     )
     {
+        InteractionInteractor? interactor = context.Requester is GameplayActionRunner runner
+            ? InteractionInteractor.FindByRunner(runner)
+            : null;
+        interactor ??= context.Instigator as InteractionInteractor;
         if (
             context.Action is not InteractionAction action
             || action.Interactive is null
-            || context.Requester is not GameplayActionRunner runner
-            || InteractionInteractor.FindByRunner(runner) is not InteractionInteractor interactor
+            || interactor is null
         )
         {
             return null;
@@ -117,11 +122,14 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
     )
     {
         interactionContext = default;
+        InteractionInteractor? interactor = context.Requester is GameplayActionRunner runner
+            ? InteractionInteractor.FindByRunner(runner)
+            : null;
+        interactor ??= context.Instigator as InteractionInteractor;
         if (
             context.Action is not InteractionAction action
             || action.Interactive is null
-            || context.Requester is not GameplayActionRunner runner
-            || InteractionInteractor.FindByRunner(runner) is not InteractionInteractor interactor
+            || interactor is null
         )
         {
             return false;

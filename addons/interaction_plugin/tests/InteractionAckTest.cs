@@ -406,10 +406,11 @@ public sealed partial class InteractionAckTest
     }
 
     [TestCase]
-    public async Task AnAutomaticActionRefusedTriesAgainOnceGameplayInvalidatesItsTarget()
+    public async Task AnAutomaticExecutorRefusalStaysLatchedAcrossAnUnchangedInvalidation()
     {
-        // The refusal is a backoff, not a permanent ban: the moment the situation it was decided
-        // against changes, the automatic action is allowed to ask again.
+        // Invalidation recomputes eligibility; it is not itself a new eligibility edge. An executor
+        // refusal leaves the binding eligible, so the automatic action stays latched until gameplay
+        // first makes it unavailable and then available again.
         AckWorld world = BuildWorld();
         world.Action.Automatic = true;
         world.Executor.Result = new InteractionExecutionRejected("The till is closed.");
@@ -418,7 +419,7 @@ public sealed partial class InteractionAckTest
 
         world.Interactive.NotifyStatusChanged();
 
-        AssertThat(world.Executor.ExecuteCount).IsEqual(2);
+        AssertThat(world.Executor.ExecuteCount).IsEqual(1);
     }
 
     [TestCase]

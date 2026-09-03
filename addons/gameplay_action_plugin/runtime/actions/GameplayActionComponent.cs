@@ -56,7 +56,7 @@ public partial class GameplayActionComponent : Node
     public delegate void ExecutionPresentationChangedEventHandler(StringName actionId);
 
     private const string NotConfiguredReason = "Action is not configured.";
-    private const string AlreadyRunningReason = "Action is already running.";
+    internal const string AlreadyRunningReason = "Action is already running.";
     private readonly Dictionary<StringName, GameplayAction> _actionsById = new();
     private readonly Dictionary<ulong, ActiveExecution> _executionsById = new();
     private readonly GameplayActionExecutionPresentationStore _presentation;
@@ -274,6 +274,45 @@ public partial class GameplayActionComponent : Node
     }
 
     public bool IsExecutionActive(ulong executionId) => _executionsById.ContainsKey(executionId);
+
+    internal bool TryGetFirstActiveExecution(
+        out GameplayAction? action,
+        out Node? instigator,
+        out Node? requester
+    )
+    {
+        foreach (ActiveExecution execution in _executionsById.Values)
+        {
+            action = execution.Action;
+            instigator = execution.Instigator;
+            requester = execution.Requester;
+            return true;
+        }
+
+        action = null;
+        instigator = null;
+        requester = null;
+        return false;
+    }
+
+    internal bool IsConcurrencyGroupExecutingByRequester(
+        StringName concurrencyGroup,
+        Node requester
+    )
+    {
+        foreach (ActiveExecution execution in _executionsById.Values)
+        {
+            if (
+                execution.Action.GetHostConcurrencyGroup() == concurrencyGroup
+                && execution.Requester == requester
+            )
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public IReadOnlyList<GameplayActionExecutionPresentation> GetExecutionPresentations()
     {

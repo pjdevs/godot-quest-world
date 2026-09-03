@@ -57,7 +57,7 @@ public sealed partial class InteractionSceneTest
         AssertThat(stateful.Schema!.Contains(new StringName("activated"))).IsTrue();
         AssertThat(interactive.Actions.Count).IsEqual(1);
         InteractionAction action = interactive.Actions[0];
-        AssertThat(action == actor.GetNode<InteractionAction>("Interactive/ActivateAction"))
+        AssertThat(action == actor.GetNode<InteractionAction>("GameplayActions/ActivateAction"))
             .IsTrue();
         AssertThat(action.Definition?.Id.ToString()).IsEqual("activate");
         AssertThat(action.Definition?.InputActionName.ToString()).IsEqual("interact");
@@ -65,11 +65,12 @@ public sealed partial class InteractionSceneTest
         AssertThat(
                 action.Executor
                     == actor.GetNode<InteractionActionExecutor>(
-                        "Interactive/ActivateAction/ActivateExecutor"
+                        "GameplayActions/ActivateAction/ActivateExecutor"
                     )
             )
             .IsTrue();
-        AssertThat(action.Rules.Count).IsEqual(2);
+        AssertThat(action.Rules.Count).IsEqual(3);
+        AssertThat(action.Rules[0] is InteractionTargetRulesAdapter).IsTrue();
         AssertThat(interactive.TargetRules.Count).IsEqual(1);
         AssertThat(interactive.ActionPromptScene != null).IsTrue();
         MultiplayerSynchronizer synchronizer = actor.GetNode<MultiplayerSynchronizer>(
@@ -93,18 +94,19 @@ public sealed partial class InteractionSceneTest
     public async Task DoorSynchronizationConvergesPresentationWithoutReplayingUnlockAudio()
     {
         Node3D door = GD.Load<PackedScene>(DoorScenePath).Instantiate<Node3D>();
+        door.Set("IsLocked", true);
         ISceneRunner runner = ISceneRunner.Load(door);
         await runner.SimulateFrames(1);
         StatefulComponent stateful = door.GetNode<StatefulComponent>(
             "Interaction/StatefulComponent"
         );
         AudioStreamPlayer3D audio = door.GetNode<AudioStreamPlayer3D>("AudioPlayer");
-        AnimationPlayer animation = door.GetNode<AnimationPlayer>("Visual/AnimationPlayer");
+        Node3D pivot = door.GetNode<Node3D>("Visual/Pivot");
 
         stateful.Set("ReplicatedState", new StringName("closed"));
 
         AssertThat(audio.Playing).IsFalse();
-        AssertThat(animation.CurrentAnimation).IsEqual("RESET");
+        AssertThat(pivot.Rotation).IsEqual(Vector3.Zero);
     }
 
     [TestCase]

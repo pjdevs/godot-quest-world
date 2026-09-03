@@ -254,7 +254,15 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void ExecutionBelongsToAnExecutorInsteadOfASignalSubscriber()
     {
-        AssertThat(typeof(InteractionAction).GetProperty("Executor") != null).IsTrue();
+        AssertThat(
+                typeof(InteractionAction).GetProperty(
+                    "Executor",
+                    System.Reflection.BindingFlags.Public
+                        | System.Reflection.BindingFlags.Instance
+                        | System.Reflection.BindingFlags.DeclaredOnly
+                ) != null
+            )
+            .IsTrue();
         AssertThat(typeof(InteractiveComponent).GetMethods().Any(m => m.Name == "ExecuteAction"))
             .IsTrue();
         AssertThat(typeof(InteractiveComponent).GetMethod("CompleteExecution") != null).IsTrue();

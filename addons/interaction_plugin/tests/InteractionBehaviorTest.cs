@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
+using QuestWorld.GameplayActions.Runtime.Actions;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Examples.Rules;
 using QuestWorld.Interaction.Integration.Stateful;
@@ -23,69 +24,6 @@ public sealed partial class InteractionBehaviorTest
     private static readonly StringName IdleState = new("idle");
     private static readonly StringName ActivatingState = new("activating");
     private static readonly StringName ActivatedState = new("activated");
-
-    [TestCase]
-    public async Task ExecutionReservationCoreMutatesWithoutRunningAnythingExternal()
-    {
-        TestWorld testWorld = BuildWorld();
-        await testWorld.Runner.SimulateFrames(1);
-        int stateSignalCount = 0;
-        int startedCount = 0;
-        testWorld.Stateful.StateChanged += (_, _, _) => stateSignalCount++;
-        testWorld.Interactive.InteractionActionStarted += (_, _) => startedCount++;
-
-        InteractionExecution? reservation = testWorld.Interactive.ReserveExecutionCore(
-            testWorld.Interactor,
-            testWorld.Action
-        );
-
-        AssertThat(reservation.HasValue).IsTrue();
-        AssertThat(reservation?.Interactor == testWorld.Interactor).IsTrue();
-        AssertThat(reservation?.Action == testWorld.Action).IsTrue();
-        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
-        AssertThat(testWorld.Owner.StartCount).IsEqual(0);
-        AssertThat(testWorld.Stateful.State).IsEqual(IdleState);
-        AssertThat(stateSignalCount).IsEqual(0);
-        AssertThat(startedCount).IsEqual(0);
-    }
-
-    [TestCase]
-    public async Task ReservedExecutionRefusesASecondReservation()
-    {
-        TestWorld testWorld = BuildWorld();
-        await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactive.ReserveExecutionCore(testWorld.Interactor, testWorld.Action);
-
-        InteractionExecution? second = testWorld.Interactive.ReserveExecutionCore(
-            testWorld.Interactor,
-            testWorld.Action
-        );
-
-        AssertThat(second.HasValue).IsFalse();
-        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
-    }
-
-    [TestCase]
-    public async Task SameActionIdCannotReserveTwiceWhenConcurrencyGroupsDiffer()
-    {
-        TestWorld testWorld = BuildWorld();
-        InteractionAction duplicate = CreateAction("activate");
-        duplicate.ConcurrencyGroup = new StringName("other");
-        AddAction(testWorld.Interactive, duplicate);
-        await testWorld.Runner.SimulateFrames(1);
-
-        InteractionExecution? first = testWorld.Interactive.ReserveExecutionCore(
-            testWorld.Interactor,
-            testWorld.Action
-        );
-        InteractionExecution? second = testWorld.Interactive.ReserveExecutionCore(
-            testWorld.Interactor,
-            duplicate
-        );
-
-        AssertThat(first.HasValue).IsTrue();
-        AssertThat(second.HasValue).IsFalse();
-    }
 
     [TestCase]
     public async Task RunningExecutionIsProjectedAsAnAuthorityPresentationAndRemovedOnCompletion()
@@ -146,123 +84,6 @@ public sealed partial class InteractionBehaviorTest
             .IsTrue();
         AssertThat(presentation.ExecutionId).IsEqual(executionId);
         AssertThat(presentation.Progress.HasValue).IsFalse();
-    }
-
-    [TestCase]
-    public async Task ExecutionResultCoreReleasesTheReservationWithoutDispatch()
-    {
-        TestWorld testWorld = BuildWorld();
-        await testWorld.Runner.SimulateFrames(1);
-        InteractionExecution reservation = testWorld
-            .Interactive.ReserveExecutionCore(testWorld.Interactor, testWorld.Action)!
-            .Value;
-        int startedCount = 0;
-        int completedCount = 0;
-        int statusSignalCount = 0;
-        testWorld.Interactive.InteractionActionStarted += (_, _) => startedCount++;
-        testWorld.Interactive.InteractionActionCompleted += (_, _) => completedCount++;
-        testWorld.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
-
-        InteractionExecutionDispatch dispatch = testWorld.Interactive.ApplyExecutionResultCore(
-            reservation,
-            new InteractionExecutionCompleted()
-        );
-
-        AssertThat(dispatch.Execution.Interactor == testWorld.Interactor).IsTrue();
-        AssertThat(dispatch.Result is InteractionExecutionCompleted).IsTrue();
-        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
-        AssertThat(startedCount).IsEqual(0);
-        AssertThat(completedCount).IsEqual(0);
-        AssertThat(statusSignalCount).IsEqual(0);
-    }
-
-    [TestCase]
-    public async Task ExecutionResultCoreKeepsARunningReservation()
-    {
-        TestWorld testWorld = BuildWorld();
-        await testWorld.Runner.SimulateFrames(1);
-        InteractionExecution reservation = testWorld
-            .Interactive.ReserveExecutionCore(testWorld.Interactor, testWorld.Action)!
-            .Value;
-
-        testWorld.Interactive.ApplyExecutionResultCore(
-            reservation,
-            new InteractionExecutionRunning()
-        );
-
-        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
-    }
-
-    [TestCase]
-    public async Task ExecutionEndCoreReleasesBeforeExternalDispatch()
-    {
-        TestWorld testWorld = BuildWorld();
-        await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactive.ExecuteAction(
-            testWorld.Interactor,
-            testWorld.Action,
-            out ulong executionId
-        );
-        int cancelledCount = 0;
-        int completedCount = 0;
-        int statusSignalCount = 0;
-        testWorld.Interactive.InteractionActionCancelled += (_, _, _) => cancelledCount++;
-        testWorld.Interactive.InteractionActionCompleted += (_, _) => completedCount++;
-        testWorld.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
-
-        InteractionExecution? execution = testWorld.Interactive.EndExecutionCore(executionId);
-
-        AssertThat(execution.HasValue).IsTrue();
-        AssertThat(execution?.Interactor == testWorld.Interactor).IsTrue();
-        AssertThat(execution?.Action == testWorld.Action).IsTrue();
-        AssertThat(testWorld.Interactive.ActiveInteractor == null).IsTrue();
-        AssertThat(cancelledCount).IsEqual(0);
-        AssertThat(completedCount).IsEqual(0);
-        AssertThat(statusSignalCount).IsEqual(0);
-    }
-
-    [TestCase]
-    public async Task ExecutionEndCoreRefusesAnIdentifierItDoesNotHold()
-    {
-        TestWorld testWorld = BuildWorld();
-        await testWorld.Runner.SimulateFrames(1);
-        testWorld.Interactive.ExecuteAction(
-            testWorld.Interactor,
-            testWorld.Action,
-            out ulong executionId
-        );
-
-        InteractionExecution? execution = testWorld.Interactive.EndExecutionCore(executionId + 1);
-
-        AssertThat(execution.HasValue).IsFalse();
-        AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsTrue();
-        AssertThat(testWorld.Interactive.ActiveInteractor == testWorld.Interactor).IsTrue();
-    }
-
-    [TestCase]
-    public async Task ExecutionDispatchEmitsStartedThenCompletedExactlyOnce()
-    {
-        TestWorld testWorld = BuildWorld();
-        await testWorld.Runner.SimulateFrames(1);
-        InteractionExecution reservation = testWorld
-            .Interactive.ReserveExecutionCore(testWorld.Interactor, testWorld.Action)!
-            .Value;
-        InteractionExecutionDispatch dispatch = testWorld.Interactive.ApplyExecutionResultCore(
-            reservation,
-            new InteractionExecutionCompleted()
-        );
-        List<string> notifications = new();
-        testWorld.Interactive.InteractionActionStarted += (_, _) => notifications.Add("started");
-        testWorld.Interactive.InteractionActionCompleted += (_, _) =>
-            notifications.Add("completed");
-        testWorld.Interactive.InteractionActionCancelled += (_, _, _) =>
-            notifications.Add("cancelled");
-        testWorld.Interactive.InteractionActionRejected += (_, _, _) =>
-            notifications.Add("rejected");
-
-        testWorld.Interactive.DispatchExecutionResult(dispatch);
-
-        AssertThat(string.Join(",", notifications)).IsEqual("started,completed");
     }
 
     [TestCase]
@@ -403,6 +224,10 @@ public sealed partial class InteractionBehaviorTest
         };
         InteractionAction action = CreateAction("activate");
         interactive.Actions.Add(action);
+        GameplayActionComponent actionComponent = new();
+        interactive.ActionComponent = actionComponent;
+        action.PrepareForInteractive(interactive, interactive.TargetRules);
+        actionComponent.AddAction(action);
         InteractionInteractor interactor = new();
 
         try
@@ -414,7 +239,7 @@ public sealed partial class InteractionBehaviorTest
         finally
         {
             interactive.Free();
-            action.Free();
+            actionComponent.Free();
             area.Free();
             owner.Free();
             interactor.Free();
@@ -631,7 +456,7 @@ public sealed partial class InteractionBehaviorTest
     public async Task StatefulRuleResolvesItsPathRelativeToTheOwningAction()
     {
         DoorWorld door = BuildDoorWorld();
-        StatefulStateInteractionRule rule = (StatefulStateInteractionRule)door.Open.Rules[0];
+        StatefulStateInteractionRule rule = (StatefulStateInteractionRule)door.Open.Rules[1];
         rule.StatefulPath = new NodePath("../../StatefulComponent");
         await door.Runner.SimulateFrames(1);
 
@@ -1857,7 +1682,7 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task AnInstantActionIsNeverReportedAsEndingLater()
+    public async Task AnInstantActionReceivesItsImmediateTerminalCallbackExactlyOnce()
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
@@ -1865,7 +1690,7 @@ public sealed partial class InteractionBehaviorTest
         door.Interactive.ExecuteAction(door.Interactor, door.Open);
 
         AssertThat(ExecutorOf(door.Open).ExecuteCount).IsEqual(1);
-        AssertThat(ExecutorOf(door.Open).CompletedCount).IsEqual(0);
+        AssertThat(ExecutorOf(door.Open).CompletedCount).IsEqual(1);
         AssertThat(ExecutorOf(door.Open).CancelledCount).IsEqual(0);
     }
 
@@ -2729,8 +2554,18 @@ public sealed partial class InteractionBehaviorTest
 
     private static void AddAction(InteractiveComponent interactive, InteractionAction action)
     {
-        interactive.AddChild(action);
         interactive.Actions.Add(action);
+        if (
+            interactive.ActionComponent is GameplayActionComponent component
+            && component.IsInsideTree()
+        )
+        {
+            action.PrepareForInteractive(interactive, interactive.TargetRules);
+            component.AddAction(action);
+            return;
+        }
+
+        interactive.AddChild(action);
     }
 
     private static InteractiveComponent AddPresentationReceiver(
@@ -3064,7 +2899,7 @@ public sealed partial class InteractionBehaviorTest
                 : new InteractionExecutionFailed("The activation timer could not start.");
         }
 
-        internal override InteractionProgressSample? GetPredictionSample(
+        internal override InteractionProgressSample? GetInteractionPredictionSample(
             in InteractionContext context
         ) => Duration.HasValue ? TimedExecution.BuildPredictionSample(Duration.Value) : null;
 

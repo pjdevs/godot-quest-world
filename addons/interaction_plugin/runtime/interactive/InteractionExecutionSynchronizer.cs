@@ -21,10 +21,20 @@ public partial class InteractionExecutionSynchronizer : GameplayActionExecutionS
 
     public override void _Ready()
     {
+        // Legacy Interaction scenes receive their GameplayActionComponent through the temporary
+        // deferred migration bridge. Initialize after that bridge has installed the component so
+        // the synchronizer subscribes to the generic presentation store before gameplay starts.
+        Callable.From(Initialize).CallDeferred();
+    }
+
+    private void Initialize()
+    {
         SyncComponent();
         if (Component is null)
         {
-            GD.PushError($"{GetPath()}: InteractionExecutionSynchronizer requires an Interactive with a GameplayActionComponent.");
+            GD.PushError(
+                $"{GetPath()}: InteractionExecutionSynchronizer requires an Interactive with a GameplayActionComponent."
+            );
             return;
         }
 

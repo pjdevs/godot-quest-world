@@ -2,6 +2,7 @@ using Godot;
 using QuestWorld.GameplayActions.Runtime.Actions;
 using QuestWorld.GameplayActions.Runtime.Runner;
 using QuestWorld.Interaction.Runtime.Actions;
+using QuestWorld.Interaction.Runtime.Interactor;
 
 namespace QuestWorld.Interaction.Runtime.Interactive
 {
@@ -44,6 +45,11 @@ namespace QuestWorld.Interaction.Runtime.Interactive
                 PrepareAction(action);
                 action.Reparent(component);
                 component.AddAction(action);
+            }
+
+            foreach (InteractionInteractor interactor in _presentInteractors)
+            {
+                interactor.RefreshFocusedBindings(this);
             }
         }
     }
