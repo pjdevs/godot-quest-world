@@ -21,35 +21,11 @@ public partial class InteractionPresenter : CanvasLayer
     /// <summary>Gets or sets the interactor whose local focus and indication signals are presented.</summary>
     [ExportGroup("Projection")]
     [Export]
-    public InteractionInteractor? Interactor
-    {
-        get => _interactor;
-        set
-        {
-            if (_interactor == value)
-            {
-                return;
-            }
-
-            _interactor = value;
-        }
-    }
+    public InteractionInteractor? Interactor { get; set; }
 
     /// <summary>Gets or sets the local camera used to project world anchors onto the screen.</summary>
     [Export]
-    public Camera3D? Camera
-    {
-        get => _camera;
-        set
-        {
-            if (_camera == value)
-            {
-                return;
-            }
-
-            _camera = value;
-        }
-    }
+    public Camera3D? Camera { get; set; }
 
     /// <summary>
     /// Gets or sets the optional target-level frame stacking the action prompts of the focused target.
@@ -62,9 +38,6 @@ public partial class InteractionPresenter : CanvasLayer
     [ExportGroup("Widgets")]
     [Export]
     public PackedScene? PromptContainerScene { get; set; }
-
-    private InteractionInteractor? _interactor;
-    private Camera3D? _camera;
     private Control? _prompt;
     private InteractiveComponent? _promptTarget;
     private string _promptContainerKey = string.Empty;
