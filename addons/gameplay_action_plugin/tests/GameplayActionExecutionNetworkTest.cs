@@ -24,7 +24,7 @@ public sealed partial class GameplayActionExecutionNetworkTest
         Session session = await Connect();
         try
         {
-            GameplayActionExecutionResult result = session.Server.Component.ExecuteProgrammatic(
+            GameplayActionExecutionResult result = session.Server.Component.ExecuteAction(
                 RepairAction,
                 out ulong executionId
             );
@@ -149,9 +149,7 @@ public sealed partial class GameplayActionExecutionNetworkTest
     {
         public int ExecuteCount { get; private set; }
 
-        public override GameplayActionExecutionResult Execute(
-            in GameplayActionExecutionContext context
-        )
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
         {
             ExecuteCount++;
             return new GameplayActionExecutionRunning();

@@ -86,19 +86,27 @@ public partial class GameplayActionComponent : Node
         }
     }
 
+    /// <summary>Registers one action at runtime and appends it to the declared action set.</summary>
+    /// <remarks>
+    /// An action added here joins <see cref="Actions"/>, which <see cref="RemoveAction"/> already
+    /// takes it out of: the declared set is the ordered action set of this host, not only what the
+    /// scene authored, so a consumer reading it never has to guess which additions it can see.
+    /// </remarks>
     public bool AddAction(GameplayAction action)
     {
-        if (!CanRegister(action, true))
+        if (!RegisterAction(action, true))
         {
             return false;
         }
 
-        GameplayActionDefinition definition = action.Definition!;
-        action.Component = this;
-        _actionsById.Add(definition.Id, action);
         if (action.GetParent() is null)
         {
             AddChild(action);
+        }
+
+        if (!Actions.Contains(action))
+        {
+            Actions.Add(action);
         }
 
         return true;
@@ -136,8 +144,7 @@ public partial class GameplayActionComponent : Node
     public GameplayActionAvailability EvaluateAction(
         StringName actionId,
         Node? instigator = null,
-        Node? requester = null,
-        GameplayActionInvocationKind invocationKind = GameplayActionInvocationKind.Programmatic
+        Node? requester = null
     )
     {
         GameplayAction? action = ResolveAction(actionId);
@@ -146,48 +153,47 @@ public partial class GameplayActionComponent : Node
             return new GameplayActionBlocked(NotConfiguredReason);
         }
 
-        GameplayActionContext context = new(instigator, requester, this, action, invocationKind);
+        GameplayActionContext context = new(0ul, instigator, requester, this, action);
         return EvaluateRules(action.Rules, context);
     }
 
-    public GameplayActionExecutionResult ExecuteProgrammatic(
+    /// <summary>Runs one action of this host on the authority, attributed to an instigator.</summary>
+    /// <remarks>
+    /// There is one way to run an action, and where the call comes from does not change it: rules and
+    /// reservations apply to a quest, a script, a timer, and a player alike. What separates a player
+    /// request is not a different operation but a requester waiting to be acknowledged, which only
+    /// <see cref="ExecuteRequestedAction"/> attaches — so an execution started here never sends an
+    /// acknowledgement to a peer that asked for nothing.
+    /// </remarks>
+    public GameplayActionExecutionResult ExecuteAction(
         StringName actionId,
         out ulong executionId,
-        Node? instigator = null,
-        Node? requester = null
+        Node? instigator = null
     )
     {
-        return ExecuteCore(
-            actionId,
-            out executionId,
-            instigator,
-            requester,
-            GameplayActionInvocationKind.Programmatic
-        );
+        return ExecuteCore(actionId, out executionId, instigator, null);
     }
 
-    internal GameplayActionExecutionResult ExecutePlayerRequest(
+    /// <summary>Runs one action on behalf of the runner that requested it.</summary>
+    /// <remarks>
+    /// Reserved for the request transport: the runner passed here is answered with the started,
+    /// progress, completed, cancelled, and failed acknowledgements of the resulting execution.
+    /// </remarks>
+    internal GameplayActionExecutionResult ExecuteRequestedAction(
         StringName actionId,
         out ulong executionId,
         Node? instigator,
         GameplayActionRunner requester
     )
     {
-        return ExecuteCore(
-            actionId,
-            out executionId,
-            instigator,
-            requester,
-            GameplayActionInvocationKind.PlayerRequest
-        );
+        return ExecuteCore(actionId, out executionId, instigator, requester);
     }
 
     private GameplayActionExecutionResult ExecuteCore(
         StringName actionId,
         out ulong executionId,
         Node? instigator,
-        Node? requester,
-        GameplayActionInvocationKind invocationKind
+        Node? requester
     )
     {
         executionId = 0;
@@ -204,12 +210,7 @@ public partial class GameplayActionComponent : Node
             return new GameplayActionExecutionRejected(NotConfiguredReason);
         }
 
-        GameplayActionAvailability availability = EvaluateAction(
-            actionId,
-            instigator,
-            requester,
-            invocationKind
-        );
+        GameplayActionAvailability availability = EvaluateAction(actionId, instigator, requester);
         if (availability is not GameplayActionAllowed)
         {
             string reason = availability.DescribeRefusal();
@@ -217,12 +218,7 @@ public partial class GameplayActionComponent : Node
             return new GameplayActionExecutionRejected(reason);
         }
 
-        ActiveExecution? reservation = ReserveExecutionCore(
-            action,
-            instigator,
-            requester,
-            invocationKind
-        );
+        ActiveExecution? reservation = ReserveExecutionCore(action, instigator, requester);
         if (reservation is null)
         {
             DispatchRejected(0ul, action, instigator, requester, AlreadyRunningReason);
@@ -295,16 +291,19 @@ public partial class GameplayActionComponent : Node
         return false;
     }
 
-    internal bool IsConcurrencyGroupExecutingByRequester(
-        StringName concurrencyGroup,
-        Node requester
-    )
+    /// <summary>Gets whether one instigator is the reason a concurrency group is busy.</summary>
+    /// <remarks>
+    /// Asked of the instigator rather than the requester, because that is what attributes an
+    /// execution whatever started it: the same answer covers an action a player asked for and one a
+    /// script ran on their behalf.
+    /// </remarks>
+    internal bool IsConcurrencyGroupExecutingFor(StringName concurrencyGroup, Node instigator)
     {
         foreach (ActiveExecution execution in _executionsById.Values)
         {
             if (
                 execution.Action.GetHostConcurrencyGroup() == concurrencyGroup
-                && execution.Requester == requester
+                && execution.Instigator == instigator
             )
             {
                 return true;
@@ -447,7 +446,7 @@ public partial class GameplayActionComponent : Node
             return false;
         }
 
-        GameplayActionExecutionContext context = BuildExecutionContext(execution.Value);
+        GameplayActionContext context = BuildExecutionContext(execution.Value);
         execution.Value.Action.Executor?.OnExecutionCompleted(context);
         FinalizeRetiredAction(execution.Value.Action);
         EmitCompleted(execution.Value);
@@ -462,7 +461,7 @@ public partial class GameplayActionComponent : Node
             return false;
         }
 
-        GameplayActionExecutionContext context = BuildExecutionContext(execution.Value);
+        GameplayActionContext context = BuildExecutionContext(execution.Value);
         execution.Value.Action.Executor?.OnExecutionCancelled(context, reason);
         FinalizeRetiredAction(execution.Value.Action);
         EmitCancelled(execution.Value, reason);
@@ -477,7 +476,7 @@ public partial class GameplayActionComponent : Node
             return false;
         }
 
-        GameplayActionExecutionContext context = BuildExecutionContext(execution.Value);
+        GameplayActionContext context = BuildExecutionContext(execution.Value);
         execution.Value.Action.Executor?.OnExecutionFailed(context, reason);
         FinalizeRetiredAction(execution.Value.Action);
         EmitFailed(execution.Value, reason);
@@ -574,8 +573,7 @@ public partial class GameplayActionComponent : Node
     private ActiveExecution? ReserveExecutionCore(
         GameplayAction action,
         Node? instigator,
-        Node? requester,
-        GameplayActionInvocationKind invocationKind
+        Node? requester
     )
     {
         StringName actionId = action.Definition!.Id;
@@ -594,14 +592,7 @@ public partial class GameplayActionComponent : Node
             return null;
         }
 
-        ActiveExecution execution = new(
-            _nextExecutionId++,
-            action,
-            group,
-            instigator,
-            requester,
-            invocationKind
-        );
+        ActiveExecution execution = new(_nextExecutionId++, action, group, instigator, requester);
         _executionsById.Add(execution.Id, execution);
         return execution;
     }
@@ -688,10 +679,7 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Instigator),
             ToVariant(execution.Requester)
         );
-        if (
-            execution.InvocationKind == GameplayActionInvocationKind.PlayerRequest
-            && execution.Requester is GameplayActionRunner runner
-        )
+        if (execution.Requester is GameplayActionRunner runner)
         {
             runner.NotifyExecutionStarted(this, execution.Action, execution.Id);
         }
@@ -706,10 +694,7 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Instigator),
             ToVariant(execution.Requester)
         );
-        if (
-            execution.InvocationKind == GameplayActionInvocationKind.PlayerRequest
-            && execution.Requester is GameplayActionRunner runner
-        )
+        if (execution.Requester is GameplayActionRunner runner)
         {
             runner.NotifyExecutionCompleted(this, execution.Action, execution.Id);
         }
@@ -725,10 +710,7 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Requester),
             reason
         );
-        if (
-            execution.InvocationKind == GameplayActionInvocationKind.PlayerRequest
-            && execution.Requester is GameplayActionRunner runner
-        )
+        if (execution.Requester is GameplayActionRunner runner)
         {
             runner.NotifyExecutionCancelled(this, execution.Action, execution.Id, reason);
         }
@@ -744,10 +726,7 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Requester),
             reason
         );
-        if (
-            execution.InvocationKind == GameplayActionInvocationKind.PlayerRequest
-            && execution.Requester is GameplayActionRunner runner
-        )
+        if (execution.Requester is GameplayActionRunner runner)
         {
             runner.NotifyExecutionFailed(this, execution.Action, execution.Id, reason);
         }
@@ -777,10 +756,7 @@ public partial class GameplayActionComponent : Node
 
     private void NotifyRequesterProgress(in ActiveExecution execution)
     {
-        if (
-            execution.InvocationKind == GameplayActionInvocationKind.PlayerRequest
-            && execution.Requester is GameplayActionRunner runner
-        )
+        if (execution.Requester is GameplayActionRunner runner)
         {
             runner.NotifyExecutionProgress(this, execution.Action, execution.Id);
         }
@@ -788,15 +764,8 @@ public partial class GameplayActionComponent : Node
 
     private static Variant ToVariant(Node? node) => node is null ? default : Variant.From(node);
 
-    private GameplayActionExecutionContext BuildExecutionContext(in ActiveExecution execution) =>
-        new(
-            execution.Id,
-            execution.Instigator,
-            execution.Requester,
-            this,
-            execution.Action,
-            execution.InvocationKind
-        );
+    private GameplayActionContext BuildExecutionContext(in ActiveExecution execution) =>
+        new(execution.Id, execution.Instigator, execution.Requester, this, execution.Action);
 
     private void FinalizeRetiredAction(GameplayAction action)
     {
@@ -817,7 +786,6 @@ public partial class GameplayActionComponent : Node
         GameplayAction Action,
         StringName ConcurrencyGroup,
         Node? Instigator,
-        Node? Requester,
-        GameplayActionInvocationKind InvocationKind
+        Node? Requester
     );
 }

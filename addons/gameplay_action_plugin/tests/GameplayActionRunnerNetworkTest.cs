@@ -379,9 +379,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
 
         public ulong ExecutionId { get; private set; }
 
-        public override GameplayActionExecutionResult Execute(
-            in GameplayActionExecutionContext context
-        )
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
         {
             ExecuteCount++;
             ExecutionId = context.ExecutionId;
@@ -393,7 +391,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
         ) => new GameplayActionProgressSample(0.0f, 1.0f, 0L);
 
         protected internal override void OnExecutionCancelled(
-            in GameplayActionExecutionContext context,
+            in GameplayActionContext context,
             string reason
         ) => CancelledCount++;
     }

@@ -35,7 +35,7 @@ public sealed partial class GameplayActionExecutionTest
         GameplayActionExecutionSynchronizer source = AutoFree(
             new GameplayActionExecutionSynchronizer { Component = authority }
         );
-        authority.ExecuteProgrammatic("replicated", out _);
+        authority.ExecuteAction("replicated", out _);
         Godot.Collections.Dictionary valid = source.CaptureSnapshot();
         GameplayActionComponent receiver = CreateRunningComponent("replicated");
         GameplayActionExecutionSynchronizer destination = AutoFree(
@@ -58,7 +58,6 @@ public sealed partial class GameplayActionExecutionTest
         RecordingExecutor executor = new(calls) { Result = new GameplayActionExecutionCompleted() };
         GameplayActionComponent component = CreateComponentWithAction("heal", executor);
         Node instigator = AutoFree(new Node());
-        Node requester = AutoFree(new Node());
         List<long> observedIds = new();
         component.GameplayActionStarted += (
             executionId,
@@ -70,7 +69,9 @@ public sealed partial class GameplayActionExecutionTest
             AssertThat(component.IsExecutionActive((ulong)executionId)).IsFalse();
             AssertThat(action == component.ResolveAction(new StringName("heal"))).IsTrue();
             AssertThat(receivedInstigator == instigator).IsTrue();
-            AssertThat(receivedRequester == requester).IsTrue();
+
+            // Nobody requested this execution, so nobody is waiting to be acknowledged for it.
+            AssertThat(receivedRequester == null).IsTrue();
             observedIds.Add(executionId);
             calls.Add("started");
         };
@@ -80,11 +81,10 @@ public sealed partial class GameplayActionExecutionTest
             calls.Add("completed");
         };
 
-        GameplayActionExecutionResult result = component.ExecuteProgrammatic(
+        GameplayActionExecutionResult result = component.ExecuteAction(
             new StringName("heal"),
             out ulong executionId,
-            instigator,
-            requester
+            instigator
         );
 
         AssertThat(result is GameplayActionExecutionCompleted).IsTrue();
@@ -106,7 +106,7 @@ public sealed partial class GameplayActionExecutionTest
         component.GameplayActionCompleted += (_, _, _, _) => calls.Add("completed");
         component.GameplayActionFailed += (_, _, _, _, reason) => calls.Add($"failed:{reason}");
 
-        component.ExecuteProgrammatic(new StringName("repair"), out ulong executionId);
+        component.ExecuteAction(new StringName("repair"), out ulong executionId);
 
         AssertThat(component.CancelExecution(executionId, "Interrupted.")).IsTrue();
         AssertThat(component.CompleteExecution(executionId)).IsFalse();
@@ -149,8 +149,8 @@ public sealed partial class GameplayActionExecutionTest
             rejectedCalls.Add($"rejected:{reason}");
         };
 
-        failed.ExecuteProgrammatic(new StringName("repair"), out _);
-        rejected.ExecuteProgrammatic(new StringName("repair"), out ulong rejectedExecutionId);
+        failed.ExecuteAction(new StringName("repair"), out _);
+        rejected.ExecuteAction(new StringName("repair"), out ulong rejectedExecutionId);
 
         AssertThat(failedCalls)
             .ContainsExactly(
@@ -176,7 +176,7 @@ public sealed partial class GameplayActionExecutionTest
             calls.Add($"rejected:{reason}");
         };
 
-        GameplayActionExecutionResult result = component.ExecuteProgrammatic(
+        GameplayActionExecutionResult result = component.ExecuteAction(
             new StringName("heal"),
             out ulong executionId
         );
@@ -200,7 +200,7 @@ public sealed partial class GameplayActionExecutionTest
         List<StringName> changed = new();
         component.ExecutionPresentationChanged += actionId => changed.Add(actionId);
 
-        component.ExecuteProgrammatic(new StringName("repair"), out ulong executionId);
+        component.ExecuteAction(new StringName("repair"), out ulong executionId);
 
         AssertThat(
                 component.TryGetExecutionPresentation(
@@ -225,7 +225,7 @@ public sealed partial class GameplayActionExecutionTest
     public void RunningExecutionPublishesClampedDiscreteAndCallableProgress()
     {
         GameplayActionComponent component = CreateRunningComponent("repair");
-        component.ExecuteProgrammatic(new StringName("repair"), out ulong executionId);
+        component.ExecuteAction(new StringName("repair"), out ulong executionId);
 
         AssertThat(component.ReportExecutionProgress(executionId, -2.0f)).IsTrue();
         AssertProgress(component, "repair", 0.0f);
@@ -289,9 +289,9 @@ public sealed partial class GameplayActionExecutionTest
             "authority",
             GameplayActionExecutionVisibility.AuthorityOnly
         );
-        authority.ExecuteProgrammatic(new StringName("replicated"), out ulong executionId);
-        authority.ExecuteProgrammatic(new StringName("requester"), out _);
-        authority.ExecuteProgrammatic(new StringName("authority"), out _);
+        authority.ExecuteAction(new StringName("replicated"), out ulong executionId);
+        authority.ExecuteAction(new StringName("requester"), out _);
+        authority.ExecuteAction(new StringName("authority"), out _);
 
         GameplayActionComponent receiver = AutoFree(new GameplayActionComponent());
         AddRunningAction(
@@ -371,7 +371,7 @@ public sealed partial class GameplayActionExecutionTest
             "repair",
             GameplayActionExecutionVisibility.Replicated
         );
-        authority.ExecuteProgrammatic(new StringName("repair"), out _);
+        authority.ExecuteAction(new StringName("repair"), out _);
         GameplayActionExecutionSynchronizer source = AutoFree(
             new GameplayActionExecutionSynchronizer { Component = authority }
         );
@@ -398,7 +398,7 @@ public sealed partial class GameplayActionExecutionTest
     public void RetiringActiveActionRemainsPresentableUntilItsTerminalOutcome()
     {
         GameplayActionComponent component = CreateRunningComponent("repair");
-        component.ExecuteProgrammatic(new StringName("repair"), out ulong executionId);
+        component.ExecuteAction(new StringName("repair"), out ulong executionId);
 
         AssertThat(component.RemoveAction(new StringName("repair"))).IsTrue();
 
@@ -420,7 +420,7 @@ public sealed partial class GameplayActionExecutionTest
         ISceneRunner runner = ISceneRunner.Load(root);
         await runner.SimulateFrames(1);
 
-        GameplayActionExecutionResult result = component.ExecuteProgrammatic(
+        GameplayActionExecutionResult result = component.ExecuteAction(
             new StringName("charge"),
             out ulong executionId
         );
@@ -461,7 +461,7 @@ public sealed partial class GameplayActionExecutionTest
         AddAction(component, "charge", executor);
         ISceneRunner runner = ISceneRunner.Load(root);
         await runner.SimulateFrames(1);
-        component.ExecuteProgrammatic(new StringName("charge"), out ulong executionId);
+        component.ExecuteAction(new StringName("charge"), out ulong executionId);
         TimedExecution timer = new();
 
         AssertThat(timer.Start(component, executionId, 0.0f))
@@ -574,25 +574,22 @@ public sealed partial class GameplayActionExecutionTest
         public GameplayActionExecutionResult Result { get; set; } =
             new GameplayActionExecutionCompleted();
 
-        public override GameplayActionExecutionResult Execute(
-            in GameplayActionExecutionContext context
-        )
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
         {
             calls.Add("execute");
             return Result;
         }
 
-        protected internal override void OnExecutionCompleted(
-            in GameplayActionExecutionContext context
-        ) => calls.Add("owner-completed");
+        protected internal override void OnExecutionCompleted(in GameplayActionContext context) =>
+            calls.Add("owner-completed");
 
         protected internal override void OnExecutionCancelled(
-            in GameplayActionExecutionContext context,
+            in GameplayActionContext context,
             string reason
         ) => calls.Add($"owner-cancelled:{reason}");
 
         protected internal override void OnExecutionFailed(
-            in GameplayActionExecutionContext context,
+            in GameplayActionContext context,
             string reason
         ) => calls.Add($"owner-failed:{reason}");
     }
@@ -603,13 +600,10 @@ public sealed partial class GameplayActionExecutionTest
 
         public bool TimerIsActive => IsTimerActive;
 
-        public override GameplayActionExecutionResult Execute(
-            in GameplayActionExecutionContext context
-        ) => RunningTimed(context);
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context) =>
+            RunningTimed(context);
 
-        protected internal override void OnExecutionCompleted(
-            in GameplayActionExecutionContext context
-        )
+        protected internal override void OnExecutionCompleted(in GameplayActionContext context)
         {
             CompletedCount++;
             base.OnExecutionCompleted(context);

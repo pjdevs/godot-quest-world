@@ -43,22 +43,31 @@ Input configuration does not belong to either type.
 
 `GameplayActionComponent` is the concrete host. Its exported `Actions` collection registers only
 explicit authored direct children during `_Ready`; it never discovers the scene tree recursively.
-`AddAction` registers and parents an unowned runtime action. Registration rejects missing
-definitions, empty IDs, missing executors, duplicate IDs, invalid parents, and actions already owned
-by another component.
+`AddAction` registers and parents an unowned runtime action, then appends it to `Actions`, which
+`RemoveAction` already takes it out of: the declared collection is the ordered action set of the
+host, not only what the scene authored, so a consumer reading it never has to guess which runtime
+additions it can see. Registration rejects missing definitions, empty IDs, missing executors,
+duplicate IDs, invalid parents, and actions already owned by another component; a refused
+registration declares nothing.
 
 The main public operations delivered by this tranche are:
 
 - `ResolveAction(ActionId)` for stable host-local lookup;
 - `EvaluateAction(ActionId, ...)` for pure ordered rule evaluation;
-- `ExecuteProgrammatic(ActionId, out ExecutionId, ...)` for authority-only execution that bypasses
-  future binding/access checks but preserves rules and reservations;
+- `ExecuteAction(ActionId, out ExecutionId, instigator)` for authority-only execution that bypasses
+  binding/access checks but preserves rules and reservations;
 - `IsActionExecuting(ActionId)` for reservation queries;
 - `CompleteExecution`, `CancelExecution`, and `FailExecution` for terminal control of an execution an
   executor left running;
 - `RemoveAction(ActionId)` for safe retirement.
 
-Programmatic execution evaluates only the action's explicit ordered `Rules` collection; action
+There is one way to run an action and where the call comes from does not change it. What separates a
+player request is not a different operation but a requester waiting to be acknowledged, and only the
+request transport attaches one, through the internal `ExecuteRequestedAction`. An execution therefore
+carries a requester exactly when a runner asked for it, which is the single condition the host reads
+before sending a started, progress, or terminal acknowledgement — there is no invocation-kind flag.
+
+Execution evaluates only the action's explicit ordered `Rules` collection; action
 subclasses have no parallel availability hook. It then reserves the stable action ID, the host-local
 concurrency group, and a host-wide execution ID before invoking the one executor. Different
 components never share reservations.

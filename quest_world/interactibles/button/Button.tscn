@@ -69,7 +69,7 @@ script = ExtResource("5_setstate")
 TargetState = &"lowering"
 metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
 
-[node name="InteractiveComponent" type="Node" parent="." unique_id=745842554 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "ActionComponent", "Actions")]
+[node name="InteractiveComponent" type="Node" parent="." unique_id=745842554 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "ActionComponent")]
 script = ExtResource("1_lq42h")
 InteractionArea = NodePath("../InteractionArea")
 IndicationArea = NodePath("../IndicationArea")
@@ -78,7 +78,6 @@ DisplayName = "Wall control"
 ActionPromptScene = ExtResource("2_2ck07")
 IndicationScene = ExtResource("3_6nsmd")
 ActionComponent = NodePath("../GameplayActions")
-Actions = [NodePath("../GameplayActions/RaiseAction"), NodePath("../GameplayActions/LowerAction")]
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
 
 [node name="InteractionArea" type="Area3D" parent="." unique_id=2064253587]

@@ -226,7 +226,6 @@ public sealed partial class InteractionBehaviorTest
             InteractionAnchor = owner,
         };
         InteractionAction action = CreateAction("activate");
-        interactive.Actions.Add(action);
         GameplayActionComponent actionComponent = new();
         interactive.ActionComponent = actionComponent;
         action.PrepareForInteractive(interactive, interactive.TargetRules);
@@ -265,10 +264,9 @@ public sealed partial class InteractionBehaviorTest
             },
         };
         InteractionAction action = CreateAction("activate");
-        interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(action);
         InteractionInteractor interactor = new();
         Node3D view = new() { Name = "ViewOrigin" };
         interactor.AddChild(view);
@@ -303,10 +301,9 @@ public sealed partial class InteractionBehaviorTest
             "activate",
             new AlwaysBlockedInteractionRule { Reason = "Action reason" }
         );
-        interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(action);
         InteractionInteractor interactor = new();
         Node3D world = new();
         world.AddChild(owner);
@@ -330,10 +327,9 @@ public sealed partial class InteractionBehaviorTest
             InteractionAnchor = owner,
         };
         InteractionAction action = CreateAction("activate", new InteractiveParentGameplayRule());
-        interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(action);
         InteractionInteractor interactor = new();
         Node3D world = new();
         world.AddChild(owner);
@@ -478,7 +474,7 @@ public sealed partial class InteractionBehaviorTest
         await testWorld.Runner.SimulateFrames(1);
         testWorld.Interactive.ExecuteAction(testWorld.Interactor, testWorld.Action);
         InteractionAction inspect = CreateAction("inspect");
-        AddAction(testWorld.Interactive, inspect);
+        testWorld.Interactive.AddAction(inspect);
         string rejectedReason = string.Empty;
         testWorld.Interactive.InteractionActionRejected += (_, _, reason) =>
             rejectedReason = reason;
@@ -636,10 +632,9 @@ public sealed partial class InteractionBehaviorTest
             InteractionAnchor = owner,
         };
         InteractionAction action = CreateActivationAction("activate", owner);
-        interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(interactive);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(action);
         owner.Interactive = interactive;
         InteractionInteractor interactor = new();
         Node3D world = new();
@@ -865,7 +860,7 @@ public sealed partial class InteractionBehaviorTest
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
         InteractionAction undefined = new() { Name = "UndefinedAction" };
-        door.Interactive.Actions.Add(undefined);
+        door.Interactive.ActionComponent!.Actions.Add(undefined);
         InteractionAction foreign = CreateAction("foreign");
 
         try
@@ -1003,10 +998,9 @@ public sealed partial class InteractionBehaviorTest
             DisplayName = "Crate",
         };
         InteractionAction inspect = CreateAction("inspect");
-        crateInteractive.Actions.Add(inspect);
         crate.AddChild(crateArea);
         crate.AddChild(crateInteractive);
-        crateInteractive.AddChild(inspect);
+        crateInteractive.AddAction(inspect);
         door.World.AddChild(crate);
         await door.Runner.SimulateFrames(1);
         door.Detect(door.Interactive);
@@ -1050,9 +1044,9 @@ public sealed partial class InteractionBehaviorTest
             new AlwaysBlockedInteractionRule { Reason = "Locked" }
         );
         blocked.Priority = 10;
-        AddAction(door.Interactive, zulu);
-        AddAction(door.Interactive, alpha);
-        AddAction(door.Interactive, blocked);
+        door.Interactive.AddAction(zulu);
+        door.Interactive.AddAction(alpha);
+        door.Interactive.AddAction(blocked);
 
         AssertThat(door.Interactive.ResolveActionForInput(door.Interactor, InteractInput) == alpha)
             .IsTrue();
@@ -1206,7 +1200,7 @@ public sealed partial class InteractionBehaviorTest
         // A group of its own, so the running execution leaves it available and a fresh resolution
         // really would pick it. Sharing the default group would block it like everything else.
         alternative.HostConcurrencyGroup = new StringName("inspection");
-        AddAction(testWorld.Interactive, alternative);
+        testWorld.Interactive.AddAction(alternative);
         testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
@@ -1249,7 +1243,7 @@ public sealed partial class InteractionBehaviorTest
         TestWorld testWorld = BuildWorld();
         InteractionAction automatic = CreateAction("automatic");
         automatic.Automatic = true;
-        AddAction(testWorld.Interactive, automatic);
+        testWorld.Interactive.AddAction(automatic);
         await testWorld.Runner.SimulateFrames(1);
 
         AssertThat(testWorld.Interactive.ResolveAutomaticAction(testWorld.Interactor) == automatic)
@@ -1463,7 +1457,7 @@ public sealed partial class InteractionBehaviorTest
             Stateful = door.State,
             TargetState = new StringName("melted"),
         };
-        GameplayActionExecutionContext context = DoorContext(door);
+        GameplayActionContext context = DoorContext(door);
 
         AssertThat(orphan.Execute(context) is GameplayActionExecutionFailed).IsTrue();
         AssertThat(undeclared.Execute(context) is GameplayActionExecutionFailed).IsTrue();
@@ -1491,7 +1485,7 @@ public sealed partial class InteractionBehaviorTest
         };
         action.AddChild(executor);
         action.Executor = executor;
-        AddAction(testWorld.Interactive, action);
+        testWorld.Interactive.AddAction(action);
         await testWorld.Runner.SimulateFrames(1);
 
         testWorld.Interactive.ExecuteAction(testWorld.Interactor, action, out ulong executionId);
@@ -1528,7 +1522,7 @@ public sealed partial class InteractionBehaviorTest
         };
         action.AddChild(executor);
         action.Executor = executor;
-        AddAction(testWorld.Interactive, action);
+        testWorld.Interactive.AddAction(action);
         await testWorld.Runner.SimulateFrames(1);
 
         testWorld.Interactive.ExecuteAction(testWorld.Interactor, action, out ulong executionId);
@@ -1548,8 +1542,8 @@ public sealed partial class InteractionBehaviorTest
         inspect.HostConcurrencyGroup = new StringName("inspection");
         InteractionAction pickup = CreateAction("pickup");
         pickup.Automatic = true;
-        AddAction(testWorld.Interactive, inspect);
-        AddAction(testWorld.Interactive, pickup);
+        testWorld.Interactive.AddAction(inspect);
+        testWorld.Interactive.AddAction(pickup);
         testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
 
@@ -1636,7 +1630,7 @@ public sealed partial class InteractionBehaviorTest
         );
         InteractionAction inspect = CreateAction("inspect");
         inspect.HostConcurrencyGroup = new StringName("inspection");
-        AddAction(testWorld.Interactive, inspect);
+        testWorld.Interactive.AddAction(inspect);
         ExecutorOf(inspect).Result = new GameplayActionExecutionRunning();
 
         GameplayActionExecutionResult result = testWorld.Interactive.ExecuteAction(
@@ -1660,8 +1654,8 @@ public sealed partial class InteractionBehaviorTest
         InteractionAction inspect = CreateAction("inspect");
         hack.HostConcurrencyGroup = new StringName("controls");
         inspect.HostConcurrencyGroup = new StringName("inspection");
-        AddAction(testWorld.Interactive, hack);
-        AddAction(testWorld.Interactive, inspect);
+        testWorld.Interactive.AddAction(hack);
+        testWorld.Interactive.AddAction(inspect);
         ExecutorOf(hack).Result = new GameplayActionExecutionRunning();
         ExecutorOf(inspect).Result = new GameplayActionExecutionRunning();
         testWorld.Interactive.ExecuteAction(testWorld.Interactor, hack, out ulong hackId);
@@ -1821,7 +1815,7 @@ public sealed partial class InteractionBehaviorTest
         ComposedTimedExecutor executor = new() { Name = "ComposedExecutor", Duration = 0.05f };
         action.AddChild(executor);
         action.Executor = executor;
-        AddAction(testWorld.Interactive, action);
+        testWorld.Interactive.AddAction(action);
         await testWorld.Runner.SimulateFrames(1);
 
         testWorld.Interactive.ExecuteAction(testWorld.Interactor, action, out ulong executionId);
@@ -1852,7 +1846,7 @@ public sealed partial class InteractionBehaviorTest
         InteractionAction second = NewAction("second", Array.Empty<InteractionRule>());
         second.HostConcurrencyGroup = new StringName("other");
         second.Executor = executor;
-        AddAction(testWorld.Interactive, second);
+        testWorld.Interactive.AddAction(second);
         await testWorld.Runner.SimulateFrames(1);
 
         GameplayActionExecutionResult firstResult = testWorld.Interactive.ExecuteAction(
@@ -1933,7 +1927,7 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         InteractionAction action = CreateAction("hack");
-        AddAction(testWorld.Interactive, action);
+        testWorld.Interactive.AddAction(action);
         ExecutorOf(action).Result = new GameplayActionExecutionRunning();
         await testWorld.Runner.SimulateFrames(1);
 
@@ -2050,7 +2044,7 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         InteractionAction repair = CreateAction("repair");
-        AddAction(testWorld.Interactive, repair);
+        testWorld.Interactive.AddAction(repair);
         ExecutorOf(repair).Result = new GameplayActionExecutionRunning();
         Node participantA = new() { Name = "ParticipantA" };
         Node participantB = new() { Name = "ParticipantB" };
@@ -2081,7 +2075,7 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         InteractionAction action = CreateAction("fail");
-        AddAction(testWorld.Interactive, action);
+        testWorld.Interactive.AddAction(action);
         RecordingInteractionExecutor executor = ExecutorOf(action);
         executor.Result = new GameplayActionExecutionRunning();
         await testWorld.Runner.SimulateFrames(1);
@@ -2108,7 +2102,7 @@ public sealed partial class InteractionBehaviorTest
         TestWorld testWorld = BuildWorld();
         InteractionAction force = CreateAction("force");
         force.Definition!.HoldThreshold = 0.05f;
-        AddAction(testWorld.Interactive, force);
+        testWorld.Interactive.AddAction(force);
         testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
 
@@ -2138,7 +2132,7 @@ public sealed partial class InteractionBehaviorTest
         InteractionAction unlock = CreateAction("unlock", DoorStateRule("locked"));
         unlock.Definition!.HoldThreshold = 0.001f;
         BindSetStateExecutor(unlock, door.State, "closed");
-        AddAction(door.Interactive, unlock);
+        door.Interactive.AddAction(unlock);
         await door.Runner.SimulateFrames(1);
         door.Detect(door.Interactive);
 
@@ -2171,7 +2165,7 @@ public sealed partial class InteractionBehaviorTest
         TestWorld testWorld = BuildWorld();
         InteractionAction force = CreateAction("force");
         force.Definition!.HoldThreshold = 3600.0f;
-        AddAction(testWorld.Interactive, force);
+        testWorld.Interactive.AddAction(force);
         testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
@@ -2247,8 +2241,8 @@ public sealed partial class InteractionBehaviorTest
         force.Definition!.HoldThreshold = 3600.0f;
         InteractionAction pry = CreateAction("pry");
         pry.Definition!.HoldThreshold = 0.001f;
-        AddAction(testWorld.Interactive, force);
-        AddAction(testWorld.Interactive, pry);
+        testWorld.Interactive.AddAction(force);
+        testWorld.Interactive.AddAction(pry);
         testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
@@ -2284,7 +2278,7 @@ public sealed partial class InteractionBehaviorTest
         TestWorld testWorld = BuildWorld();
         testWorld.Action.Definition!.HoldThreshold = 2.0f;
         InteractionAction inspect = CreateAction("inspect");
-        AddAction(testWorld.Interactive, inspect);
+        testWorld.Interactive.AddAction(inspect);
         testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
 
@@ -2305,7 +2299,7 @@ public sealed partial class InteractionBehaviorTest
     {
         TestWorld testWorld = BuildWorld();
         ActivationExecutorOf(testWorld.Action).Duration = 3600.0f;
-        AddAction(testWorld.Interactive, CreateAction("inspect"));
+        testWorld.Interactive.AddAction(CreateAction("inspect"));
         testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
@@ -2434,12 +2428,11 @@ public sealed partial class InteractionBehaviorTest
             DoorStateRule("primed"),
             key
         );
-        interactive.Actions.Add(activate);
-        interactive.Actions.Add(reactivate);
         reactor.AddChild(area);
         reactor.AddChild(state);
         reactor.AddChild(interactive);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(activate);
+        interactive.AddAction(reactivate);
 
         Node3D view = new() { Name = "ViewOrigin" };
         InteractionInteractor interactor = new() { Name = "Interactor" };
@@ -2518,11 +2511,10 @@ public sealed partial class InteractionBehaviorTest
             ActorStateRule("This is already activated.", IdleState, ActivatingState),
             ActorStateRule("This is busy.", IdleState)
         );
-        interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(stateful);
         owner.AddChild(interactive);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(action);
         interactive.InteractionActionCancelled += owner.OnInteractionActionCancelled;
         stateful.StateChangedAuthority += owner.OnStateChangedAuthority;
         stateful.StateChangedPresentation += owner.OnStateChangedPresentation;
@@ -2560,12 +2552,6 @@ public sealed partial class InteractionBehaviorTest
         return detector;
     }
 
-    private static void AddAction(InteractiveComponent interactive, InteractionAction action)
-    {
-        interactive.Actions.Add(action);
-        interactive.ConfigureActionHost();
-    }
-
     private static InteractiveComponent AddPresentationReceiver(
         Node parent,
         StringName actionId,
@@ -2583,10 +2569,9 @@ public sealed partial class InteractionBehaviorTest
         };
         InteractionAction action = CreateAction(actionId.ToString());
         action.ExecutionVisibility = visibility;
-        interactive.Actions.Add(action);
         actor.AddChild(area);
         actor.AddChild(interactive);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(action);
         parent.AddChild(actor);
         return interactive;
     }
@@ -2663,14 +2648,13 @@ public sealed partial class InteractionBehaviorTest
         return array;
     }
 
-    private static GameplayActionExecutionContext DoorContext(DoorWorld door) =>
+    private static GameplayActionContext DoorContext(DoorWorld door) =>
         new(
             1,
             door.Interactor,
             door.Interactor.Runner,
             door.Interactive.ActionComponent!,
-            door.Open,
-            GameplayActionInvocationKind.Programmatic
+            door.Open
         );
 
     private static void BindSetStateExecutor(
@@ -2741,12 +2725,11 @@ public sealed partial class InteractionBehaviorTest
         };
         InteractionAction open = CreateAction("open", DoorStateRule("closed"));
         InteractionAction close = CreateAction("close", DoorStateRule("open"));
-        interactive.Actions.Add(open);
-        interactive.Actions.Add(close);
         door.AddChild(area);
         door.AddChild(state);
         door.AddChild(interactive);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(open);
+        interactive.AddAction(close);
 
         Node3D view = new() { Name = "ViewOrigin" };
         InteractionInteractor interactor = new() { Name = "Interactor" };

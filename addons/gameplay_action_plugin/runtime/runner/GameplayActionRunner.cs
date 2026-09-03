@@ -230,12 +230,7 @@ public partial class GameplayActionRunner : Node
             return new GameplayActionHidden();
         }
 
-        return binding.Component.EvaluateAction(
-            binding.ActionId,
-            ResolveInstigator(),
-            this,
-            GameplayActionInvocationKind.PlayerRequest
-        );
+        return binding.Component.EvaluateAction(binding.ActionId, ResolveInstigator(), this);
     }
 
     private bool CanAccess(GameplayActionComponent component, GameplayAction action, bool sustained)

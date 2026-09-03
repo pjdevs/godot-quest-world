@@ -455,12 +455,11 @@ public sealed partial class GameplayActionRunnerTest
 
         public override bool RequiresRequesterPresence => requiresRequesterPresence;
 
-        public override GameplayActionExecutionResult Execute(
-            in GameplayActionExecutionContext context
-        ) => new GameplayActionExecutionRunning();
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context) =>
+            new GameplayActionExecutionRunning();
 
         protected internal override void OnExecutionCancelled(
-            in GameplayActionExecutionContext context,
+            in GameplayActionContext context,
             string reason
         ) => CancelledCount++;
     }

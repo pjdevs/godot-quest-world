@@ -1151,8 +1151,7 @@ public sealed partial class InteractionNetworkTest
         TestScriptedExecutor executor = new() { Name = $"{id}Executor" };
         action.AddChild(executor);
         action.Executor = executor;
-        interactive.Actions.Add(action);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(action);
         return executor;
     }
 
@@ -1187,8 +1186,7 @@ public sealed partial class InteractionNetworkTest
         };
         action.AddChild(executor);
         action.Executor = executor;
-        interactive.Actions.Add(action);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(action);
     }
 
     private static InteractionAction NewAction(

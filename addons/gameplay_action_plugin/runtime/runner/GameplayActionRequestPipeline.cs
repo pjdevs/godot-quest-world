@@ -211,13 +211,7 @@ internal sealed class GameplayActionRequestPipeline(
     private void PredictExecution(GameplayActionBinding binding, GameplayAction action)
     {
         GameplayActionProgressSample? sample = action.Executor?.GetPredictionSample(
-            new GameplayActionContext(
-                resolveInstigator(),
-                _owner,
-                binding.Component,
-                action,
-                GameplayActionInvocationKind.PlayerRequest
-            )
+            new GameplayActionContext(0ul, resolveInstigator(), _owner, binding.Component, action)
         );
         if (sample is GameplayActionProgressSample prediction)
         {
@@ -634,7 +628,7 @@ internal sealed class GameplayActionRequestPipeline(
             return new GameplayActionExecutionRejected();
         }
 
-        GameplayActionExecutionResult result = component.ExecutePlayerRequest(
+        GameplayActionExecutionResult result = component.ExecuteRequestedAction(
             actionId,
             out ulong executionId,
             resolveInstigator(),

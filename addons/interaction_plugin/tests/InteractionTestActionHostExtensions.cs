@@ -20,45 +20,62 @@ internal static class InteractionTestActionHostExtensions
     /// enters the tree subscribed to the host it was authored with, so a live tree needs the host
     /// assigned first.
     /// </summary>
-    public static void ConfigureActionHost(
+    public static GameplayActionComponent ConfigureActionHost(
         this InteractiveComponent interactive,
         Node? beside = null
     )
     {
-        GameplayActionComponent component;
-        if (interactive.ActionComponent is null)
+        if (interactive.ActionComponent is not null)
         {
-            component = new GameplayActionComponent { Name = "GameplayActions" };
-            (beside ?? interactive.GetParent() ?? (Node)interactive).AddChild(component);
-            interactive.ActionComponent = component;
-        }
-        else
-        {
-            component = interactive.ActionComponent;
+            return interactive.ActionComponent;
         }
 
-        foreach (InteractionAction action in interactive.Actions)
+        GameplayActionComponent component = new() { Name = "GameplayActions" };
+        (beside ?? interactive.GetParent() ?? (Node)interactive).AddChild(component);
+        interactive.ActionComponent = component;
+        return component;
+    }
+
+    /// <summary>Declares one action on the host of an interactive, creating that host when needed.</summary>
+    /// <remarks>
+    /// An interactive offers what its host declares, so a test builds its actions the way a scene
+    /// does: as direct children of the host, in declaration order. A host already inside the tree has
+    /// run its authored registration, so an action added afterwards goes through the runtime entry
+    /// point exactly like production.
+    /// </remarks>
+    public static void AddAction(
+        this InteractiveComponent interactive,
+        InteractionAction action,
+        Node? beside = null
+    )
+    {
+        GameplayActionComponent component = interactive.ConfigureActionHost(beside);
+        AdoptAction(component, action);
+
+        if (component.IsInsideTree())
         {
-            if (!component.Actions.Contains(action))
-                component.Actions.Add(action);
+            action.PrepareForInteractive(interactive, interactive.TargetRules);
+            component.AddAction(action);
+            return;
+        }
 
-            AdoptAction(component, action);
-
-            // A host already in the tree has run its authored registration, so an action added
-            // afterwards registers the way production does at runtime.
-            if (component.IsInsideTree() && action.Component != component)
-            {
-                action.PrepareForInteractive(interactive, interactive.TargetRules);
-                component.AddAction(action);
-            }
+        if (!component.Actions.Contains(action))
+        {
+            component.Actions.Add(action);
         }
     }
+
+    /// <summary>Gets one action of an interactive by its position in the declared order.</summary>
+    public static InteractionAction ActionAt(this InteractiveComponent interactive, int index) =>
+        (InteractionAction)interactive.ActionComponent!.Actions[index];
 
     private static void AdoptAction(GameplayActionComponent component, InteractionAction action)
     {
         Node? parent = action.GetParent();
         if (parent == component)
+        {
             return;
+        }
 
         if (parent is null)
         {
@@ -114,11 +131,12 @@ internal static class InteractionTestActionHostExtensions
             return new GameplayActionExecutionRejected("Interaction is not configured.");
         }
 
-        return interactive.ActionComponent.ExecuteProgrammatic(
+        // A programmatic execution names no requester: nobody asked for it over the wire, so nobody
+        // is waiting to be acknowledged. The interactor it is attributed to is its instigator.
+        return interactive.ActionComponent.ExecuteAction(
             action.Definition.Id,
             out executionId,
-            interactor,
-            interactor.Runner
+            interactor
         );
     }
 

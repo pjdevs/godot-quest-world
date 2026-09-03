@@ -37,7 +37,7 @@ public partial class SetStateGameplayActionExecutor : GameplayActionExecutor
         }
     }
 
-    public override GameplayActionExecutionResult Execute(in GameplayActionExecutionContext context)
+    public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         if (Stateful is null || TargetState.IsEmpty)
         {

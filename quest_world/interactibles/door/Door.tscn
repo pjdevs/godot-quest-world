@@ -240,7 +240,7 @@ Stateful = NodePath("../../../StatefulComponent")
 TargetState = &"closed"
 metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
 
-[node name="InteractiveComponent" type="Node" parent="Interaction" unique_id=1375300189 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "ActionComponent", "Actions")]
+[node name="InteractiveComponent" type="Node" parent="Interaction" unique_id=1375300189 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "ActionComponent")]
 script = ExtResource("1_vodtj")
 InteractionArea = NodePath("../InteractionArea")
 IndicationArea = NodePath("../IndicationArea")
@@ -249,7 +249,6 @@ DisplayName = "Door"
 ActionPromptScene = ExtResource("2_wx55h")
 IndicationScene = ExtResource("4_qkbub")
 ActionComponent = NodePath("../GameplayActions")
-Actions = [NodePath("../GameplayActions/OpenAction"), NodePath("../GameplayActions/CloseAction"), NodePath("../GameplayActions/UnlockAction")]
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
 
 [node name="StatefulComponent" type="Node" parent="Interaction" unique_id=957633712]

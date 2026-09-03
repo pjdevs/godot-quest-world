@@ -22,19 +22,12 @@ public abstract partial class TimedGameplayActionExecutor : GameplayActionExecut
         in GameplayActionContext context
     ) => TimedExecution.BuildPredictionSample(ComputeTimedDuration(context));
 
-    protected GameplayActionExecutionResult RunningTimed(in GameplayActionExecutionContext context)
+    protected GameplayActionExecutionResult RunningTimed(in GameplayActionContext context)
     {
-        GameplayActionContext query = new(
-            context.Instigator,
-            context.Requester,
-            context.Component,
-            context.Action,
-            context.InvocationKind
-        );
         TimedExecutionStartResult startResult = _timedExecution.Start(
             context.Component,
             context.ExecutionId,
-            ComputeTimedDuration(query),
+            ComputeTimedDuration(context),
             CorrectionInterval
         );
         return startResult == TimedExecutionStartResult.Started
@@ -42,14 +35,14 @@ public abstract partial class TimedGameplayActionExecutor : GameplayActionExecut
             : new GameplayActionExecutionFailed(StartFailureReason(startResult));
     }
 
-    protected internal override void OnExecutionCompleted(in GameplayActionExecutionContext context)
+    protected internal override void OnExecutionCompleted(in GameplayActionContext context)
     {
         _timedExecution.Stop(context.ExecutionId);
         base.OnExecutionCompleted(context);
     }
 
     protected internal override void OnExecutionCancelled(
-        in GameplayActionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     )
     {
@@ -58,7 +51,7 @@ public abstract partial class TimedGameplayActionExecutor : GameplayActionExecut
     }
 
     protected internal override void OnExecutionFailed(
-        in GameplayActionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     )
     {

@@ -112,6 +112,7 @@ public sealed partial class GameplayActionComponentTest
         AssertThat(action.GetParent() == component).IsTrue();
         AssertThat(action.Component == component).IsTrue();
         AssertThat(component.ResolveAction(new StringName("heal")) == action).IsTrue();
+        AssertThat(component.Actions.Contains(action)).IsTrue();
     }
 
     [TestCase]
@@ -133,6 +134,11 @@ public sealed partial class GameplayActionComponentTest
         AssertThat(first.AddAction(duplicate)).IsFalse();
         AssertThat(second.AddAction(registered)).IsFalse();
         AssertThat(second.ResolveAction(new StringName("heal")) is null).IsTrue();
+
+        // A refused registration declares nothing: only the one accepted action joined the set.
+        AssertThat(first.Actions.Count).IsEqual(1);
+        AssertThat(first.Actions[0] == registered).IsTrue();
+        AssertThat(second.Actions.Count).IsEqual(0);
     }
 
     [TestCase]
@@ -184,7 +190,7 @@ public sealed partial class GameplayActionComponentTest
         );
         component.AddAction(action);
 
-        GameplayActionExecutionResult result = component.ExecuteProgrammatic(
+        GameplayActionExecutionResult result = component.ExecuteAction(
             new StringName("heal"),
             out ulong executionId
         );
@@ -212,7 +218,7 @@ public sealed partial class GameplayActionComponentTest
         );
         component.AddAction(action);
 
-        GameplayActionExecutionResult result = component.ExecuteProgrammatic(
+        GameplayActionExecutionResult result = component.ExecuteAction(
             new StringName("heal"),
             out ulong executionId
         );
@@ -238,7 +244,7 @@ public sealed partial class GameplayActionComponentTest
         };
         component.AddAction(CreateAction("heal", executor));
 
-        GameplayActionExecutionResult result = component.ExecuteProgrammatic(
+        GameplayActionExecutionResult result = component.ExecuteAction(
             new StringName("heal"),
             out ulong executionId
         );
@@ -256,11 +262,11 @@ public sealed partial class GameplayActionComponentTest
         GameplayAction action = CreateRunningAction("heal");
         component.AddAction(action);
 
-        GameplayActionExecutionResult first = component.ExecuteProgrammatic(
+        GameplayActionExecutionResult first = component.ExecuteAction(
             new StringName("heal"),
             out ulong firstId
         );
-        GameplayActionExecutionResult second = component.ExecuteProgrammatic(
+        GameplayActionExecutionResult second = component.ExecuteAction(
             new StringName("heal"),
             out ulong secondId
         );
@@ -280,15 +286,15 @@ public sealed partial class GameplayActionComponentTest
         firstHost.AddAction(CreateRunningAction("drop", "actor"));
         secondHost.AddAction(CreateRunningAction("heal", "actor"));
 
-        GameplayActionExecutionResult first = firstHost.ExecuteProgrammatic(
+        GameplayActionExecutionResult first = firstHost.ExecuteAction(
             new StringName("heal"),
             out _
         );
-        GameplayActionExecutionResult sameHost = firstHost.ExecuteProgrammatic(
+        GameplayActionExecutionResult sameHost = firstHost.ExecuteAction(
             new StringName("drop"),
             out _
         );
-        GameplayActionExecutionResult otherHost = secondHost.ExecuteProgrammatic(
+        GameplayActionExecutionResult otherHost = secondHost.ExecuteAction(
             new StringName("heal"),
             out _
         );
@@ -305,11 +311,11 @@ public sealed partial class GameplayActionComponentTest
         component.AddAction(CreateRunningAction("heal", "body"));
         component.AddAction(CreateRunningAction("inspect", "inspection"));
 
-        GameplayActionExecutionResult first = component.ExecuteProgrammatic(
+        GameplayActionExecutionResult first = component.ExecuteAction(
             new StringName("heal"),
             out _
         );
-        GameplayActionExecutionResult second = component.ExecuteProgrammatic(
+        GameplayActionExecutionResult second = component.ExecuteAction(
             new StringName("inspect"),
             out _
         );
@@ -328,7 +334,7 @@ public sealed partial class GameplayActionComponentTest
         component.AddAction(action);
         ISceneRunner runner = ISceneRunner.Load(root);
         await runner.SimulateFrames(1);
-        component.ExecuteProgrammatic(new StringName("heal"), out ulong executionId);
+        component.ExecuteAction(new StringName("heal"), out ulong executionId);
 
         AssertThat(component.RemoveAction(new StringName("heal"))).IsTrue();
         AssertThat(component.ResolveAction(new StringName("heal")) is null).IsTrue();
@@ -344,7 +350,7 @@ public sealed partial class GameplayActionComponentTest
     {
         GameplayActionComponent component = AutoFree(new GameplayActionComponent());
         component.AddAction(CreateRunningAction("heal"));
-        component.ExecuteProgrammatic(new StringName("heal"), out ulong executionId);
+        component.ExecuteAction(new StringName("heal"), out ulong executionId);
         component.RemoveAction(new StringName("heal"));
 
         AssertThat(component.AddAction(CreateAction("heal"))).IsFalse();

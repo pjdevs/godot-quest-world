@@ -35,9 +35,14 @@ Interaction/
       OpenExecutor                     # SetStateGameplayActionExecutor, Stateful = ../../../...
   GameplayActionExecutionSynchronizer  # Component = ../GameplayActions
   InteractiveComponent                 # ActionComponent = ../GameplayActions
-                                       # Actions = [../GameplayActions/OpenAction, ...]
   StatefulComponent
 ```
+
+L'`InteractiveComponent` ne déclare **aucune** action : `Actions` y est une projection en lecture
+seule des `InteractionAction` de son host, dans l'ordre où celui-ci les déclare. Une seule liste
+authorée fait foi, celle du host qui possède réellement les exécutions, et elle ne peut plus diverger
+de la cible qui les présente. Une action générique hébergée à côté n'est pas une offre d'interaction
+et est ignorée.
 
 Deux contraintes découlent de cette forme, et le validateur les signale :
 
@@ -52,6 +57,24 @@ sans réécriture.
 
 Côté demandeur, `Character.tscn` authore de même `GameplayActions` et `GameplayActionRunner` à côté
 de l'`InteractionInteractor`, dont la propriété `Runner` les désigne explicitement.
+
+### Instigator plutôt qu'index inverse
+
+L'`InteractionInteractor` s'approprie l'`Instigator` de son `GameplayActionRunner` : l'instigator
+d'une exécution d'interaction *est* l'interactor qui l'a menée. C'est ce qui rend le contexte
+générique suffisant pour les rules et les executors d'Interaction, et ce qui supprime les deux
+dictionnaires statiques qui indexaient les runners et les hosts vers leurs propriétaires. Dans
+l'autre sens, une cible se retrouve par appartenance : le host nomme l'action, et l'action connaît
+l'interactive qui l'a préparée.
+
+Une exécution programmatique ne nomme donc aucun *requester* — personne ne l'a demandée sur le
+réseau, personne n'attend d'acquittement — mais elle nomme son instigator. C'est cet instigator qui
+distingue « tu utilises déjà ceci » de « quelqu'un d'autre l'utilise », quelle que soit l'origine de
+l'exécution.
+
+Corollaire assumé : un executor d'interaction ne tourne que pour un interactor. Une exécution pilotée
+par le monde sans interactor n'est pas une interaction et est refusée, avec un motif qui dit laquelle
+des deux moitiés manque.
 
 Les tests couvrent notamment le bind/unbind de focus, le refus autoritaire hors portée, le bypass
 spatial programmatique avec rules, l'annulation sur perte d'accès soutenu, les ACK, la réplication

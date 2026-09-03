@@ -461,10 +461,9 @@ public sealed partial class InteractionAckTest
         TestScriptedExecutor executor = new() { Name = "ActivateExecutor" };
         action.AddChild(executor);
         action.Executor = executor;
-        interactive.Actions.Add(action);
         actor.AddChild(area);
         actor.AddChild(interactive);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(action);
 
         Node3D view = new() { Name = "ViewOrigin" };
         InteractionInteractor interactor = new() { Name = "Interactor", OwnerPeerId = 1 };

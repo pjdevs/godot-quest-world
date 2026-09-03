@@ -17,15 +17,11 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
 
     public abstract GameplayActionExecutionResult Execute(in InteractionExecutionContext context);
 
-    public sealed override GameplayActionExecutionResult Execute(
-        in GameplayActionExecutionContext context
-    )
+    public sealed override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         if (!TryAdapt(context, out InteractionExecutionContext interactionContext))
         {
-            return new GameplayActionExecutionFailed(
-                "The interaction execution context is invalid."
-            );
+            return new GameplayActionExecutionFailed(DescribeUnadaptable(context));
         }
 
         return Execute(interactionContext);
@@ -39,9 +35,7 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
 
     protected internal virtual void OnExecutionCompleted(in InteractionExecutionContext context) { }
 
-    protected internal sealed override void OnExecutionCompleted(
-        in GameplayActionExecutionContext context
-    )
+    protected internal sealed override void OnExecutionCompleted(in GameplayActionContext context)
     {
         if (TryAdapt(context, out InteractionExecutionContext interactionContext))
         {
@@ -55,7 +49,7 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
     ) { }
 
     protected internal sealed override void OnExecutionCancelled(
-        in GameplayActionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     )
     {
@@ -71,7 +65,7 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
     ) { }
 
     protected internal sealed override void OnExecutionFailed(
-        in GameplayActionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     )
     {
@@ -89,14 +83,10 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
         in GameplayActionContext context
     )
     {
-        InteractionInteractor? interactor = context.Requester is GameplayActionRunner runner
-            ? InteractionInteractor.FindByRunner(runner)
-            : null;
-        interactor ??= context.Instigator as InteractionInteractor;
         if (
             context.Action is not InteractionAction action
             || action.Interactive is null
-            || interactor is null
+            || context.Instigator is not InteractionInteractor interactor
         )
         {
             return null;
@@ -110,20 +100,38 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
     protected static GameplayActionExecutionResult Running() =>
         new GameplayActionExecutionRunning();
 
+    /// <summary>Says which part of a generic execution keeps it from being an interaction.</summary>
+    /// <remarks>
+    /// An interaction executor is written against an interactor and a target; an execution missing
+    /// either is not an interaction and cannot be adapted into one. That is a deliberate boundary
+    /// rather than a gap: what the failure owes its reader is which half is absent, so a wrongly
+    /// hosted action and a world-driven execution are not both reported as an invalid context.
+    /// </remarks>
+    private static string DescribeUnadaptable(in GameplayActionContext context)
+    {
+        if (context.Action is not InteractionAction action)
+        {
+            return "This action is not an interaction action.";
+        }
+
+        if (action.Interactive is null)
+        {
+            return "This interaction action is not hosted by an interactive target.";
+        }
+
+        return "An interaction action only runs for an interactor, and this execution has none.";
+    }
+
     private static bool TryAdapt(
-        in GameplayActionExecutionContext context,
+        in GameplayActionContext context,
         out InteractionExecutionContext interactionContext
     )
     {
         interactionContext = default;
-        InteractionInteractor? interactor = context.Requester is GameplayActionRunner runner
-            ? InteractionInteractor.FindByRunner(runner)
-            : null;
-        interactor ??= context.Instigator as InteractionInteractor;
         if (
             context.Action is not InteractionAction action
             || action.Interactive is null
-            || interactor is null
+            || context.Instigator is not InteractionInteractor interactor
         )
         {
             return false;

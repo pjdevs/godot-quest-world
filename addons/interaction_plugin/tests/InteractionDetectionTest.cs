@@ -493,8 +493,7 @@ public sealed partial class InteractionDetectionTest
         NoopInteractionExecutor executor = new() { Name = "activateExecutor" };
         action.AddChild(executor);
         action.Executor = executor;
-        interactive.Actions.Add(action);
-        interactive.ConfigureActionHost();
+        interactive.AddAction(action);
         return interactive;
     }
 

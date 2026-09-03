@@ -55,7 +55,7 @@ public partial class TransitionStateGameplayActionExecutor : GameplayActionExecu
         }
     }
 
-    public override GameplayActionExecutionResult Execute(in GameplayActionExecutionContext context)
+    public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         if (Stateful is null)
         {
@@ -68,17 +68,17 @@ public partial class TransitionStateGameplayActionExecutor : GameplayActionExecu
     }
 
     protected virtual GameplayActionExecutionResult StartRunning(
-        in GameplayActionExecutionContext context
+        in GameplayActionContext context
     ) => new GameplayActionExecutionRunning();
 
-    protected internal override void OnExecutionCompleted(in GameplayActionExecutionContext context)
+    protected internal override void OnExecutionCompleted(in GameplayActionContext context)
     {
         base.OnExecutionCompleted(context);
         Stateful?.SetState(CompletedState);
     }
 
     protected internal override void OnExecutionCancelled(
-        in GameplayActionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     )
     {
@@ -87,7 +87,7 @@ public partial class TransitionStateGameplayActionExecutor : GameplayActionExecu
     }
 
     protected internal override void OnExecutionFailed(
-        in GameplayActionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     )
     {

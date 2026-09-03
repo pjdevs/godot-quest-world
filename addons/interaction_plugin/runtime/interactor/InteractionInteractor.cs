@@ -90,8 +90,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
     [Export]
     public GameplayActionRunner? Runner { get; set; }
 
-    private static readonly Dictionary<ulong, InteractionInteractor> _runnerOwners = new();
-
     private readonly HashSet<InteractiveComponent> _detectedInteractives = new();
     private readonly HashSet<InteractiveComponent> _detectionBuffer = new();
     private readonly List<InteractiveComponent> _detectionEntered = new();
@@ -145,7 +143,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         SetMultiplayerAuthority(ServerPeerId);
         SyncRunnerConfiguration();
         Runner.RegisterAccessProvider(InteractionAction.InteractionAccessProviderId, this);
-        _runnerOwners[Runner.GetInstanceId()] = this;
         ConnectRunnerSignals();
     }
 
@@ -173,18 +170,12 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
         Runner.ServerPeerId = ServerPeerId;
         Runner.OwnerPeerId = OwnerPeerId;
-        Runner.Instigator ??= this;
-    }
 
-    internal static InteractionInteractor? FindByRunner(GameplayActionRunner? runner)
-    {
-        return
-            runner is not null
-            && IsInstanceValid(runner)
-            && _runnerOwners.TryGetValue(runner.GetInstanceId(), out InteractionInteractor? owner)
-            && IsInstanceValid(owner)
-            ? owner
-            : null;
+        // The interactor claims the instigator of its runner rather than defaulting into it. That is
+        // the contract every interaction rule and executor reads: the instigator of an interaction
+        // execution is the interactor that drove it, which is what makes the generic context
+        // sufficient and spares Interaction a reverse index from runners back to their owners.
+        Runner.Instigator = this;
     }
 
     public bool CanRequest(in GameplayActionAccessContext context) =>
@@ -537,12 +528,21 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         Runner.GameplayActionFailed -= OnGameplayActionFailed;
     }
 
-    private static InteractiveComponent? ResolveInteractive(Node? component) =>
-        InteractiveComponent.FindByActionComponent(component as GameplayActionComponent);
+    /// <summary>Resolves the interaction target one host signal belongs to.</summary>
+    /// <remarks>
+    /// The host names the action, and an <see cref="InteractionAction"/> knows the target that
+    /// prepared it, so the target is reached by ownership instead of by a reverse index from hosts
+    /// back to interactives. A host carrying generic actions beside the interaction ones therefore
+    /// resolves only the latter, which is exactly what the interaction signals describe.
+    /// </remarks>
+    private static InteractiveComponent? ResolveInteractive(Node? component, StringName actionId) =>
+        (component as GameplayActionComponent)?.ResolveAction(actionId) is InteractionAction action
+            ? action.Interactive
+            : null;
 
     private void OnGameplayActionRequested(Node component, StringName actionId)
     {
-        if (ResolveInteractive(component) is { } interactive)
+        if (ResolveInteractive(component, actionId) is { } interactive)
         {
             EmitSignal(SignalName.InteractionRequested, interactive, actionId);
         }
@@ -550,7 +550,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
     private void OnGameplayActionRejected(Node component, StringName actionId, string reason)
     {
-        InteractiveComponent? target = ResolveInteractive(component);
+        InteractiveComponent? target = ResolveInteractive(component, actionId);
         if (target?.ResolveAction(actionId) is InteractionAction action)
         {
             reason = target.AdaptRejectionReason(this, action, reason);
@@ -566,7 +566,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
     private void OnGameplayActionStarted(Node component, StringName actionId, long executionId)
     {
-        Variant interactive = ResolveInteractive(component) is { } target
+        Variant interactive = ResolveInteractive(component, actionId) is { } target
             ? Variant.From(target)
             : default;
         EmitSignal(
@@ -579,7 +579,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
     private void OnGameplayActionCompleted(Node component, StringName actionId, long executionId)
     {
-        Variant interactive = ResolveInteractive(component) is { } target
+        Variant interactive = ResolveInteractive(component, actionId) is { } target
             ? Variant.From(target)
             : default;
         EmitSignal(SignalName.InteractionCompleted, interactive, actionId);
@@ -592,7 +592,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         string reason
     )
     {
-        Variant interactive = ResolveInteractive(component) is { } target
+        Variant interactive = ResolveInteractive(component, actionId) is { } target
             ? Variant.From(target)
             : default;
         EmitSignal(SignalName.InteractionCancelled, interactive, actionId, reason);
@@ -605,7 +605,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         string reason
     )
     {
-        Variant interactive = ResolveInteractive(component) is { } target
+        Variant interactive = ResolveInteractive(component, actionId) is { } target
             ? Variant.From(target)
             : default;
         EmitSignal(SignalName.InteractionFailed, interactive, actionId, reason);
@@ -621,7 +621,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             }
             Runner.UnregisterAccessProvider(InteractionAction.InteractionAccessProviderId, this);
             DisconnectRunnerSignals();
-            _runnerOwners.Remove(Runner.GetInstanceId());
         }
 
         foreach (InteractiveComponent interactive in _detectedInteractives)

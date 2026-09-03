@@ -203,18 +203,45 @@ public partial class InteractiveComponent : Node
     public PackedScene? IndicationScene { get; set; }
 
     /// <summary>
-    /// Gets or sets the explicit actions offered by this target, evaluated in declaration order.
+    /// Gets or sets the host owning every action this target offers, assigned before tree entry.
     /// </summary>
     /// <remarks>
-    /// Add each <see cref="InteractionAction"/> to the target scene and reference it here. Nothing is
-    /// discovered from the tree, and a target without action offers no interaction at all.
+    /// Author it beside this node so the relative paths its rules and executors spell out keep the
+    /// depth they were written at, and assign it in the Inspector: this node subscribes to its host
+    /// when it enters the tree, so a host attached afterwards is never wired.
     /// </remarks>
     [ExportGroup("Actions")]
     [Export]
     public GameplayActionComponent? ActionComponent { get; set; }
 
-    [Export]
-    public Godot.Collections.Array<InteractionAction> Actions { get; set; } = new();
+    /// <summary>
+    /// Gets the actions this target offers, in the order its host declares them.
+    /// </summary>
+    /// <remarks>
+    /// A target declares no action of its own. Its offers are the <see cref="InteractionAction"/>
+    /// entries of <see cref="ActionComponent"/>, so one authored list is the single source of truth
+    /// and can never drift from the host that actually owns the executions. A generic action the
+    /// host also carries is not an interaction offer and is skipped: interaction presents what an
+    /// interactor can ask for, not everything the host can run.
+    /// </remarks>
+    public IEnumerable<InteractionAction> Actions
+    {
+        get
+        {
+            if (ActionComponent is null)
+            {
+                yield break;
+            }
+
+            foreach (GameplayAction action in ActionComponent.Actions)
+            {
+                if (action is InteractionAction interactionAction)
+                {
+                    yield return interactionAction;
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the ordered gameplay conditions shared by every action of this target.
@@ -239,7 +266,6 @@ public partial class InteractiveComponent : Node
     // like the signals the target connects to those very areas: swapping one at runtime is already
     // outside the contract.
     private static readonly Dictionary<ulong, InteractiveComponent> _areaOwners = new();
-    private static readonly Dictionary<ulong, InteractiveComponent> _actionComponentOwners = new();
 
     private readonly HashSet<InteractionInteractor> _presentInteractors = new();
     private readonly HashSet<InteractionInteractor> _interactionOverlaps = new();
@@ -265,7 +291,7 @@ public partial class InteractiveComponent : Node
                 return null;
             }
 
-            return ResolveInteractor(requester) ?? instigator as InteractionInteractor;
+            return instigator as InteractionInteractor;
         }
     }
 
@@ -297,19 +323,6 @@ public partial class InteractiveComponent : Node
             : null;
     }
 
-    internal static InteractiveComponent? FindByActionComponent(GameplayActionComponent? component)
-    {
-        return
-            component is not null
-            && _actionComponentOwners.TryGetValue(
-                component.GetInstanceId(),
-                out InteractiveComponent? owner
-            )
-            && IsInstanceValid(owner)
-            ? owner
-            : null;
-    }
-
     /// <summary>Godot callback that joins the registry the sourceless detectors read.</summary>
     public override void _EnterTree()
     {
@@ -334,19 +347,24 @@ public partial class InteractiveComponent : Node
             GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionAnchor.");
         }
 
-        if (Actions.Count == 0)
-        {
-            GD.PushError($"{GetPath()}: InteractiveComponent requires at least one Action.");
-        }
-
         if (ActionComponent is null)
         {
             GD.PushError($"{GetPath()}: InteractiveComponent requires a GameplayActionComponent.");
         }
 
+        bool hasAction = false;
         foreach (InteractionAction action in Actions)
         {
             PrepareAction(action);
+            hasAction = true;
+        }
+
+        if (ActionComponent is not null && !hasAction)
+        {
+            GD.PushError(
+                $"{GetPath()}: InteractiveComponent requires its GameplayActionComponent to declare "
+                    + "at least one InteractionAction."
+            );
         }
 
         ConnectActionComponent();
@@ -379,7 +397,6 @@ public partial class InteractiveComponent : Node
             return;
         }
 
-        _actionComponentOwners[ActionComponent.GetInstanceId()] = this;
         ActionComponent.GameplayActionStarted += OnGameplayActionStarted;
         ActionComponent.GameplayActionCompleted += OnGameplayActionCompleted;
         ActionComponent.GameplayActionCancelled += OnGameplayActionCancelled;
@@ -387,9 +404,6 @@ public partial class InteractiveComponent : Node
         ActionComponent.GameplayActionRejected += OnGameplayActionRejected;
         ActionComponent.ExecutionPresentationChanged += OnExecutionPresentationChanged;
     }
-
-    private static InteractionInteractor? ResolveInteractor(Node? requester) =>
-        InteractionInteractor.FindByRunner(requester as GameplayActionRunner);
 
     private void OnGameplayActionStarted(
         long executionId,
@@ -400,7 +414,7 @@ public partial class InteractiveComponent : Node
     {
         if (
             action is InteractionAction interactionAction
-            && ResolveInteractor(requester) is { } interactor
+            && instigator is InteractionInteractor interactor
         )
         {
             EmitSignal(SignalName.InteractionActionStarted, interactor, interactionAction);
@@ -416,7 +430,7 @@ public partial class InteractiveComponent : Node
     {
         if (
             action is InteractionAction interactionAction
-            && ResolveInteractor(requester) is { } interactor
+            && instigator is InteractionInteractor interactor
         )
         {
             EmitSignal(SignalName.InteractionActionCompleted, interactor, interactionAction);
@@ -433,7 +447,7 @@ public partial class InteractiveComponent : Node
     {
         if (
             action is InteractionAction interactionAction
-            && ResolveInteractor(requester) is { } interactor
+            && instigator is InteractionInteractor interactor
         )
         {
             EmitSignal(
@@ -455,7 +469,7 @@ public partial class InteractiveComponent : Node
     {
         if (
             action is InteractionAction interactionAction
-            && ResolveInteractor(requester) is { } interactor
+            && instigator is InteractionInteractor interactor
         )
         {
             EmitSignal(SignalName.InteractionActionFailed, interactor, interactionAction, reason);
@@ -472,7 +486,7 @@ public partial class InteractiveComponent : Node
     {
         if (
             action is InteractionAction interactionAction
-            && ResolveInteractor(requester) is { } interactor
+            && instigator is InteractionInteractor interactor
         )
         {
             EmitSignal(
@@ -500,13 +514,11 @@ public partial class InteractiveComponent : Node
             return reason;
         }
 
-        bool requestedByInteractor =
-            interactor.Runner is not null
-            && ActionComponent.IsConcurrencyGroupExecutingByRequester(
-                action.GetHostConcurrencyGroup(),
-                interactor.Runner
-            );
-        return requestedByInteractor ? AlreadyRunningReason : SomeoneElseReason;
+        bool startedByInteractor = ActionComponent.IsConcurrencyGroupExecutingFor(
+            action.GetHostConcurrencyGroup(),
+            interactor
+        );
+        return startedByInteractor ? AlreadyRunningReason : SomeoneElseReason;
     }
 
     private void OnExecutionPresentationChanged(StringName actionId) =>
@@ -535,7 +547,6 @@ public partial class InteractiveComponent : Node
             || action is null
             || action.InteractionDefinition is null
             || action.Executor is null
-            || !Actions.Contains(action)
             || ActionComponent is null
             || action.Component != ActionComponent
         )
@@ -545,12 +556,7 @@ public partial class InteractiveComponent : Node
 
         PrepareAction(action);
         InteractionAvailability actionAvailability = ActionComponent
-            .EvaluateAction(
-                action.InteractionDefinition.Id,
-                interactor,
-                interactor.Runner,
-                GameplayActionInvocationKind.PlayerRequest
-            )
+            .EvaluateAction(action.InteractionDefinition.Id, interactor, interactor.Runner)
             .ToInteractionAvailability();
         if (actionAvailability is not InteractionAllowed)
         {
@@ -569,14 +575,12 @@ public partial class InteractiveComponent : Node
             || ActionComponent.IsConcurrencyGroupExecuting(action.GetHostConcurrencyGroup())
         )
         {
-            bool requestedByInteractor =
-                interactor.Runner is not null
-                && ActionComponent.IsConcurrencyGroupExecutingByRequester(
-                    action.GetHostConcurrencyGroup(),
-                    interactor.Runner
-                );
+            bool startedByInteractor = ActionComponent.IsConcurrencyGroupExecutingFor(
+                action.GetHostConcurrencyGroup(),
+                interactor
+            );
             return new InteractionBlocked(
-                requestedByInteractor ? AlreadyRunningReason : SomeoneElseReason
+                startedByInteractor ? AlreadyRunningReason : SomeoneElseReason
             );
         }
 
@@ -1053,7 +1057,6 @@ public partial class InteractiveComponent : Node
             ActionComponent.GameplayActionFailed -= OnGameplayActionFailed;
             ActionComponent.GameplayActionRejected -= OnGameplayActionRejected;
             ActionComponent.ExecutionPresentationChanged -= OnExecutionPresentationChanged;
-            _actionComponentOwners.Remove(ActionComponent.GetInstanceId());
         }
 
         _registered.Remove(this);

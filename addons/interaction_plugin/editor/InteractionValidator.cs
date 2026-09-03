@@ -65,13 +65,30 @@ public static class InteractionValidator
         if (GetObject(obj, "InteractionAnchor") is null)
             yield return "InteractionAnchor must be assigned.";
 
-        Godot.Collections.Array actions = GetArray(obj, "Actions");
+        // The action set belongs to the host, so this reads the host's declared array and keeps only
+        // the interaction offers: a generic action hosted beside them is not this target's business.
         GodotObject? actionComponent = GetObject(obj, "ActionComponent");
+        List<GodotObject> actions = new();
         if (actionComponent is null)
+        {
             yield return "ActionComponent must be assigned.";
+        }
+        else
+        {
+            foreach (Variant entry in GetArray(actionComponent, "Actions"))
+            {
+                if (
+                    entry.AsGodotObject() is GodotObject hosted
+                    && ResolveType(hosted) == InspectableType.InteractionAction
+                )
+                {
+                    actions.Add(hosted);
+                }
+            }
 
-        if (actions.Count == 0)
-            yield return "Actions must declare at least one action.";
+            if (actions.Count == 0)
+                yield return "The assigned ActionComponent must declare at least one InteractionAction.";
+        }
 
         HashSet<string> ids = new();
         Dictionary<string, string> inputs = new();
@@ -79,13 +96,7 @@ public static class InteractionValidator
 
         for (int index = 0; index < actions.Count; index++)
         {
-            GodotObject? action = actions[index].AsGodotObject();
-            if (action is null)
-            {
-                yield return $"Actions[{index}] must not be null.";
-                continue;
-            }
-
+            GodotObject action = actions[index];
             GodotObject? definition = GetObject(action, "Definition");
             if (definition is null)
             {
@@ -95,13 +106,6 @@ public static class InteractionValidator
 
             if (GetObject(action, "Executor") is null)
                 yield return $"Actions[{index}] has no Executor.";
-
-            if (
-                actionComponent is GameplayActionComponent component
-                && action is InteractionAction interactionAction
-                && interactionAction.Component != component
-            )
-                yield return $"Actions[{index}] must be hosted by the assigned ActionComponent.";
 
             hasReplicatedAction |=
                 GetInt(action, "ExecutionVisibility")
@@ -153,10 +157,7 @@ public static class InteractionValidator
 
         for (int index = 0; index < actions.Count; index++)
         {
-            if (actions[index].AsGodotObject() is not GodotObject action)
-                continue;
-
-            foreach (string warning in ValidateRules(action, action, "Rules"))
+            foreach (string warning in ValidateRules(actions[index], actions[index], "Rules"))
             {
                 yield return $"Actions[{index}]: {warning}";
             }

@@ -28,12 +28,6 @@ public static class GameplayActionAvailabilityExtensions
         };
 }
 
-public enum GameplayActionInvocationKind
-{
-    PlayerRequest,
-    Programmatic,
-}
-
 public enum GameplayActionExecutionVisibility
 {
     RequesterOnly,
@@ -78,19 +72,27 @@ public readonly union GameplayActionExecutionResult(
     GameplayActionExecutionFailed
 );
 
+/// <summary>Read-only inputs supplied to every rule and executor of one gameplay action.</summary>
+/// <remarks>
+/// One shape answers both questions an action asks, because an evaluation and the execution it
+/// authorises read the same facts. <paramref name="ExecutionId"/> is the only thing an evaluation
+/// does not have yet, and zero says so.
+/// <para>
+/// Where the action came from is not one of those facts. What an execution owes its caller is
+/// carried by <paramref name="Requester"/>: a requester is present exactly when a runner asked for
+/// this action and is therefore waiting to be acknowledged, and only the request transport can put
+/// one there.
+/// </para>
+/// </remarks>
+/// <param name="ExecutionId">Identifier of the reservation, or zero while none is reserved.</param>
+/// <param name="Instigator">Node the action is attributed to, or null when nothing claims it.</param>
+/// <param name="Requester">Runner awaiting acknowledgement, or null outside a request.</param>
+/// <param name="Component">Host owning the action.</param>
+/// <param name="Action">Action being evaluated or executed.</param>
 public readonly record struct GameplayActionContext(
-    Node? Instigator,
-    Node? Requester,
-    GameplayActionComponent Component,
-    GameplayAction Action,
-    GameplayActionInvocationKind InvocationKind
-);
-
-public readonly record struct GameplayActionExecutionContext(
     ulong ExecutionId,
     Node? Instigator,
     Node? Requester,
     GameplayActionComponent Component,
-    GameplayAction Action,
-    GameplayActionInvocationKind InvocationKind
+    GameplayAction Action
 );

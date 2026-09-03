@@ -59,8 +59,8 @@ public sealed partial class InteractionSceneTest
         AssertThat(stateful.Schema != null).IsTrue();
         AssertThat(stateful.Schema!.Contains(new StringName("activating"))).IsTrue();
         AssertThat(stateful.Schema!.Contains(new StringName("activated"))).IsTrue();
-        AssertThat(interactive.Actions.Count).IsEqual(1);
-        InteractionAction action = interactive.Actions[0];
+        AssertThat(interactive.Actions.Count()).IsEqual(1);
+        InteractionAction action = interactive.ActionAt(0);
         AssertThat(action == actor.GetNode<InteractionAction>("GameplayActions/ActivateAction"))
             .IsTrue();
         AssertThat(action.Definition?.Id.ToString()).IsEqual("activate");
@@ -318,7 +318,7 @@ public sealed partial class InteractionSceneTest
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
         InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
-        interactive.Actions[1].Definition!.HoldThreshold = 3600.0f;
+        interactive.ActionAt(1).Definition!.HoldThreshold = 3600.0f;
 
         detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
         await runner.SimulateFrames(1);
@@ -507,8 +507,8 @@ public sealed partial class InteractionSceneTest
             interactive,
             interactor,
             actor.GetNode<StatefulComponent>("StatefulComponent"),
-            interactive.Actions[0],
-            (TimedTransitionStateGameplayActionExecutor)interactive.Actions[0].Executor!
+            interactive.ActionAt(0),
+            (TimedTransitionStateGameplayActionExecutor)interactive.ActionAt(0).Executor!
         );
     }
 
@@ -546,7 +546,7 @@ public sealed partial class InteractionSceneTest
             "talk"
         );
         InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
-        interactive.Actions[0].Rules.Add(new DialogInteractionRule());
+        interactive.ActionAt(0).Rules.Add(new DialogInteractionRule());
         world.AddChild(owner);
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
@@ -684,8 +684,8 @@ public sealed partial class InteractionSceneTest
         InteractiveComponent interactive = button.GetNode<InteractiveComponent>(
             "InteractiveComponent"
         );
-        WireWallControlAction(interactive.Actions[0], wallState, LoweredState, RaisingState);
-        WireWallControlAction(interactive.Actions[1], wallState, RaisedState, LoweringState);
+        WireWallControlAction(interactive.ActionAt(0), wallState, LoweredState, RaisingState);
+        WireWallControlAction(interactive.ActionAt(1), wallState, RaisedState, LoweringState);
 
         Node3D view = new() { Name = "ViewOrigin" };
         InteractionInteractor interactor = new() { Name = "Interactor" };
@@ -774,11 +774,10 @@ public sealed partial class InteractionSceneTest
                     Label = actionId,
                 },
             };
-            interactive.Actions.Add(action);
-            interactive.ConfigureActionHost();
             NoopInteractionExecutor executor = new() { Name = $"{actionId}Executor" };
             action.AddChild(executor);
             action.Executor = executor;
+            interactive.AddAction(action);
         }
 
         return owner;

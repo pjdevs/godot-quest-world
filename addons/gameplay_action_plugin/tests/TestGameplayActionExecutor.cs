@@ -21,7 +21,7 @@ public sealed partial class TestGameplayActionExecutor : GameplayActionExecutor
 
     public bool WasReservedWhenExecuted { get; private set; }
 
-    public override GameplayActionExecutionResult Execute(in GameplayActionExecutionContext context)
+    public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         ExecuteCount++;
         WasReservedWhenExecuted = context.Component.IsActionExecuting(
@@ -35,17 +35,16 @@ public sealed partial class TestGameplayActionExecutor : GameplayActionExecutor
         return Result;
     }
 
-    protected internal override void OnExecutionCompleted(
-        in GameplayActionExecutionContext context
-    ) => CompletedCount++;
+    protected internal override void OnExecutionCompleted(in GameplayActionContext context) =>
+        CompletedCount++;
 
     protected internal override void OnExecutionCancelled(
-        in GameplayActionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     ) => CancelledCount++;
 
     protected internal override void OnExecutionFailed(
-        in GameplayActionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     ) => FailedCount++;
 }

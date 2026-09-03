@@ -19,21 +19,12 @@ public partial class TimedTransitionStateGameplayActionExecutor
 
     public virtual float ComputeTimedDuration(in GameplayActionContext context) => Duration;
 
-    protected override GameplayActionExecutionResult StartRunning(
-        in GameplayActionExecutionContext context
-    )
+    protected override GameplayActionExecutionResult StartRunning(in GameplayActionContext context)
     {
-        GameplayActionContext query = new(
-            context.Instigator,
-            context.Requester,
-            context.Component,
-            context.Action,
-            context.InvocationKind
-        );
         TimedExecutionStartResult startResult = _timedExecution.Start(
             context.Component,
             context.ExecutionId,
-            ComputeTimedDuration(query),
+            ComputeTimedDuration(context),
             CorrectionInterval
         );
         if (startResult == TimedExecutionStartResult.Started)
@@ -49,14 +40,14 @@ public partial class TimedTransitionStateGameplayActionExecutor
         in GameplayActionContext context
     ) => TimedExecution.BuildPredictionSample(ComputeTimedDuration(context));
 
-    protected internal override void OnExecutionCompleted(in GameplayActionExecutionContext context)
+    protected internal override void OnExecutionCompleted(in GameplayActionContext context)
     {
         _timedExecution.Stop(context.ExecutionId);
         base.OnExecutionCompleted(context);
     }
 
     protected internal override void OnExecutionCancelled(
-        in GameplayActionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     )
     {
@@ -65,7 +56,7 @@ public partial class TimedTransitionStateGameplayActionExecutor
     }
 
     protected internal override void OnExecutionFailed(
-        in GameplayActionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     )
     {

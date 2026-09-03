@@ -193,7 +193,7 @@ public sealed partial class InteractionConfigurationTest
     public void ReplicatedActionRequiresAMatchingExecutionSynchronizer()
     {
         InteractiveComponent interactive = NewConfiguredInteractive();
-        interactive.Actions[0].ExecutionVisibility = GameplayActionExecutionVisibility.Replicated;
+        interactive.ActionAt(0).ExecutionVisibility = GameplayActionExecutionVisibility.Replicated;
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
@@ -369,7 +369,7 @@ public sealed partial class InteractionConfigurationTest
         {
             InteractionArea = new Area3D(),
             InteractionAnchor = new Node3D(),
-            Actions = new() { new InteractionAction() },
+            ActionComponent = new() { Actions = { new InteractionAction() } },
         };
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
@@ -398,11 +398,10 @@ public sealed partial class InteractionConfigurationTest
                 ExpectedStates = { new StringName("closed") },
             }
         );
-        interactive.Actions.Add(action);
         owner.AddChild(area);
         owner.AddChild(stateful);
         owner.AddChild(interactive);
-        interactive.AddChild(action);
+        interactive.AddAction(action);
         root.AddChild(owner);
         ISceneRunner runner = ISceneRunner.Load(root);
         await runner.SimulateFrames(1);
@@ -420,7 +419,7 @@ public sealed partial class InteractionConfigurationTest
         {
             InteractionArea = new Area3D(),
             InteractionAnchor = new Node3D(),
-            Actions = new() { NewAction(definition), NewAction(definition) },
+            ActionComponent = new() { Actions = { NewAction(definition), NewAction(definition) } },
         };
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
@@ -436,10 +435,13 @@ public sealed partial class InteractionConfigurationTest
         {
             InteractionArea = new Area3D(),
             InteractionAnchor = new Node3D(),
-            Actions = new()
+            ActionComponent = new()
             {
-                NewAction(new InteractionActionDefinition { Id = "open" }),
-                NewAction(new InteractionActionDefinition { Id = "force" }),
+                Actions =
+                {
+                    NewAction(new InteractionActionDefinition { Id = "open" }),
+                    NewAction(new InteractionActionDefinition { Id = "force" }),
+                },
             },
         };
 
@@ -462,7 +464,7 @@ public sealed partial class InteractionConfigurationTest
         {
             InteractionArea = new Area3D(),
             InteractionAnchor = new Node3D(),
-            Actions = new() { open, unlock },
+            ActionComponent = new() { Actions = { open, unlock } },
         };
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
@@ -519,7 +521,6 @@ public sealed partial class InteractionConfigurationTest
             InteractionArea = new Area3D(),
             InteractionAnchor = new Node3D(),
             ActionComponent = component,
-            Actions = new() { action },
         };
         action.PrepareForInteractive(interactive, interactive.TargetRules);
         component.AddAction(action);

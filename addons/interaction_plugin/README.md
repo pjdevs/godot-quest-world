@@ -63,7 +63,7 @@ Door
 
 Execution is owned by the generic `gameplay_action_plugin` add-on: the host is a `GameplayActionComponent` and every action is one of its **direct children**. The host is authored as a **sibling** of `InteractiveComponent`, not below it, so a `NodePath` written from an action or its executor keeps the depth it would have had under the interactive.
 
-On `InteractiveComponent`, assign `InteractionArea`, `InteractionAnchor`, `ActionComponent`, and every `InteractionAction` explicitly in `Actions`. Nothing is discovered by node name or tree search. The host must be assigned before the target enters the tree, because the interactive subscribes to it on `_Ready`; authoring it as an exported `NodePath` does that. A replicated action also needs a `GameplayActionExecutionSynchronizer` beside the host, pointing at it.
+On `InteractiveComponent`, assign `InteractionArea`, `InteractionAnchor`, and `ActionComponent`. The target declares no action of its own: its `Actions` are the `InteractionAction` entries the host declares, read in that order, so the host's list is the only one to author. Nothing is discovered by node name or tree search. The host must be assigned before the target enters the tree, because the interactive subscribes to it on `_Ready`; authoring it as an exported `NodePath` does that. A replicated action also needs a `GameplayActionExecutionSynchronizer` beside the host, pointing at it.
 
 `InteractionAnchor` is the single world point used for distance, focus, LOS, and UI projection. `InteractionArea` is currently required for every target: the area detector consumes its body overlaps, the aim detector casts against its collision shape, and the proximity detector ignores its geometry. Configure collision layers/masks accordingly.
 

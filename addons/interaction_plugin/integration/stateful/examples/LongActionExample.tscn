@@ -103,7 +103,7 @@ CancelledState = &"idle"
 Duration = 1.5
 metadata/_custom_type_script = "uid://bir8pc65gbklo"
 
-[node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "ActionComponent", "Actions")]
+[node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "ActionComponent")]
 script = ExtResource("2_interactive")
 InteractionArea = NodePath("../InteractionArea")
 IndicationArea = NodePath("../IndicationArea")
@@ -113,7 +113,6 @@ Description = "Interact"
 ActionPromptScene = ExtResource("4_prompt")
 IndicationScene = ExtResource("5_indicator")
 ActionComponent = NodePath("../GameplayActions")
-Actions = [NodePath("../GameplayActions/ActivateAction")]
 TargetRules = Array[ExtResource("5_ll77h")]([SubResource("Resource_ll77h")])
 
 [node name="GameplayActionExecutionSynchronizer" type="MultiplayerSynchronizer" parent="." node_paths=PackedStringArray("Component")]
