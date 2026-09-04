@@ -1,0 +1,25 @@
+[gd_scene format=3 uid="uid://3hiqhen7i480"]
+
+[ext_resource type="Script" uid="uid://bpl2q4bryqvmj" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayAction.cs" id="1_ry6km"]
+[ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="2_ta0xg"]
+[ext_resource type="Script" uid="uid://drdlbawicokrs" path="res://quest_world/interactibles/battery/DropBatteryExecutor.cs" id="3_ela6r"]
+[ext_resource type="PackedScene" uid="uid://c615ipxd5fba5" path="res://quest_world/interactibles/battery/Battery.tscn" id="4_53nho"]
+
+[sub_resource type="Resource" id="Resource_ta0xg"]
+script = ExtResource("2_ta0xg")
+Id = &"dropBattery"
+Label = "Drop Battery"
+metadata/_custom_type_script = "uid://nyac2n1klfrk"
+
+[node name="DropBatteryAction" type="Node" unique_id=479174066 node_paths=PackedStringArray("Executor")]
+script = ExtResource("1_ry6km")
+Definition = SubResource("Resource_ta0xg")
+Executor = NodePath("DropBatteryExecutor")
+ExecutionVisibility = 2
+metadata/_custom_type_script = "uid://bpl2q4bryqvmj"
+
+[node name="DropBatteryExecutor" type="Node" parent="." unique_id=636624359]
+script = ExtResource("3_ela6r")
+BatteryItem = &"battery"
+BatteryScene = ExtResource("4_53nho")
+metadata/_custom_type_script = "uid://drdlbawicokrs"

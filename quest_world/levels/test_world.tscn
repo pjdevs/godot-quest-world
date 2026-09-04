@@ -6,9 +6,10 @@
 [ext_resource type="PackedScene" uid="uid://bnrv7fcbbhuga" path="res://quest_world/interactibles/button/Button.tscn" id="3_kevvi"]
 [ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/NetworkSession.cs" id="3_network_session"]
 [ext_resource type="PackedScene" uid="uid://ccfh2n8mfm2gn" path="res://addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn" id="4_2dls1"]
-[ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_rule"]
+[ext_resource type="Script" uid="uid://canmvbkunu40a" path="res://addons/gameplay_action_plugin/runtime/rules/GameplayActionRule.cs" id="4_onb8u"]
 [ext_resource type="PackedScene" uid="uid://biblv21jbgvwk" path="res://quest_world/interactibles/door/Door.tscn" id="6_onb8u"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_staterule"]
+[ext_resource type="PackedScene" uid="uid://c615ipxd5fba5" path="res://quest_world/interactibles/battery/Battery.tscn" id="10_cjmvp"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_edcox"]
 ground_color = Color(0.160784, 0.815686, 0.905882, 1)
@@ -137,14 +138,14 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.091249, 0.49999976, -2.677
 [node name="Button" parent="Level" unique_id=1874486156 instance=ExtResource("3_kevvi")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, -0.034323096, 10)
 
-[node name="RaiseAction" parent="Level/Button/GameplayActions" index="0" unique_id=1667473628]
-Rules = Array[ExtResource("5_rule")]([SubResource("Resource_raise_phase"), SubResource("Resource_raise_ready")])
+[node name="RaiseAction" parent="Level/Button/GameplayActions" parent_id_path=PackedInt32Array(1874486156, 745842555) index="0" unique_id=1667473628]
+Rules = Array[ExtResource("4_onb8u")]([SubResource("Resource_raise_phase"), SubResource("Resource_raise_ready")])
 
 [node name="RaiseExecutor" parent="Level/Button/GameplayActions/RaiseAction" index="0" unique_id=1426697339 node_paths=PackedStringArray("Stateful")]
 Stateful = NodePath("../../../../LeverWall/StatefulComponent")
 
-[node name="LowerAction" parent="Level/Button/GameplayActions" index="1" unique_id=1721581751]
-Rules = Array[ExtResource("5_rule")]([SubResource("Resource_lower_phase"), SubResource("Resource_lower_ready")])
+[node name="LowerAction" parent="Level/Button/GameplayActions" parent_id_path=PackedInt32Array(1874486156, 745842555) index="1" unique_id=1721581751]
+Rules = Array[ExtResource("4_onb8u")]([SubResource("Resource_lower_phase"), SubResource("Resource_lower_ready")])
 
 [node name="LowerExecutor" parent="Level/Button/GameplayActions/LowerAction" index="0" unique_id=913228593 node_paths=PackedStringArray("Stateful")]
 Stateful = NodePath("../../../../LeverWall/StatefulComponent")
@@ -163,5 +164,14 @@ PlayerScene = ExtResource("1_character")
 
 [node name="PlayerController" type="Node" parent="." unique_id=1335039517]
 script = ExtResource("2_player_controller")
+
+[node name="Batteries" type="Node3D" parent="." unique_id=213100253]
+
+[node name="BatterySpawner" type="MultiplayerSpawner" parent="Batteries" unique_id=1333401836]
+_spawnable_scenes = PackedStringArray("uid://c615ipxd5fba5")
+spawn_path = NodePath("..")
+
+[node name="Battery" parent="Batteries" unique_id=1538100754 instance=ExtResource("10_cjmvp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.56146663, 0, -8.010992)
 
 [editable path="Level/Button"]

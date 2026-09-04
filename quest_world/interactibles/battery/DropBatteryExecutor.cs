@@ -1,0 +1,61 @@
+using Godot;
+using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.Inventory;
+
+[GlobalClass]
+public partial class DropBatteryExecutor : GameplayActionExecutor
+{
+    [Export]
+    public StringName? BatteryItem { get; set; } = null;
+
+    [Export]
+    public PackedScene? BatteryScene { get; set; } = null;
+
+    public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
+    {
+        InventoryComponent? inventory = context
+            .Instigator?.GetParent()
+            .GetNode<InventoryComponent>("InventoryComponent");
+
+        if (inventory is not null && BatteryItem is not null)
+        {
+            inventory?.RemoveItem(BatteryItem);
+        }
+        else
+        {
+            return new GameplayActionExecutionFailed("InventoryComponent or BatteryItem is null.");
+        }
+
+        Node3D? instigatorNode = context.Instigator as Node3D;
+
+        if (instigatorNode is null)
+        {
+            return new GameplayActionExecutionFailed("Instigator is not a Node3D.");
+        }
+
+        Node3D? batteryNode = BatteryScene?.Instantiate<Node3D>();
+
+        if (batteryNode is null)
+        {
+            return new GameplayActionExecutionFailed(
+                "BatteryScene is null or failed to instantiate."
+            );
+        }
+
+        GetTree().Root.GetNode<Node3D>("Batteries").AddChild(batteryNode);
+
+        instigatorNode.AddChild(batteryNode);
+
+        Vector3? instigatorPosition = (context.Instigator as Node3D)?.GlobalPosition;
+
+        if (instigatorPosition is null)
+        {
+            return new GameplayActionExecutionFailed("Instigator position is null.");
+        }
+
+        batteryNode?.GlobalPosition = instigatorPosition.Value + new Vector3(0f, 0f, 1f);
+
+        return new GameplayActionExecutionCompleted();
+    }
+}

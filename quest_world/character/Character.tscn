@@ -5,9 +5,29 @@
 [ext_resource type="Script" uid="uid://yahimljmakge" path="res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" id="3_interactor"]
 [ext_resource type="Script" uid="uid://drgb3r1muwfvx" path="res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" id="4_presenter"]
 [ext_resource type="PackedScene" uid="uid://m4nr18qimc1s" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="5_prompt_container"]
-[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/detection/AreaInteractionDetector.cs" id="6_detector"]
+[ext_resource type="Script" uid="uid://gr7tji6jpsi4" path="res://addons/interaction_plugin/runtime/detection/AreaInteractionDetector.cs" id="6_detector"]
 [ext_resource type="Script" uid="uid://dwmqsp6eyk4gd" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="7_actions"]
 [ext_resource type="Script" uid="uid://cq7x5laa2qc4c" path="res://addons/gameplay_action_plugin/runtime/runner/GameplayActionRunner.cs" id="8_runner"]
+[ext_resource type="Script" uid="uid://v72ge0wsrrkf" path="res://addons/inventory_plugin/runtime/InventoryComponent.cs" id="9_kksnx"]
+[ext_resource type="Script" uid="uid://b6bybu005qipw" path="res://addons/inventory_plugin/runtime/InventoryReplicationSynchronizer.cs" id="10_8y4fs"]
+[ext_resource type="Script" uid="uid://dn35rp4w1f58" path="res://addons/inventory_plugin/runtime/InventoryItemDefinition.cs" id="10_mxxis"]
+[ext_resource type="Script" uid="uid://bigpf5i68whtl" path="res://addons/inventory_plugin/runtime/InventoryCatalog.cs" id="11_e3fll"]
+[ext_resource type="Texture2D" uid="uid://cpfio4ivhoxcy" path="res://icon.svg" id="11_wu3k4"]
+[ext_resource type="Script" uid="uid://b3dfxqn40hwot" path="res://quest_world/interactibles/battery/ItemActionGrant.cs" id="14_wu3k4"]
+
+[sub_resource type="Resource" id="Resource_wu3k4"]
+script = ExtResource("10_mxxis")
+Id = &"battery"
+DisplayName = "Battery"
+Icon = ExtResource("11_wu3k4")
+metadata/_custom_type_script = "uid://dn35rp4w1f58"
+
+[sub_resource type="Resource" id="Resource_e3fll"]
+script = ExtResource("11_e3fll")
+Items = Array[ExtResource("10_mxxis")]([SubResource("Resource_wu3k4")])
+metadata/_custom_type_script = "uid://bigpf5i68whtl"
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_mxxis"]
 
 [node name="Character" unique_id=493885237 instance=ExtResource("1_base")]
 script = ExtResource("2_project_character")
@@ -35,12 +55,12 @@ OwnedActionComponent = NodePath("../GameplayActions")
 Instigator = NodePath("../InteractionInteractor")
 metadata/_custom_type_script = "uid://cq7x5laa2qc4c"
 
-[node name="InteractionInteractor" type="Node" parent="." index="8" unique_id=1688919232 groups=["Player"] node_paths=PackedStringArray("Detector", "Runner")]
+[node name="InteractionInteractor" type="Node" parent="." index="8" unique_id=1688919232 node_paths=PackedStringArray("Detector", "Runner") groups=["Player"]]
 script = ExtResource("3_interactor")
 Detector = NodePath("AreaInteractionDetector")
 Runner = NodePath("../GameplayActionRunner")
 
-[node name="AreaInteractionDetector" type="Node" parent="InteractionInteractor" unique_id=1688919233 node_paths=PackedStringArray("ViewOrigin")]
+[node name="AreaInteractionDetector" type="Node" parent="InteractionInteractor" index="0" unique_id=1688919233 node_paths=PackedStringArray("ViewOrigin")]
 script = ExtResource("6_detector")
 ViewOrigin = NodePath("../../CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")
 
@@ -49,3 +69,21 @@ script = ExtResource("4_presenter")
 Interactor = NodePath("../InteractionInteractor")
 Camera = NodePath("../CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects/Camera3D")
 PromptContainerScene = ExtResource("5_prompt_container")
+
+[node name="InventoryComponent" type="Node" parent="." index="10" unique_id=1665184357]
+script = ExtResource("9_kksnx")
+Catalog = SubResource("Resource_e3fll")
+metadata/_custom_type_script = "uid://v72ge0wsrrkf"
+
+[node name="InventoryReplicationSynchronizer" type="MultiplayerSynchronizer" parent="InventoryComponent" index="0" unique_id=858490407 node_paths=PackedStringArray("Inventory")]
+root_path = NodePath("../..")
+replication_config = SubResource("SceneReplicationConfig_mxxis")
+script = ExtResource("10_8y4fs")
+Inventory = NodePath("..")
+metadata/_custom_type_script = "uid://b6bybu005qipw"
+
+[node name="ItemActionGrant" type="Node" parent="." index="11" unique_id=1210864062 node_paths=PackedStringArray("Inventory", "ActionComponent")]
+script = ExtResource("14_wu3k4")
+Inventory = NodePath("../InventoryComponent")
+ActionComponent = NodePath("../GameplayActions")
+metadata/_custom_type_script = "uid://b3dfxqn40hwot"
