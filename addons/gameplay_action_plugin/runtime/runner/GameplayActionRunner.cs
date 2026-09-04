@@ -63,6 +63,7 @@ public partial class GameplayActionRunner : Node
     private readonly GameplayActionGestureResolver _gestures;
     private readonly GameplayActionRequestPipeline _requests;
     private readonly Dictionary<StringName, IGameplayActionAccessProvider> _accessProviders = new();
+    private readonly List<StringName> _relevantInputs = new();
     private GameplayActionComponent? _observedOwnedActionComponent;
 
     [Export]
@@ -181,6 +182,42 @@ public partial class GameplayActionRunner : Node
     public int UnbindSource(GodotObject source) => _bindings.RemoveSource(source);
 
     public IReadOnlyList<GameplayActionBinding> GetBindings() => _bindings.GetBindings();
+
+    public IReadOnlyList<StringName> GetRelevantInputs()
+    {
+        _relevantInputs.Clear();
+        if (!IsLocallyControlled)
+        {
+            return _relevantInputs;
+        }
+
+        foreach (GameplayActionBinding binding in _bindings.GetBindings())
+        {
+            if (binding.ActivationMode != GameplayActionActivationMode.Automatic)
+            {
+                AddRelevantInput(binding.InputActionName);
+            }
+        }
+
+        foreach (StringName consumed in _gestures.GetConsumedInputs())
+        {
+            AddRelevantInput(consumed);
+        }
+
+        return _relevantInputs;
+    }
+
+    private void AddRelevantInput(StringName inputActionName)
+    {
+        if (
+            inputActionName is not null
+            && !inputActionName.IsEmpty
+            && !_relevantInputs.Contains(inputActionName)
+        )
+        {
+            _relevantInputs.Add(inputActionName);
+        }
+    }
 
     public GameplayActionAvailability GetBindingAvailability(ulong bindingId) =>
         _bindings.GetAvailability(bindingId);

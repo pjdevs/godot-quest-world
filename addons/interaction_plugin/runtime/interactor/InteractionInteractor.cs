@@ -93,8 +93,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
     private readonly HashSet<InteractiveComponent> _detectionBuffer = new();
     private readonly List<InteractiveComponent> _detectionEntered = new();
     private readonly List<InteractiveComponent> _detectionExited = new();
-    private readonly List<StringName> _relevantInputs = new();
-
     private InteractiveComponent? _focusedInteractive;
     private bool _hasKnownLocalControl;
     private bool _lastKnownLocalControl;
@@ -419,44 +417,8 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         _detectionExited.Clear();
     }
 
-    public IReadOnlyList<StringName> GetRelevantInputs()
-    {
-        _relevantInputs.Clear();
-        if (!IsLocallyControlled || Runner is null)
-        {
-            return _relevantInputs;
-        }
-
-        foreach (GameplayActionBinding binding in Runner.GetBindings())
-        {
-            if (
-                binding.Source == _focusedInteractive
-                && binding.ActivationMode != GameplayActionActivationMode.Automatic
-            )
-            {
-                AddRelevantInput(binding.InputActionName);
-            }
-        }
-
-        foreach (StringName consumed in Runner.GetConsumedInputs())
-        {
-            AddRelevantInput(consumed);
-        }
-
-        return _relevantInputs;
-    }
-
-    private void AddRelevantInput(StringName inputActionName)
-    {
-        if (
-            inputActionName is not null
-            && !inputActionName.IsEmpty
-            && !_relevantInputs.Contains(inputActionName)
-        )
-        {
-            _relevantInputs.Add(inputActionName);
-        }
-    }
+    public IReadOnlyList<StringName> GetRelevantInputs() =>
+        Runner?.GetRelevantInputs() ?? System.Array.Empty<StringName>();
 
     public InteractionTargetPresentation? GetInteractionPresentation() =>
         _focusedInteractive?.GetPresentation(this, true);
@@ -468,12 +430,8 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             return false;
         }
 
-        RecalculateFocus();
-        if (_focusedInteractive is not null)
-        {
-            Runner.InvalidateSource(_focusedInteractive);
-        }
-        return _focusedInteractive is not null && Runner.TryStartActionInput(inputActionName);
+        RefreshFocusedBindings();
+        return Runner.TryStartActionInput(inputActionName);
     }
 
     public bool TryEndInteractionInput(StringName inputActionName) =>
@@ -634,8 +592,16 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         _detectionBuffer.Clear();
         _detectionEntered.Clear();
         _detectionExited.Clear();
-        _relevantInputs.Clear();
         _focusedInteractive = null;
+    }
+
+    internal void RefreshFocusedBindings()
+    {
+        RecalculateFocus();
+        if (_focusedInteractive is not null)
+        {
+            Runner?.InvalidateSource(_focusedInteractive);
+        }
     }
 
     private void EmitStatusFor(InteractiveComponent interactive) =>

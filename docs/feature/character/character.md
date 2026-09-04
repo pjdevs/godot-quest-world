@@ -36,7 +36,10 @@ CharacterAnimationController   CharacterCameraEffects
 
 `Character` owns the current view mode, while `CharacterCameraRig` owns the serialized camera configuration: first-person offset, third-person distance, mouse sensitivity and pitch limits. `Character` resolves and orchestrates the rig without duplicating its settings.
 
-The global project `Character` subclass hosts `InteractionInteractor` and `InteractionPresenter`. The interactor uses the active camera as its view origin; the subclass samples the `interact` action and forwards press/release to the interactor.
+The global project `Character` subclass hosts `GameplayActionRunner`, `InteractionInteractor` and
+`InteractionPresenter`. The runner is the single input-loop boundary: the subclass samples the
+runner's relevant inputs and forwards press/release directly to it. A press refreshes Interaction's
+focus bindings first, but the runner remains usable for owned actions when no interactive is focused.
 ```
 
 The components are:
@@ -44,7 +47,7 @@ The components are:
 - `addons/dummy_character_plugin/scripts/Character.cs`: Godot composition root and orchestration facade. It resolves scene nodes, owns the exported character configuration, adapts camera/input state and applies presentation. Its public `Simulate` method remains as the stable entry point.
 - `addons/dummy_character_plugin/scripts/CharacterMovement.cs`: plain C# movement motor. It owns deterministic movement state, floor transitions and `MoveAndSlide`; `Simulate` consumes `CharacterSimulationInput` plus a plain `CharacterMovementSettings` snapshot and returns `CharacterFrameState`.
 - `addons/dummy_character_plugin/scripts/CharacterPlayerController.cs`: global movement input sampling and explicit `Possess`/`Unpossess` authority.
-- `quest_world/character/Character.cs`: project-only interaction composition and `interact` input forwarding.
+- `quest_world/character/Character.cs`: project-only action/interaction composition and generic input forwarding.
 - The remaining `CharacterInputFrame`, `CharacterSimulationInput`, `CharacterFrameState`, animation, camera and pitch scripts stay in the addon namespace `QuestWorld.Character`.
 
 The movement configuration stays serialized on `Character`; `CharacterMovementSettings` is only a plain value snapshot, not a `Resource` or a second set of exported properties. This keeps one inspector-facing source of truth while allowing the motor implementation to evolve independently and later support alternative movement modes. Presentation systems do not resample global input or independently infer floor transitions; local-only look deltas are passed directly to camera presentation.
@@ -59,7 +62,7 @@ The movement configuration stays serialized on `Character`; `CharacterMovementSe
 - Mouse: camera yaw/pitch while captured.
 - `Escape`: release the mouse.
 - Left click: recapture the mouse if UI did not consume the click.
-- `E`: start/end the focused interaction while held; the action is configurable through `CharacterPlayerController.InteractionAction`.
+- `E`: start/end the focused interaction while held in the current scenes; the input loop also forwards any owned gameplay-action bindings.
 
 The test world contains one player controller with the project `res://quest_world/character/Character.tscn` as its spawned scene. Additional characters remain simulated but unpossessed until `Possess(character)` is called.
 

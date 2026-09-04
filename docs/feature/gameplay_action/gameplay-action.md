@@ -192,6 +192,10 @@ action invalidation APIs. Invalidation re-evaluates only the requested cached bi
 `GameplayActionBindingInvalidated`; automatic bindings latch one continuous eligibility window and
 competing edges select at most one deterministic winner.
 
+`GetRelevantInputs()` is the input-loop boundary for the game. On a locally controlled runner it
+returns every non-automatic bound input, plus inputs whose gesture or sustained request is still
+consumed after a binding disappears. It returns no inputs for a remote runner.
+
 `InputGameplayAction` is the opt-in action type for default input binding. A missing
 `DefaultBindingConfig` is valid and means that no default binding is created; generic actions remain
 free of input concerns.

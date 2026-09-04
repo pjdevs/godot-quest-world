@@ -1,9 +1,11 @@
 using Godot;
+using QuestWorld.GameplayActions.Runtime.Runner;
 using QuestWorld.Interaction.Runtime.Interactor;
 
 public partial class Character : QuestWorld.Character.Character
 {
     private InteractionInteractor _interactionInteractor = null!;
+    private GameplayActionRunner _gameplayActionRunner = null!;
     private bool _wasPossessed;
 
     public InteractionInteractor InteractionInteractor => _interactionInteractor;
@@ -17,6 +19,13 @@ public partial class Character : QuestWorld.Character.Character
             GD.PushError(
                 $"{GetPath()}: project Character requires an InteractionInteractor child."
             );
+            return;
+        }
+
+        _gameplayActionRunner = GetNodeOrNull<GameplayActionRunner>("GameplayActionRunner")!;
+        if (_gameplayActionRunner == null)
+        {
+            GD.PushError($"{GetPath()}: project Character requires a GameplayActionRunner child.");
             return;
         }
 
@@ -53,24 +62,25 @@ public partial class Character : QuestWorld.Character.Character
         // The focused target decides which inputs matter, so binding an action to another key in a
         // scene needs no change here. What the interactor reports is information, not a command:
         // arbitrating between interacting and anything else sharing a key stays this class's job.
-        foreach (StringName inputActionName in _interactionInteractor.GetRelevantInputs())
+        foreach (StringName inputActionName in _gameplayActionRunner.GetRelevantInputs())
         {
             if (Input.IsActionJustPressed(inputActionName))
             {
-                _interactionInteractor.TryStartInteractionInput(inputActionName);
+                _interactionInteractor.RefreshFocusedBindings();
+                _gameplayActionRunner.TryStartActionInput(inputActionName);
             }
             else if (Input.IsActionJustReleased(inputActionName))
             {
-                _interactionInteractor.TryEndInteractionInput(inputActionName);
+                _gameplayActionRunner.TryEndActionInput(inputActionName);
             }
         }
     }
 
     private void ReleaseInteractionInputs()
     {
-        foreach (StringName inputActionName in _interactionInteractor.GetRelevantInputs())
+        foreach (StringName inputActionName in _gameplayActionRunner.GetRelevantInputs())
         {
-            _interactionInteractor.TryEndInteractionInput(inputActionName);
+            _gameplayActionRunner.TryEndActionInput(inputActionName);
         }
     }
 
