@@ -55,6 +55,12 @@ public partial class GameplayActionComponent : Node
     [Signal]
     public delegate void ExecutionPresentationChangedEventHandler(StringName actionId);
 
+    [Signal]
+    public delegate void GameplayActionAddedEventHandler(GameplayAction action);
+
+    [Signal]
+    public delegate void GameplayActionRemovedEventHandler(GameplayAction action);
+
     private const string NotConfiguredReason = "Action is not configured.";
     internal const string AlreadyRunningReason = "Action is already running.";
     private readonly Dictionary<StringName, GameplayAction> _actionsById = new();
@@ -109,6 +115,8 @@ public partial class GameplayActionComponent : Node
             Actions.Add(action);
         }
 
+        EmitSignal(SignalName.GameplayActionAdded, action);
+
         return true;
     }
 
@@ -127,6 +135,7 @@ public partial class GameplayActionComponent : Node
 
         _actionsById.Remove(actionId);
         Actions.Remove(action);
+        EmitSignal(SignalName.GameplayActionRemoved, action);
         bool isExecuting = IsActionExecuting(actionId);
         if (isExecuting)
         {

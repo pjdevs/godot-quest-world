@@ -50,7 +50,10 @@ explicit authored direct children during `_Ready`; it never discovers the scene 
 host, not only what the scene authored, so a consumer reading it never has to guess which runtime
 additions it can see. Registration rejects missing definitions, empty IDs, missing executors,
 duplicate IDs, invalid parents, and actions already owned by another component; a refused
-registration declares nothing.
+registration declares nothing. Successful runtime mutations emit `GameplayActionAdded` and
+`GameplayActionRemoved` after the action set has changed. `GameplayActionRemoved` is emitted at the
+logical removal boundary, before an active action's retiring window ends, so local bindings can be
+cleaned immediately.
 
 The main public operations delivered by this tranche are:
 
@@ -192,6 +195,11 @@ competing edges select at most one deterministic winner.
 `InputGameplayAction` is the opt-in action type for default input binding. A missing
 `DefaultBindingConfig` is valid and means that no default binding is created; generic actions remain
 free of input concerns.
+
+When a runner has an `OwnedActionComponent`, it observes only that component. At `_Ready` it scans
+the actions already registered; later `GameplayActionAdded` signals bind input actions with the
+action itself as the cleanup source, and `GameplayActionRemoved` unbinds that source immediately.
+This lifecycle also drives local `Automatic` actions through the normal runner request pipeline.
 
 Gesture resolution snapshots candidates at the press edge. A competing hold delays press/release
 selection, the longest reached captured threshold wins, and a consumed gesture cannot trigger a

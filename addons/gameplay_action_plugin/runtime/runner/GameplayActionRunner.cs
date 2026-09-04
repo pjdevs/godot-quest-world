@@ -63,6 +63,7 @@ public partial class GameplayActionRunner : Node
     private readonly GameplayActionGestureResolver _gestures;
     private readonly GameplayActionRequestPipeline _requests;
     private readonly Dictionary<StringName, IGameplayActionAccessProvider> _accessProviders = new();
+    private GameplayActionComponent? _observedOwnedActionComponent;
 
     [Export]
     public GameplayActionComponent? OwnedActionComponent { get; set; }
@@ -101,6 +102,52 @@ public partial class GameplayActionRunner : Node
     public override void _Ready()
     {
         _requests.Ready();
+        ObserveOwnedActionComponent();
+    }
+
+    private void ObserveOwnedActionComponent()
+    {
+        if (_observedOwnedActionComponent == OwnedActionComponent)
+        {
+            return;
+        }
+
+        if (_observedOwnedActionComponent is not null)
+        {
+            _observedOwnedActionComponent.GameplayActionAdded -= OnOwnedActionAdded;
+            _observedOwnedActionComponent.GameplayActionRemoved -= OnOwnedActionRemoved;
+        }
+
+        _observedOwnedActionComponent = OwnedActionComponent;
+        if (_observedOwnedActionComponent is null)
+        {
+            return;
+        }
+
+        _observedOwnedActionComponent.GameplayActionAdded += OnOwnedActionAdded;
+        _observedOwnedActionComponent.GameplayActionRemoved += OnOwnedActionRemoved;
+        foreach (GameplayAction action in _observedOwnedActionComponent.Actions)
+        {
+            BindOwnedInputAction(action);
+        }
+    }
+
+    private void OnOwnedActionAdded(GameplayAction action) => BindOwnedInputAction(action);
+
+    private void OnOwnedActionRemoved(GameplayAction action) => UnbindSource(action);
+
+    private void BindOwnedInputAction(GameplayAction action)
+    {
+        if (
+            action is not InputGameplayAction inputAction
+            || inputAction.DefaultBindingConfig is not GameplayActionBindingConfig config
+            || inputAction.Definition is null
+        )
+        {
+            return;
+        }
+
+        BindAction(OwnedActionComponent!, inputAction.Definition.Id, inputAction, config);
     }
 
     public GameplayActionBinding? BindAction(
