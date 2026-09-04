@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using Godot;
 using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Editor;
 using QuestWorld.GameplayActions.Runtime.Actions;
 using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.Interaction;
@@ -26,7 +27,6 @@ public static class InteractionValidator
         AreaInteractionDetector,
         InteractionPresenter,
         InteractionAction,
-        InteractionActionDefinition,
         StatefulStateInteractionRule,
     }
 
@@ -48,8 +48,6 @@ public static class InteractionValidator
                 return ValidatePresenter(obj);
             case InspectableType.InteractionAction:
                 return ValidateAction(obj);
-            case InspectableType.InteractionActionDefinition:
-                return ValidateActionDefinition(obj);
             case InspectableType.StatefulStateInteractionRule:
                 return ValidateStatefulRule(obj);
             default:
@@ -104,6 +102,13 @@ public static class InteractionValidator
                 continue;
             }
 
+            GodotObject? binding = GetObject(action, "DefaultBindingConfig");
+            if (binding is null)
+            {
+                yield return $"Actions[{index}] ('{GetName(definition, "Id")}') has no DefaultBindingConfig.";
+                continue;
+            }
+
             if (GetObject(action, "Executor") is null)
                 yield return $"Actions[{index}] has no Executor.";
 
@@ -117,10 +122,10 @@ public static class InteractionValidator
             else if (!ids.Add(id))
                 yield return $"Actions declare the action id '{id}' more than once.";
 
-            if (GetBool(action, "Automatic"))
+            if (GetInt(binding, "ActivationMode") == (int)GameplayActionActivationMode.Automatic)
                 continue;
 
-            string input = GetName(definition, "InputActionName");
+            string input = GetName(binding, "InputActionName");
             if (input.Length == 0)
             {
                 yield return $"Actions[{index}] ('{id}') is not automatic but declares no input.";
@@ -132,7 +137,7 @@ public static class InteractionValidator
             // Priority is the last discriminator an author can express, so it belongs to the key —
             // below it the resolver falls back on identifier order, which nobody authored on purpose.
             string trigger =
-                $"{input}|{GetFloat(definition, "HoldThreshold")}|{GetInt(action, "Priority")}";
+                $"{input}|{GetFloat(binding, "HoldDuration")}|{GetInt(binding, "Priority")}";
             if (inputs.TryGetValue(trigger, out string? other))
             {
                 yield return $"Actions '{other}' and '{id}' share the input '{input}', the same hold "
@@ -218,6 +223,16 @@ public static class InteractionValidator
         if (GetName(obj, "HostConcurrencyGroup").Length == 0)
             yield return "HostConcurrencyGroup must not be empty.";
 
+        if (GetObject(obj, "DefaultBindingConfig") is not GodotObject binding)
+        {
+            yield return "DefaultBindingConfig must be assigned.";
+        }
+        else
+        {
+            foreach (string warning in GameplayActionValidator.Validate(binding))
+                yield return $"DefaultBindingConfig: {warning}";
+        }
+
         if (obj is InteractionAction action && action.Interactive is null)
             yield return "InteractionAction must be hosted by a matching InteractiveComponent.";
 
@@ -251,19 +266,6 @@ public static class InteractionValidator
         }
 
         return false;
-    }
-
-    private static IEnumerable<string> ValidateActionDefinition(GodotObject obj)
-    {
-        if (GetName(obj, "Id").Length == 0)
-            yield return "Id must be assigned.";
-
-        string input = GetName(obj, "InputActionName");
-        if (input.Length > 0 && !InputMap.HasAction(input))
-            yield return $"InputActionName '{input}' is not declared in the project input map.";
-
-        if (GetFloat(obj, "HoldThreshold") < 0.0f)
-            yield return "HoldThreshold must not be negative.";
     }
 
     private static IEnumerable<string> ValidateStatefulRule(GodotObject obj)
@@ -363,7 +365,6 @@ public static class InteractionValidator
             InteractionDetector => InspectableType.InteractionDetector,
             InteractionPresenter => InspectableType.InteractionPresenter,
             InteractionAction => InspectableType.InteractionAction,
-            InteractionActionDefinition => InspectableType.InteractionActionDefinition,
             StatefulStateInteractionRule => InspectableType.StatefulStateInteractionRule,
             _ => InspectableType.None,
         };
@@ -384,7 +385,6 @@ public static class InteractionValidator
             nameof(InteractionDetector) => InspectableType.InteractionDetector,
             nameof(InteractionPresenter) => InspectableType.InteractionPresenter,
             nameof(InteractionAction) => InspectableType.InteractionAction,
-            nameof(InteractionActionDefinition) => InspectableType.InteractionActionDefinition,
             nameof(StatefulStateInteractionRule) => InspectableType.StatefulStateInteractionRule,
             _ => ResolveTypeFromPath(script?.ResourcePath),
         };
@@ -410,8 +410,6 @@ public static class InteractionValidator
                 InspectableType.InteractionPresenter,
             "res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" =>
                 InspectableType.InteractionAction,
-            "res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" =>
-                InspectableType.InteractionActionDefinition,
             "res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" =>
                 InspectableType.StatefulStateInteractionRule,
             _ => InspectableType.None,
@@ -420,9 +418,6 @@ public static class InteractionValidator
 
     private static Godot.Collections.Array GetArray(GodotObject obj, StringName propertyName) =>
         obj.Get(propertyName).AsGodotArray();
-
-    private static bool GetBool(GodotObject obj, StringName propertyName) =>
-        obj.Get(propertyName).AsBool();
 
     private static int GetInt(GodotObject obj, StringName propertyName) =>
         obj.Get(propertyName).AsInt32();

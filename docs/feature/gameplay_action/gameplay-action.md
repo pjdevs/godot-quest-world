@@ -265,8 +265,10 @@ receives an empty animation name. No GameplayAction test fails in that run.
 
 ### Ownership and compatibility bridge
 
-`InteractionActionDefinition`, `InteractionAction`, `InteractionRule`, and
-`InteractionActionExecutor` are now typed specializations/adapters of the generic contracts.
+`InteractionAction`, `InteractionRule`, and `InteractionActionExecutor` are now the useful
+specialization/adapters of the generic contracts. Interaction actions reuse
+`GameplayActionDefinition` and `GameplayActionBindingConfig` directly; no empty Interaction data
+subtypes remain.
 `InteractiveComponent` delegates authoritative evaluation, reservations, execution, progress, and
 presentation storage to `GameplayActionComponent`; `InteractionInteractor` delegates bindings,
 gesture resolution, request transport, acknowledgements, and sustained execution tracking to

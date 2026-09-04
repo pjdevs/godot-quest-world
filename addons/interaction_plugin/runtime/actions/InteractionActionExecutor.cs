@@ -31,7 +31,8 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
 
     public sealed override bool RequiresRequesterPresence =>
         RequiresInteractorPresence
-        || InteractionAction?.InteractionDefinition?.CancelOnInputReleased == true;
+        || InteractionAction?.DefaultBindingConfig?.InputRequirement
+            == GameplayActionInputRequirement.Pressed;
 
     protected internal virtual void OnExecutionCompleted(in InteractionExecutionContext context) { }
 

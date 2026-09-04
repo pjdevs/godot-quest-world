@@ -31,19 +31,25 @@ Add one `InteractionInteractor` to each character, add a detector below it, and 
 - Detector `ViewOrigin`: camera or aiming transform.
 - Detector `InteractionOrigin`: optional body/reach origin; otherwise the nearest `Node3D` ancestor.
 
-The interactor never samples input. Forward the relevant project actions from local character code:
+The interactor never samples input. Forward the relevant project actions from local character code;
+the runner is the input boundary for both owned actions and focused interactions:
 
 ```csharp
-foreach (StringName input in _interactor.GetRelevantInputs())
+foreach (StringName input in _runner.GetRelevantInputs())
 {
     if (Input.IsActionJustPressed(input))
-        _interactor.TryStartInteractionInput(input);
+    {
+        _interactor.RefreshFocusedBindings();
+        _runner.TryStartActionInput(input);
+    }
     else if (Input.IsActionJustReleased(input))
-        _interactor.TryEndInteractionInput(input);
+        _runner.TryEndActionInput(input);
 }
 ```
 
-`GetRelevantInputs()` includes presentable actions of the focused target and any consumed or sustained input still awaiting release. Once a press starts an interaction or hold, another start on that input is ignored until its release.
+`GameplayActionRunner.GetRelevantInputs()` includes every non-automatic binding, including owned
+actions, plus any consumed or sustained input still awaiting release. It is empty for a remote runner.
+Once a press starts an action or hold, another start on that input is ignored until its release.
 
 ### 2. Build an interactive target
 
@@ -73,10 +79,16 @@ Do not subclass `InteractiveComponent` for gameplay. It has no gameplay hook: co
 
 An action has two layers:
 
-- `InteractionActionDefinition` is reusable static data: stable `Id`, label, description, input, hold threshold, and release behavior.
-- `InteractionAction` is one occurrence on one target: executor, rules, priority, concurrency group, and optional automatic trigger.
+- `GameplayActionDefinition` is reusable static data: stable `Id`, label, and description.
+- `InteractionAction` is one occurrence on one target: executor, rules, and an optional
+  `DefaultBindingConfig` containing input, activation mode, hold duration, input requirement, and
+  priority. `InteractionAction` inherits `InputGameplayAction`; there is no Interaction-only
+  definition or binding-config subtype.
 
-Keep `Id` stable across builds because it crosses the network, and declare `InputActionName` in the project Input Map. `HoldThreshold` only selects between actions sharing an input; it is not execution duration. `CancelOnInputReleased` makes a running execution depend on that input.
+Keep `Id` stable across builds because it crosses the network. For a non-automatic binding, declare
+`InputActionName` in the project Input Map. `HoldDuration` only selects between actions sharing an
+input; it is not execution duration. `InputRequirement.Pressed` makes a running execution depend on
+that input until release. Automatic bindings use an empty input and `InputRequirement.None`.
 
 Actions sharing a `HostConcurrencyGroup` are mutually exclusive on their own target. The default group makes all actions of a target exclusive. `Automatic` actions request themselves when focused and do not appear as input prompts.
 
@@ -166,7 +178,7 @@ Use `InteractionActionExecutor` (or `TransitionStateGameplayActionExecutor`) for
 clock uses monotonic real time on authority and presentation peers, so pausing one node's processing
 does not give the lifecycle and its extrapolated bar different time semantics.
 
-A timed running action delegates its clock to a composed `TimedExecution`, which publishes sparse linear samples and completes the generic execution on the authority. A presence-bound running action is also revalidated once per server process frame through its detector. Set `RequiresInteractorPresence = false` for work handed to the world; `CancelOnInputReleased` always keeps it presence-bound.
+A timed running action delegates its clock to a composed `TimedExecution`, which publishes sparse linear samples and completes the generic execution on the authority. A presence-bound running action is also revalidated once per server process frame through its detector. Set `RequiresInteractorPresence = false` for work handed to the world; `InputRequirement.Pressed` always keeps it presence-bound.
 
 ### Provided executors
 
@@ -256,9 +268,12 @@ When several actions share an input:
 3. Higher `Priority` wins.
 4. The stable action id breaks the final tie.
 
-A tap may therefore select a zero-threshold action while a hold selects another. For “hold while hacking,” normally use a zero selection threshold, a running executor with a duration, and `CancelOnInputReleased = true`. Combining a hold threshold with execution duration creates two consecutive waits.
+A tap may therefore select a zero-duration action while a hold selects another. For “hold while
+hacking,” normally use a zero selection duration, a running executor with a duration, and
+`InputRequirement.Pressed`. Combining a hold duration with execution duration creates two consecutive
+waits.
 
-The reliable client RPC carries only `targetPath + actionId`. The server checks the owning peer, resolves the target and action from its scene, validates `Detect`, evaluates rules, and only then executes. Do not call the RPC methods directly; use `TryStartInteractionInput` and `TryEndInteractionInput`.
+The reliable client RPC carries only `targetPath + actionId`. The server checks the owning peer, resolves the target and action from its scene, validates `Detect`, evaluates rules, and only then executes. Do not call the RPC methods directly; use the runner's `TryStartActionInput` and `TryEndActionInput`.
 
 ## Build presentation
 

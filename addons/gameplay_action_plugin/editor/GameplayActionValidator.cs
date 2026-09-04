@@ -29,6 +29,8 @@ public static class GameplayActionValidator
         {
             case GameplayActionComponent component:
                 return ValidateComponent(component);
+            case InputGameplayAction inputAction:
+                return ValidateInputAction(inputAction);
             case GameplayAction action:
                 return ValidateAction(action);
             case GameplayActionDefinition definition:
@@ -101,6 +103,18 @@ public static class GameplayActionValidator
         {
             if (action.Rules[index] is null)
                 yield return $"Rules[{index}] must not be null.";
+        }
+    }
+
+    private static IEnumerable<string> ValidateInputAction(InputGameplayAction action)
+    {
+        foreach (string warning in ValidateAction(action))
+            yield return warning;
+
+        if (action.DefaultBindingConfig is not null)
+        {
+            foreach (string warning in ValidateBinding(action.DefaultBindingConfig))
+                yield return $"DefaultBindingConfig: {warning}";
         }
     }
 

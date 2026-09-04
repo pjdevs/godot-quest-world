@@ -8,6 +8,7 @@ using Godot;
 using QuestWorld.GameplayActions;
 using QuestWorld.GameplayActions.Integration.Stateful;
 using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Bindings;
 using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
@@ -1199,12 +1200,14 @@ public sealed partial class InteractionNetworkTest
         {
             Name = $"{id}Action",
             HostConcurrencyGroup = concurrencyGroup,
-            Definition = new InteractionActionDefinition
+            Definition = new GameplayActionDefinition { Id = id, Label = id.ToString() },
+            DefaultBindingConfig = new GameplayActionBindingConfig
             {
-                Id = id,
-                Label = id.ToString(),
                 InputActionName = input,
-                CancelOnInputReleased = sustained,
+                ActivationMode = GameplayActionActivationMode.Press,
+                InputRequirement = sustained
+                    ? GameplayActionInputRequirement.Pressed
+                    : GameplayActionInputRequirement.None,
             },
         };
 

@@ -8,7 +8,8 @@
 [ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_ll77h"]
 [ext_resource type="Script" uid="uid://c2ca7cnp0rpau" path="res://addons/interaction_plugin/examples/rules/InteractorGroupInteractionRule.cs" id="6_ueomp"]
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="7_action"]
-[ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="8_actiondef"]
+[ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="8_actiondef"]
+[ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="13_binding"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="9_staterule"]
 [ext_resource type="Script" uid="uid://bir8pc65gbklo" path="res://addons/gameplay_action_plugin/integration/stateful/TimedTransitionStateGameplayActionExecutor.cs" id="10_executor"]
 [ext_resource type="Script" uid="uid://bma1jjw2w4xn3" path="res://addons/gameplay_action_plugin/runtime/execution/GameplayActionExecutionSynchronizer.cs" id="11_execution_sync"]
@@ -36,9 +37,13 @@ script = ExtResource("8_actiondef")
 Id = &"activate"
 Label = "Activate"
 Description = "Hold to activate."
+metadata/_custom_type_script = "uid://nyac2n1klfrk"
+
+[sub_resource type="Resource" id="Resource_activate_binding"]
+script = ExtResource("13_binding")
 InputActionName = &"interact"
-CancelOnInputReleased = true
-metadata/_custom_type_script = "uid://bqs31n67gwjq1"
+ActivationMode = 0
+InputRequirement = 1
 
 [sub_resource type="Resource" id="Resource_activate_phase_rule"]
 script = ExtResource("9_staterule")
@@ -89,6 +94,7 @@ metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
 [node name="ActivateAction" type="Node" parent="GameplayActions" node_paths=PackedStringArray("Executor")]
 script = ExtResource("7_action")
 Definition = SubResource("Resource_activate_definition")
+DefaultBindingConfig = SubResource("Resource_activate_binding")
 Executor = NodePath("ActivateExecutor")
 Rules = Array[ExtResource("5_ll77h")]([SubResource("Resource_activate_phase_rule"), SubResource("Resource_activate_ready_rule")])
 ExecutionVisibility = 1

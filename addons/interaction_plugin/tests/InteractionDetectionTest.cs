@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
 using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Bindings;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Detection;
@@ -483,11 +485,15 @@ public sealed partial class InteractionDetectionTest
         InteractionAction action = new()
         {
             Name = "activateAction",
-            Definition = new InteractionActionDefinition
+            Definition = new GameplayActionDefinition
             {
                 Id = new StringName("activate"),
                 Label = "Activate",
+            },
+            DefaultBindingConfig = new GameplayActionBindingConfig
+            {
                 InputActionName = new StringName("interact"),
+                ActivationMode = GameplayActionActivationMode.Press,
             },
         };
         NoopInteractionExecutor executor = new() { Name = "activateExecutor" };

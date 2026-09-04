@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
 using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Bindings;
 using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Runtime.Actions;
@@ -194,7 +196,8 @@ public sealed partial class InteractionAckTest
         // that never existed. The local press stays consumed until that release, however, and the
         // input boundary therefore reports that it handled the completed press cycle.
         AckWorld world = BuildWorld();
-        world.Definition.CancelOnInputReleased = true;
+        world.Action.DefaultBindingConfig!.InputRequirement =
+            GameplayActionInputRequirement.Pressed;
         world.Executor.Duration = 2.0f;
         world.Executor.Result = new GameplayActionExecutionRunning();
         await world.Runner.SimulateFrames(1);
@@ -321,7 +324,8 @@ public sealed partial class InteractionAckTest
         // The bar belongs to the local prediction and disappears with no round trip; the terminal
         // acknowledgement is what everything else closes on, and arrives afterwards.
         AckWorld world = BuildWorld();
-        world.Definition.CancelOnInputReleased = true;
+        world.Action.DefaultBindingConfig!.InputRequirement =
+            GameplayActionInputRequirement.Pressed;
         world.Executor.Duration = 2.0f;
         world.Executor.Result = new GameplayActionExecutionRunning();
         await world.Runner.SimulateFrames(1);
@@ -395,7 +399,9 @@ public sealed partial class InteractionAckTest
         // Forgetting the automatic request on a refusal without remembering the refused pair would
         // re-send the very same request on the very next frame, turning one refusal into a flood.
         AckWorld world = BuildWorld();
-        world.Action.Automatic = true;
+        world.Action.DefaultBindingConfig!.ActivationMode = GameplayActionActivationMode.Automatic;
+        world.Action.DefaultBindingConfig.InputActionName = new StringName();
+        world.Action.DefaultBindingConfig.InputRequirement = GameplayActionInputRequirement.None;
         world.Executor.Result = new GameplayActionExecutionRejected("The till is closed.");
         await world.Runner.SimulateFrames(1);
 
@@ -414,7 +420,9 @@ public sealed partial class InteractionAckTest
         // refusal leaves the binding eligible, so the automatic action stays latched until gameplay
         // first makes it unavailable and then available again.
         AckWorld world = BuildWorld();
-        world.Action.Automatic = true;
+        world.Action.DefaultBindingConfig!.ActivationMode = GameplayActionActivationMode.Automatic;
+        world.Action.DefaultBindingConfig.InputActionName = new StringName();
+        world.Action.DefaultBindingConfig.InputRequirement = GameplayActionInputRequirement.None;
         world.Executor.Result = new GameplayActionExecutionRejected("The till is closed.");
         await world.Runner.SimulateFrames(1);
         world.Focus();
@@ -428,7 +436,9 @@ public sealed partial class InteractionAckTest
     public async Task AnAutomaticActionRefusedTriesAgainAfterTheFocusMoved()
     {
         AckWorld world = BuildWorld();
-        world.Action.Automatic = true;
+        world.Action.DefaultBindingConfig!.ActivationMode = GameplayActionActivationMode.Automatic;
+        world.Action.DefaultBindingConfig.InputActionName = new StringName();
+        world.Action.DefaultBindingConfig.InputRequirement = GameplayActionInputRequirement.None;
         world.Executor.Result = new GameplayActionExecutionRejected("The till is closed.");
         await world.Runner.SimulateFrames(1);
         world.Focus();
@@ -451,13 +461,21 @@ public sealed partial class InteractionAckTest
             InteractionArea = area,
             InteractionAnchor = actor,
         };
-        InteractionActionDefinition definition = new()
+        GameplayActionDefinition definition = new()
         {
             Id = new StringName("activate"),
             Label = "Activate",
-            InputActionName = InteractInput,
         };
-        InteractionAction action = new() { Name = "ActivateAction", Definition = definition };
+        InteractionAction action = new()
+        {
+            Name = "ActivateAction",
+            Definition = definition,
+            DefaultBindingConfig = new GameplayActionBindingConfig
+            {
+                InputActionName = InteractInput,
+                ActivationMode = GameplayActionActivationMode.Press,
+            },
+        };
         TestScriptedExecutor executor = new() { Name = "ActivateExecutor" };
         action.AddChild(executor);
         action.Executor = executor;
@@ -503,7 +521,7 @@ public sealed partial class InteractionAckTest
         InteractiveComponent Interactive,
         InteractionInteractor Interactor,
         TestInteractionDetector Detector,
-        InteractionActionDefinition Definition,
+        GameplayActionDefinition Definition,
         InteractionAction Action,
         TestScriptedExecutor Executor,
         List<Ack> Acks

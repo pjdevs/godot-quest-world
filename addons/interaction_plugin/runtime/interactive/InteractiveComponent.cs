@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Godot;
 using QuestWorld.GameplayActions;
 using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Bindings;
 using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.GameplayActions.Runtime.Rules;
 using QuestWorld.GameplayActions.Runtime.Runner;
@@ -35,21 +36,23 @@ internal readonly record struct InteractionProgress(StringName? HeldInput, float
     /// would promise something else.
     /// </para>
     /// </remarks>
-    public float? HoldOf(InteractionActionDefinition definition) =>
-        Holds(definition) ? Mathf.Clamp(HoldElapsed / definition.HoldThreshold, 0.0f, 1.0f) : null;
+    public float? HoldOf(GameplayActionBindingConfig? config) =>
+        Holds(config) ? Mathf.Clamp(HoldElapsed / config!.HoldDuration, 0.0f, 1.0f) : null;
 
     /// <summary>Gets the seconds one action has been held for, or null when it is not being held.</summary>
     /// <remarks>
     /// The raw duration next to the normalised one, because a widget showing a countdown cannot rebuild
     /// it: the threshold it would divide by is not part of the presentation.
     /// </remarks>
-    public float? HoldElapsedOf(InteractionActionDefinition definition) =>
-        Holds(definition) ? HoldElapsed : null;
+    public float? HoldElapsedOf(GameplayActionBindingConfig? config) =>
+        Holds(config) ? HoldElapsed : null;
 
-    private bool Holds(InteractionActionDefinition definition) =>
+    private bool Holds(GameplayActionBindingConfig? config) =>
         HeldInput is not null
-        && definition.HoldThreshold > 0.0f
-        && definition.InputActionName == HeldInput;
+        && config is not null
+        && config.ActivationMode == GameplayActionActivationMode.Hold
+        && config.HoldDuration > 0.0f
+        && config.InputActionName == HeldInput;
 }
 
 /// <summary>
@@ -545,7 +548,7 @@ public partial class InteractiveComponent : Node
             || InteractionArea is null
             || InteractionAnchor is null
             || action is null
-            || action.InteractionDefinition is null
+            || action.Definition is null
             || action.Executor is null
             || ActionComponent is null
             || action.Component != ActionComponent
@@ -556,7 +559,7 @@ public partial class InteractiveComponent : Node
 
         PrepareAction(action);
         InteractionAvailability actionAvailability = ActionComponent
-            .EvaluateAction(action.InteractionDefinition.Id, interactor, interactor.Runner)
+            .EvaluateAction(action.Definition.Id, interactor, interactor.Runner)
             .ToInteractionAvailability();
         if (actionAvailability is not InteractionAllowed)
         {
@@ -571,7 +574,7 @@ public partial class InteractiveComponent : Node
         // allowed for the owner would make a prompt claim an action the target would immediately
         // refuse; blocked keeps the action presented, with the reason, which is what a prompt needs.
         if (
-            ActionComponent.IsActionExecuting(action.InteractionDefinition.Id)
+            ActionComponent.IsActionExecuting(action.Definition.Id)
             || ActionComponent.IsConcurrencyGroupExecuting(action.GetHostConcurrencyGroup())
         )
         {
@@ -658,68 +661,13 @@ public partial class InteractiveComponent : Node
 
         foreach (InteractionAction action in Actions)
         {
-            if (
-                action?.InteractionDefinition is not null
-                && action.InteractionDefinition.Id == actionId
-            )
+            if (action?.Definition is not null && action.Definition.Id == actionId)
             {
                 return action;
             }
         }
 
         return null;
-    }
-
-    /// <summary>Resolves the action this target offers for one project input action.</summary>
-    /// <remarks>
-    /// Hidden actions are ignored, so an input can be reused by mutually exclusive actions such as
-    /// <c>open</c> and <c>close</c>. A blocked action is still resolved so the refusal can be
-    /// explained instead of the input silently doing nothing.
-    /// </remarks>
-    /// <param name="interactor">Interactor for which availability is evaluated.</param>
-    /// <param name="inputActionName">Project input action pressed by the player.</param>
-    /// <param name="heldSeconds">
-    /// How long the input has been held, which excludes the actions asking for a longer hold. The
-    /// default considers every action, since a target whose actions declare no threshold resolves
-    /// the same way whatever the gesture.
-    /// </param>
-    /// <returns>The preferred allowed or blocked action, or null when the input offers none.</returns>
-    public InteractionAction? ResolveActionForInput(
-        InteractionInteractor interactor,
-        StringName inputActionName,
-        float heldSeconds = float.MaxValue
-    )
-    {
-        InteractionAction? best = null;
-        int bestRank = 0;
-        foreach (InteractionAction action in Actions)
-        {
-            if (
-                action?.InteractionDefinition is null
-                || action.InteractionDefinition.InputActionName != inputActionName
-            )
-            {
-                continue;
-            }
-
-            if (action.InteractionDefinition.HoldThreshold > heldSeconds)
-            {
-                continue;
-            }
-
-            if (!TryRankAction(interactor, action, out int rank))
-            {
-                continue;
-            }
-
-            if (best is null || IsBetterCandidate(action, rank, best, bestRank))
-            {
-                best = action;
-                bestRank = rank;
-            }
-        }
-
-        return best;
     }
 
     /// <summary>Gets the longest hold this target asks for on one input.</summary>
@@ -740,103 +688,24 @@ public partial class InteractiveComponent : Node
         foreach (InteractionAction action in Actions)
         {
             if (
-                action?.InteractionDefinition is null
-                || action.InteractionDefinition.InputActionName != inputActionName
+                action?.DefaultBindingConfig is not GameplayActionBindingConfig config
+                || config.InputActionName != inputActionName
             )
             {
                 continue;
             }
 
             if (
-                action.InteractionDefinition.HoldThreshold > longest
-                && TryRankAction(interactor, action, out _)
+                config.ActivationMode == GameplayActionActivationMode.Hold
+                && config.HoldDuration > longest
+                && EvaluateAvailability(interactor, action) is not InteractionHidden
             )
             {
-                longest = action.InteractionDefinition.HoldThreshold;
+                longest = config.HoldDuration;
             }
         }
 
         return longest;
-    }
-
-    /// <summary>Resolves the action this target offers to a focusing interactor without input.</summary>
-    /// <remarks>
-    /// A blocked automatic action is still resolved so focusing a target that cannot run it reports
-    /// the reason, exactly like a pressed input would.
-    /// </remarks>
-    /// <param name="interactor">Interactor for which availability is evaluated.</param>
-    /// <returns>The preferred automatic action, or null when this target declares none.</returns>
-    public InteractionAction? ResolveAutomaticAction(InteractionInteractor interactor)
-    {
-        InteractionAction? best = null;
-        int bestRank = 0;
-        foreach (InteractionAction action in Actions)
-        {
-            if (action?.Definition is null || !action.Automatic)
-            {
-                continue;
-            }
-
-            if (!TryRankAction(interactor, action, out int rank))
-            {
-                continue;
-            }
-
-            if (best is null || IsBetterCandidate(action, rank, best, bestRank))
-            {
-                best = action;
-                bestRank = rank;
-            }
-        }
-
-        return best;
-    }
-
-    private bool TryRankAction(
-        InteractionInteractor interactor,
-        InteractionAction action,
-        out int rank
-    )
-    {
-        rank = EvaluateAvailability(interactor, action) switch
-        {
-            InteractionAllowed => 0,
-            InteractionBlocked => 1,
-            InteractionHidden => -1,
-        };
-        return rank >= 0;
-    }
-
-    private static bool IsBetterCandidate(
-        InteractionAction action,
-        int rank,
-        InteractionAction best,
-        int bestRank
-    )
-    {
-        // A hold is a deliberate selection, so the action the player held for wins over one asking
-        // for no hold. Without this, holding could never reach the action the threshold exists for.
-        float threshold = action.InteractionDefinition!.HoldThreshold;
-        float bestThreshold = best.InteractionDefinition!.HoldThreshold;
-        if (threshold != bestThreshold)
-        {
-            return threshold > bestThreshold;
-        }
-
-        if (rank != bestRank)
-        {
-            return rank < bestRank;
-        }
-
-        if (action.Priority != best.Priority)
-        {
-            return action.Priority > best.Priority;
-        }
-
-        return string.CompareOrdinal(
-                action.InteractionDefinition!.Id.ToString(),
-                best.InteractionDefinition!.Id.ToString()
-            ) < 0;
     }
 
     /// <summary>Builds the local presentation snapshot for prompt or indication widgets.</summary>
@@ -915,7 +784,10 @@ public partial class InteractiveComponent : Node
     )
     {
         presentation = default;
-        if (action?.InteractionDefinition is null)
+        if (
+            action?.Definition is null
+            || action.DefaultBindingConfig is not GameplayActionBindingConfig config
+        )
         {
             return false;
         }
@@ -927,15 +799,15 @@ public partial class InteractiveComponent : Node
         }
 
         presentation = new InteractionActionPresentation(
-            action.InteractionDefinition.Id,
-            action.InteractionDefinition.Label,
-            action.InteractionDefinition.Description,
-            action.InteractionDefinition.InputActionName,
+            action.Definition.Id,
+            action.Definition.Label,
+            action.Definition.Description,
+            config.InputActionName,
             availability,
-            action.Automatic,
-            action.InteractionDefinition.HoldThreshold > 0.0f,
-            progress.HoldOf(action.InteractionDefinition),
-            progress.HoldElapsedOf(action.InteractionDefinition)
+            config.ActivationMode == GameplayActionActivationMode.Automatic,
+            config.ActivationMode == GameplayActionActivationMode.Hold,
+            progress.HoldOf(config),
+            progress.HoldElapsedOf(config)
         );
         return true;
     }

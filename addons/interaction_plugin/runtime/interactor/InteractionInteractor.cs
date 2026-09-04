@@ -334,16 +334,19 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
         foreach (InteractionAction action in interactive.Actions)
         {
-            if (action?.InteractionDefinition is null)
+            if (
+                action?.Definition is null
+                || action.DefaultBindingConfig is not GameplayActionBindingConfig config
+            )
             {
                 continue;
             }
 
             Runner.BindAction(
                 interactive.ActionComponent,
-                action.InteractionDefinition.Id,
+                action.Definition.Id,
                 interactive,
-                action.BuildBindingConfig(),
+                config,
                 Variant.From(interactive)
             );
         }
@@ -595,7 +598,11 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         _focusedInteractive = null;
     }
 
-    internal void RefreshFocusedBindings()
+    /// <summary>
+    /// Re-evaluates focus and refreshes the focused target's contextual action bindings.
+    /// </summary>
+    /// <remarks>Call this immediately before forwarding a local press to the runner.</remarks>
+    public void RefreshFocusedBindings()
     {
         RecalculateFocus();
         if (_focusedInteractive is not null)

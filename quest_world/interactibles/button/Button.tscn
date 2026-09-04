@@ -4,7 +4,8 @@
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn" id="2_2ck07"]
 [ext_resource type="PackedScene" uid="uid://mknaynw5h20v" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="3_6nsmd"]
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="3_action"]
-[ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="4_actiondef"]
+[ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="4_actiondef"]
+[ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="7_binding"]
 [ext_resource type="Script" uid="uid://bw02qn7pyxpy4" path="res://addons/gameplay_action_plugin/integration/stateful/SetStateGameplayActionExecutor.cs" id="5_setstate"]
 [ext_resource type="Script" uid="uid://dwmqsp6eyk4gd" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="6_actions"]
 
@@ -18,13 +19,24 @@ albedo_color = Color(0, 1, 0, 1)
 script = ExtResource("4_actiondef")
 Id = &"raise"
 Label = "Raise wall"
-metadata/_custom_type_script = "uid://bqs31n67gwjq1"
+metadata/_custom_type_script = "uid://nyac2n1klfrk"
+
+[sub_resource type="Resource" id="Resource_raise_binding"]
+script = ExtResource("7_binding")
+InputActionName = &"interact"
+ActivationMode = 0
+Priority = 1
 
 [sub_resource type="Resource" id="Resource_lower_definition"]
 script = ExtResource("4_actiondef")
 Id = &"lower"
 Label = "Lower wall"
-metadata/_custom_type_script = "uid://bqs31n67gwjq1"
+metadata/_custom_type_script = "uid://nyac2n1klfrk"
+
+[sub_resource type="Resource" id="Resource_lower_binding"]
+script = ExtResource("7_binding")
+InputActionName = &"interact"
+ActivationMode = 0
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_mokd0"]
 size = Vector3(5, 3, 5)
@@ -49,8 +61,8 @@ metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
 [node name="RaiseAction" type="Node" parent="GameplayActions" unique_id=1667473628 node_paths=PackedStringArray("Executor")]
 script = ExtResource("3_action")
 Definition = SubResource("Resource_raise_definition")
+DefaultBindingConfig = SubResource("Resource_raise_binding")
 Executor = NodePath("RaiseExecutor")
-Priority = 1
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
 [node name="RaiseExecutor" type="Node" parent="GameplayActions/RaiseAction" unique_id=1426697339]
@@ -61,6 +73,7 @@ metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
 [node name="LowerAction" type="Node" parent="GameplayActions" unique_id=1721581751 node_paths=PackedStringArray("Executor")]
 script = ExtResource("3_action")
 Definition = SubResource("Resource_lower_definition")
+DefaultBindingConfig = SubResource("Resource_lower_binding")
 Executor = NodePath("LowerExecutor")
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 

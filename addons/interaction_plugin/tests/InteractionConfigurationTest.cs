@@ -10,6 +10,7 @@ using QuestWorld.GameplayActions;
 using QuestWorld.GameplayActions.Editor;
 using QuestWorld.GameplayActions.Integration.Stateful;
 using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Bindings;
 using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
@@ -176,8 +177,9 @@ public sealed partial class InteractionConfigurationTest
             .IsTrue();
         AssertThat(typeof(InteractiveComponent).GetProperty("AutomaticInteraction") == null)
             .IsTrue();
-        AssertThat(typeof(InteractionAction).GetProperty("Priority") != null).IsTrue();
-        AssertThat(typeof(InteractionAction).GetProperty("Automatic") != null).IsTrue();
+        AssertThat(typeof(InteractionAction).GetProperty("Priority") == null).IsTrue();
+        AssertThat(typeof(InteractionAction).GetProperty("Automatic") == null).IsTrue();
+        AssertThat(typeof(InteractionAction).GetProperty("DefaultBindingConfig") != null).IsTrue();
     }
 
     [TestCase]
@@ -390,7 +392,7 @@ public sealed partial class InteractionConfigurationTest
             InteractionArea = area,
             InteractionAnchor = owner,
         };
-        InteractionAction action = NewAction(new InteractionActionDefinition { Id = "open" });
+        InteractionAction action = NewAction(new GameplayActionDefinition { Id = "open" });
         action.Rules.Add(
             new StatefulStateInteractionRule
             {
@@ -414,7 +416,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void InteractiveReportsDuplicateActionIds()
     {
-        InteractionActionDefinition definition = new() { Id = "open" };
+        GameplayActionDefinition definition = new() { Id = "open" };
         InteractiveComponent interactive = new()
         {
             InteractionArea = new Area3D(),
@@ -439,8 +441,8 @@ public sealed partial class InteractionConfigurationTest
             {
                 Actions =
                 {
-                    NewAction(new InteractionActionDefinition { Id = "open" }),
-                    NewAction(new InteractionActionDefinition { Id = "force" }),
+                    NewAction(new GameplayActionDefinition { Id = "open" }),
+                    NewAction(new GameplayActionDefinition { Id = "force" }),
                 },
             },
         };
@@ -457,9 +459,9 @@ public sealed partial class InteractionConfigurationTest
         // Sharing an input and a threshold is how "open" and "unlock" alternate on one key: the
         // resolver separates them by availability, then by priority. Only a tie the author did not
         // break is worth reporting, because below priority the identifier order decides.
-        InteractionAction open = NewAction(new InteractionActionDefinition { Id = "open" });
-        InteractionAction unlock = NewAction(new InteractionActionDefinition { Id = "unlock" });
-        unlock.Priority = 10;
+        InteractionAction open = NewAction(new GameplayActionDefinition { Id = "open" });
+        InteractionAction unlock = NewAction(new GameplayActionDefinition { Id = "unlock" });
+        unlock.DefaultBindingConfig!.Priority = 10;
         InteractiveComponent interactive = new()
         {
             InteractionArea = new Area3D(),
@@ -487,9 +489,9 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void ActionDefinitionRequiresAnId()
     {
-        InteractionActionDefinition definition = new();
+        GameplayActionDefinition definition = new();
 
-        string[] warnings = InteractionValidator.Validate(definition).ToArray();
+        string[] warnings = GameplayActionValidator.Validate(definition).ToArray();
 
         AssertThat(warnings.Contains("Id must be assigned.")).IsTrue();
     }
@@ -514,7 +516,7 @@ public sealed partial class InteractionConfigurationTest
 
     private static InteractiveComponent NewConfiguredInteractive()
     {
-        InteractionAction action = NewAction(new InteractionActionDefinition { Id = "open" });
+        InteractionAction action = NewAction(new GameplayActionDefinition { Id = "open" });
         GameplayActionComponent component = new() { Actions = { action } };
         InteractiveComponent interactive = new()
         {
@@ -527,8 +529,17 @@ public sealed partial class InteractionConfigurationTest
         return interactive;
     }
 
-    private static InteractionAction NewAction(InteractionActionDefinition definition)
+    private static InteractionAction NewAction(GameplayActionDefinition definition)
     {
-        return new() { Definition = definition, Executor = new SetStateGameplayActionExecutor() };
+        return new()
+        {
+            Definition = definition,
+            DefaultBindingConfig = new GameplayActionBindingConfig
+            {
+                InputActionName = new StringName("interact"),
+                ActivationMode = GameplayActionActivationMode.Press,
+            },
+            Executor = new SetStateGameplayActionExecutor(),
+        };
     }
 }

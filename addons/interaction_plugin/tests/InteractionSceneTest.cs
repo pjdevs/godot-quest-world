@@ -9,6 +9,7 @@ using InteractionPlugin.Editor;
 using QuestWorld.GameplayActions;
 using QuestWorld.GameplayActions.Integration.Stateful;
 using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Bindings;
 using QuestWorld.GameplayActions.Runtime.Execution;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Integration.Stateful;
@@ -64,7 +65,7 @@ public sealed partial class InteractionSceneTest
         AssertThat(action == actor.GetNode<InteractionAction>("GameplayActions/ActivateAction"))
             .IsTrue();
         AssertThat(action.Definition?.Id.ToString()).IsEqual("activate");
-        AssertThat(action.Definition?.InputActionName.ToString()).IsEqual("interact");
+        AssertThat(action.DefaultBindingConfig?.InputActionName.ToString()).IsEqual("interact");
         AssertThat(action.Executor != null).IsTrue();
         AssertThat(
                 action.Executor
@@ -318,7 +319,9 @@ public sealed partial class InteractionSceneTest
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
         InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
-        interactive.ActionAt(1).Definition!.HoldThreshold = 3600.0f;
+        interactive.ActionAt(1).DefaultBindingConfig!.ActivationMode =
+            GameplayActionActivationMode.Hold;
+        interactive.ActionAt(1).DefaultBindingConfig!.HoldDuration = 3600.0f;
 
         detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
         await runner.SimulateFrames(1);
@@ -610,7 +613,7 @@ public sealed partial class InteractionSceneTest
 
         GameplayActionExecutionResult raise = world.Interactive.ExecuteAction(
             world.Interactor,
-            world.Interactive.ResolveActionForInput(world.Interactor, new StringName("interact"))!
+            world.Interactive.ResolveAction(new StringName("raise"))!
         );
 
         AssertThat(raise is GameplayActionExecutionCompleted).IsTrue();
@@ -623,7 +626,7 @@ public sealed partial class InteractionSceneTest
 
         GameplayActionExecutionResult lower = world.Interactive.ExecuteAction(
             world.Interactor,
-            world.Interactive.ResolveActionForInput(world.Interactor, new StringName("interact"))!
+            world.Interactive.ResolveAction(new StringName("lower"))!
         );
 
         AssertThat(lower is GameplayActionExecutionCompleted).IsTrue();
@@ -639,7 +642,7 @@ public sealed partial class InteractionSceneTest
 
         world.Interactive.ExecuteAction(
             world.Interactor,
-            world.Interactive.ResolveActionForInput(world.Interactor, new StringName("interact"))!
+            world.Interactive.ResolveAction(new StringName("raise"))!
         );
 
         AssertThat(world.WallState.State).IsEqual(RaisingState);
@@ -768,10 +771,15 @@ public sealed partial class InteractionSceneTest
             InteractionAction action = new()
             {
                 Name = $"{actionId}Action",
-                Definition = new InteractionActionDefinition
+                Definition = new GameplayActionDefinition
                 {
                     Id = new StringName(actionId),
                     Label = actionId,
+                },
+                DefaultBindingConfig = new GameplayActionBindingConfig
+                {
+                    InputActionName = new StringName("interact"),
+                    ActivationMode = GameplayActionActivationMode.Press,
                 },
             };
             NoopInteractionExecutor executor = new() { Name = $"{actionId}Executor" };
