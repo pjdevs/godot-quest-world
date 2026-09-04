@@ -37,7 +37,9 @@ Its public namespace is `QuestWorld.GameplayActions`, with action nodes under
 
 `GameplayAction` is one owned occurrence. It references exactly one definition, exactly one
 executor, an ordered rule collection, a host concurrency group, and its future execution visibility.
-Input configuration does not belong to either type.
+Input configuration does not belong to `GameplayAction`. An `InputGameplayAction` may optionally
+expose a `DefaultBindingConfig`; the runner uses that resource only as the authored source for a
+local binding, whose input fields are snapshot values rather than a live reference.
 
 ### Authoritative host
 
@@ -186,6 +188,10 @@ access.
 action invalidation APIs. Invalidation re-evaluates only the requested cached bindings and emits
 `GameplayActionBindingInvalidated`; automatic bindings latch one continuous eligibility window and
 competing edges select at most one deterministic winner.
+
+`InputGameplayAction` is the opt-in action type for default input binding. A missing
+`DefaultBindingConfig` is valid and means that no default binding is created; generic actions remain
+free of input concerns.
 
 Gesture resolution snapshots candidates at the press edge. A competing hold delays press/release
 selection, the longest reached captured threshold wins, and a consumed gesture cannot trigger a
