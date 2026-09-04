@@ -397,8 +397,9 @@ public sealed partial class InteractionSceneTest
         Node3D world = new();
         Node3D character = new() { Name = "RemoteCharacter" };
         Camera3D camera = new() { Name = "Camera" };
-        InteractionInteractor interactor = new() { Name = "Interactor", OwnerPeerId = 2 };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
         TestInteractionDetector detector = AttachDetector(interactor, camera);
+        interactor.Runner!.OwnerPeerId = 2;
         InteractionPresenter presenter = new()
         {
             Name = "Presenter",

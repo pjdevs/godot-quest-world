@@ -65,6 +65,9 @@ public partial class GameplayActionRunner : Node
     private readonly Dictionary<StringName, IGameplayActionAccessProvider> _accessProviders = new();
     private readonly List<StringName> _relevantInputs = new();
     private GameplayActionComponent? _observedOwnedActionComponent;
+    private int _serverPeerId = 1;
+    private bool _hasKnownLocalControl;
+    private bool _lastKnownLocalControl;
 
     [Export]
     public GameplayActionComponent? OwnedActionComponent { get; set; }
@@ -74,7 +77,15 @@ public partial class GameplayActionRunner : Node
 
     [ExportGroup("Network")]
     [Export]
-    public int ServerPeerId { get; set; } = 1;
+    public int ServerPeerId
+    {
+        get => _serverPeerId;
+        set
+        {
+            _serverPeerId = value;
+            ApplyNetworkAuthority();
+        }
+    }
 
     [Export]
     public int OwnerPeerId { get; set; } = 1;
@@ -95,15 +106,36 @@ public partial class GameplayActionRunner : Node
 
     internal bool IsAuthoritativeRunner => IsAuthoritative;
 
-    public bool IsLocallyControlled =>
-        Multiplayer is null
-        || Multiplayer.MultiplayerPeer is null
-        || Multiplayer.GetUniqueId() == OwnerPeerId;
+    public bool IsLocallyControlled
+    {
+        get
+        {
+            if (Multiplayer is null || Multiplayer.MultiplayerPeer is null)
+            {
+                return _hasKnownLocalControl ? _lastKnownLocalControl : OwnerPeerId == 1;
+            }
+
+            _lastKnownLocalControl = OwnerPeerId == (int)Multiplayer.GetUniqueId();
+            _hasKnownLocalControl = true;
+            return _lastKnownLocalControl;
+        }
+    }
 
     public override void _Ready()
     {
+        ApplyNetworkAuthority();
         _requests.Ready();
         ObserveOwnedActionComponent();
+    }
+
+    private void ApplyNetworkAuthority()
+    {
+        if (!IsInsideTree() || ServerPeerId <= 0 || GetMultiplayerAuthority() == ServerPeerId)
+        {
+            return;
+        }
+
+        SetMultiplayerAuthority(ServerPeerId);
     }
 
     private void ObserveOwnedActionComponent()

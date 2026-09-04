@@ -484,7 +484,7 @@ public sealed partial class InteractionAckTest
         interactive.AddAction(action);
 
         Node3D view = new() { Name = "ViewOrigin" };
-        InteractionInteractor interactor = new() { Name = "Interactor", OwnerPeerId = 1 };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
         interactor.AddChild(view);
         TestInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
         interactor.AddChild(detector);

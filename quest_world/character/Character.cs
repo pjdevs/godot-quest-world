@@ -40,11 +40,7 @@ public partial class Character : QuestWorld.Character.Character
             return;
         }
 
-        _interactionInteractor.OwnerPeerId = OwnerPeerId;
-        if (IsInsideTree())
-        {
-            _interactionInteractor.SetMultiplayerAuthority(_interactionInteractor.ServerPeerId);
-        }
+        _gameplayActionRunner.OwnerPeerId = OwnerPeerId;
     }
 
     public override void _PhysicsProcess(double delta)

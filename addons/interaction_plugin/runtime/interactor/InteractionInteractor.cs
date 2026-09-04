@@ -78,13 +78,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
     [Export]
     public InteractionDetector? Detector { get; set; }
 
-    [ExportGroup("Network")]
-    [Export]
-    public int ServerPeerId { get; set; } = 1;
-
-    [Export]
-    public int OwnerPeerId { get; set; } = 1;
-
     [ExportGroup("Actions")]
     [Export]
     public GameplayActionRunner? Runner { get; set; }
@@ -94,25 +87,10 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
     private readonly List<InteractiveComponent> _detectionEntered = new();
     private readonly List<InteractiveComponent> _detectionExited = new();
     private InteractiveComponent? _focusedInteractive;
-    private bool _hasKnownLocalControl;
-    private bool _lastKnownLocalControl;
 
     public InteractiveComponent? FocusedInteractive => _focusedInteractive;
 
-    public bool IsLocallyControlled
-    {
-        get
-        {
-            if (Multiplayer is null || Multiplayer.MultiplayerPeer is null)
-            {
-                return _hasKnownLocalControl ? _lastKnownLocalControl : OwnerPeerId == 1;
-            }
-
-            _lastKnownLocalControl = OwnerPeerId == (int)Multiplayer.GetUniqueId();
-            _hasKnownLocalControl = true;
-            return _lastKnownLocalControl;
-        }
-    }
+    public bool IsLocallyControlled => Runner?.IsLocallyControlled ?? true;
 
     public override void _Ready()
     {
@@ -129,23 +107,12 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             return;
         }
 
-        if (OwnerPeerId <= 0)
-        {
-            OwnerPeerId =
-                Multiplayer is null || Multiplayer.MultiplayerPeer is null
-                    ? 1
-                    : (int)Multiplayer.GetUniqueId();
-        }
-
-        SetMultiplayerAuthority(ServerPeerId);
-        SyncRunnerConfiguration();
         Runner.RegisterAccessProvider(InteractionAction.InteractionAccessProviderId, this);
         ConnectRunnerSignals();
     }
 
     public override void _Process(double delta)
     {
-        SyncRunnerConfiguration();
         bool locallyControlled = IsLocallyControlled;
         Detector?.SetCandidateSourceActive(locallyControlled);
         if (locallyControlled)
@@ -156,17 +123,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
                 Runner?.InvalidateSource(_focusedInteractive);
             }
         }
-    }
-
-    private void SyncRunnerConfiguration()
-    {
-        if (Runner is null)
-        {
-            return;
-        }
-
-        Runner.ServerPeerId = ServerPeerId;
-        Runner.OwnerPeerId = OwnerPeerId;
     }
 
     internal static InteractionInteractor? ResolveForInstigator(Node? instigator)

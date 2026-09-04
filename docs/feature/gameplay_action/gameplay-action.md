@@ -236,6 +236,13 @@ activation modes, hold durations, input requirements, providers, and gameplay ru
 claims. The authority returns requester-only started, progress, rejected, completed, cancelled, and
 failed acknowledgements.
 
+`GameplayActionRunner` owns the network boundary for both owned actions and actions supplied by an
+Interaction interactor. It applies `SetMultiplayerAuthority(ServerPeerId)` to its own node during
+`_Ready` (and when that configuration changes). This is required because a character root can inherit
+the player peer authority recursively, while the runner's `Authority` acknowledgement RPCs must be
+sent by the server. `InteractionInteractor` therefore owns no RPC authority and delegates its local
+control query to the runner.
+
 A timed executor can seed a local progress prediction before the round trip. The started ACK replaces
 that prediction with the authoritative execution ID and sample; rejection clears it. Active ACK IDs
 also guard `AuthorityOnly` actions, which intentionally expose no requester presentation, against

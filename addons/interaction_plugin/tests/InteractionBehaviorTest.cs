@@ -100,7 +100,7 @@ public sealed partial class InteractionBehaviorTest
             testWorld.Interactive,
             InteractionDetectionKind.Interactible
         );
-        testWorld.Interactor.OwnerPeerId = 1;
+        testWorld.Interactor.Runner!.OwnerPeerId = 1;
         int focusSignalCount = 0;
         int statusSignalCount = 0;
         testWorld.Interactor.FocusedInteractiveChanged += _ => focusSignalCount++;
@@ -126,7 +126,7 @@ public sealed partial class InteractionBehaviorTest
             testWorld.Interactive,
             InteractionDetectionKind.Interactible
         );
-        testWorld.Interactor.OwnerPeerId = 1;
+        testWorld.Interactor.Runner!.OwnerPeerId = 1;
         int focusSignalCount = 0;
         int statusSignalCount = 0;
         testWorld.Interactor.FocusedInteractiveChanged += _ => focusSignalCount++;
@@ -148,7 +148,7 @@ public sealed partial class InteractionBehaviorTest
             testWorld.Interactive,
             InteractionDetectionKind.Interactible
         );
-        testWorld.Interactor.OwnerPeerId = 1;
+        testWorld.Interactor.Runner!.OwnerPeerId = 1;
         FocusChangeResult? initialResult = testWorld.Interactor.RecalculateFocusCore();
         testWorld.Interactor.DispatchFocusChange(initialResult!.Value);
         int focusSignalCount = 0;
@@ -202,7 +202,7 @@ public sealed partial class InteractionBehaviorTest
     [TestCase]
     public void OfflineInteractorKeepsLocalControlWithoutMultiplayerPeer()
     {
-        InteractionInteractor interactor = new() { OwnerPeerId = 1 };
+        InteractionInteractor interactor = new();
 
         try
         {
@@ -780,13 +780,13 @@ public sealed partial class InteractionBehaviorTest
     }
 
     [TestCase]
-    public async Task InteractorNetworkAuthorityRemainsOnServerForRemoteOwner()
+    public async Task GameplayActionRunnerNetworkAuthorityRemainsOnServerForRemoteOwner()
     {
-        TestWorld testWorld = BuildWorld(ownerPeerId: 2);
+        TestWorld testWorld = BuildWorld(ownerPeerId: 2, inheritedAuthority: true);
         await testWorld.Runner.SimulateFrames(1);
 
-        AssertThat(testWorld.Interactor.GetMultiplayerAuthority())
-            .IsEqual(testWorld.Interactor.ServerPeerId);
+        AssertThat(testWorld.Interactor.Runner!.GetMultiplayerAuthority())
+            .IsEqual(testWorld.Interactor.Runner.ServerPeerId);
     }
 
     [TestCase]
@@ -2532,7 +2532,7 @@ public sealed partial class InteractionBehaviorTest
             InteractionHidden => "hidden",
         };
 
-    private static TestWorld BuildWorld(int ownerPeerId = 1)
+    private static TestWorld BuildWorld(int ownerPeerId = 1, bool inheritedAuthority = false)
     {
         Node3D world = new();
         TestInteractiveActor owner = new()
@@ -2566,9 +2566,13 @@ public sealed partial class InteractionBehaviorTest
         owner.Stateful = stateful;
 
         Node3D view = new() { Name = "ViewOrigin" };
-        InteractionInteractor interactor = new() { Name = "Interactor", OwnerPeerId = ownerPeerId };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
+        if (inheritedAuthority)
+        {
+            interactor.SetMultiplayerAuthority(ownerPeerId);
+        }
         interactor.AddChild(view);
-        TestInteractionDetector detector = AttachDetector(interactor, view);
+        TestInteractionDetector detector = AttachDetector(interactor, view, ownerPeerId);
         world.AddChild(owner);
         world.AddChild(interactor);
         ISceneRunner runner = ISceneRunner.Load(world);
@@ -2586,13 +2590,14 @@ public sealed partial class InteractionBehaviorTest
 
     private static TestInteractionDetector AttachDetector(
         InteractionInteractor interactor,
-        Node3D viewOrigin
+        Node3D viewOrigin,
+        int ownerPeerId = 1
     )
     {
         TestInteractionDetector detector = new() { Name = "Detector", ViewOrigin = viewOrigin };
         interactor.AddChild(detector);
         interactor.Detector = detector;
-        interactor.ConfigureActionRunner();
+        interactor.ConfigureActionRunner(ownerPeerId);
         return detector;
     }
 

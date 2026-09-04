@@ -871,11 +871,11 @@ public sealed partial class InteractionNetworkTest
             session.SetExecutionVisibility(GameplayActionExecutionVisibility.Replicated);
             session.Arm(new GameplayActionExecutionRunning(), 3600.0f);
             session.Focus();
-            int observerPeerId = session.Server.InteractorB.OwnerPeerId;
+            int observerPeerId = session.Server.InteractorB.Runner!.OwnerPeerId;
             AssertThat(observerPeerId).IsEqual(session.ClientB.Root.Multiplayer.GetUniqueId());
             session.Server.ExecutionSynchronizer.PublicVisibility = false;
             session.Server.ExecutionSynchronizer.SetVisibilityFor(
-                session.Server.InteractorA.OwnerPeerId,
+                session.Server.InteractorA.Runner!.OwnerPeerId,
                 true
             );
             session.Server.ExecutionSynchronizer.UpdateVisibility();
@@ -1214,7 +1214,7 @@ public sealed partial class InteractionNetworkTest
     private static PeerInteractor BuildInteractor(Node3D root, string name)
     {
         Node3D view = new() { Name = "ViewOrigin" };
-        InteractionInteractor interactor = new() { Name = name, OwnerPeerId = 1 };
+        InteractionInteractor interactor = new() { Name = name };
         interactor.AddChild(view);
         TestInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
         interactor.AddChild(detector);
@@ -1314,8 +1314,8 @@ public sealed partial class InteractionNetworkTest
         {
             foreach (PeerScene scene in new[] { Server, ClientA, ClientB })
             {
-                scene.InteractorA.OwnerPeerId = peerA;
-                scene.InteractorB.OwnerPeerId = peerB;
+                scene.InteractorA.Runner!.OwnerPeerId = peerA;
+                scene.InteractorB.Runner!.OwnerPeerId = peerB;
             }
         }
 

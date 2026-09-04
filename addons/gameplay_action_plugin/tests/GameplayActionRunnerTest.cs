@@ -1,5 +1,6 @@
 namespace QuestWorld.Tests.GameplayActions;
 
+using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
 using QuestWorld.GameplayActions;
@@ -13,6 +14,20 @@ using static GdUnit4.Assertions;
 [RequireGodotRuntime]
 public sealed partial class GameplayActionRunnerTest
 {
+    [TestCase]
+    public async Task RunnerClaimsServerAuthorityWhenInheritedFromPlayerRoot()
+    {
+        Node player = new() { Name = "Player_1883133663" };
+        GameplayActionRunner runner = new() { ServerPeerId = 1 };
+        player.AddChild(runner);
+        player.SetMultiplayerAuthority(1883133663);
+
+        ISceneRunner scene = ISceneRunner.Load(player);
+        await scene.SimulateFrames(1);
+
+        AssertThat(runner.GetMultiplayerAuthority()).IsEqual(runner.ServerPeerId);
+    }
+
     [TestCase]
     public void PressReleaseHoldAndAutomaticUseTheirOwnActivationEdges()
     {

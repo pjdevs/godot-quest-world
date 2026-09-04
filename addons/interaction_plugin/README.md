@@ -24,12 +24,17 @@ Enable `interaction_plugin` in **Project Settings > Plugins** for Inspector vali
 
 ### 1. Configure an interactor
 
-Add one `InteractionInteractor` to each character, add a detector below it, and assign `Detector`. Set:
+Add one `InteractionInteractor` to each character, add a detector below it, and assign `Detector` and
+`Runner`. Configure the network identity on the `GameplayActionRunner`:
 
-- `OwnerPeerId`: peer that owns focus, input, and presentation.
-- `ServerPeerId`: authoritative peer receiving reliable RPCs; normally `1`.
+- `OwnerPeerId`: peer that owns input, focus, and requester acknowledgements.
+- `ServerPeerId`: peer that owns the runner's RPC authority; normally `1`.
 - Detector `ViewOrigin`: camera or aiming transform.
 - Detector `InteractionOrigin`: optional body/reach origin; otherwise the nearest `Node3D` ancestor.
+
+The interactor has no RPC authority of its own. It delegates local-control decisions to its runner;
+the runner applies `SetMultiplayerAuthority(ServerPeerId)` to itself, so actions owned by the
+character and actions discovered through Interaction use the same transport boundary.
 
 The interactor never samples input. Forward the relevant project actions from local character code;
 the runner is the input boundary for both owned actions and focused interactions:

@@ -93,7 +93,11 @@ internal static class InteractionTestActionHostExtensions
         component.AddChild(action);
     }
 
-    public static void ConfigureActionRunner(this InteractionInteractor interactor)
+    public static void ConfigureActionRunner(
+        this InteractionInteractor interactor,
+        int ownerPeerId = 1,
+        int serverPeerId = 1
+    )
     {
         if (interactor.Runner is not null)
             return;
@@ -104,8 +108,8 @@ internal static class InteractionTestActionHostExtensions
             Name = "GameplayActionRunner",
             OwnedActionComponent = owned,
             Instigator = interactor,
-            OwnerPeerId = interactor.OwnerPeerId,
-            ServerPeerId = interactor.ServerPeerId,
+            OwnerPeerId = ownerPeerId,
+            ServerPeerId = serverPeerId,
         };
         interactor.AddChild(owned);
         interactor.AddChild(runner);

@@ -447,12 +447,12 @@ public sealed partial class InteractionDetectionTest
     {
         Node3D character = new() { Name = name };
         Node3D view = new() { Name = "ViewOrigin" };
-        InteractionInteractor interactor = new() { Name = "Interactor", OwnerPeerId = ownerPeerId };
+        InteractionInteractor interactor = new() { Name = "Interactor" };
         TestInteractionDetector detector = new() { Name = "Detector", ViewOrigin = view };
         interactor.AddChild(view);
         interactor.AddChild(detector);
         interactor.Detector = detector;
-        interactor.ConfigureActionRunner();
+        interactor.ConfigureActionRunner(ownerPeerId);
         character.AddChild(interactor);
         world.AddChild(character);
         return detector;
