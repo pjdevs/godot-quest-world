@@ -27,7 +27,7 @@ public partial class DropBatteryExecutor : GameplayActionExecutor
             return new GameplayActionExecutionFailed("InventoryComponent or BatteryItem is null.");
         }
 
-        Node3D? instigatorNode = context.Instigator as Node3D;
+        Node3D? instigatorNode = context.Instigator?.GetParent<Node3D>();
 
         if (instigatorNode is null)
         {
@@ -43,18 +43,16 @@ public partial class DropBatteryExecutor : GameplayActionExecutor
             );
         }
 
-        GetTree().Root.GetNode<Node3D>("Batteries").AddChild(batteryNode);
+        Window window = GetTree().Root;
+        Node3D batteriesRoot = window.GetNode<Node3D>("test_world/Batteries");
 
-        instigatorNode.AddChild(batteryNode);
-
-        Vector3? instigatorPosition = (context.Instigator as Node3D)?.GlobalPosition;
-
-        if (instigatorPosition is null)
+        if (batteriesRoot is null)
         {
-            return new GameplayActionExecutionFailed("Instigator position is null.");
+            return new GameplayActionExecutionFailed("Batteries root node not found.");
         }
 
-        batteryNode?.GlobalPosition = instigatorPosition.Value + new Vector3(0f, 0f, 1f);
+        batteriesRoot.AddChild(batteryNode);
+        batteryNode?.GlobalPosition = instigatorNode.GlobalPosition + new Vector3(0f, 0f, 1f);
 
         return new GameplayActionExecutionCompleted();
     }

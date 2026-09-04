@@ -2,10 +2,10 @@
 
 [ext_resource type="Script" uid="uid://dwmqsp6eyk4gd" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="1_t2p7y"]
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="2_p1x0o"]
-[ext_resource type="Script" uid="uid://bqs31n67gwjq1" path="res://addons/interaction_plugin/runtime/actions/InteractionActionDefinition.cs" id="3_p1x0o"]
+[ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="3_p1x0o"]
+[ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="3_tj8cv"]
 [ext_resource type="Script" uid="uid://cq2b53tun566l" path="res://quest_world/interactibles/battery/TakeBatteryExecutor.cs" id="4_sdpir"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="5_sj1vt"]
-[ext_resource type="PackedScene" uid="uid://3hiqhen7i480" path="res://quest_world/interactibles/battery/DropBatteryAction.tscn" id="5_tj8cv"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn" id="6_4t8iy"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
@@ -13,6 +13,11 @@ size = Vector3(1.5, 0.5, 0.5)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_a6s0s"]
 albedo_color = Color(0.39, 0.39, 0.39, 1)
+
+[sub_resource type="Resource" id="Resource_4t8iy"]
+script = ExtResource("3_tj8cv")
+InputActionName = &"interact"
+metadata/_custom_type_script = "uid://clv6g48bftyhm"
 
 [sub_resource type="Resource" id="Resource_sdpir"]
 script = ExtResource("3_p1x0o")
@@ -37,6 +42,7 @@ metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
 
 [node name="TakeAction" type="Node" parent="ActionComponent" unique_id=1076240554 node_paths=PackedStringArray("Executor")]
 script = ExtResource("2_p1x0o")
+DefaultBindingConfig = SubResource("Resource_4t8iy")
 Definition = SubResource("Resource_sdpir")
 Executor = NodePath("TakeBatteryExecutor")
 ExecutionVisibility = 2
@@ -45,7 +51,6 @@ metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 [node name="TakeBatteryExecutor" type="Node" parent="ActionComponent/TakeAction" unique_id=2073787997]
 script = ExtResource("4_sdpir")
 BatteryItem = &"battery"
-DropBatteryActionScene = ExtResource("5_tj8cv")
 metadata/_custom_type_script = "uid://cq2b53tun566l"
 
 [node name="InteractiveComponent" type="Node" parent="." unique_id=75349340 node_paths=PackedStringArray("InteractionArea", "InteractionAnchor", "ActionComponent")]

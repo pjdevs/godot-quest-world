@@ -42,13 +42,16 @@ public partial class ItemActionGrant : Node
             return;
         }
 
-        if (newQuantity > 0)
+        if (oldQuantity <= 0 && newQuantity > 0)
         {
             GameplayAction? action = actionScene?.Instantiate<GameplayAction>();
 
             if (action is not null)
             {
-                ActionComponent?.AddAction(action);
+                if (ActionComponent?.AddAction(action) == true)
+                {
+                    _grantedActionsByItemId[itemId] = action;
+                }
             }
             else
             {
@@ -57,7 +60,7 @@ public partial class ItemActionGrant : Node
                 );
             }
         }
-        else
+        else if (oldQuantity > 0 && newQuantity <= 0)
         {
             if (
                 _grantedActionsByItemId.TryGetValue(itemId, out GameplayAction? action)

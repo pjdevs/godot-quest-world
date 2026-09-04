@@ -1,22 +1,29 @@
 [gd_scene format=3 uid="uid://3hiqhen7i480"]
 
-[ext_resource type="Script" uid="uid://bpl2q4bryqvmj" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayAction.cs" id="1_ry6km"]
+[ext_resource type="Script" uid="uid://bym6om5u0xap2" path="res://addons/gameplay_action_plugin/runtime/actions/InputGameplayAction.cs" id="1_53nho"]
+[ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="2_6ypf1"]
 [ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="2_ta0xg"]
 [ext_resource type="Script" uid="uid://drdlbawicokrs" path="res://quest_world/interactibles/battery/DropBatteryExecutor.cs" id="3_ela6r"]
 [ext_resource type="PackedScene" uid="uid://c615ipxd5fba5" path="res://quest_world/interactibles/battery/Battery.tscn" id="4_53nho"]
 
-[sub_resource type="Resource" id="Resource_ta0xg"]
+[sub_resource type="Resource" id="Resource_vq8ek"]
+script = ExtResource("2_6ypf1")
+InputActionName = &"interact"
+metadata/_custom_type_script = "uid://clv6g48bftyhm"
+
+[sub_resource type="Resource" id="Resource_6ypf1"]
 script = ExtResource("2_ta0xg")
-Id = &"dropBattery"
+Id = &"drop_battery"
 Label = "Drop Battery"
 metadata/_custom_type_script = "uid://nyac2n1klfrk"
 
-[node name="DropBatteryAction" type="Node" unique_id=479174066 node_paths=PackedStringArray("Executor")]
-script = ExtResource("1_ry6km")
-Definition = SubResource("Resource_ta0xg")
+[node name="DropBatteryAction" type="Node" unique_id=2066805382 node_paths=PackedStringArray("Executor")]
+script = ExtResource("1_53nho")
+DefaultBindingConfig = SubResource("Resource_vq8ek")
+Definition = SubResource("Resource_6ypf1")
 Executor = NodePath("DropBatteryExecutor")
 ExecutionVisibility = 2
-metadata/_custom_type_script = "uid://bpl2q4bryqvmj"
+metadata/_custom_type_script = "uid://bym6om5u0xap2"
 
 [node name="DropBatteryExecutor" type="Node" parent="." unique_id=636624359]
 script = ExtResource("3_ela6r")
