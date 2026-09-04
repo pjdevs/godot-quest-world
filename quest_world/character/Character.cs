@@ -1,14 +1,18 @@
 using Godot;
 using QuestWorld.GameplayActions.Runtime.Runner;
 using QuestWorld.Interaction.Runtime.Interactor;
+using QuestWorld.Inventory;
 
 public partial class Character : QuestWorld.Character.Character
 {
     private InteractionInteractor _interactionInteractor = null!;
     private GameplayActionRunner _gameplayActionRunner = null!;
+    private InventoryComponent _inventory = null!;
     private bool _wasPossessed;
 
     public InteractionInteractor InteractionInteractor => _interactionInteractor;
+
+    public InventoryComponent Inventory => _inventory;
 
     public override void _Ready()
     {
@@ -26,6 +30,13 @@ public partial class Character : QuestWorld.Character.Character
         if (_gameplayActionRunner == null)
         {
             GD.PushError($"{GetPath()}: project Character requires a GameplayActionRunner child.");
+            return;
+        }
+
+        _inventory = GetNodeOrNull<InventoryComponent>("InventoryComponent")!;
+        if (_inventory == null)
+        {
+            GD.PushError($"{GetPath()}: project Character requires an InventoryComponent child.");
             return;
         }
 

@@ -415,10 +415,8 @@ public partial class InteractiveComponent : Node
         Node? requester
     )
     {
-        if (
-            action is InteractionAction interactionAction
-            && instigator is InteractionInteractor interactor
-        )
+        InteractionInteractor? interactor = InteractionInteractor.ResolveForInstigator(instigator);
+        if (action is InteractionAction interactionAction && interactor is not null)
         {
             EmitSignal(SignalName.InteractionActionStarted, interactor, interactionAction);
         }
@@ -431,10 +429,8 @@ public partial class InteractiveComponent : Node
         Node? requester
     )
     {
-        if (
-            action is InteractionAction interactionAction
-            && instigator is InteractionInteractor interactor
-        )
+        InteractionInteractor? interactor = InteractionInteractor.ResolveForInstigator(instigator);
+        if (action is InteractionAction interactionAction && interactor is not null)
         {
             EmitSignal(SignalName.InteractionActionCompleted, interactor, interactionAction);
         }
@@ -448,10 +444,8 @@ public partial class InteractiveComponent : Node
         string reason
     )
     {
-        if (
-            action is InteractionAction interactionAction
-            && instigator is InteractionInteractor interactor
-        )
+        InteractionInteractor? interactor = InteractionInteractor.ResolveForInstigator(instigator);
+        if (action is InteractionAction interactionAction && interactor is not null)
         {
             EmitSignal(
                 SignalName.InteractionActionCancelled,
@@ -470,10 +464,8 @@ public partial class InteractiveComponent : Node
         string reason
     )
     {
-        if (
-            action is InteractionAction interactionAction
-            && instigator is InteractionInteractor interactor
-        )
+        InteractionInteractor? interactor = InteractionInteractor.ResolveForInstigator(instigator);
+        if (action is InteractionAction interactionAction && interactor is not null)
         {
             EmitSignal(SignalName.InteractionActionFailed, interactor, interactionAction, reason);
         }
@@ -487,10 +479,8 @@ public partial class InteractiveComponent : Node
         string reason
     )
     {
-        if (
-            action is InteractionAction interactionAction
-            && instigator is InteractionInteractor interactor
-        )
+        InteractionInteractor? interactor = InteractionInteractor.ResolveForInstigator(instigator);
+        if (action is InteractionAction interactionAction && interactor is not null)
         {
             EmitSignal(
                 SignalName.InteractionActionRejected,
@@ -517,9 +507,10 @@ public partial class InteractiveComponent : Node
             return reason;
         }
 
+        Node interactionInstigator = interactor.Runner?.ResolveInstigator() ?? interactor;
         bool startedByInteractor = ActionComponent.IsConcurrencyGroupExecutingFor(
             action.GetHostConcurrencyGroup(),
-            interactor
+            interactionInstigator
         );
         return startedByInteractor ? AlreadyRunningReason : SomeoneElseReason;
     }
@@ -558,8 +549,9 @@ public partial class InteractiveComponent : Node
         }
 
         PrepareAction(action);
+        Node interactionInstigator = interactor.Runner?.ResolveInstigator() ?? interactor;
         InteractionAvailability actionAvailability = ActionComponent
-            .EvaluateAction(action.Definition.Id, interactor, interactor.Runner)
+            .EvaluateAction(action.Definition.Id, interactionInstigator, interactor.Runner)
             .ToInteractionAvailability();
         if (actionAvailability is not InteractionAllowed)
         {
@@ -580,7 +572,7 @@ public partial class InteractiveComponent : Node
         {
             bool startedByInteractor = ActionComponent.IsConcurrencyGroupExecutingFor(
                 action.GetHostConcurrencyGroup(),
-                interactor
+                interactionInstigator
             );
             return new InteractionBlocked(
                 startedByInteractor ? AlreadyRunningReason : SomeoneElseReason

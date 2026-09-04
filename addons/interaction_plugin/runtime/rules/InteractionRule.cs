@@ -33,7 +33,8 @@ public abstract partial class InteractionRule : GameplayActionRule
         if (
             context.Action is not InteractionAction action
             || action.Interactive is null
-            || context.Instigator is not InteractionInteractor interactor
+            || InteractionInteractor.ResolveForInstigator(context.GetInstigator<Node>())
+                is not InteractionInteractor interactor
         )
         {
             return new GameplayActionBlocked(InteractionAvailabilityExtensions.UnavailableReason);

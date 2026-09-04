@@ -372,6 +372,26 @@ At the tranche checkpoint, `csharpier format .` and `dotnet build` succeed with 
 errors, the complete GdUnit4 suite passes (285/285), and the project boots headless with no error or
 warning.
 
+## Tranche 6 — execution context roles
+
+`GameplayActionContext` now exposes the four execution roles without coupling the generic framework
+to a game's scene layout:
+
+- `Instigator` is the gameplay actor responsible for the action;
+- `Host` is the gameplay object owning the action;
+- `World` is the current gameplay world root;
+- `Requester` remains the request transport source, when a runner requested the action.
+
+The context provides `GetInstigator<T>()`, `GetHost<T>()`, and `GetWorld<T>()` typed helpers. The
+`GameplayActionComponent` owns optional `Host` and `World` overrides; when they are absent, the host
+falls back to the component parent and the world to `SceneTree.CurrentScene`. `Node.Owner` is not
+used for either role. `Component` remains available for framework lifecycle operations and is not
+an integration-specific host alias.
+
+The demo `Character` is now the default instigator of its runner, while Interaction derives its
+interactor adapter from that instigator. The Battery executors consume `Character.Inventory`, the
+typed `QuestWorldWorld`, and its `BatterySpawner` instead of resolving global scene paths.
+
 ## Deferred, not partially implemented
 
 V1 deliberately stops at the invariants above. The following are **not** present in any partial form,
@@ -383,8 +403,9 @@ and nothing in the current API should be read as a first step towards them:
   concurrency group. There is no lock spanning two hosts, and no cross-requester cancellation policy.
 - **Target data and invocation payloads** — an execution carries an id, an instigator, a requester,
   its host, and its action. It carries no arbitrary target or payload.
-- **Inventory integration** — there is none, in either direction. An inventory condition is authored
-  today as an ordinary rule in the consuming feature.
+- **Generic inventory integration** — the framework still owns no inventory contract. The demo's
+  Battery actions are an application-level consumer that reaches the typed instigator and world
+  context explicitly.
 - **Richer presentation schema** — a definition offers optional intrinsic label/description metadata
   and a binding preserves opaque integration-owned context. That is the whole contract: no generic
   HUD policy, no presenter model, no standardized action menu.

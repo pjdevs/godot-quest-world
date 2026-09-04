@@ -87,12 +87,26 @@ public readonly union GameplayActionExecutionResult(
 /// <param name="ExecutionId">Identifier of the reservation, or zero while none is reserved.</param>
 /// <param name="Instigator">Node the action is attributed to, or null when nothing claims it.</param>
 /// <param name="Requester">Runner awaiting acknowledgement, or null outside a request.</param>
-/// <param name="Component">Host owning the action.</param>
+/// <param name="Component">Generic action component owning the action occurrence.</param>
 /// <param name="Action">Action being evaluated or executed.</param>
+/// <param name="Host">Gameplay object hosting the action, or null when it has no host.</param>
+/// <param name="World">Gameplay world containing the execution, or null when unavailable.</param>
 public readonly record struct GameplayActionContext(
     ulong ExecutionId,
     Node? Instigator,
     Node? Requester,
     GameplayActionComponent Component,
-    GameplayAction Action
-);
+    GameplayAction Action,
+    Node? Host = null,
+    Node? World = null
+)
+{
+    public T? GetInstigator<T>()
+        where T : Node => Instigator as T;
+
+    public T? GetHost<T>()
+        where T : Node => Host as T;
+
+    public T? GetWorld<T>()
+        where T : Node => World as T;
+}

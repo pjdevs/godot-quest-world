@@ -87,7 +87,8 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
         if (
             context.Action is not InteractionAction action
             || action.Interactive is null
-            || context.Instigator is not InteractionInteractor interactor
+            || InteractionInteractor.ResolveForInstigator(context.GetInstigator<Node>())
+                is not InteractionInteractor interactor
         )
         {
             return null;
@@ -132,7 +133,8 @@ public abstract partial class InteractionActionExecutor : GameplayActionExecutor
         if (
             context.Action is not InteractionAction action
             || action.Interactive is null
-            || context.Instigator is not InteractionInteractor interactor
+            || InteractionInteractor.ResolveForInstigator(context.GetInstigator<Node>())
+                is not InteractionInteractor interactor
         )
         {
             return false;

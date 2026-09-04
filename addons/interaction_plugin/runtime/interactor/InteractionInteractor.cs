@@ -167,12 +167,30 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
         Runner.ServerPeerId = ServerPeerId;
         Runner.OwnerPeerId = OwnerPeerId;
+    }
 
-        // The interactor claims the instigator of its runner rather than defaulting into it. That is
-        // the contract every interaction rule and executor reads: the instigator of an interaction
-        // execution is the interactor that drove it, which is what makes the generic context
-        // sufficient and spares Interaction a reverse index from runners back to their owners.
-        Runner.Instigator = this;
+    internal static InteractionInteractor? ResolveForInstigator(Node? instigator)
+    {
+        if (instigator is null || !GodotObject.IsInstanceValid(instigator))
+        {
+            return null;
+        }
+
+        if (instigator is InteractionInteractor interactor)
+        {
+            return interactor;
+        }
+
+        foreach (Node child in instigator.GetChildren())
+        {
+            InteractionInteractor? resolved = ResolveForInstigator(child);
+            if (resolved is not null)
+            {
+                return resolved;
+            }
+        }
+
+        return null;
     }
 
     public bool CanRequest(in GameplayActionAccessContext context) =>

@@ -72,6 +72,13 @@ public partial class GameplayActionComponent : Node
     [Export]
     public Godot.Collections.Array<GameplayAction> Actions { get; set; } = new();
 
+    [ExportGroup("Context")]
+    [Export]
+    public Node? Host { get; set; }
+
+    [Export]
+    public Node? World { get; set; }
+
     public GameplayActionComponent()
     {
         _presentation = new GameplayActionExecutionPresentationStore(
@@ -162,7 +169,7 @@ public partial class GameplayActionComponent : Node
             return new GameplayActionBlocked(NotConfiguredReason);
         }
 
-        GameplayActionContext context = new(0ul, instigator, requester, this, action);
+        GameplayActionContext context = CreateContext(0ul, instigator, requester, action);
         return EvaluateRules(action.Rules, context);
     }
 
@@ -773,8 +780,24 @@ public partial class GameplayActionComponent : Node
 
     private static Variant ToVariant(Node? node) => node is null ? default : Variant.From(node);
 
+    internal GameplayActionContext CreateContext(
+        ulong executionId,
+        Node? instigator,
+        Node? requester,
+        GameplayAction action
+    ) =>
+        new(
+            executionId,
+            instigator,
+            requester,
+            this,
+            action,
+            Host ?? GetParent(),
+            World ?? (IsInsideTree() ? GetTree().CurrentScene : null)
+        );
+
     private GameplayActionContext BuildExecutionContext(in ActiveExecution execution) =>
-        new(execution.Id, execution.Instigator, execution.Requester, this, execution.Action);
+        CreateContext(execution.Id, execution.Instigator, execution.Requester, execution.Action);
 
     private void FinalizeRetiredAction(GameplayAction action)
     {

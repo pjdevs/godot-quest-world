@@ -211,7 +211,7 @@ internal sealed class GameplayActionRequestPipeline(
     private void PredictExecution(GameplayActionBinding binding, GameplayAction action)
     {
         GameplayActionProgressSample? sample = action.Executor?.GetPredictionSample(
-            new GameplayActionContext(0ul, resolveInstigator(), _owner, binding.Component, action)
+            binding.Component.CreateContext(0ul, resolveInstigator(), _owner, action)
         );
         if (sample is GameplayActionProgressSample prediction)
         {

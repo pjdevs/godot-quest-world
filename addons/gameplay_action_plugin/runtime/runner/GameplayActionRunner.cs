@@ -551,7 +551,7 @@ public partial class GameplayActionRunner : Node
         string reason
     ) => _requests.NotifyExecutionRejected(component, action, reason);
 
-    private Node? ResolveInstigator() => Instigator ?? GetParent();
+    internal Node? ResolveInstigator() => Instigator ?? GetParent();
 
     private int CompareCandidates(
         GameplayActionBindingCandidate left,

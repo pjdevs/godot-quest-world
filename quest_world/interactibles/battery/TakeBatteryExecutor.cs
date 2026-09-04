@@ -1,32 +1,24 @@
 using Godot;
 using QuestWorld.GameplayActions;
 using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.Interaction;
-using QuestWorld.Interaction.Runtime.Actions;
-using QuestWorld.Inventory;
 
 [GlobalClass]
-public partial class TakeBatteryExecutor : InteractionActionExecutor
+public partial class TakeBatteryExecutor : GameplayActionExecutor
 {
     [Export]
     public StringName? BatteryItem { get; set; } = null;
 
-    public override GameplayActionExecutionResult Execute(in InteractionExecutionContext context)
+    public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
-        InventoryComponent inventory = context
-            .Interactor.GetParent()
-            .GetNode<InventoryComponent>("InventoryComponent");
-
-        if (inventory is not null && BatteryItem is not null)
+        Character? character = context.GetInstigator<Character>();
+        Node3D? battery = context.GetHost<Node3D>();
+        if (character?.Inventory is null || BatteryItem is null || battery is null)
         {
-            inventory?.AddItem(BatteryItem);
-        }
-        else
-        {
-            return new GameplayActionExecutionFailed("InventoryComponent or BatteryItem is null.");
+            return new GameplayActionExecutionFailed("Battery pickup context is incomplete.");
         }
 
-        context.Interactive.GetParent().QueueFree();
+        character.Inventory.AddItem(BatteryItem);
+        battery.QueueFree();
 
         return new GameplayActionExecutionCompleted();
     }

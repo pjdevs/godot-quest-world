@@ -204,6 +204,43 @@ public sealed partial class GameplayActionComponentTest
     }
 
     [TestCase]
+    public void ContextProvidesTypedInstigatorHostAndWorldOverrides()
+    {
+        Node3D instigator = AutoFree(new Node3D());
+        Node host = AutoFree(new Node());
+        Node world = AutoFree(new Node());
+        GameplayActionComponent component = AutoFree(
+            new GameplayActionComponent { Host = host, World = world }
+        );
+        TestGameplayActionExecutor executor = new();
+        component.AddAction(CreateAction("drop", executor));
+
+        component.ExecuteAction(new StringName("drop"), out _, instigator);
+
+        AssertThat(executor.LastContext.GetInstigator<Node3D>() == instigator).IsTrue();
+        AssertThat(executor.LastContext.GetHost<Node>() == host).IsTrue();
+        AssertThat(executor.LastContext.GetWorld<Node>() == world).IsTrue();
+    }
+
+    [TestCase]
+    public async Task ContextDefaultsHostToComponentParentAndWorldToCurrentScene()
+    {
+        Node root = new() { Name = "World" };
+        GameplayActionComponent component = new();
+        TestGameplayActionExecutor executor = new();
+        root.AddChild(component);
+        component.AddAction(CreateAction("drop", executor));
+        ISceneRunner runner = ISceneRunner.Load(root);
+        await runner.SimulateFrames(1);
+        component.GetTree().CurrentScene = root;
+
+        component.ExecuteAction(new StringName("drop"), out _);
+
+        AssertThat(executor.LastContext.GetHost<Node>() == component.GetParent()).IsTrue();
+        AssertThat(executor.LastContext.GetWorld<Node>() == root).IsTrue();
+    }
+
+    [TestCase]
     public void ProgrammaticExecutionStopsAtRulesBeforeAllocatingOrInvoking()
     {
         GameplayActionComponent component = AutoFree(new GameplayActionComponent());

@@ -21,8 +21,11 @@ public sealed partial class TestGameplayActionExecutor : GameplayActionExecutor
 
     public bool WasReservedWhenExecuted { get; private set; }
 
+    public GameplayActionContext LastContext { get; private set; }
+
     public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
+        LastContext = context;
         ExecuteCount++;
         WasReservedWhenExecuted = context.Component.IsActionExecuting(
             context.Action.Definition!.Id
