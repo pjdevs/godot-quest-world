@@ -167,13 +167,6 @@ spawn_path = NodePath("../Players")
 script = ExtResource("8_53a43")
 Scene = ExtResource("1_character")
 
-[node name="NetworkSession" type="Node" parent="." unique_id=1403936845 node_paths=PackedStringArray("LocalPlayerController")]
-script = ExtResource("3_network_session")
-LocalPlayerController = NodePath("../PlayerController")
-
-[node name="PlayerController" type="Node" parent="." unique_id=1335039517]
-script = ExtResource("2_player_controller")
-
 [node name="Batteries" type="Node3D" parent="." unique_id=213100253]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -10.9480095)
 
@@ -183,5 +176,12 @@ spawn_path = NodePath("../Batteries")
 script = ExtResource("11_w5rq3")
 Scene = ExtResource("12_53a43")
 AutoSpawn = true
+
+[node name="PlayerController" type="Node" parent="." unique_id=1335039517]
+script = ExtResource("2_player_controller")
+
+[node name="NetworkSession" type="Node" parent="." unique_id=1403936845 node_paths=PackedStringArray("LocalPlayerController")]
+script = ExtResource("3_network_session")
+LocalPlayerController = NodePath("../PlayerController")
 
 [editable path="Level/Button"]
