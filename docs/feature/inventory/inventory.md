@@ -61,6 +61,17 @@ its reliable ordered transport, spawn delivery, authority, and peer visibility. 
 revision or explicit resynchronization protocol. Snapshot application emits synchronization signals; live
 batches emit ordinary remote quantity changes.
 
+## Player integration invariant
+
+The demo's `Character` assigns its multiplayer authority recursively to the owning player peer. The inventory
+is nevertheless server-authoritative, so its `InventoryReplicationSynchronizer` must explicitly claim server
+authority on every copy. Otherwise the server can mutate its inventory and prepare `DeltaBatch`, while the
+native synchronizer still considers the owning client authoritative and does not transport that server state.
+
+`ItemActionGrant` is a local derived view, not a replicated action collection. It creates `DropBatteryAction`
+from `ItemQuantityChanged`; therefore the client can only receive that grant after its inventory snapshot or
+delta has been applied. Adding the action on the server does not replicate the dynamically added action node.
+
 ## Deferred work
 
 - demo/player ownership and shared inventory lookup;

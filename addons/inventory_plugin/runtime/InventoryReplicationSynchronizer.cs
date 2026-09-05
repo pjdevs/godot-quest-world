@@ -11,9 +11,23 @@ namespace QuestWorld.Inventory;
 [GlobalClass]
 public partial class InventoryReplicationSynchronizer : MultiplayerSynchronizer
 {
+    private int _serverPeerId = 1;
+
     /// <summary>Gets or sets the authoritative inventory observed by this transport.</summary>
     [Export]
     public InventoryComponent? Inventory { get; set; }
+
+    [ExportGroup("Network")]
+    [Export]
+    public int ServerPeerId
+    {
+        get => _serverPeerId;
+        set
+        {
+            _serverPeerId = value;
+            ApplyNetworkAuthority();
+        }
+    }
 
     [Export]
     private Godot.Collections.Dictionary<StringName, int> SpawnSnapshot
@@ -72,6 +86,25 @@ public partial class InventoryReplicationSynchronizer : MultiplayerSynchronizer
         );
 
         ReplicationConfig = config;
+    }
+
+    public override void _EnterTree()
+    {
+        ApplyNetworkAuthority();
+    }
+
+    private void ApplyNetworkAuthority()
+    {
+        if (
+            !IsInsideTree()
+            || ServerPeerId <= 0
+            || GetMultiplayerAuthority() == ServerPeerId
+        )
+        {
+            return;
+        }
+
+        SetMultiplayerAuthority(ServerPeerId, false);
     }
 
     /// <summary>Observes authoritative mutations that will form live replication batches.</summary>
