@@ -108,6 +108,10 @@ public partial class Character : CharacterBody3D
 
     public CharacterCameraRig CameraRig => _cameraRig;
 
+    public Vector3 ForwardVector => -_visual.GlobalBasis.Z;
+
+    public Transform3D VisualTransform => _visual.GlobalTransform;
+
     public override void _EnterTree()
     {
         if (NetworkPlayerIdentity.TryGetPeerId(Name, out int peerId))

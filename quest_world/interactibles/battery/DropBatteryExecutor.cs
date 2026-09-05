@@ -19,8 +19,9 @@ public partial class DropBatteryExecutor : GameplayActionExecutor
 
         character.Inventory.RemoveItem(BatteryItem);
         Node3D? battery = world.BatterySpawner.Spawn(
-            character.GlobalTransform.TranslatedLocal(new Vector3(0f, 0f, 1f))
+            character.VisualTransform.Translated(character.ForwardVector * 1.5f)
         );
+
         if (battery is null)
         {
             return new GameplayActionExecutionFailed("BatterySpawner failed to spawn a battery.");
