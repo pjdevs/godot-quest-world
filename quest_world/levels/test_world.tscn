@@ -168,7 +168,10 @@ script = ExtResource("8_53a43")
 Scene = ExtResource("1_character")
 
 [node name="Batteries" type="Node3D" parent="." unique_id=213100253]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -10.9480095)
+
+[node name="BatteryPlaceholder" type="Marker3D" parent="Batteries" unique_id=1732081378]
+transform = Transform3D(-0.030662268, 0, 0.99952984, 0, 0.99999994, 0, -0.99952984, 0, -0.030662268, -1, 0, -7.901)
+gizmo_extents = 0.79
 
 [node name="BatterySpawner" type="MultiplayerSpawner" parent="." unique_id=1333401836]
 _spawnable_scenes = PackedStringArray("uid://c615ipxd5fba5")

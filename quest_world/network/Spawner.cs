@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 public partial class Spawner<T> : MultiplayerSpawner, IWorldSystem
@@ -9,15 +10,43 @@ public partial class Spawner<T> : MultiplayerSpawner, IWorldSystem
     [Export]
     public bool AutoSpawn { get; set; } = false;
 
+    private readonly List<Transform3D> _initialTransforms = [];
+
+    public override void _Ready()
+    {
+        base._Ready();
+
+        if (AutoSpawn)
+        {
+            Node3D? spawnRoot = GetSpawnRoot();
+
+            if (spawnRoot is not null)
+            {
+                foreach (var child in spawnRoot.GetChildren())
+                {
+                    if (child is Marker3D marker)
+                    {
+                        _initialTransforms.Add(marker.GlobalTransform);
+                        spawnRoot.RemoveChild(marker);
+                        marker.QueueFree();
+                    }
+                }
+            }
+        }
+    }
+
     public void InitializeAuthority()
     {
         if (AutoSpawn)
         {
-            Spawn(Vector3.Zero);
+            foreach (var transform in _initialTransforms)
+            {
+                Spawn(transform);
+            }
         }
     }
 
-    public T? Spawn(Vector3 position, string? name = null)
+    public T? Spawn(Transform3D transform, string? name = null)
     {
         if (!IsServer() || Scene is null)
         {
@@ -41,7 +70,7 @@ public partial class Spawner<T> : MultiplayerSpawner, IWorldSystem
             player.Name = name;
         }
         spawnRoot.AddChild(player);
-        player.GlobalPosition = position;
+        player.GlobalTransform = transform;
 
         return player;
     }

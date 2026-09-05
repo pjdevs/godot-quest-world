@@ -219,7 +219,7 @@ public partial class NetworkSession : Node
         }
 
         Character? player = World?.PlayerSpawner?.Spawn(
-            NetworkPlayerIdentity.GetSpawnPosition(peerId),
+            Transform3D.Identity.Translated(NetworkPlayerIdentity.GetSpawnPosition(peerId)),
             playerName
         );
 
