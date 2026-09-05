@@ -36,7 +36,7 @@ public sealed class NetworkLaunchOptions
 
     public static bool TryParse(
         IReadOnlyList<string> arguments,
-        out NetworkLaunchOptions options,
+        out NetworkLaunchOptions? options,
         out string error
     )
     {

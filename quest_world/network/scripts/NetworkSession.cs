@@ -13,46 +13,33 @@ public partial class NetworkSession : Node
         Failed,
     }
 
-    private const string DefaultPlayerScenePath = "res://quest_world/character/Character.tscn";
-
     [Export]
-    public PackedScene PlayerScene { get; set; } = null!;
+    public CharacterPlayerController? LocalPlayerController { get; set; }
 
-    [Export]
-    public NodePath PlayersPath { get; set; } = new("../Players");
-
-    [Export]
-    public NodePath PlayerSpawnerPath { get; set; } = new("../PlayerSpawner");
-
-    [Export]
-    public NodePath LocalPlayerControllerPath { get; set; } = new("../PlayerController");
-
-    private Node3D _players = null!;
-    private MultiplayerSpawner _playerSpawner = null!;
-    private CharacterPlayerController _localPlayerController = null!;
-    private NetworkLaunchOptions _launchOptions = null!;
     private bool _configurationValid;
     private bool _multiplayerSignalsConnected;
     private MultiplayerPeer? _peer;
-    private int _localPeerId;
     private SessionState _sessionState;
 
-    public NetworkLaunchOptions LaunchOptions => _launchOptions;
+    private QuestWorldWorld? World => GetParent() as QuestWorldWorld;
+
+    private Spawner<Character>? PlayerSpawner => World?.PlayerSpawner;
+
+    public NetworkLaunchOptions? LaunchOptions { get; private set; }
 
     public bool IsServer =>
-        _launchOptions.Mode is NetworkLaunchMode.Server or NetworkLaunchMode.Host;
+        LaunchOptions?.Mode is NetworkLaunchMode.Server or NetworkLaunchMode.Host;
 
-    public bool IsDedicatedServer => _launchOptions.Mode == NetworkLaunchMode.Server;
+    public bool IsDedicatedServer => LaunchOptions?.Mode == NetworkLaunchMode.Server;
 
-    public int LocalPeerId => _localPeerId;
+    public int LocalPeerId { get; private set; } = 0;
 
     public override void _Ready()
     {
-        List<string> commandLineArguments = new(OS.GetCmdlineArgs());
-        commandLineArguments.AddRange(OS.GetCmdlineUserArgs());
+        List<string> commandLineArguments = [with(OS.GetCmdlineArgs()), .. OS.GetCmdlineUserArgs()];
         _configurationValid = NetworkLaunchOptions.TryParse(
             commandLineArguments,
-            out _launchOptions,
+            out NetworkLaunchOptions? launchOptions,
             out string parseError
         );
         if (!_configurationValid)
@@ -63,26 +50,19 @@ public partial class NetworkSession : Node
             return;
         }
 
-        _players = GetNodeOrNull<Node3D>(PlayersPath)!;
-        _playerSpawner = GetNodeOrNull<MultiplayerSpawner>(PlayerSpawnerPath)!;
-        _localPlayerController = GetNodeOrNull<CharacterPlayerController>(
-            LocalPlayerControllerPath
-        )!;
-        if (_players == null || _playerSpawner == null)
+        LaunchOptions = launchOptions;
+
+        QuestWorldWorld? world = World;
+        if (world is null || world.PlayerSpawner is null)
         {
-            GD.PushError("NetworkSession: Players and PlayerSpawner nodes are required.");
+            GD.PushError(
+                "NetworkSession: QuestWorldWorld and QuestWorldWorld.PlayerSpawner are required."
+            );
             _configurationValid = false;
             _sessionState = SessionState.Failed;
             return;
         }
 
-        if (PlayerScene == null)
-        {
-            PlayerScene = GD.Load<PackedScene>(DefaultPlayerScenePath);
-        }
-
-        _playerSpawner.SpawnPath = _playerSpawner.GetPathTo(_players);
-        _playerSpawner.AddSpawnableScene(PlayerScene.ResourcePath);
         Multiplayer.PeerConnected += OnPeerConnected;
         Multiplayer.PeerDisconnected += OnPeerDisconnected;
         Multiplayer.ConnectedToServer += OnConnectedToServer;
@@ -90,18 +70,20 @@ public partial class NetworkSession : Node
         Multiplayer.ServerDisconnected += OnServerDisconnected;
         _multiplayerSignalsConnected = true;
 
-        switch (_launchOptions.Mode)
+        switch (launchOptions!.Mode)
         {
             case NetworkLaunchMode.Offline:
-                _localPeerId = 1;
+                LocalPeerId = 1;
                 _sessionState = SessionState.Active;
+                world.InitializeAuthority();
                 SpawnPlayer(1);
                 break;
             case NetworkLaunchMode.Host:
                 if (StartServer())
                 {
-                    _localPeerId = 1;
+                    LocalPeerId = 1;
                     _sessionState = SessionState.Active;
+                    world.InitializeAuthority();
                     SpawnPlayer(1);
                 }
                 else
@@ -110,7 +92,15 @@ public partial class NetworkSession : Node
                 }
                 break;
             case NetworkLaunchMode.Server:
-                _sessionState = StartServer() ? SessionState.Active : SessionState.Failed;
+                if (StartServer())
+                {
+                    _sessionState = SessionState.Active;
+                    world.InitializeAuthority();
+                }
+                else
+                {
+                    _sessionState = SessionState.Failed;
+                }
                 break;
             case NetworkLaunchMode.Client:
                 _sessionState = StartClient() ? SessionState.Connecting : SessionState.Failed;
@@ -118,7 +108,7 @@ public partial class NetworkSession : Node
         }
 
         GD.Print(
-            $"NetworkSession: mode={_launchOptions.Mode}, address={_launchOptions.Address}, port={_launchOptions.Port}"
+            $"NetworkSession: mode={launchOptions.Mode}, address={launchOptions.Address}, port={launchOptions.Port}"
         );
     }
 
@@ -127,62 +117,66 @@ public partial class NetworkSession : Node
         if (
             !_configurationValid
             || _sessionState != SessionState.Active
-            || _localPlayerController == null
+            || LocalPlayerController is null
             || IsDedicatedServer
-            || _localPeerId <= 0
+            || LocalPeerId <= 0
         )
         {
             return;
         }
 
-        Character localPlayer = _players.GetNodeOrNull<Character>(
-            NetworkPlayerIdentity.GetPlayerName(_localPeerId)
-        )!;
+        Character? localPlayer = World
+            ?.PlayerSpawner?.GetSpawnRoot()
+            ?.GetNodeOrNull<Character>(NetworkPlayerIdentity.GetPlayerName(LocalPeerId));
         if (
             localPlayer != null
             && localPlayer.IsMultiplayerAuthority()
-            && _localPlayerController.ControlledCharacter != localPlayer
+            && LocalPlayerController.ControlledCharacter != localPlayer
         )
         {
-            _localPlayerController.Possess(localPlayer);
+            LocalPlayerController.Possess(localPlayer);
             GD.Print($"NetworkSession: possessed local {localPlayer.Name}");
-            GD.Print($"NetworkSession: visible player count={_players.GetChildCount()}");
+            GD.Print(
+                $"NetworkSession: visible player count={World?.PlayerSpawner?.GetSpawnRoot()?.GetChildCount()}"
+            );
         }
     }
 
     private bool StartServer()
     {
+        NetworkLaunchOptions options = LaunchOptions!;
         ENetMultiplayerPeer peer = new();
-        Error result = peer.CreateServer(_launchOptions.Port, _launchOptions.MaxPlayers);
+        Error result = peer.CreateServer(options.Port, options.MaxPlayers);
         if (result != Error.Ok)
         {
             GD.PushError(
-                $"NetworkSession: unable to start server on port {_launchOptions.Port}: {result}"
+                $"NetworkSession: unable to start server on port {options.Port}: {result}"
             );
             return false;
         }
 
         _peer = peer;
         Multiplayer.MultiplayerPeer = peer;
-        GD.Print($"NetworkSession: server listening on UDP {_launchOptions.Port}");
+        GD.Print($"NetworkSession: server listening on UDP {options.Port}");
         return true;
     }
 
     private bool StartClient()
     {
+        NetworkLaunchOptions options = LaunchOptions!;
         ENetMultiplayerPeer peer = new();
-        Error result = peer.CreateClient(_launchOptions.Address, _launchOptions.Port);
+        Error result = peer.CreateClient(options.Address, options.Port);
         if (result != Error.Ok)
         {
             GD.PushError(
-                $"NetworkSession: unable to connect to {_launchOptions.Address}:{_launchOptions.Port}: {result}"
+                $"NetworkSession: unable to connect to {options.Address}:{options.Port}: {result}"
             );
             return false;
         }
 
         _peer = peer;
         Multiplayer.MultiplayerPeer = peer;
-        GD.Print($"NetworkSession: connecting to {_launchOptions.Address}:{_launchOptions.Port}");
+        GD.Print($"NetworkSession: connecting to {options.Address}:{options.Port}");
         return true;
     }
 
@@ -201,9 +195,9 @@ public partial class NetworkSession : Node
             return;
         }
 
-        Character player = _players.GetNodeOrNull<Character>(
-            NetworkPlayerIdentity.GetPlayerName((int)peerId)
-        )!;
+        Character? player = World
+            ?.PlayerSpawner?.GetSpawnRoot()
+            ?.GetNodeOrNull<Character>(NetworkPlayerIdentity.GetPlayerName((int)peerId));
         if (player != null)
         {
             player.QueueFree();
@@ -214,15 +208,27 @@ public partial class NetworkSession : Node
     private void SpawnPlayer(int peerId)
     {
         string playerName = NetworkPlayerIdentity.GetPlayerName(peerId);
-        if (_players.GetNodeOrNull<Character>(playerName) != null)
+        Character? existingPlayer = World
+            ?.PlayerSpawner?.GetSpawnRoot()
+            ?.GetNodeOrNull<Character>(playerName);
+
+        if (existingPlayer is not null)
         {
+            GD.PushWarning($"NetworkSession: player {playerName} already exists; skipping spawn.");
             return;
         }
 
-        Character player = PlayerScene.Instantiate<Character>();
-        player.Name = playerName;
-        player.Position = NetworkPlayerIdentity.GetSpawnPosition(peerId);
-        _players.AddChild(player, true);
+        Character? player = World?.PlayerSpawner?.Spawn(
+            NetworkPlayerIdentity.GetSpawnPosition(peerId),
+            playerName
+        );
+
+        if (player is null)
+        {
+            GD.PushError($"NetworkSession: failed to spawn {playerName}.");
+            return;
+        }
+
         GD.Print($"NetworkSession: spawned {playerName} at {player.Position}");
     }
 
@@ -233,9 +239,9 @@ public partial class NetworkSession : Node
             return;
         }
 
-        _localPeerId = (int)_peer.GetUniqueId();
+        LocalPeerId = (int)_peer.GetUniqueId();
         _sessionState = SessionState.Active;
-        GD.Print($"NetworkSession: connected as peer {_localPeerId}");
+        GD.Print($"NetworkSession: connected as peer {LocalPeerId}");
     }
 
     private void OnConnectionFailed()
@@ -285,7 +291,7 @@ public partial class NetworkSession : Node
         }
 
         MultiplayerPeer? peer = _peer ?? Multiplayer.MultiplayerPeer;
-        _localPeerId = 0;
+        LocalPeerId = 0;
         _peer = null;
 
         if (Multiplayer.MultiplayerPeer != null)

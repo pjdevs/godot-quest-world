@@ -9,9 +9,10 @@
 [ext_resource type="Script" uid="uid://canmvbkunu40a" path="res://addons/gameplay_action_plugin/runtime/rules/GameplayActionRule.cs" id="4_onb8u"]
 [ext_resource type="PackedScene" uid="uid://biblv21jbgvwk" path="res://quest_world/interactibles/door/Door.tscn" id="6_onb8u"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_staterule"]
-[ext_resource type="PackedScene" uid="uid://c615ipxd5fba5" path="res://quest_world/interactibles/battery/Battery.tscn" id="10_cjmvp"]
-[ext_resource type="Script" path="res://quest_world/levels/QuestWorldWorld.cs" id="11_world"]
-[ext_resource type="Script" path="res://quest_world/interactibles/battery/BatterySpawner.cs" id="12_battery_spawner"]
+[ext_resource type="Script" uid="uid://cc3a1y8oau6w0" path="res://quest_world/world/PlayerSpawner.cs" id="8_53a43"]
+[ext_resource type="Script" uid="uid://dwo8hrr15xu0s" path="res://quest_world/world/BatterySpawner.cs" id="11_w5rq3"]
+[ext_resource type="Script" uid="uid://djq3dj56kwgo0" path="res://quest_world/world/QuestWorldWorld.cs" id="11_world"]
+[ext_resource type="PackedScene" uid="uid://c615ipxd5fba5" path="res://quest_world/interactibles/battery/Battery.tscn" id="12_53a43"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_edcox"]
 ground_color = Color(0.160784, 0.815686, 0.905882, 1)
@@ -74,9 +75,10 @@ MismatchAvailability = 1
 BlockReason = "The wall is moving."
 metadata/_custom_type_script = "uid://cvrhmun38iql5"
 
-[node name="test_world" type="Node3D" unique_id=1604557493 node_paths=PackedStringArray("BatterySpawner")]
+[node name="test_world" type="Node3D" unique_id=1604557493 node_paths=PackedStringArray("BatterySpawner", "PlayerSpawner")]
 script = ExtResource("11_world")
-BatterySpawner = NodePath("Batteries/BatterySpawner")
+BatterySpawner = NodePath("BatterySpawner")
+PlayerSpawner = NodePath("PlayerSpawner")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=291661268]
 environment = SubResource("Environment_20rw3")
@@ -160,23 +162,26 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.639, 0, -4.238)
 [node name="Players" type="Node3D" parent="." unique_id=7684642]
 
 [node name="PlayerSpawner" type="MultiplayerSpawner" parent="." unique_id=1259490337]
+_spawnable_scenes = PackedStringArray("uid://bh7me5hps2qp6")
 spawn_path = NodePath("../Players")
+script = ExtResource("8_53a43")
+Scene = ExtResource("1_character")
 
-[node name="NetworkSession" type="Node" parent="." unique_id=1403936845]
+[node name="NetworkSession" type="Node" parent="." unique_id=1403936845 node_paths=PackedStringArray("LocalPlayerController")]
 script = ExtResource("3_network_session")
-PlayerScene = ExtResource("1_character")
+LocalPlayerController = NodePath("../PlayerController")
 
 [node name="PlayerController" type="Node" parent="." unique_id=1335039517]
 script = ExtResource("2_player_controller")
 
 [node name="Batteries" type="Node3D" parent="." unique_id=213100253]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -10.9480095)
 
-[node name="BatterySpawner" type="MultiplayerSpawner" parent="Batteries" unique_id=1333401836]
-script = ExtResource("12_battery_spawner")
+[node name="BatterySpawner" type="MultiplayerSpawner" parent="." unique_id=1333401836]
 _spawnable_scenes = PackedStringArray("uid://c615ipxd5fba5")
-spawn_path = NodePath("..")
-
-[node name="Battery" parent="Batteries" unique_id=1538100754 instance=ExtResource("10_cjmvp")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.56146663, 0, -8.010992)
+spawn_path = NodePath("../Batteries")
+script = ExtResource("11_w5rq3")
+Scene = ExtResource("12_53a43")
+AutoSpawn = true
 
 [editable path="Level/Button"]

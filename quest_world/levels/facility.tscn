@@ -4,6 +4,8 @@
 [ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/NetworkSession.cs" id="4_wtwud"]
 [ext_resource type="PackedScene" uid="uid://bh7me5hps2qp6" path="res://quest_world/character/Character.tscn" id="5_jnsjd"]
 [ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="6_4k80j"]
+[ext_resource type="Script" uid="uid://djq3dj56kwgo0" path="res://quest_world/world/QuestWorldWorld.cs" id="7_world"]
+[ext_resource type="Script" path="res://quest_world/world/GenericSpawner.cs" id="8_generic_spawner"]
 
 [sub_resource type="Environment" id="Environment_20rw3"]
 background_mode = 1
@@ -95,7 +97,9 @@ emission_enabled = true
 emission = Color(1, 0.05, 0.02, 1)
 emission_energy_multiplier = 4.0
 
-[node name="Facility" type="Node3D" unique_id=1604557493]
+[node name="Facility" type="Node3D" unique_id=1604557493 node_paths=PackedStringArray("PlayerSpawner")]
+script = ExtResource("7_world")
+PlayerSpawner = NodePath("PlayerSpawner")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=291661268]
 environment = SubResource("Environment_20rw3")
@@ -1507,10 +1511,12 @@ font_size = 48
 
 [node name="PlayerSpawner" type="MultiplayerSpawner" parent="." unique_id=1259490337]
 spawn_path = NodePath("../Players")
+script = ExtResource("8_generic_spawner")
+Scene = ExtResource("5_jnsjd")
 
 [node name="NetworkSession" type="Node" parent="." unique_id=1403936845]
 script = ExtResource("4_wtwud")
-PlayerScene = ExtResource("5_jnsjd")
+LocalPlayerController = NodePath("../PlayerController")
 
 [node name="PlayerController" type="Node" parent="." unique_id=1335039517]
 script = ExtResource("6_4k80j")
