@@ -8,6 +8,7 @@ using Godot;
 using InteractionPlugin.Editor;
 using QuestWorld.GameplayActions;
 using QuestWorld.GameplayActions.Integration.Stateful;
+using QuestWorld.GameplayActions.Presentation.UI;
 using QuestWorld.GameplayActions.Runtime.Actions;
 using QuestWorld.GameplayActions.Runtime.Bindings;
 using QuestWorld.GameplayActions.Runtime.Execution;
@@ -30,7 +31,7 @@ public sealed partial class InteractionSceneTest
     private const string PromptScenePath =
         "res://addons/interaction_plugin/scenes/InteractionPrompt.tscn";
     private const string ActionPromptScenePath =
-        "res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn";
+        "res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn";
     private const string IndicatorScenePath =
         "res://addons/interaction_plugin/scenes/InteractionIndicator.tscn";
     private const string ButtonScenePath = "res://quest_world/interactibles/button/Button.tscn";
@@ -143,18 +144,19 @@ public sealed partial class InteractionSceneTest
     [TestCase]
     public async Task DefaultActionPromptWidgetShowsInputWhenAllowedAndReasonWhenBlocked()
     {
-        InteractionActionPromptWidget widget = GD.Load<PackedScene>(ActionPromptScenePath)
-            .Instantiate<InteractionActionPromptWidget>();
+        GameplayActionPromptWidget widget = GD.Load<PackedScene>(ActionPromptScenePath)
+            .Instantiate<GameplayActionPromptWidget>();
         ISceneRunner runner = ISceneRunner.Load(widget);
         await runner.SimulateFrames(1);
 
         widget.Bind(
-            new InteractionActionPresentation(
+            new GameplayActionPresentation(
                 "open",
                 "Open",
                 "Open it",
                 "interact",
-                new InteractionAllowed()
+                new GameplayActionAllowed(),
+                GameplayActionActivationMode.Press
             ),
             null
         );
@@ -163,12 +165,13 @@ public sealed partial class InteractionSceneTest
         AssertThat(widget.ActionNameLabel!.Text).IsEqual("Open");
 
         widget.Bind(
-            new InteractionActionPresentation(
+            new GameplayActionPresentation(
                 "open",
                 "Open",
                 "Open it",
                 "interact",
-                new InteractionBlocked("Locked")
+                new GameplayActionBlocked("Locked"),
+                GameplayActionActivationMode.Press
             ),
             null
         );
@@ -179,7 +182,7 @@ public sealed partial class InteractionSceneTest
     [TestCase]
     public async Task DefaultActionPromptKeepsAnIdleHoldBarVisibleAtZero()
     {
-        InteractionActionPromptWidget widget = new();
+        GameplayActionPromptWidget widget = new();
         Label actionName = new();
         Label actionKey = new();
         ProgressBar progress = new();
@@ -193,13 +196,13 @@ public sealed partial class InteractionSceneTest
         await runner.SimulateFrames(1);
 
         widget.Bind(
-            new InteractionActionPresentation(
+            new GameplayActionPresentation(
                 "unlock",
                 "Unlock",
                 "Unlock it",
                 "interact",
-                new InteractionAllowed(),
-                IsHoldable: true
+                new GameplayActionAllowed(),
+                GameplayActionActivationMode.Hold
             ),
             null
         );
@@ -208,12 +211,13 @@ public sealed partial class InteractionSceneTest
         AssertThat(progress.Value).IsEqual(0.0);
 
         widget.Bind(
-            new InteractionActionPresentation(
+            new GameplayActionPresentation(
                 "open",
                 "Open",
                 "Open it",
                 "interact",
-                new InteractionAllowed()
+                new GameplayActionAllowed(),
+                GameplayActionActivationMode.Press
             ),
             null
         );
@@ -234,7 +238,7 @@ public sealed partial class InteractionSceneTest
                 new InteractiveComponent(),
                 "Door",
                 "A heavy door",
-                new List<InteractionActionPresentation>(),
+                new List<GameplayActionPresentation>(),
                 true
             )
         );
@@ -281,9 +285,9 @@ public sealed partial class InteractionSceneTest
             .OfType<InteractionPromptWidget>()
             .Single();
         AssertThat(container.GetNode<Label>("Content/Label").Text).IsEqual("Console");
-        InteractionActionPromptWidget[] actions = container
+        GameplayActionPromptWidget[] actions = container
             .ActionsContainer.GetChildren()
-            .OfType<InteractionActionPromptWidget>()
+            .OfType<GameplayActionPromptWidget>()
             .ToArray();
         AssertThat(actions.Length).IsEqual(2);
         AssertThat(actions[0].ActionNameLabel!.Text).IsEqual("open");
@@ -574,12 +578,12 @@ public sealed partial class InteractionSceneTest
         AssertThat(statusNotifications).IsEqual(0);
     }
 
-    private static string Describe(InteractionAvailability availability) =>
+    private static string Describe(GameplayActionAvailability availability) =>
         availability switch
         {
-            InteractionAllowed => "allowed",
-            InteractionBlocked blocked => blocked.Reason,
-            InteractionHidden => "hidden",
+            GameplayActionAllowed => "allowed",
+            GameplayActionBlocked blocked => blocked.Reason,
+            GameplayActionHidden => "hidden",
         };
 
     private static string WidgetIdentities(InteractionPromptWidget container) =>
@@ -598,7 +602,7 @@ public sealed partial class InteractionSceneTest
             " | ",
             container
                 .ActionsContainer.GetChildren()
-                .OfType<InteractionActionPromptWidget>()
+                .OfType<GameplayActionPromptWidget>()
                 .Select(widget => widget.ActionNameLabel!.Text)
         );
     }
@@ -723,7 +727,7 @@ public sealed partial class InteractionSceneTest
             {
                 StatefulPath = statefulPath,
                 ExpectedStates = { readyState },
-                MismatchAvailability = InteractionUnavailableKind.Blocked,
+                MismatchAvailability = GameplayActionUnavailableKind.Blocked,
                 BlockReason = "The wall is moving.",
             }
         );
@@ -799,10 +803,10 @@ public sealed partial class InteractionSceneTest
 
     private sealed partial class DialogInteractionRule : InteractionRule
     {
-        public override InteractionAvailability Evaluate(in InteractionContext context) =>
+        public override GameplayActionAvailability Evaluate(in InteractionContext context) =>
             context.Interactive.GetParent() is TestInteractiveActor { DialogRunning: true }
-                ? new InteractionBlocked("Someone is talking.")
-                : new InteractionAllowed();
+                ? new GameplayActionBlocked("Someone is talking.")
+                : new GameplayActionAllowed();
     }
 
     private sealed partial class NoopInteractionExecutor : InteractionActionExecutor

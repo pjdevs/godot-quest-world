@@ -422,3 +422,14 @@ and nothing in the current API should be read as a first step towards them:
 
 Each of these must start from an observed use case and preserve the V1 ownership, authority, and
 lifecycle invariants. Their listing here is documentation of a boundary, not a roadmap commitment.
+
+## Action presentation boundary
+
+`GameplayActionPresentation` is now the generic read model for one input-bound action. It carries the
+stable identity, player-facing text, input name, `GameplayActionAvailability`, activation mode, and
+optional per-binding hold progress. `IsAllowed`, `IsAutomatic`, `IsHoldable`, and `BlockReason` are
+derived properties; the activation mode remains the source of truth.
+
+`IGameplayActionWidget` and the default `GameplayActionPromptWidget` live in this addon as well. A
+generic presenter may therefore render actions from any `GameplayActionComponent`; an interaction
+presenter only projects its target-level view and does not define a second availability vocabulary.

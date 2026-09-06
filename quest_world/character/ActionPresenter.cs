@@ -2,10 +2,10 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Presentation.UI;
 using QuestWorld.GameplayActions.Runtime.Actions;
 using QuestWorld.GameplayActions.Runtime.Runner;
 using QuestWorld.Interaction;
-using QuestWorld.Interaction.Presentation.UI;
 using QuestWorld.Interaction.Runtime.Actions;
 
 [GlobalClass]
@@ -54,7 +54,7 @@ public partial class ActionPresenter : CanvasLayer
                     continue;
                 }
 
-                if (actionControl is IInteractionActionWidget actionWidget)
+                if (actionControl is IGameplayActionWidget actionWidget)
                 {
                     // TODO: Bind the presentation of the action
                     // (not available for simple GameplayAction for now, only InteractionAction)
@@ -62,12 +62,13 @@ public partial class ActionPresenter : CanvasLayer
                         .GetBindings()
                         .FirstOrDefault(b => b.ActionId == action.Definition.Id);
                     actionWidget.Bind(
-                        new InteractionActionPresentation(
+                        new GameplayActionPresentation(
                             action.Definition.Id,
                             action.Definition.Label,
                             action.Definition.Description,
                             binding?.InputActionName ?? "interact",
-                            new InteractionAllowed()
+                            new GameplayActionAllowed(),
+                            binding?.ActivationMode ?? GameplayActionActivationMode.Press
                         ),
                         null
                     );

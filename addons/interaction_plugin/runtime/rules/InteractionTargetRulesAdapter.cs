@@ -16,7 +16,9 @@ internal sealed partial class InteractionTargetRulesAdapter : GameplayActionRule
     {
         if (Interactive is null)
         {
-            return new GameplayActionBlocked(InteractionAvailabilityExtensions.UnavailableReason);
+            return new GameplayActionBlocked(
+                GameplayActionAvailabilityExtensions.UnavailableReason
+            );
         }
 
         foreach (InteractionRule rule in Interactive.TargetRules)

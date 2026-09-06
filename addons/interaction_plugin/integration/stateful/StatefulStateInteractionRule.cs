@@ -1,4 +1,5 @@
 using Godot;
+using QuestWorld.GameplayActions;
 using QuestWorld.Interaction.Runtime.Rules;
 using QuestWorld.State;
 
@@ -46,8 +47,8 @@ public partial class StatefulStateInteractionRule : InteractionRule
     /// that makes no sense yet. Blocked keeps it presentable and explains itself.
     /// </remarks>
     [Export]
-    public InteractionUnavailableKind MismatchAvailability { get; set; } =
-        InteractionUnavailableKind.Hidden;
+    public GameplayActionUnavailableKind MismatchAvailability { get; set; } =
+        GameplayActionUnavailableKind.Hidden;
 
     /// <summary>Gets or sets the reason displayed when the mismatch is blocked.</summary>
     [Export]
@@ -58,16 +59,16 @@ public partial class StatefulStateInteractionRule : InteractionRule
     /// The rule reads the state and never changes it. An unresolvable path or an empty state list is
     /// a configuration error, reported as blocked instead of silently allowing the action.
     /// </remarks>
-    public override InteractionAvailability Evaluate(in InteractionContext context)
+    public override GameplayActionAvailability Evaluate(in InteractionContext context)
     {
         StatefulComponent? stateful = ResolveStateful(context);
         if (stateful is null || ExpectedStates.Count == 0)
         {
-            return new InteractionBlocked(NotConfiguredReason);
+            return new GameplayActionBlocked(NotConfiguredReason);
         }
 
         return ExpectedStates.Contains(stateful.State) != Invert
-            ? new InteractionAllowed()
+            ? new GameplayActionAllowed()
             : MismatchAvailability.ToAvailability(BlockReason);
     }
 

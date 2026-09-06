@@ -1,4 +1,5 @@
 using Godot;
+using QuestWorld.GameplayActions;
 using QuestWorld.Interaction.Runtime.Rules;
 
 namespace QuestWorld.Interaction.Examples.Rules;
@@ -12,6 +13,6 @@ public partial class AlwaysBlockedInteractionRule : InteractionRule
     public string Reason { get; set; } = "Interaction unavailable.";
 
     /// <inheritdoc />
-    public override InteractionAvailability Evaluate(in InteractionContext context) =>
-        new InteractionBlocked(Reason);
+    public override GameplayActionAvailability Evaluate(in InteractionContext context) =>
+        new GameplayActionBlocked(Reason);
 }

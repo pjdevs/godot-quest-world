@@ -499,7 +499,7 @@ public partial class InteractiveComponent : Node
     {
         if (reason == GameplayActionAvailabilityExtensions.UnavailableReason)
         {
-            return InteractionAvailabilityExtensions.UnavailableReason;
+            return "Interaction unavailable.";
         }
 
         if (reason != GameplayActionComponent.AlreadyRunningReason || ActionComponent is null)
@@ -529,7 +529,7 @@ public partial class InteractiveComponent : Node
     /// <param name="interactor">Interactor for which availability is evaluated.</param>
     /// <param name="action">Action of this target being evaluated.</param>
     /// <returns>The first hidden or blocked result, or allowed when every check succeeds.</returns>
-    public InteractionAvailability EvaluateAvailability(
+    public GameplayActionAvailability EvaluateAvailability(
         InteractionInteractor interactor,
         InteractionAction action
     )
@@ -545,15 +545,17 @@ public partial class InteractiveComponent : Node
             || action.Component != ActionComponent
         )
         {
-            return new InteractionBlocked(NotConfiguredReason);
+            return new GameplayActionBlocked(NotConfiguredReason);
         }
 
         PrepareAction(action);
         Node interactionInstigator = interactor.Runner?.ResolveInstigator() ?? interactor;
-        InteractionAvailability actionAvailability = ActionComponent
-            .EvaluateAction(action.Definition.Id, interactionInstigator, interactor.Runner)
-            .ToInteractionAvailability();
-        if (actionAvailability is not InteractionAllowed)
+        GameplayActionAvailability actionAvailability = ActionComponent.EvaluateAction(
+            action.Definition.Id,
+            interactionInstigator,
+            interactor.Runner
+        );
+        if (actionAvailability is not GameplayActionAllowed)
         {
             return actionAvailability;
         }
@@ -574,12 +576,12 @@ public partial class InteractiveComponent : Node
                 action.GetHostConcurrencyGroup(),
                 interactionInstigator
             );
-            return new InteractionBlocked(
+            return new GameplayActionBlocked(
                 startedByInteractor ? AlreadyRunningReason : SomeoneElseReason
             );
         }
 
-        return new InteractionAllowed();
+        return new GameplayActionAllowed();
     }
 
     /// <summary>Aggregates the availability of every action into one target-level result.</summary>
@@ -589,9 +591,9 @@ public partial class InteractiveComponent : Node
     /// </remarks>
     /// <param name="interactor">Interactor for which availability is evaluated.</param>
     /// <returns>Allowed when one action is allowed, the first blocked result, or hidden.</returns>
-    public InteractionAvailability EvaluateAvailability(InteractionInteractor interactor)
+    public GameplayActionAvailability EvaluateAvailability(InteractionInteractor interactor)
     {
-        InteractionAvailability aggregate = new InteractionHidden();
+        GameplayActionAvailability aggregate = new GameplayActionHidden();
         foreach (InteractionAction action in Actions)
         {
             if (action is null)
@@ -599,13 +601,13 @@ public partial class InteractiveComponent : Node
                 continue;
             }
 
-            InteractionAvailability availability = EvaluateAvailability(interactor, action);
-            if (availability is InteractionAllowed)
+            GameplayActionAvailability availability = EvaluateAvailability(interactor, action);
+            if (availability is GameplayActionAllowed)
             {
                 return availability;
             }
 
-            if (availability is InteractionBlocked && aggregate is InteractionHidden)
+            if (availability is GameplayActionBlocked && aggregate is GameplayActionHidden)
             {
                 aggregate = availability;
             }
@@ -614,7 +616,7 @@ public partial class InteractiveComponent : Node
         return aggregate;
     }
 
-    private static InteractionAvailability EvaluateRules(
+    private static GameplayActionAvailability EvaluateRules(
         Godot.Collections.Array<InteractionRule> rules,
         in InteractionContext context
     )
@@ -626,14 +628,14 @@ public partial class InteractiveComponent : Node
                 continue;
             }
 
-            InteractionAvailability availability = rule.Evaluate(context);
-            if (availability is not InteractionAllowed)
+            GameplayActionAvailability availability = rule.Evaluate(context);
+            if (availability is not GameplayActionAllowed)
             {
                 return availability;
             }
         }
 
-        return new InteractionAllowed();
+        return new GameplayActionAllowed();
     }
 
     /// <summary>Resolves one action of this target from its stable identifier.</summary>
@@ -690,7 +692,7 @@ public partial class InteractiveComponent : Node
             if (
                 config.ActivationMode == GameplayActionActivationMode.Hold
                 && config.HoldDuration > longest
-                && EvaluateAvailability(interactor, action) is not InteractionHidden
+                && EvaluateAvailability(interactor, action) is not GameplayActionHidden
             )
             {
                 longest = config.HoldDuration;
@@ -722,14 +724,14 @@ public partial class InteractiveComponent : Node
             holdElapsed
         );
 
-        List<InteractionActionPresentation> presentedActions = new();
+        List<GameplayActionPresentation> presentedActions = new();
         foreach (InteractionAction action in Actions)
         {
             if (
                 TryGetActionPresentation(
                     interactor,
                     action,
-                    out InteractionActionPresentation presentation,
+                    out GameplayActionPresentation presentation,
                     progress
                 )
             )
@@ -771,7 +773,7 @@ public partial class InteractiveComponent : Node
     private bool TryGetActionPresentation(
         InteractionInteractor interactor,
         InteractionAction? action,
-        out InteractionActionPresentation presentation,
+        out GameplayActionPresentation presentation,
         in InteractionProgress progress = default
     )
     {
@@ -784,20 +786,19 @@ public partial class InteractiveComponent : Node
             return false;
         }
 
-        InteractionAvailability availability = EvaluateAvailability(interactor, action);
-        if (availability is InteractionHidden)
+        GameplayActionAvailability availability = EvaluateAvailability(interactor, action);
+        if (availability is GameplayActionHidden)
         {
             return false;
         }
 
-        presentation = new InteractionActionPresentation(
+        presentation = new GameplayActionPresentation(
             action.Definition.Id,
             action.Definition.Label,
             action.Definition.Description,
             config.InputActionName,
             availability,
-            config.ActivationMode == GameplayActionActivationMode.Automatic,
-            config.ActivationMode == GameplayActionActivationMode.Hold,
+            config.ActivationMode,
             progress.HoldOf(config),
             progress.HoldElapsedOf(config)
         );

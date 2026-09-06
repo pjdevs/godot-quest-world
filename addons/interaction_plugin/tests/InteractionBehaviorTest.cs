@@ -190,9 +190,9 @@ public sealed partial class InteractionBehaviorTest
     [TestCase]
     public void AvailabilityUsesExhaustiveAllowedBlockedAndHiddenCases()
     {
-        InteractionAvailability allowed = new InteractionAllowed();
-        InteractionAvailability blocked = new InteractionBlocked("Needs a key");
-        InteractionAvailability hidden = new InteractionHidden();
+        GameplayActionAvailability allowed = new GameplayActionAllowed();
+        GameplayActionAvailability blocked = new GameplayActionBlocked("Needs a key");
+        GameplayActionAvailability hidden = new GameplayActionHidden();
 
         AssertThat(Describe(allowed)).IsEqual("allowed");
         AssertThat(Describe(blocked)).IsEqual("Needs a key");
@@ -279,9 +279,14 @@ public sealed partial class InteractionBehaviorTest
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
 
-        InteractionAvailability availability = interactive.EvaluateAvailability(interactor, action);
+        GameplayActionAvailability availability = interactive.EvaluateAvailability(
+            interactor,
+            action
+        );
 
-        AssertThat(availability is InteractionBlocked blocked && blocked.Reason == "First reason")
+        AssertThat(
+                availability is GameplayActionBlocked blocked && blocked.Reason == "First reason"
+            )
             .IsTrue();
     }
 
@@ -313,7 +318,10 @@ public sealed partial class InteractionBehaviorTest
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
 
-        InteractionAvailability availability = interactive.EvaluateAvailability(interactor, action);
+        GameplayActionAvailability availability = interactive.EvaluateAvailability(
+            interactor,
+            action
+        );
 
         AssertThat(Describe(availability)).IsEqual("Target reason");
     }
@@ -339,18 +347,18 @@ public sealed partial class InteractionBehaviorTest
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
 
-        InteractionAvailability blockedAvailability = interactive.EvaluateAvailability(
+        GameplayActionAvailability blockedAvailability = interactive.EvaluateAvailability(
             interactor,
             action
         );
         owner.GameplayBlocked = false;
-        InteractionAvailability allowedAvailability = interactive.EvaluateAvailability(
+        GameplayActionAvailability allowedAvailability = interactive.EvaluateAvailability(
             interactor,
             action
         );
 
         AssertThat(Describe(blockedAvailability)).IsEqual("Gameplay condition is blocked.");
-        AssertThat(allowedAvailability is InteractionAllowed).IsTrue();
+        AssertThat(allowedAvailability is GameplayActionAllowed).IsTrue();
     }
 
     [TestCase]
@@ -461,12 +469,12 @@ public sealed partial class InteractionBehaviorTest
         rule.StatefulPath = new NodePath("../../StatefulComponent");
         await door.Runner.SimulateFrames(1);
 
-        InteractionAvailability availability = door.Interactive.EvaluateAvailability(
+        GameplayActionAvailability availability = door.Interactive.EvaluateAvailability(
             door.Interactor,
             door.Open
         );
 
-        AssertThat(availability is InteractionAllowed).IsTrue();
+        AssertThat(availability is GameplayActionAllowed).IsTrue();
     }
 
     [TestCase]
@@ -573,7 +581,7 @@ public sealed partial class InteractionBehaviorTest
         door.Interactive.InteractionActionRejected += (_, _, _) => rejectedCount++;
         door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
 
-        InteractionAvailability availability = door.Interactive.EvaluateAvailability(
+        GameplayActionAvailability availability = door.Interactive.EvaluateAvailability(
             door.Interactor,
             door.Open
         );
@@ -645,7 +653,7 @@ public sealed partial class InteractionBehaviorTest
         ISceneRunner runner = ISceneRunner.Load(world);
         await runner.SimulateFrames(1);
 
-        AssertThat(interactive.EvaluateAvailability(interactor) is InteractionAllowed).IsTrue();
+        AssertThat(interactive.EvaluateAvailability(interactor) is GameplayActionAllowed).IsTrue();
         AssertThat(
                 interactive.ExecuteAction(interactor, action, out ulong executionId)
                     is GameplayActionExecutionCompleted
@@ -841,11 +849,11 @@ public sealed partial class InteractionBehaviorTest
         RecordingInteractionExecutor executor = ExecutorOf(door.Open);
         door.Interactive.InteractiveStatusChanged += () => statusSignalCount++;
 
-        InteractionAvailability first = door.Interactive.EvaluateAvailability(
+        GameplayActionAvailability first = door.Interactive.EvaluateAvailability(
             door.Interactor,
             door.Open
         );
-        InteractionAvailability second = door.Interactive.EvaluateAvailability(
+        GameplayActionAvailability second = door.Interactive.EvaluateAvailability(
             door.Interactor,
             door.Open
         );
@@ -905,7 +913,8 @@ public sealed partial class InteractionBehaviorTest
         InteractionAction foreign = CreateAction("foreign");
         try
         {
-            AssertThat(interactive.EvaluateAvailability(interactor) is InteractionHidden).IsTrue();
+            AssertThat(interactive.EvaluateAvailability(interactor) is GameplayActionHidden)
+                .IsTrue();
             AssertThat(interactive.ResolveAction(new StringName("foreign")) == null).IsTrue();
             AssertThat(
                     interactive.ExecuteAction(interactor, foreign)
@@ -1245,7 +1254,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(testWorld.Stateful.State).IsEqual(ActivatingState);
         AssertThat(
                 testWorld.Interactive.EvaluateAvailability(testWorld.Interactor, alternative)
-                    is InteractionAllowed
+                    is GameplayActionAllowed
             )
             .IsTrue();
 
@@ -1332,7 +1341,7 @@ public sealed partial class InteractionBehaviorTest
             {
                 StatefulPath = new NodePath("../../StatefulComponent"),
                 ExpectedStates = States("closed"),
-                MismatchAvailability = InteractionUnavailableKind.Blocked,
+                MismatchAvailability = GameplayActionUnavailableKind.Blocked,
                 BlockReason = "The door is moving.",
             }
         );
@@ -1633,7 +1642,7 @@ public sealed partial class InteractionBehaviorTest
         // the rules, so a running sibling never drags a hidden action into the prompt.
         AssertThat(
                 door.Interactive.EvaluateAvailability(door.Interactor, door.Close)
-                    is InteractionHidden
+                    is GameplayActionHidden
             )
             .IsTrue();
 
@@ -1644,7 +1653,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(door.Interactive.CompleteExecution(executionId)).IsTrue();
         AssertThat(
                 door.Interactive.EvaluateAvailability(door.Interactor, door.Open)
-                    is InteractionAllowed
+                    is GameplayActionAllowed
             )
             .IsTrue();
     }
@@ -2330,8 +2339,8 @@ public sealed partial class InteractionBehaviorTest
             testWorld.Interactor,
             true
         );
-        InteractionActionPresentation activation = PresentedAction(presentation, "activate");
-        InteractionActionPresentation inspection = PresentedAction(presentation, "inspect");
+        GameplayActionPresentation activation = PresentedAction(presentation, "activate");
+        GameplayActionPresentation inspection = PresentedAction(presentation, "inspect");
 
         AssertThat(activation.IsHoldable).IsTrue();
         AssertThat(activation.HoldProgress.HasValue).IsFalse();
@@ -2390,7 +2399,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(core.State.State.ToString()).IsEqual("primed");
 
         // Phase two exists but the player lacks the resonator, so it is presentable and explained.
-        List<InteractionActionPresentation> primed = Presented(core);
+        List<GameplayActionPresentation> primed = Presented(core);
         AssertThat(primed.Count).IsEqual(1);
         AssertThat(primed[0].ActionId).IsEqual(new StringName("reactivate"));
         AssertThat(primed[0].IsAllowed).IsFalse();
@@ -2426,7 +2435,7 @@ public sealed partial class InteractionBehaviorTest
         AssertThat(core.Interactive.IsExecutionActive(executionId)).IsFalse();
     }
 
-    private static List<InteractionActionPresentation> Presented(CoreWorld core) =>
+    private static List<GameplayActionPresentation> Presented(CoreWorld core) =>
         new(core.Interactive.GetPresentation(core.Interactor, true).Actions);
 
     private static CoreWorld BuildCoreWorld()
@@ -2524,12 +2533,12 @@ public sealed partial class InteractionBehaviorTest
         return action;
     }
 
-    private static string Describe(InteractionAvailability availability) =>
+    private static string Describe(GameplayActionAvailability availability) =>
         availability switch
         {
-            InteractionAllowed => "allowed",
-            InteractionBlocked blocked => blocked.Reason,
-            InteractionHidden => "hidden",
+            GameplayActionAllowed => "allowed",
+            GameplayActionBlocked blocked => blocked.Reason,
+            GameplayActionHidden => "hidden",
         };
 
     private static TestWorld BuildWorld(int ownerPeerId = 1, bool inheritedAuthority = false)
@@ -2641,12 +2650,12 @@ public sealed partial class InteractionBehaviorTest
         return action;
     }
 
-    private static InteractionActionPresentation PresentedAction(
+    private static GameplayActionPresentation PresentedAction(
         in InteractionTargetPresentation presentation,
         string actionId
     )
     {
-        foreach (InteractionActionPresentation action in presentation.Actions)
+        foreach (GameplayActionPresentation action in presentation.Actions)
         {
             if (action.ActionId.ToString() == actionId)
             {
@@ -2730,7 +2739,7 @@ public sealed partial class InteractionBehaviorTest
         StatefulStateInteractionRule rule = new()
         {
             StatefulPath = new NodePath("../../StatefulComponent"),
-            MismatchAvailability = InteractionUnavailableKind.Blocked,
+            MismatchAvailability = GameplayActionUnavailableKind.Blocked,
             BlockReason = blockReason,
         };
         foreach (StringName state in expectedStates)
@@ -2826,8 +2835,10 @@ public sealed partial class InteractionBehaviorTest
     {
         public bool HasKey { get; set; }
 
-        public override InteractionAvailability Evaluate(in InteractionContext context) =>
-            HasKey ? new InteractionAllowed() : new InteractionBlocked("You need the resonator.");
+        public override GameplayActionAvailability Evaluate(in InteractionContext context) =>
+            HasKey
+                ? new GameplayActionAllowed()
+                : new GameplayActionBlocked("You need the resonator.");
     }
 
     private sealed record TestWorld(
@@ -3089,11 +3100,11 @@ public sealed partial class InteractionBehaviorTest
 
     private sealed partial class InteractiveParentGameplayRule : InteractionRule
     {
-        public override InteractionAvailability Evaluate(in InteractionContext context)
+        public override GameplayActionAvailability Evaluate(in InteractionContext context)
         {
             return context.Interactive.GetParent() is TestInteractiveActor { GameplayBlocked: true }
-                ? new InteractionBlocked("Gameplay condition is blocked.")
-                : new InteractionAllowed();
+                ? new GameplayActionBlocked("Gameplay condition is blocked.")
+                : new GameplayActionAllowed();
         }
     }
 }

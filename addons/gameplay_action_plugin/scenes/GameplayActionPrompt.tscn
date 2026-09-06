@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://dq3n5v8xkw2b7"]
 
-[ext_resource type="Script" uid="uid://b5tly7c61k01n" path="res://addons/interaction_plugin/presentation/ui/InteractionActionPromptWidget.cs" id="1_action_prompt"]
+[ext_resource type="Script" uid="uid://b5tly7c61k01n" path="res://addons/gameplay_action_plugin/presentation/ui/GameplayActionPromptWidget.cs" id="1_action_prompt"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vlcnc"]
 bg_color = Color(0, 0, 0, 0.1764706)
@@ -13,7 +13,7 @@ bg_color = Color(0.4320224, 0.60253876, 0.877438, 1)
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_72247"]
 bg_color = Color(0, 0, 0, 0.39215687)
 
-[node name="InteractionActionPrompt" type="PanelContainer" unique_id=768295207 node_paths=PackedStringArray("ActionNameLabel", "ActionKeyLabel", "ActionProgress")]
+[node name="GameplayActionPrompt" type="PanelContainer" unique_id=768295207 node_paths=PackedStringArray("ActionNameLabel", "ActionKeyLabel", "ActionProgress")]
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_vlcnc")
 script = ExtResource("1_action_prompt")

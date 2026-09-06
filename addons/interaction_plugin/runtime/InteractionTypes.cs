@@ -7,102 +7,6 @@ using QuestWorld.Interaction.Runtime.Interactor;
 
 namespace QuestWorld.Interaction;
 
-/// <summary>Indicates that an action may be requested by the interactor.</summary>
-public sealed record InteractionAllowed();
-
-/// <summary>Indicates that an action is presentable but cannot be requested, and why.</summary>
-/// <param name="Reason">Reason displayed by interaction presentation widgets.</param>
-public sealed record InteractionBlocked(string Reason = "Interaction unavailable.");
-
-/// <summary>Indicates that an action is not part of the choices currently offered.</summary>
-/// <remarks>
-/// A hidden action carries no reason: it is absent from presentation instead of being explained,
-/// for example <c>Close</c> while a door is already closed.
-/// </remarks>
-public sealed record InteractionHidden();
-
-/// <summary>Availability of one action, returned by rules and by interactive evaluation.</summary>
-public readonly union InteractionAvailability(
-    InteractionAllowed,
-    InteractionBlocked,
-    InteractionHidden
-);
-
-/// <summary>Turns an availability into the text reported to a refused interactor.</summary>
-public static class InteractionAvailabilityExtensions
-{
-    /// <summary>Reason used when a refusal must not reveal why an action is unavailable.</summary>
-    public const string UnavailableReason = "Interaction unavailable.";
-
-    /// <summary>Describes why an action was refused, without disclosing a hidden action.</summary>
-    /// <remarks>
-    /// Hidden and blocked deliberately share one wording on the authoritative side: an action absent
-    /// from the offered choices must not become discoverable through the refusal it produces.
-    /// </remarks>
-    /// <param name="availability">Availability that stopped the request.</param>
-    /// <returns>The blocked reason, the neutral wording, or an empty string when allowed.</returns>
-    public static string DescribeRefusal(this InteractionAvailability availability) =>
-        availability switch
-        {
-            InteractionAllowed => string.Empty,
-            InteractionBlocked blocked => blocked.Reason,
-            InteractionHidden => UnavailableReason,
-        };
-
-    public static GameplayActionAvailability ToGameplayActionAvailability(
-        this InteractionAvailability availability
-    ) =>
-        availability switch
-        {
-            InteractionAllowed => new GameplayActionAllowed(),
-            InteractionBlocked blocked => new GameplayActionBlocked(blocked.Reason),
-            _ => new GameplayActionHidden(),
-        };
-
-    public static InteractionAvailability ToInteractionAvailability(
-        this GameplayActionAvailability availability
-    ) =>
-        availability switch
-        {
-            GameplayActionAllowed => new InteractionAllowed(),
-            GameplayActionBlocked blocked => new InteractionBlocked(blocked.Reason),
-            _ => new InteractionHidden(),
-        };
-}
-
-/// <summary>Availability an authoring-time choice may select when a rule condition does not hold.</summary>
-/// <remarks>
-/// <see cref="InteractionAvailability"/> is a union and cannot be exported, so a rule exposing its
-/// own refusal to the Inspector declares this enum instead. Only the two unavailable cases exist:
-/// a rule that would select <c>Allowed</c> carries no condition at all.
-/// </remarks>
-public enum InteractionUnavailableKind
-{
-    /// <summary>The action leaves the offered choices, without any reason to display.</summary>
-    Hidden,
-
-    /// <summary>The action stays presentable and explains why it cannot run.</summary>
-    Blocked
-}
-
-/// <summary>Turns an authored unavailable kind into the availability returned by a rule.</summary>
-public static class InteractionUnavailableKindExtensions
-{
-    /// <summary>Builds the availability selected by an authored refusal.</summary>
-    /// <param name="kind">Unavailable case chosen in the Inspector.</param>
-    /// <param name="reason">Reason carried by a blocked result, ignored when hidden.</param>
-    /// <returns>A hidden or blocked availability.</returns>
-    public static InteractionAvailability ToAvailability(
-        this InteractionUnavailableKind kind,
-        string reason
-    ) =>
-        kind switch
-        {
-            InteractionUnavailableKind.Blocked => new InteractionBlocked(reason),
-            _ => new InteractionHidden(),
-        };
-}
-
 /// <summary>Tier one target reaches for one interactor, decided by its detector.</summary>
 /// <remarks>
 /// The tiers are cumulative: an interactible target is also indicated, because a widget saying "there
@@ -149,56 +53,6 @@ public readonly record struct InteractionExecutionContext(
     InteractionAction Action
 );
 
-/// <summary>Snapshot of one action currently offered by a target.</summary>
-/// <remarks>
-/// One entry exists per presentable action. Availability is carried per action and is never
-/// summarized across the target: a prompt shows each action with its own allowed or blocked state.
-/// </remarks>
-/// <param name="ActionId">Stable gameplay and network identity of the action.</param>
-/// <param name="Label">Player-facing label of the action.</param>
-/// <param name="Description">Optional player-facing description of the action.</param>
-/// <param name="InputActionName">Project input action requesting this action.</param>
-/// <param name="Availability">Availability of this action, either allowed or blocked.</param>
-/// <param name="IsAutomatic">Whether local focus requests this action without any player input.</param>
-/// <param name="IsHoldable">Whether selecting this action requires holding its input.</param>
-/// <param name="HoldProgress">
-/// How far the hold selecting this action has progressed towards <b>its own</b> threshold, or null when
-/// none is in progress.
-/// </param>
-/// <param name="HoldElapsed">
-/// Seconds that hold has lasted, or null when none is in progress.
-/// </param>
-public readonly record struct InteractionActionPresentation(
-    StringName ActionId,
-    string Label,
-    string Description,
-    StringName InputActionName,
-    InteractionAvailability Availability,
-    bool IsAutomatic = false,
-    bool IsHoldable = false,
-    float? HoldProgress = null,
-    float? HoldElapsed = null
-)
-{
-    /// <summary>Gets whether this action can currently be requested.</summary>
-    public bool IsAllowed =>
-        Availability switch
-        {
-            InteractionAllowed => true,
-            InteractionBlocked => false,
-            InteractionHidden => false,
-        };
-
-    /// <summary>Gets the blocked reason of this action, or an empty string when allowed.</summary>
-    public string BlockReason =>
-        Availability switch
-        {
-            InteractionAllowed => string.Empty,
-            InteractionBlocked blocked => blocked.Reason,
-            InteractionHidden => string.Empty,
-        };
-}
-
 /// <summary>Snapshot consumed by local prompt and indication presentation.</summary>
 /// <remarks>
 /// Hidden actions are absent from <paramref name="Actions"/>; blocked ones stay present so a prompt
@@ -222,7 +76,7 @@ public readonly record struct InteractionTargetPresentation(
     InteractiveComponent Interactive,
     string DisplayName,
     string Description,
-    IReadOnlyList<InteractionActionPresentation> Actions,
+    IReadOnlyList<GameplayActionPresentation> Actions,
     bool IsFocused,
     float Distance = 0.0f
 )
@@ -241,9 +95,9 @@ public readonly record struct InteractionTargetPresentation(
                 return false;
             }
 
-            foreach (InteractionActionPresentation action in Actions)
+            foreach (GameplayActionPresentation action in Actions)
             {
-                if (action.Availability is InteractionAllowed)
+                if (action.Availability is GameplayActionAllowed)
                 {
                     return true;
                 }
@@ -267,7 +121,7 @@ public readonly record struct InteractionTargetPresentation(
                 return false;
             }
 
-            foreach (InteractionActionPresentation action in Actions)
+            foreach (GameplayActionPresentation action in Actions)
             {
                 if (!action.IsAutomatic)
                 {

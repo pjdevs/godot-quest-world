@@ -28,6 +28,34 @@ public static class GameplayActionAvailabilityExtensions
         };
 }
 
+/// <summary>Availability an authoring-time rule may select when its condition does not hold.</summary>
+/// <remarks>
+/// <see cref="GameplayActionAvailability"/> is a union and cannot be exported, so authored rules
+/// expose this enum instead. An allowed result carries no unavailable kind at all.
+/// </remarks>
+public enum GameplayActionUnavailableKind
+{
+    /// <summary>The action leaves the offered choices, without any reason to display.</summary>
+    Hidden,
+
+    /// <summary>The action stays presentable and explains why it cannot run.</summary>
+    Blocked,
+}
+
+/// <summary>Turns an authored unavailable kind into a generic gameplay action availability.</summary>
+public static class GameplayActionUnavailableKindExtensions
+{
+    /// <summary>Builds the availability selected by an authored refusal.</summary>
+    /// <param name="kind">Unavailable case chosen in the Inspector.</param>
+    /// <param name="reason">Reason carried by a blocked result, ignored when hidden.</param>
+    public static GameplayActionAvailability ToAvailability(this GameplayActionUnavailableKind kind, string reason) =>
+        kind switch
+        {
+            GameplayActionUnavailableKind.Blocked => new GameplayActionBlocked(reason),
+            _ => new GameplayActionHidden(),
+        };
+}
+
 public enum GameplayActionExecutionVisibility
 {
     RequesterOnly,

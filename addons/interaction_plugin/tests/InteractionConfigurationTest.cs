@@ -9,6 +9,7 @@ using InteractionPlugin.Editor;
 using QuestWorld.GameplayActions;
 using QuestWorld.GameplayActions.Editor;
 using QuestWorld.GameplayActions.Integration.Stateful;
+using QuestWorld.GameplayActions.Presentation.UI;
 using QuestWorld.GameplayActions.Runtime.Actions;
 using QuestWorld.GameplayActions.Runtime.Bindings;
 using QuestWorld.GameplayActions.Runtime.Execution;
@@ -19,6 +20,7 @@ using QuestWorld.Interaction.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Detection;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
+using QuestWorld.Interaction.Runtime.Rules;
 using QuestWorld.State;
 using static GdUnit4.Assertions;
 
@@ -242,21 +244,42 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void ActionPresentationContainsOnlyActionAndHoldData()
     {
-        AssertThat(
-                typeof(InteractionActionPresentation).GetProperty("HasTimed" + "Execution") == null
-            )
+        AssertThat(typeof(GameplayActionPresentation).GetProperty("HasTimed" + "Execution") == null)
             .IsTrue();
-        AssertThat(typeof(InteractionActionPresentation).GetProperty("ExecutionProgress") == null)
+        AssertThat(typeof(GameplayActionPresentation).GetProperty("ExecutionProgress") == null)
             .IsTrue();
 
-        System.Reflection.ParameterInfo[] parameters = typeof(IInteractionActionWidget)
+        System.Reflection.ParameterInfo[] parameters = typeof(IGameplayActionWidget)
             .GetMethod("Bind")!
             .GetParameters();
         AssertThat(parameters.Length).IsEqual(2);
         AssertThat(parameters[0].ParameterType)
-            .IsEqual(typeof(InteractionActionPresentation).MakeByRefType());
+            .IsEqual(typeof(GameplayActionPresentation).MakeByRefType());
         AssertThat(parameters[1].ParameterType)
             .IsEqual(typeof(GameplayActionExecutionPresentation?));
+    }
+
+    [TestCase]
+    public void InteractionRulesUseTheGenericUnavailableKind()
+    {
+        AssertThat(
+                typeof(StatefulStateInteractionRule)
+                    .GetProperty("MismatchAvailability")!
+                    .PropertyType
+            )
+            .IsEqual(typeof(GameplayActionUnavailableKind));
+        AssertThat(
+                typeof(InteractionRule)
+                    .GetMethods()
+                    .Single(method =>
+                        method.Name == "Evaluate"
+                        && method.ReturnType == typeof(GameplayActionAvailability)
+                        && method.GetParameters()[0].ParameterType
+                            == typeof(InteractionContext).MakeByRefType()
+                    )
+                    .ReturnType
+            )
+            .IsEqual(typeof(GameplayActionAvailability));
     }
 
     [TestCase]
@@ -311,9 +334,9 @@ public sealed partial class InteractionConfigurationTest
         AssertThat(rules.Count).IsEqual(2);
         AssertThat(phase.StatefulPath.ToString()).IsEqual("../../../LeverWall/StatefulComponent");
         AssertThat(phase.ExpectedStates.Count).IsEqual(2);
-        AssertThat(phase.MismatchAvailability).IsEqual(InteractionUnavailableKind.Hidden);
+        AssertThat(phase.MismatchAvailability).IsEqual(GameplayActionUnavailableKind.Hidden);
         AssertThat(ready.ExpectedStates.Count).IsEqual(1);
-        AssertThat(ready.MismatchAvailability).IsEqual(InteractionUnavailableKind.Blocked);
+        AssertThat(ready.MismatchAvailability).IsEqual(GameplayActionUnavailableKind.Blocked);
         AssertThat(ready.BlockReason).IsEqual("The wall is moving.");
     }
 

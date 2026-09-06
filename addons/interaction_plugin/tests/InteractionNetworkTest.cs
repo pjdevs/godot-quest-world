@@ -630,14 +630,14 @@ public sealed partial class InteractionNetworkTest
 
             // And B presents the action as busy from the state alone, having received no interaction
             // event of any kind.
-            InteractionActionPresentation switchOnB = PresentedAction(
+            GameplayActionPresentation switchOnB = PresentedAction(
                 session.ClientB.Interactive.GetPresentation(
                     session.ClientB.InteractorB,
                     isFocused: true
                 ),
                 "switch"
             );
-            AssertThat(switchOnB.Availability is InteractionBlocked).IsTrue();
+            AssertThat(switchOnB.Availability is GameplayActionBlocked).IsTrue();
         }
         finally
         {
@@ -645,12 +645,12 @@ public sealed partial class InteractionNetworkTest
         }
     }
 
-    private static InteractionActionPresentation PresentedAction(
+    private static GameplayActionPresentation PresentedAction(
         in InteractionTargetPresentation presentation,
         string actionId
     )
     {
-        foreach (InteractionActionPresentation action in presentation.Actions)
+        foreach (GameplayActionPresentation action in presentation.Actions)
         {
             if (action.ActionId.ToString() == actionId)
             {
@@ -755,11 +755,11 @@ public sealed partial class InteractionNetworkTest
             LatePeer late = await session.JoinLate("ClientC");
 
             AssertThat(late.Scene.Stateful.State.ToString()).IsEqual("activating");
-            InteractionActionPresentation onLate = PresentedAction(
+            GameplayActionPresentation onLate = PresentedAction(
                 late.Scene.Interactive.GetPresentation(late.Scene.InteractorA, isFocused: true),
                 "switch"
             );
-            AssertThat(onLate.Availability is InteractionBlocked).IsTrue();
+            AssertThat(onLate.Availability is GameplayActionBlocked).IsTrue();
             // And the acknowledgement of somebody else's request never reached it.
             AssertThat(session.KindsB()).IsEmpty();
         }
@@ -1175,7 +1175,7 @@ public sealed partial class InteractionNetworkTest
             {
                 StatefulPath = new NodePath("../../StatefulComponent"),
                 ExpectedStates = new Godot.Collections.Array<StringName> { IdleState },
-                MismatchAvailability = InteractionUnavailableKind.Blocked,
+                MismatchAvailability = GameplayActionUnavailableKind.Blocked,
                 BlockReason = "Somebody is already using this.",
             }
         );

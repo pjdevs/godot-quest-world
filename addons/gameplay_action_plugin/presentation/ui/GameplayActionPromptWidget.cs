@@ -2,10 +2,10 @@ using System.Linq;
 using Godot;
 using QuestWorld.GameplayActions;
 
-namespace QuestWorld.Interaction.Presentation.UI;
+namespace QuestWorld.GameplayActions.Presentation.UI;
 
-/// <summary>Default prompt of one action, showing its input when allowed or its reason when blocked.</summary>
-public partial class InteractionActionPromptWidget : PanelContainer, IInteractionActionWidget
+/// <summary>Default prompt showing an action input and its allowed or blocked state.</summary>
+public partial class GameplayActionPromptWidget : PanelContainer, IGameplayActionWidget
 {
     [Export]
     public Label? ActionNameLabel { get; set; }
@@ -20,7 +20,7 @@ public partial class InteractionActionPromptWidget : PanelContainer, IInteractio
 
     /// <inheritdoc />
     public void Bind(
-        in InteractionActionPresentation presentation,
+        in GameplayActionPresentation presentation,
         GameplayActionExecutionPresentation? execution
     )
     {

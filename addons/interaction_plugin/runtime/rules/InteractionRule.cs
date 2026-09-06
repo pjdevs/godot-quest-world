@@ -26,7 +26,7 @@ public abstract partial class InteractionRule : GameplayActionRule
     /// <returns>
     /// An allowed availability, or the hidden or blocked result that stops the rule pipeline.
     /// </returns>
-    public abstract InteractionAvailability Evaluate(in InteractionContext context);
+    public abstract GameplayActionAvailability Evaluate(in InteractionContext context);
 
     public sealed override GameplayActionAvailability Evaluate(in GameplayActionContext context)
     {
@@ -37,10 +37,11 @@ public abstract partial class InteractionRule : GameplayActionRule
                 is not InteractionInteractor interactor
         )
         {
-            return new GameplayActionBlocked(InteractionAvailabilityExtensions.UnavailableReason);
+            return new GameplayActionBlocked(
+                GameplayActionAvailabilityExtensions.UnavailableReason
+            );
         }
 
-        return Evaluate(new InteractionContext(interactor, action.Interactive, action))
-            .ToGameplayActionAvailability();
+        return Evaluate(new InteractionContext(interactor, action.Interactive, action));
     }
 }

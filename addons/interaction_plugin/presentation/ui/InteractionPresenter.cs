@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using QuestWorld.GameplayActions;
+using QuestWorld.GameplayActions.Presentation.UI;
 using QuestWorld.Interaction;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Interactor;
@@ -43,7 +44,7 @@ public partial class InteractionPresenter : CanvasLayer
     private string _promptContainerKey = string.Empty;
     private string _promptActionKey = string.Empty;
     private readonly List<Control> _promptActions = new();
-    private readonly List<InteractionActionPresentation> _promptedActions = new();
+    private readonly List<GameplayActionPresentation> _promptedActions = new();
     private readonly Dictionary<InteractiveComponent, Control> _indications = new();
     private readonly List<InteractiveComponent> _staleIndications = new();
     private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
@@ -211,7 +212,7 @@ public partial class InteractionPresenter : CanvasLayer
 
         for (int index = 0; index < _promptActions.Count; index++)
         {
-            InteractionActionPresentation action = _promptedActions[index];
+            GameplayActionPresentation action = _promptedActions[index];
             GameplayActionExecutionPresentation? execution =
                 presentation.Interactive.TryGetExecutionPresentation(
                     action.ActionId,
@@ -219,7 +220,7 @@ public partial class InteractionPresenter : CanvasLayer
                 )
                     ? currentExecution
                     : null;
-            (_promptActions[index] as IInteractionActionWidget)?.Bind(action, execution);
+            (_promptActions[index] as IGameplayActionWidget)?.Bind(action, execution);
         }
     }
 
@@ -231,7 +232,7 @@ public partial class InteractionPresenter : CanvasLayer
             return;
         }
 
-        foreach (InteractionActionPresentation action in presentation.Actions)
+        foreach (GameplayActionPresentation action in presentation.Actions)
         {
             if (!action.IsAutomatic)
             {

@@ -1,4 +1,5 @@
 using Godot;
+using QuestWorld.GameplayActions;
 using QuestWorld.Interaction.Runtime.Rules;
 
 namespace QuestWorld.Interaction.Examples.Rules;
@@ -16,13 +17,13 @@ public partial class InteractorGroupInteractionRule : InteractionRule
     public string MissingGroupReason { get; set; } = "You cannot use this yet.";
 
     /// <inheritdoc />
-    public override InteractionAvailability Evaluate(in InteractionContext context)
+    public override GameplayActionAvailability Evaluate(in InteractionContext context)
     {
         if (string.IsNullOrEmpty(RequiredGroup) || context.Interactor.IsInGroup(RequiredGroup))
         {
-            return new InteractionAllowed();
+            return new GameplayActionAllowed();
         }
 
-        return new InteractionBlocked(MissingGroupReason);
+        return new GameplayActionBlocked(MissingGroupReason);
     }
 }

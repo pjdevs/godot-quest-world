@@ -491,7 +491,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         }
         else if (reason == GameplayActionAvailabilityExtensions.UnavailableReason)
         {
-            reason = InteractionAvailabilityExtensions.UnavailableReason;
+            reason = "Interaction unavailable.";
         }
 
         Variant interactive = target is null ? default : Variant.From(target);

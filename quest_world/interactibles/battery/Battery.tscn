@@ -6,7 +6,7 @@
 [ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="3_tj8cv"]
 [ext_resource type="Script" uid="uid://cq2b53tun566l" path="res://quest_world/interactibles/battery/TakeBatteryExecutor.cs" id="4_sdpir"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="5_sj1vt"]
-[ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/interaction_plugin/scenes/InteractionActionPrompt.tscn" id="6_4t8iy"]
+[ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="6_4t8iy"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
 size = Vector3(1.5, 0.5, 0.5)

@@ -733,3 +733,13 @@ diagnostic doit suivre la chaîne `Area3D → candidat → LOS → tier → sign
 - La persistance réelle, les intégrations Quest/Dialog/Inventory, les combinateurs de règles, l'occlusion, les widgets 3D cliquables et les transports hors `SceneMultiplayer` restent hors V1.
 - Le Character projet n'a plus de nom d'input codé en dur : il itère `GameplayActionRunner.GetRelevantInputs()` et échantillonne les bindings owned et focalisés. Les noms d'input viennent donc des configurations de binding des scènes, `interact` (touche `E`) étant simplement celui des configurations actuelles.
 - L'addon Character générique reste sous `QuestWorld.Character` et ne référence pas `QuestWorld.Interaction`; seule la sous-classe globale du projet compose les deux systèmes.
+
+## Current presentation boundary
+
+La disponibilité d'une action d'interaction est désormais directement un
+`GameplayActionAvailability` (`GameplayActionAllowed`, `GameplayActionBlocked` ou
+`GameplayActionHidden`) : Interaction ne maintient plus une seconde union ni des conversions.
+`InteractionTargetPresentation.Actions` transporte le read model générique
+`GameplayActionPresentation`, tandis que `InteractionTargetPresentation` reste le seul niveau propre
+à la cible interactive. Le widget d'une action est `IGameplayActionWidget` et son implémentation par
+défaut `GameplayActionPromptWidget` appartient à `gameplay_action_plugin`.
