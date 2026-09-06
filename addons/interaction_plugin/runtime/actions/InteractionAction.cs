@@ -1,4 +1,5 @@
 using Godot;
+using QuestWorld.GameplayActions;
 using QuestWorld.GameplayActions.Runtime.Actions;
 using QuestWorld.Interaction.Runtime.Interactive;
 using QuestWorld.Interaction.Runtime.Rules;
@@ -13,6 +14,15 @@ public partial class InteractionAction : InputGameplayAction
 {
     public static readonly StringName InteractionAccessProviderId = new("interaction");
     public override StringName AccessProviderId => InteractionAccessProviderId;
+
+    [ExportGroup("Execution Availability")]
+    [Export]
+    public GameplayActionUnavailableKind WhenExecutingBySelf { get; set; } =
+        GameplayActionUnavailableKind.Blocked;
+
+    [Export]
+    public GameplayActionUnavailableKind WhenExecutingByOther { get; set; } =
+        GameplayActionUnavailableKind.Blocked;
 
     public InteractiveComponent? Interactive { get; internal set; }
 

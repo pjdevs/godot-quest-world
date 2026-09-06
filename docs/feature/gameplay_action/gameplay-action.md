@@ -136,6 +136,12 @@ Every authoritative running execution creates one local
 visibility policy. Consumers read a snapshot through `GetExecutionPresentations()` or look up one
 action with `TryGetExecutionPresentation()`.
 
+The read model also carries a local `GameplayActionExecutionRelation`: `Observed` for a generic or
+replicated execution, and `RequestedLocally` for a prediction or a requester acknowledgement. This
+is local presentation metadata, not a new network field. When a requester later receives the
+replicated snapshot for the same `ExecutionId`, the presentation store keeps `RequestedLocally`
+instead of downgrading the local knowledge to `Observed`.
+
 `ReportExecutionProgress()` publishes a finite discrete value clamped to `[0, 1]`, or `null` to clear
 generic progress. `SetExecutionProgressSource()` attaches a local callable for derived progress and
 `ClearExecutionProgressSource()` returns to the last transported/published value. Linear samples use
@@ -248,6 +254,12 @@ that prediction with the authoritative execution ID and sample; rejection clears
 also guard `AuthorityOnly` actions, which intentionally expose no requester presentation, against
 duplicate local requests. Terminal reconciliation is correlated by component, ActionId, and
 ExecutionId, so a duplicate or stale terminal ACK cannot close a newer execution.
+
+`GameplayActionExecutionRelation` is deliberately resolved independently on each peer: the requester
+learns `RequestedLocally` through prediction/ACK, while observers and late joiners receive
+`Observed` through replication. `GameplayActionExecutionVisibility` still decides whether an
+observer gets a slot at all; a `RequesterOnly` observer remains optimistic rather than bypassing that
+visibility contract.
 
 The replicated execution codec now uses
 `Array<Dictionary<string, Variant>>` internally. An untyped Godot array exists only for the immediate

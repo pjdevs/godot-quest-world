@@ -63,6 +63,12 @@ public enum GameplayActionExecutionVisibility
     AuthorityOnly,
 }
 
+public enum GameplayActionExecutionRelation
+{
+    Observed,
+    RequestedLocally,
+}
+
 public enum GameplayActionActivationMode
 {
     Press,
@@ -80,7 +86,8 @@ public enum GameplayActionInputRequirement
 public readonly record struct GameplayActionExecutionPresentation(
     ulong ExecutionId,
     StringName ActionId,
-    float? Progress = null
+    float? Progress = null,
+    GameplayActionExecutionRelation Relation = GameplayActionExecutionRelation.Observed
 );
 
 public sealed record GameplayActionExecutionCompleted();

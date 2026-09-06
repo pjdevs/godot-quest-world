@@ -797,6 +797,9 @@ public sealed partial class InteractionNetworkTest
                 )
                 .IsTrue();
             AssertThat(observer.ExecutionId).IsEqual(requester.ExecutionId);
+            AssertThat(requester.Relation)
+                .IsEqual(GameplayActionExecutionRelation.RequestedLocally);
+            AssertThat(observer.Relation).IsEqual(GameplayActionExecutionRelation.Observed);
 
             LatePeer late = await session.JoinLate("ClientC");
             AssertThat(
@@ -807,6 +810,7 @@ public sealed partial class InteractionNetworkTest
                 )
                 .IsTrue();
             AssertThat(joined.ExecutionId).IsEqual(requester.ExecutionId);
+            AssertThat(joined.Relation).IsEqual(GameplayActionExecutionRelation.Observed);
 
             AssertThat(session.Server.Interactive.CompleteExecution(requester.ExecutionId))
                 .IsTrue();

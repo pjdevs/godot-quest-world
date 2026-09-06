@@ -222,6 +222,115 @@ public sealed partial class GameplayActionExecutionTest
     }
 
     [TestCase]
+    public void PredictionIsRequestedLocally()
+    {
+        GameplayActionComponent component = CreateRunningComponent("repair");
+
+        AssertThat(
+                component.AddPendingExecutionPresentation(
+                    new StringName("repair"),
+                    new GameplayActionProgressSample(0.0f, 1.0f, 0L)
+                )
+            )
+            .IsTrue();
+        AssertThat(
+                component.TryGetExecutionPresentation(
+                    new StringName("repair"),
+                    out GameplayActionExecutionPresentation presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.Relation).IsEqual(GameplayActionExecutionRelation.RequestedLocally);
+    }
+
+    [TestCase]
+    public void RequesterAckIsRequestedLocally()
+    {
+        GameplayActionComponent component = CreateRunningComponent("repair");
+
+        AssertThat(
+                component.ConfirmRequesterExecution(new StringName("repair"), 7UL, false, default)
+            )
+            .IsTrue();
+        AssertThat(
+                component.TryGetExecutionPresentation(
+                    new StringName("repair"),
+                    out GameplayActionExecutionPresentation presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.Relation).IsEqual(GameplayActionExecutionRelation.RequestedLocally);
+    }
+
+    [TestCase]
+    public void ReplicatedExecutionIsObserved()
+    {
+        GameplayActionComponent authority = CreateRunningComponent("replicated");
+        authority.ResolveAction("replicated")!.ExecutionVisibility =
+            GameplayActionExecutionVisibility.Replicated;
+        authority.ExecuteAction("replicated", out ulong executionId);
+
+        GameplayActionComponent receiver = CreateRunningComponent("replicated");
+        receiver.ResolveAction("replicated")!.ExecutionVisibility =
+            GameplayActionExecutionVisibility.Replicated;
+        GameplayActionExecutionSynchronizer source = AutoFree(
+            new GameplayActionExecutionSynchronizer { Component = authority }
+        );
+        GameplayActionExecutionSynchronizer destination = AutoFree(
+            new GameplayActionExecutionSynchronizer { Component = receiver }
+        );
+
+        AssertThat(destination.ApplySnapshot(source.CaptureSnapshot())).IsTrue();
+        AssertThat(
+                receiver.TryGetExecutionPresentation(
+                    new StringName("replicated"),
+                    out GameplayActionExecutionPresentation presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.ExecutionId).IsEqual(executionId);
+        AssertThat(presentation.Relation).IsEqual(GameplayActionExecutionRelation.Observed);
+    }
+
+    [TestCase]
+    public void ReplicationDoesNotDowngradeLocalRequester()
+    {
+        GameplayActionComponent authority = CreateRunningComponent("replicated");
+        authority.ResolveAction("replicated")!.ExecutionVisibility =
+            GameplayActionExecutionVisibility.Replicated;
+        authority.ExecuteAction("replicated", out ulong executionId);
+
+        GameplayActionComponent requester = CreateRunningComponent("replicated");
+        requester.ResolveAction("replicated")!.ExecutionVisibility =
+            GameplayActionExecutionVisibility.Replicated;
+        AssertThat(
+                requester.ConfirmRequesterExecution(
+                    new StringName("replicated"),
+                    executionId,
+                    false,
+                    default
+                )
+            )
+            .IsTrue();
+        GameplayActionExecutionSynchronizer source = AutoFree(
+            new GameplayActionExecutionSynchronizer { Component = authority }
+        );
+        GameplayActionExecutionSynchronizer destination = AutoFree(
+            new GameplayActionExecutionSynchronizer { Component = requester }
+        );
+
+        AssertThat(destination.ApplySnapshot(source.CaptureSnapshot())).IsTrue();
+        AssertThat(
+                requester.TryGetExecutionPresentation(
+                    new StringName("replicated"),
+                    out GameplayActionExecutionPresentation presentation
+                )
+            )
+            .IsTrue();
+        AssertThat(presentation.Relation).IsEqual(GameplayActionExecutionRelation.RequestedLocally);
+    }
+
+    [TestCase]
     public void RunningExecutionPublishesClampedDiscreteAndCallableProgress()
     {
         GameplayActionComponent component = CreateRunningComponent("repair");

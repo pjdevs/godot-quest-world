@@ -37,6 +37,9 @@ internal sealed class GameplayActionExecutionPresentationSlot(
 
     public StringName ActionId { get; } = actionId;
 
+    public GameplayActionExecutionRelation Relation { get; set; } =
+        GameplayActionExecutionRelation.Observed;
+
     public GameplayActionExecutionProgressState Progress { get; } = new();
 }
 

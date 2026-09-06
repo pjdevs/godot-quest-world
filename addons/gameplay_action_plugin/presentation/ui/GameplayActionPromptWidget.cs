@@ -29,7 +29,9 @@ public partial class GameplayActionPromptWidget : PanelContainer, IGameplayActio
             ?? "???";
         ActionKeyLabel?.SetText($"{actionKey}");
 
-        if (presentation.IsAllowed)
+        bool requestedLocally =
+            execution?.Relation == GameplayActionExecutionRelation.RequestedLocally;
+        if (presentation.IsAllowed || requestedLocally)
         {
             ActionNameLabel?.SetText($"{presentation.Label}");
             ActionNameLabel?.RemoveThemeColorOverride("font_color");

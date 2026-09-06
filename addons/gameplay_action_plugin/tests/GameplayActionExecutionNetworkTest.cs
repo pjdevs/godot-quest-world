@@ -32,12 +32,28 @@ public sealed partial class GameplayActionExecutionNetworkTest
 
             AssertThat(result is GameplayActionExecutionRunning).IsTrue();
             AssertPresentation(session.Client.Component, executionId);
+            AssertThat(
+                    session.Client.Component.TryGetExecutionPresentation(
+                        RepairAction,
+                        out GameplayActionExecutionPresentation observer
+                    )
+                )
+                .IsTrue();
+            AssertThat(observer.Relation).IsEqual(GameplayActionExecutionRelation.Observed);
             AssertThat(session.Server.Executor.ExecuteCount).IsEqual(1);
             AssertThat(session.Client.Executor.ExecuteCount).IsEqual(0);
 
             PeerScene late = await session.JoinLate("LateClient");
 
             AssertPresentation(late.Component, executionId);
+            AssertThat(
+                    late.Component.TryGetExecutionPresentation(
+                        RepairAction,
+                        out GameplayActionExecutionPresentation joined
+                    )
+                )
+                .IsTrue();
+            AssertThat(joined.Relation).IsEqual(GameplayActionExecutionRelation.Observed);
             AssertThat(late.Executor.ExecuteCount).IsEqual(0);
 
             AssertThat(session.Server.Component.CompleteExecution(executionId)).IsTrue();

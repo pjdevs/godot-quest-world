@@ -10,7 +10,7 @@
 
 **Invariant important:** aucune nouvelle donnée réseau pour la relation. Le requester apprend `RequestedLocally` par prediction/ACK ; la réplication produit `Observed`.
 
-- [ ] **Task 1 — Ajouter `GameplayActionExecutionRelation` au read model d’exécution.** Modifier `addons/gameplay_action_plugin/runtime/GameplayActionTypes.cs`, `runtime/execution/GameplayActionExecutionProgressState.cs` et `GameplayActionExecutionPresentationStore.cs`. Introduire :
+- [x] **Task 1 — Ajouter `GameplayActionExecutionRelation` au read model d’exécution.** Modifier `addons/gameplay_action_plugin/runtime/GameplayActionTypes.cs`, `runtime/execution/GameplayActionExecutionProgressState.cs` et `GameplayActionExecutionPresentationStore.cs`. Introduire :
   ```csharp
   public enum GameplayActionExecutionRelation
   {
@@ -28,20 +28,20 @@
   ```
   Le slot interne conserve cette relation. `AddPrediction()` crée `RequestedLocally`; `ConfirmRequesterExecution()` force/préserve `RequestedLocally`; une exécution découverte par réplication ou exécution générique reste `Observed`. Cas critique : si le requester reçoit ensuite la réplication du **même `ExecutionId`**, ne jamais downgrader `RequestedLocally` vers `Observed`. Ajouter dans `GameplayActionExecutionTest.cs` les tests `PredictionIsRequestedLocally`, `RequesterAckIsRequestedLocally`, `ReplicatedExecutionIsObserved`, `ReplicationDoesNotDowngradeLocalRequester`. Puis compléter `GameplayActionExecutionNetworkTest`/`InteractionNetworkTest` : requester = local, observer et late joiner = observed.
 
-- [ ] **Task 2 — Ajouter les deux outcomes de concurrency sur `InteractionAction`.** Dans `addons/interaction_plugin/runtime/actions/InteractionAction.cs`, ajouter :
+- [x] **Task 2 — Ajouter les deux outcomes de concurrency sur `InteractionAction`.** Dans `addons/interaction_plugin/runtime/actions/InteractionAction.cs`, ajouter :
   ```csharp
   [ExportGroup("Execution Availability")]
   [Export]
-  public InteractionUnavailableKind WhenExecutingBySelf { get; set; } =
-      InteractionUnavailableKind.Blocked;
+  public GameplayActionUnavailableKind WhenExecutingBySelf { get; set; } =
+      GameplayActionUnavailableKind.Blocked;
 
   [Export]
-  public InteractionUnavailableKind WhenExecutingByOther { get; set; } =
-      InteractionUnavailableKind.Blocked;
+  public GameplayActionUnavailableKind WhenExecutingByOther { get; set; } =
+      GameplayActionUnavailableKind.Blocked;
   ```
-  Les defaults `Blocked/Blocked` garantissent **zéro changement de comportement des scènes existantes**. Réutiliser `InteractionUnavailableKind`, pas créer un deuxième enum : il exprime déjà exactement `Hidden | Blocked`. Ajouter un test de configuration/defaults dans `InteractionConfigurationTest`.
+  Les defaults `Blocked/Blocked` garantissent **zéro changement de comportement des scènes existantes**. Réutiliser `GameplayActionUnavailableKind`, pas créer un deuxième enum : le refacto précédent l'a déjà généralisé et il exprime exactement `Hidden | Blocked`. Ajouter un test de configuration/defaults dans `InteractionConfigurationTest`.
 
-- [ ] **Task 3 — Appliquer cette policy dans `InteractiveComponent.EvaluateAvailability()`.** Ne toucher ni aux rules ni à leur ordre. Conserver :
+- [x] **Task 3 — Appliquer cette policy dans `InteractiveComponent.EvaluateAvailability()`.** Ne toucher ni aux rules ni à leur ordre. Conserver :
   ```text
   configuration
   → target/action rules
@@ -49,7 +49,7 @@
   ```
   À l’étape concurrency, remplacer le hardcode `Blocked(SelfReason/OtherReason)` par :
   ```csharp
-  InteractionUnavailableKind kind =
+  GameplayActionUnavailableKind kind =
       startedByInteractor
           ? action.WhenExecutingBySelf
           : action.WhenExecutingByOther;
@@ -67,7 +67,7 @@
   ```
   Sur authority, `startedByInteractor` continue d’être déterminé par l’instigator comme maintenant. Sur client, une exécution visible `RequestedLocally` => self ; `Observed` => other. Si une action est `RequesterOnly`, un observer ne connaît volontairement pas l’exécution et peut rester optimiste jusqu’au refus serveur : **ne pas contourner `ExecutionVisibility` pour ce feature**.
 
-- [ ] **Task 4 — Verrouiller la matrice `Self/Other × Hidden/Blocked`.** Dans `InteractionBehaviorTest.cs`, tester au minimum :
+- [x] **Task 4 — Verrouiller la matrice `Self/Other × Hidden/Blocked`.** Dans `InteractionBehaviorTest.cs`, tester au minimum :
   ```text
   defaults:
       self  → Blocked("This is already in use.")
@@ -90,7 +90,7 @@
   ```
   Ajouter aussi un test où une **rule retourne déjà `Hidden`** alors qu’un sibling du concurrency group tourne : elle doit rester `Hidden`. Ça protège l’invariant existant “rules before concurrency” et empêche cette feature de réintroduire le vieux bug où la concurrency faisait resurfacer une action cachée.
 
-- [ ] **Task 5 — Faire enfin exploiter la relation au widget générique.** Dans `InteractionActionPromptWidget.cs`, ne plus traiter mécaniquement tout `Blocked` en rouge. Le rendu “normal/active” devient :
+- [x] **Task 5 — Faire enfin exploiter la relation au widget générique.** Dans `addons/gameplay_action_plugin/presentation/ui/GameplayActionPromptWidget.cs`, ne plus traiter mécaniquement tout `Blocked` en rouge. Le rendu “normal/active” devient :
   ```csharp
   bool requestedLocally =
       execution?.Relation
@@ -107,7 +107,7 @@
   ```
   **Ne pas** faire `execution != null => normal`, `Progress != null => normal` ou `RequestedLocally => Visible=false`. Hidden reste entièrement géré en amont : `TryGetActionPresentation()` ne produit déjà aucune entrée pour une action hidden. Le widget custom garde évidemment accès à `execution.Relation` pour afficher un spinner, texte “Hacking…”, progression, etc.
 
-- [ ] **Task 6 — Docs + regression finale.** Mettre à jour `docs/feature/gameplay_action/gameplay-action.md` avec la définition locale de `ExecutionRelation`, puis `docs/feature/interaction/interaction.md` avec les deux policies et trois exemples : `Hack = Blocked/Blocked`, `Dialogue = Hidden/Blocked`, action silencieuse = `Hidden/Hidden`. Insister sur :
+- [x] **Task 6 — Docs + regression finale.** Mettre à jour `docs/feature/gameplay_action/gameplay-action.md` avec la définition locale de `ExecutionRelation`, puis `docs/feature/interaction/interaction.md` avec les deux policies et trois exemples : `Hack = Blocked/Blocked`, `Dialogue = Hidden/Blocked`, action silencieuse = `Hidden/Hidden`. Insister sur :
   ```text
   Availability = peut/doit-on proposer l'action à cet interactor ?
   Execution    = qu'est-ce qui tourne ?

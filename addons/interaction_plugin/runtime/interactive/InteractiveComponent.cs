@@ -526,16 +526,38 @@ public partial class InteractiveComponent : Node
         // A reserved group blocks the action for everybody, its own interactor included. Staying
         // allowed for the owner would make a prompt claim an action the target would immediately
         // refuse; blocked keeps the action presented, with the reason, which is what a prompt needs.
-        if (
-            ActionComponent.IsActionExecuting(action.Definition.Id)
-            || ActionComponent.IsConcurrencyGroupExecuting(action.GetHostConcurrencyGroup())
-        )
+        StringName concurrencyGroup = action.GetHostConcurrencyGroup();
+        bool concurrencyActive;
+        bool startedByInteractor;
+        if (ActionComponent.IsAuthoritative)
         {
-            bool startedByInteractor = ActionComponent.IsConcurrencyGroupExecutingFor(
-                action.GetHostConcurrencyGroup(),
-                interactionInstigator
+            concurrencyActive =
+                ActionComponent.IsActionExecuting(action.Definition.Id)
+                || ActionComponent.IsConcurrencyGroupExecuting(concurrencyGroup);
+            startedByInteractor =
+                concurrencyActive
+                && ActionComponent.IsConcurrencyGroupExecutingFor(
+                    concurrencyGroup,
+                    interactionInstigator
+                );
+        }
+        else
+        {
+            concurrencyActive = ActionComponent.TryGetExecutionPresentationInGroup(
+                concurrencyGroup,
+                out GameplayActionExecutionPresentation execution
             );
-            return new GameplayActionBlocked(
+            startedByInteractor =
+                concurrencyActive
+                && execution.Relation == GameplayActionExecutionRelation.RequestedLocally;
+        }
+
+        if (concurrencyActive)
+        {
+            GameplayActionUnavailableKind kind = startedByInteractor
+                ? action.WhenExecutingBySelf
+                : action.WhenExecutingByOther;
+            return kind.ToAvailability(
                 startedByInteractor ? AlreadyRunningReason : SomeoneElseReason
             );
         }

@@ -67,6 +67,7 @@ internal sealed class GameplayActionExecutionPresentationStore(
         }
 
         GameplayActionExecutionPresentationSlot slot = new(0ul, actionId);
+        slot.Relation = GameplayActionExecutionRelation.RequestedLocally;
         slot.Progress.Predict(sample, CurrentTimeSeconds());
         _visible.Add(actionId, slot);
         notifyChanged(actionId);
@@ -93,9 +94,18 @@ internal sealed class GameplayActionExecutionPresentationStore(
 
         if (slot is not null && slot.ExecutionId == executionId)
         {
+            bool relationChanged =
+                slot.Relation != GameplayActionExecutionRelation.RequestedLocally;
+            slot.Relation = GameplayActionExecutionRelation.RequestedLocally;
+            bool progressChanged = false;
             if (hasSample && sample.Revision > slot.Progress.Revision)
             {
-                ApplyRequesterProgress(actionId, executionId, true, sample);
+                progressChanged = ApplyRequesterProgress(actionId, executionId, true, sample);
+            }
+
+            if (relationChanged && !progressChanged)
+            {
+                notifyChanged(actionId);
             }
 
             return true;
@@ -109,6 +119,7 @@ internal sealed class GameplayActionExecutionPresentationStore(
 
         bool structuralChange = slot.ExecutionId != executionId;
         slot.ExecutionId = executionId;
+        slot.Relation = GameplayActionExecutionRelation.RequestedLocally;
         slot.Progress.Confirm(hasSample, sample, CurrentTimeSeconds(), owner, actionId);
         if (structuralChange)
         {
@@ -158,6 +169,24 @@ internal sealed class GameplayActionExecutionPresentationStore(
         {
             if (resolveAction(slot.ActionId)?.GetHostConcurrencyGroup() == group)
             {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public bool TryGetInGroup(
+        StringName group,
+        out GameplayActionExecutionPresentation presentation
+    )
+    {
+        presentation = default;
+        foreach (GameplayActionExecutionPresentationSlot slot in _visible.Values)
+        {
+            if (resolveAction(slot.ActionId)?.GetHostConcurrencyGroup() == group)
+            {
+                presentation = Resolve(slot);
                 return true;
             }
         }
@@ -442,7 +471,8 @@ internal sealed class GameplayActionExecutionPresentationStore(
         new(
             slot.ExecutionId,
             slot.ActionId,
-            slot.Progress.Resolve(owner, slot.ActionId, CurrentTimeSeconds())
+            slot.Progress.Resolve(owner, slot.ActionId, CurrentTimeSeconds()),
+            slot.Relation
         );
 
     private bool TryGetProgressSlot(

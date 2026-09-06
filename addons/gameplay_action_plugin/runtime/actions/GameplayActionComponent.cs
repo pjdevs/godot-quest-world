@@ -88,7 +88,7 @@ public partial class GameplayActionComponent : Node
         );
     }
 
-    private bool IsAuthoritative =>
+    internal bool IsAuthoritative =>
         Multiplayer is null || Multiplayer.MultiplayerPeer is null || Multiplayer.IsServer();
 
     public override void _Ready()
@@ -371,6 +371,11 @@ public partial class GameplayActionComponent : Node
 
     internal bool HasLocalExecutionInGroup(StringName group) =>
         _presentation.HasLocalExecutionInGroup(group);
+
+    internal bool TryGetExecutionPresentationInGroup(
+        StringName group,
+        out GameplayActionExecutionPresentation presentation
+    ) => _presentation.TryGetInGroup(group, out presentation);
 
     public bool ReportExecutionProgress(ulong executionId, float? progress)
     {

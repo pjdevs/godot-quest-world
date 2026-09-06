@@ -533,7 +533,8 @@ visibilité explicite, la réplication des présentations world-observable et le
 - `InteractionActionPresentation` porte uniquement l'identité, le texte, l'input, la disponibilité,
   l'automaticité et le maintien (`HoldProgress` / `HoldElapsed`). Il n'expose plus la capacité timed ni
   la progression d'exécution.
-- `InteractionExecutionPresentation` porte `ExecutionId`, `ActionId` et une progression nullable.
+- `InteractionExecutionPresentation` porte `ExecutionId`, `ActionId`, une progression nullable et
+  la relation locale `Observed | RequestedLocally` avec l'exécution.
   `InteractiveComponent.GetExecutionPresentations()` renvoie un snapshot dans l'ordre des actions et
   `TryGetExecutionPresentation(actionId, out presentation)` permet un accès direct.
 - Toute exécution `Running` de l'autorité et du mode offline alimente un slot local par `ActionId` ; une
@@ -596,6 +597,41 @@ Cette réplication ne transporte que la présentation transitoire. La vérité d
 requester-only car leurs actions sont instantanées et leur état monde est déjà répliqué par Stateful.
 Le Door traite une synchronisation comme une pose silencieuse : il seek l'animation correspondant à
 l'état sans rejouer l'audio one-shot.
+
+### Concurrence : availability, execution et relation locale
+
+Ces trois notions restent séparées :
+
+```text
+Availability = peut/doit-on proposer l'action à cet interactor ?
+Execution    = qu'est-ce qui tourne ?
+Relation     = quelle est ma relation locale avec cette exécution ?
+```
+
+La concurrence arrive après la configuration et les rules (`TargetRules`, puis `Action.Rules`). Une
+rule qui renvoie déjà `Hidden` reste donc cachée, même si un sibling du même groupe tourne. Quand la
+concurrence est atteinte, `InteractionAction` choisit séparément son résultat selon la relation :
+`WhenExecutingBySelf` et `WhenExecutingByOther` réutilisent `GameplayActionUnavailableKind` (`Hidden | Blocked`)
+et valent tous deux `Blocked` par défaut.
+
+Exemples d'authoring :
+
+```text
+Hack       = Blocked / Blocked
+Dialogue   = Hidden  / Blocked
+Silencieuse = Hidden / Hidden
+```
+
+Sur l'autorité, `Self` est déterminé par l'instigator de l'exécution. Sur un client, une entrée du
+presentation store `RequestedLocally` est `Self`, une entrée `Observed` est `Other`. La query parcourt
+le groupe de concurrence, pas seulement le même `ActionId`, afin que `Talk` et `Trade` se bloquent
+selon leurs propres policies lorsqu'ils partagent `npc`. Si une action est `RequesterOnly`, un
+observer ne possède volontairement aucune entrée et peut rester optimiste jusqu'au refus serveur.
+
+Le widget générique garde une disponibilité `Blocked` explicative pour les observations, mais rend
+normalement une action `Blocked` dont la relation est `RequestedLocally`, afin que le requester puisse
+continuer à afficher son action et sa progression. Un widget custom peut lire la relation pour
+afficher « Hacking… », un spinner ou tout autre feedback spécifique.
 
 ## Integration
 

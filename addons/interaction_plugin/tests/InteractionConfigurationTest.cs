@@ -194,6 +194,15 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
+    public void InteractionExecutionAvailabilityDefaultsToBlocked()
+    {
+        InteractionAction action = new();
+
+        AssertThat(action.WhenExecutingBySelf).IsEqual(GameplayActionUnavailableKind.Blocked);
+        AssertThat(action.WhenExecutingByOther).IsEqual(GameplayActionUnavailableKind.Blocked);
+    }
+
+    [TestCase]
     public void ReplicatedActionRequiresAMatchingExecutionSynchronizer()
     {
         InteractiveComponent interactive = NewConfiguredInteractive();

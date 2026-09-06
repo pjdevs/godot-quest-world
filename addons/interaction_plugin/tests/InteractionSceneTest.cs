@@ -177,6 +177,24 @@ public sealed partial class InteractionSceneTest
         );
 
         AssertThat(widget.ActionNameLabel.Text).IsEqual("Open: Locked");
+
+        widget.Bind(
+            new GameplayActionPresentation(
+                "open",
+                "Open",
+                "Open it",
+                "interact",
+                new GameplayActionBlocked("Locked"),
+                GameplayActionActivationMode.Press
+            ),
+            new GameplayActionExecutionPresentation(
+                42,
+                "open",
+                Relation: GameplayActionExecutionRelation.RequestedLocally
+            )
+        );
+
+        AssertThat(widget.ActionNameLabel.Text).IsEqual("Open");
     }
 
     [TestCase]
