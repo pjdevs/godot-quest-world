@@ -438,3 +438,8 @@ Le `GameplayActionRunner` expose aussi `TryGetBindingHoldProgress(bindingId, out
 elapsed)`. La valeur n'existe que pour un binding `Hold` capturé au début du gesture correspondant ;
 elle est normalisée sur son propre threshold. Les bindings ajoutés après le press, retirés pendant le
 gesture, ou configurés en `Press`/`Release` ne produisent pas de progression.
+
+`GameplayActionPresenter` consomme cette même liste de bindings et ne présente que ceux dont le
+`Component` est le `OwnedActionComponent` du runner. Il ignore les actions `Hidden` et `Automatic`,
+conserve les `Blocked`, réconcilie les contrôles par `binding.Id`, et vide sa vue quand le runner n'est
+pas local.

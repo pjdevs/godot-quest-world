@@ -15,7 +15,7 @@
 [ext_resource type="Texture2D" uid="uid://cpfio4ivhoxcy" path="res://icon.svg" id="11_wu3k4"]
 [ext_resource type="Script" uid="uid://b3dfxqn40hwot" path="res://quest_world/interactibles/battery/ItemActionGrant.cs" id="14_wu3k4"]
 [ext_resource type="PackedScene" uid="uid://3hiqhen7i480" path="res://quest_world/interactibles/battery/DropBatteryAction.tscn" id="15_xok31"]
-[ext_resource type="Script" uid="uid://u7x7xha33xn" path="res://quest_world/character/ActionPresenter.cs" id="16_cv4cp"]
+[ext_resource type="Script" uid="uid://u7x7xha33xn" path="res://addons/gameplay_action_plugin/presentation/ui/GameplayActionPresenter.cs" id="16_cv4cp"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="17_xgwmf"]
 
 [sub_resource type="Resource" id="Resource_wu3k4"]
@@ -93,14 +93,14 @@ Inventory = NodePath("../InventoryComponent")
 ActionComponent = NodePath("../GameplayActions")
 metadata/_custom_type_script = "uid://b3dfxqn40hwot"
 
-[node name="ActionPresenter" type="CanvasLayer" parent="." index="12" unique_id=823527363 node_paths=PackedStringArray("ActionRunner", "ActionContainer")]
+[node name="GameplayActionPresenter" type="CanvasLayer" parent="." index="12" unique_id=823527363 node_paths=PackedStringArray("ActionRunner", "ActionContainer")]
 script = ExtResource("16_cv4cp")
 ActionRunner = NodePath("../GameplayActionRunner")
 ActionContainer = NodePath("ActionContainer/ActionList")
 ActionScene = ExtResource("17_xgwmf")
 metadata/_custom_type_script = "uid://u7x7xha33xn"
 
-[node name="ActionContainer" type="MarginContainer" parent="ActionPresenter" index="0" unique_id=1023687990]
+[node name="ActionContainer" type="MarginContainer" parent="GameplayActionPresenter" index="0" unique_id=1023687990]
 anchors_preset = -1
 anchor_left = 0.7
 anchor_top = 0.5
@@ -113,6 +113,6 @@ offset_bottom = 15.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="ActionList" type="VBoxContainer" parent="ActionPresenter/ActionContainer" index="0" unique_id=1807339351]
+[node name="ActionList" type="VBoxContainer" parent="GameplayActionPresenter/ActionContainer" index="0" unique_id=1807339351]
 layout_mode = 2
 alignment = 1

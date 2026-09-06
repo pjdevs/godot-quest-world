@@ -747,3 +747,5 @@ défaut `GameplayActionPromptWidget` appartient à `gameplay_action_plugin`.
 La progression de sélection n'est plus reconstruite par Interaction : chaque action liée lit son
 `binding.Id` via le `GameplayActionRunner`, qui expose `HoldProgress` et `HoldElapsed` sur son propre
 seuil. `InteractionInteractor` ne fournit donc plus de query de gesture ni de seuil agrégé target-level.
+Le presenter générique du gameplay possède la vue des bindings owned ; le presenter Interaction ne
+présente que le target focusé et ses indications, sans classifier les actions par leur type concret.
