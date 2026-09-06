@@ -96,6 +96,30 @@ internal sealed class GameplayActionBindingStore(
         return false;
     }
 
+    public bool TryGet(
+        GameplayActionComponent component,
+        StringName actionId,
+        GodotObject source,
+        out GameplayActionBinding? binding
+    )
+    {
+        foreach (BindingState state in _bindings.Values)
+        {
+            if (
+                state.Binding.Component == component
+                && state.Binding.ActionId == actionId
+                && state.Binding.Source == source
+            )
+            {
+                binding = state.Binding;
+                return true;
+            }
+        }
+
+        binding = null;
+        return false;
+    }
+
     public GameplayActionAvailability GetAvailability(ulong bindingId) =>
         _bindings.TryGetValue(bindingId, out BindingState? state)
             ? state.Availability

@@ -743,3 +743,7 @@ La disponibilité d'une action d'interaction est désormais directement un
 `GameplayActionPresentation`, tandis que `InteractionTargetPresentation` reste le seul niveau propre
 à la cible interactive. Le widget d'une action est `IGameplayActionWidget` et son implémentation par
 défaut `GameplayActionPromptWidget` appartient à `gameplay_action_plugin`.
+
+La progression de sélection n'est plus reconstruite par Interaction : chaque action liée lit son
+`binding.Id` via le `GameplayActionRunner`, qui expose `HoldProgress` et `HoldElapsed` sur son propre
+seuil. `InteractionInteractor` ne fournit donc plus de query de gesture ni de seuil agrégé target-level.

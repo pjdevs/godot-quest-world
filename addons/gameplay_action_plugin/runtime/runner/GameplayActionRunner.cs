@@ -215,6 +215,13 @@ public partial class GameplayActionRunner : Node
 
     public IReadOnlyList<GameplayActionBinding> GetBindings() => _bindings.GetBindings();
 
+    public bool TryGetBinding(
+        GameplayActionComponent component,
+        StringName actionId,
+        GodotObject source,
+        out GameplayActionBinding? binding
+    ) => _bindings.TryGet(component, actionId, source, out binding);
+
     public IReadOnlyList<StringName> GetRelevantInputs()
     {
         _relevantInputs.Clear();
@@ -319,8 +326,8 @@ public partial class GameplayActionRunner : Node
 
     public void AdvanceGestures(float delta) => _gestures.Advance(delta);
 
-    public bool TryGetGestureProgress(out StringName inputActionName, out float progress) =>
-        _gestures.TryGetProgress(out inputActionName, out progress);
+    public bool TryGetBindingHoldProgress(ulong bindingId, out float progress, out float elapsed) =>
+        _gestures.TryGetBindingHoldProgress(bindingId, out progress, out elapsed);
 
     public void ValidateSustainedExecutions() => _requests.ValidateSustainedExecutions();
 

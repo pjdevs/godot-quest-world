@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using QuestWorld.GameplayActions.Runtime.Bindings;
 
@@ -118,23 +119,27 @@ internal sealed class GameplayActionGestureResolver(
         }
     }
 
-    public bool TryGetProgress(out StringName inputActionName, out float progress)
+    public bool TryGetBindingHoldProgress(ulong bindingId, out float progress, out float elapsed)
     {
         foreach (GameplayActionGesturePlan gesture in _gestures.Values)
         {
-            float longestRemainingHold = GetLongestRemainingHold(gesture);
-            if (longestRemainingHold <= 0.0f)
+            if (
+                !gesture.CandidateIds.Contains(bindingId)
+                || !bindings.TryGet(bindingId, out GameplayActionBinding? binding)
+                || binding!.ActivationMode != GameplayActionActivationMode.Hold
+                || binding.HoldDuration <= 0.0f
+            )
             {
                 continue;
             }
 
-            inputActionName = gesture.Input;
-            progress = Mathf.Clamp(gesture.Elapsed / longestRemainingHold, 0.0f, 1.0f);
+            elapsed = gesture.Elapsed;
+            progress = Mathf.Clamp(elapsed / binding.HoldDuration, 0.0f, 1.0f);
             return true;
         }
 
-        inputActionName = new StringName();
         progress = 0.0f;
+        elapsed = 0.0f;
         return false;
     }
 

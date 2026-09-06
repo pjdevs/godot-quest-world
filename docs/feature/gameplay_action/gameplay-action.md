@@ -433,3 +433,8 @@ derived properties; the activation mode remains the source of truth.
 `IGameplayActionWidget` and the default `GameplayActionPromptWidget` live in this addon as well. A
 generic presenter may therefore render actions from any `GameplayActionComponent`; an interaction
 presenter only projects its target-level view and does not define a second availability vocabulary.
+
+Le `GameplayActionRunner` expose aussi `TryGetBindingHoldProgress(bindingId, out progress, out
+elapsed)`. La valeur n'existe que pour un binding `Hold` capturé au début du gesture correspondant ;
+elle est normalisée sur son propre threshold. Les bindings ajoutés après le press, retirés pendant le
+gesture, ou configurés en `Press`/`Release` ne produisent pas de progression.

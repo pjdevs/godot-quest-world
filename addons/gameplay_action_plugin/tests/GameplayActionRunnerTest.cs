@@ -132,6 +132,97 @@ public sealed partial class GameplayActionRunnerTest
     }
 
     [TestCase]
+    public void HoldPresentationUsesEachCapturedBindingThresholdAndInput()
+    {
+        GameplayActionRunner runner = CreateRunnerWithOwnedActions(
+            out GameplayActionComponent component,
+            ("short", new TestGameplayActionExecutor()),
+            ("long", new TestGameplayActionExecutor()),
+            ("other", new TestGameplayActionExecutor())
+        );
+        Node source = AutoFree(new Node());
+        GameplayActionBinding shortBinding = runner.BindAction(
+            component,
+            "short",
+            source,
+            Config("use", GameplayActionActivationMode.Hold, holdDuration: 0.5f)
+        )!;
+        GameplayActionBinding longBinding = runner.BindAction(
+            component,
+            "long",
+            source,
+            Config("use", GameplayActionActivationMode.Hold, holdDuration: 1.0f)
+        )!;
+        GameplayActionBinding otherBinding = runner.BindAction(
+            component,
+            "other",
+            source,
+            Config("other", GameplayActionActivationMode.Hold, holdDuration: 0.75f)
+        )!;
+
+        AssertThat(
+                runner.TryGetBinding(component, "short", source, out GameplayActionBinding? found)
+            )
+            .IsTrue();
+        AssertThat(found!.Id).IsEqual(shortBinding.Id);
+        AssertThat(runner.TryStartActionInput("use")).IsTrue();
+        AssertThat(runner.TryStartActionInput("other")).IsTrue();
+        runner.AdvanceGestures(0.25f);
+
+        AssertHoldProgress(runner, shortBinding.Id, 0.5f, 0.25f);
+        AssertHoldProgress(runner, longBinding.Id, 0.25f, 0.25f);
+        AssertHoldProgress(runner, otherBinding.Id, 1.0f / 3.0f, 0.25f);
+    }
+
+    [TestCase]
+    public void HoldPresentationOnlyReportsBindingsCapturedAtPress()
+    {
+        GameplayActionRunner runner = CreateRunnerWithOwnedActions(
+            out GameplayActionComponent component,
+            ("hold", new TestGameplayActionExecutor()),
+            ("late", new TestGameplayActionExecutor()),
+            ("press", new TestGameplayActionExecutor()),
+            ("release", new TestGameplayActionExecutor())
+        );
+        Node source = AutoFree(new Node());
+        GameplayActionBinding holdBinding = runner.BindAction(
+            component,
+            "hold",
+            source,
+            Config("use", GameplayActionActivationMode.Hold, holdDuration: 1.0f)
+        )!;
+        GameplayActionBinding pressBinding = runner.BindAction(
+            component,
+            "press",
+            source,
+            Config("press", GameplayActionActivationMode.Press)
+        )!;
+        GameplayActionBinding releaseBinding = runner.BindAction(
+            component,
+            "release",
+            source,
+            Config("release", GameplayActionActivationMode.Release)
+        )!;
+
+        AssertThat(runner.TryStartActionInput("use")).IsTrue();
+        GameplayActionBinding lateBinding = runner.BindAction(
+            component,
+            "late",
+            source,
+            Config("use", GameplayActionActivationMode.Hold, holdDuration: 0.1f)
+        )!;
+        runner.AdvanceGestures(0.05f);
+
+        AssertHoldProgress(runner, holdBinding.Id, 0.05f, 0.05f);
+        AssertThat(runner.TryGetBindingHoldProgress(lateBinding.Id, out _, out _)).IsFalse();
+        AssertThat(runner.TryGetBindingHoldProgress(pressBinding.Id, out _, out _)).IsFalse();
+        AssertThat(runner.TryGetBindingHoldProgress(releaseBinding.Id, out _, out _)).IsFalse();
+
+        runner.UnbindAction(holdBinding.Id);
+        AssertThat(runner.TryGetBindingHoldProgress(holdBinding.Id, out _, out _)).IsFalse();
+    }
+
+    [TestCase]
     public void ConflictResolutionPrefersAllowedThenPriorityThenStableHostAndActionIdentity()
     {
         TestGameplayActionExecutor allowedLow = new();
@@ -433,6 +524,21 @@ public sealed partial class GameplayActionRunnerTest
         GameplayActionComponent component,
         string id
     ) => (TestGameplayActionExecutor)component.ResolveAction(new StringName(id))!.Executor!;
+
+    private static void AssertHoldProgress(
+        GameplayActionRunner runner,
+        ulong bindingId,
+        float expectedProgress,
+        float expectedElapsed
+    )
+    {
+        AssertThat(
+                runner.TryGetBindingHoldProgress(bindingId, out float progress, out float elapsed)
+            )
+            .IsTrue();
+        AssertThat(progress).IsEqualApprox(expectedProgress, 0.001f);
+        AssertThat(elapsed).IsEqualApprox(expectedElapsed, 0.001f);
+    }
 
     private sealed partial class MutableRule(GameplayActionAvailability result)
         : QuestWorld.GameplayActions.Runtime.Rules.GameplayActionRule

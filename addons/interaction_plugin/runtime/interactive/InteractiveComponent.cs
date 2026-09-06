@@ -14,47 +14,6 @@ using QuestWorld.Interaction.Runtime.Rules;
 
 namespace QuestWorld.Interaction.Runtime.Interactive;
 
-/// <summary>The hold progression the interactor reports, read once per presentation snapshot.</summary>
-/// <remarks>
-/// The hold is attributed per action rather than per target so a widget never has to filter by action
-/// identifier. It answers a different question from execution presentation: it is a local
-/// <b>selection</b> between actions sharing an input, while execution presentation belongs to the
-/// interactive target.
-/// </remarks>
-/// <param name="HeldInput">Input being held, or null when no hold is in progress.</param>
-/// <param name="HoldElapsed">Seconds that input has been held.</param>
-internal readonly record struct InteractionProgress(StringName? HeldInput, float HoldElapsed)
-{
-    /// <summary>Gets the hold progress one action should show, or null when it shows none.</summary>
-    /// <remarks>
-    /// Normalised on the threshold of <b>that</b> action and not on the longest one of the input, so a
-    /// bar drawn around the key reaches one when the action it belongs to becomes selectable — the
-    /// shorter of two actions sharing an input would otherwise never fill.
-    /// <para>
-    /// An action that asks for no hold never reports progress, whatever the player is holding: it is
-    /// selected by the press or by the release, and a bar filling towards a threshold it does not have
-    /// would promise something else.
-    /// </para>
-    /// </remarks>
-    public float? HoldOf(GameplayActionBindingConfig? config) =>
-        Holds(config) ? Mathf.Clamp(HoldElapsed / config!.HoldDuration, 0.0f, 1.0f) : null;
-
-    /// <summary>Gets the seconds one action has been held for, or null when it is not being held.</summary>
-    /// <remarks>
-    /// The raw duration next to the normalised one, because a widget showing a countdown cannot rebuild
-    /// it: the threshold it would divide by is not part of the presentation.
-    /// </remarks>
-    public float? HoldElapsedOf(GameplayActionBindingConfig? config) =>
-        Holds(config) ? HoldElapsed : null;
-
-    private bool Holds(GameplayActionBindingConfig? config) =>
-        HeldInput is not null
-        && config is not null
-        && config.ActivationMode == GameplayActionActivationMode.Hold
-        && config.HoldDuration > 0.0f
-        && config.InputActionName == HeldInput;
-}
-
 /// <summary>
 /// Defines an interactable target, evaluates its rules, and owns the execution of its actions.
 /// </summary>
@@ -664,44 +623,6 @@ public partial class InteractiveComponent : Node
         return null;
     }
 
-    /// <summary>Gets the longest hold this target asks for on one input.</summary>
-    /// <remarks>
-    /// A pure query used by the local gesture layer to decide whether pressing the input selects an
-    /// action immediately or starts a hold. Hidden actions are ignored, so a threshold that cannot
-    /// currently be reached never makes the player wait for nothing.
-    /// </remarks>
-    /// <param name="interactor">Interactor for which availability is evaluated.</param>
-    /// <param name="inputActionName">Project input action pressed by the player.</param>
-    /// <returns>The highest threshold in seconds, or zero when no action asks for a hold.</returns>
-    public float GetLongestHoldThreshold(
-        InteractionInteractor interactor,
-        StringName inputActionName
-    )
-    {
-        float longest = 0.0f;
-        foreach (InteractionAction action in Actions)
-        {
-            if (
-                action?.DefaultBindingConfig is not GameplayActionBindingConfig config
-                || config.InputActionName != inputActionName
-            )
-            {
-                continue;
-            }
-
-            if (
-                config.ActivationMode == GameplayActionActivationMode.Hold
-                && config.HoldDuration > longest
-                && EvaluateAvailability(interactor, action) is not GameplayActionHidden
-            )
-            {
-                longest = config.HoldDuration;
-            }
-        }
-
-        return longest;
-    }
-
     /// <summary>Builds the local presentation snapshot for prompt or indication widgets.</summary>
     /// <remarks>
     /// One entry is produced per presentable action, in declaration order. Hidden actions are
@@ -715,15 +636,6 @@ public partial class InteractiveComponent : Node
         bool isFocused
     )
     {
-        // Read once for the whole snapshot: the interactor holds one input at a time, and every action
-        // of this target reads the same hold state.
-        InteractionProgress progress = new(
-            interactor.TryGetGestureElapsed(out StringName heldInput, out float holdElapsed)
-                ? heldInput
-                : null,
-            holdElapsed
-        );
-
         List<GameplayActionPresentation> presentedActions = new();
         foreach (InteractionAction action in Actions)
         {
@@ -731,8 +643,7 @@ public partial class InteractiveComponent : Node
                 TryGetActionPresentation(
                     interactor,
                     action,
-                    out GameplayActionPresentation presentation,
-                    progress
+                    out GameplayActionPresentation presentation
                 )
             )
             {
@@ -773,8 +684,7 @@ public partial class InteractiveComponent : Node
     private bool TryGetActionPresentation(
         InteractionInteractor interactor,
         InteractionAction? action,
-        out GameplayActionPresentation presentation,
-        in InteractionProgress progress = default
+        out GameplayActionPresentation presentation
     )
     {
         presentation = default;
@@ -792,6 +702,29 @@ public partial class InteractiveComponent : Node
             return false;
         }
 
+        float? holdProgress = null;
+        float? holdElapsed = null;
+        if (
+            ActionComponent is not null
+            && interactor.Runner is not null
+            && interactor.Runner.TryGetBinding(
+                ActionComponent,
+                action.Definition.Id,
+                this,
+                out GameplayActionBinding? binding
+            )
+            && binding is not null
+            && interactor.Runner.TryGetBindingHoldProgress(
+                binding.Id,
+                out float currentProgress,
+                out float currentElapsed
+            )
+        )
+        {
+            holdProgress = currentProgress;
+            holdElapsed = currentElapsed;
+        }
+
         presentation = new GameplayActionPresentation(
             action.Definition.Id,
             action.Definition.Label,
@@ -799,8 +732,8 @@ public partial class InteractiveComponent : Node
             config.InputActionName,
             availability,
             config.ActivationMode,
-            progress.HoldOf(config),
-            progress.HoldElapsedOf(config)
+            holdProgress,
+            holdElapsed
         );
         return true;
     }

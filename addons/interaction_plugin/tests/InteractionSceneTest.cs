@@ -346,8 +346,11 @@ public sealed partial class InteractionSceneTest
                 presenter.GetChildren().OfType<InteractionPromptWidget>().Single().GetInstanceId()
             )
             .IsEqual(container.GetInstanceId());
-        AssertThat(interactor.TryGetGestureProgress(out _, out float progress)).IsTrue();
-        AssertThat(progress > 0.0f).IsTrue();
+        GameplayActionPresentation heldAction = interactor
+            .GetInteractionPresentation()!
+            .Value.Actions.Single(action => action.IsHoldable);
+        AssertThat(heldAction.HoldProgress.HasValue).IsTrue();
+        AssertThat(heldAction.HoldProgress!.Value > 0.0f).IsTrue();
     }
 
     [TestCase]

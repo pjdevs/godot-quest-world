@@ -112,7 +112,9 @@ Notre modèle générique distinguait précisément ces deux lifecycles. Soit il
 
 - Un binding peut survivre à la suppression de son action avec une availability cachée devenue obsolète. L’exécution est finalement refusée car `ResolveAction()` retourne `null`, mais une UI lisant `GetBindings()` et `GetBindingAvailability()` peut encore montrer l’ancien binding. Pour Battery, l’intégration devra impérativement faire `Unbind`, puis `RemoveAction`, ou le store devrait automatiquement traiter une action disparue comme `Hidden`.
 
-- `TryGetGestureProgress()` ne retourne qu’un geste arbitraire alors que le Runner autorise plusieurs inputs simultanément. C’est acceptable en V1 pour le presenter Interaction, mais à documenter avant un HUD générique.
+- La query de geste générique est maintenant résolue par `binding.Id` : plusieurs inputs et plusieurs
+  thresholds coexistent sans sélection arbitraire, et Interaction ne reconstruit plus l'elapsed depuis
+  un seuil target-level.
 
 - Les adapters Stateful placés dans `gameplay_action_plugin/integration/stateful` font dépendre physiquement l’add-on générique de Stateful, alors que sa documentation affirme le contraire. À terme, je mettrais ces classes dans un petit add-on d’intégration séparé.
 

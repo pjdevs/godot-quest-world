@@ -159,36 +159,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             && Detector?.Detect(interactive) == InteractionDetectionKind.Interactible;
     }
 
-    public bool TryGetGestureProgress(out StringName inputActionName, out float progress)
-    {
-        if (Runner is not null)
-        {
-            return Runner.TryGetGestureProgress(out inputActionName, out progress);
-        }
-
-        inputActionName = new StringName();
-        progress = 0.0f;
-        return false;
-    }
-
-    public bool TryGetGestureElapsed(out StringName inputActionName, out float seconds)
-    {
-        if (
-            Runner is not null
-            && Runner.TryGetGestureProgress(out inputActionName, out float progress)
-        )
-        {
-            seconds =
-                (_focusedInteractive?.GetLongestHoldThreshold(this, inputActionName) ?? 0.0f)
-                * progress;
-            return true;
-        }
-
-        inputActionName = new StringName();
-        seconds = 0.0f;
-        return false;
-    }
-
     internal void NotifyInteractiveRemoved(InteractiveComponent interactive)
     {
         Runner?.UnbindSource(interactive);

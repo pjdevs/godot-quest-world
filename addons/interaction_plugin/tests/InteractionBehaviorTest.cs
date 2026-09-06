@@ -2157,8 +2157,12 @@ public sealed partial class InteractionBehaviorTest
         // Pressing only started the hold: nothing is selected while the threshold is not reached.
         AssertThat(testWorld.Owner.StartCount).IsEqual(0);
         AssertThat(ExecutorOf(force).ExecuteCount).IsEqual(0);
-        AssertThat(testWorld.Interactor.TryGetGestureProgress(out StringName held, out _)).IsTrue();
-        AssertThat(held).IsEqual(InteractInput);
+        GameplayActionPresentation forcePresentation = PresentedAction(
+            testWorld.Interactor.GetInteractionPresentation()!.Value,
+            "force"
+        );
+        AssertThat(forcePresentation.HoldProgress.HasValue).IsTrue();
+        AssertThat(forcePresentation.HoldElapsed.HasValue).IsTrue();
 
         for (int frame = 0; frame < 300 && ExecutorOf(force).ExecuteCount == 0; frame++)
         {
@@ -2167,7 +2171,13 @@ public sealed partial class InteractionBehaviorTest
 
         AssertThat(ExecutorOf(force).ExecuteCount).IsEqual(1);
         AssertThat(testWorld.Owner.StartCount).IsEqual(0);
-        AssertThat(testWorld.Interactor.TryGetGestureProgress(out _, out _)).IsFalse();
+        AssertThat(
+                PresentedAction(
+                    testWorld.Interactor.GetInteractionPresentation()!.Value,
+                    "force"
+                ).HoldProgress.HasValue
+            )
+            .IsFalse();
     }
 
     [TestCase]
