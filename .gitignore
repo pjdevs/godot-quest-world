@@ -6,6 +6,9 @@
 # MacOS
 **/.DS_Store
 
+# Local linked worktrees
+.worktrees/
+
 # VSCode
 .vscode/
 !.vscode/launch.json
