@@ -9,12 +9,16 @@ public enum TimedExecutionStartResult
 {
     /// <summary>The timer started and now owns the execution deadline.</summary>
     Started,
+
     /// <summary>This helper already owns another running execution.</summary>
     AlreadyActive,
+
     /// <summary>The requested duration is not finite and strictly positive.</summary>
     InvalidDuration,
+
     /// <summary>The supplied execution identifier is absent or no longer active.</summary>
     InvalidExecution,
+
     /// <summary>The action component is not attached to an active scene tree.</summary>
     MissingSceneTree,
 }
