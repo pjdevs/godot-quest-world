@@ -1,1 +1,0 @@
-We tried to predict all possible states needed and have strongly typed enum, why not see to handle any state to allow open/closed doors, on/off/submerged/powered rooms etc without the need to map every existing state on the scripted object and support these states natively.

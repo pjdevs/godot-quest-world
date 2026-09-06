@@ -6,9 +6,11 @@ using QuestWorld.GameplayActions.Runtime.Runner;
 
 namespace QuestWorld.GameplayActions.Runtime.Actions;
 
+/// <summary>Authoritative host owning action occurrences, reservations and execution lifecycle.</summary>
 [GlobalClass]
 public partial class GameplayActionComponent : Node
 {
+    /// <summary>Emitted after an accepted execution has entered its started lifecycle.</summary>
     [Signal]
     public delegate void GameplayActionStartedEventHandler(
         long executionId,
@@ -17,6 +19,7 @@ public partial class GameplayActionComponent : Node
         Node? requester
     );
 
+    /// <summary>Emitted after an execution completes and its reservation has been released.</summary>
     [Signal]
     public delegate void GameplayActionCompletedEventHandler(
         long executionId,
@@ -25,6 +28,7 @@ public partial class GameplayActionComponent : Node
         Node? requester
     );
 
+    /// <summary>Emitted after a running execution is cancelled and released.</summary>
     [Signal]
     public delegate void GameplayActionCancelledEventHandler(
         long executionId,
@@ -34,6 +38,7 @@ public partial class GameplayActionComponent : Node
         string reason
     );
 
+    /// <summary>Emitted after an accepted execution fails and is released.</summary>
     [Signal]
     public delegate void GameplayActionFailedEventHandler(
         long executionId,
@@ -43,6 +48,7 @@ public partial class GameplayActionComponent : Node
         string reason
     );
 
+    /// <summary>Emitted when an action request is refused before a started lifecycle exists.</summary>
     [Signal]
     public delegate void GameplayActionRejectedEventHandler(
         long executionId,
@@ -52,12 +58,15 @@ public partial class GameplayActionComponent : Node
         string reason
     );
 
+    /// <summary>Emitted when transient execution presentation for one action changes.</summary>
     [Signal]
     public delegate void ExecutionPresentationChangedEventHandler(StringName actionId);
 
+    /// <summary>Emitted after an action occurrence joins this host's declared action set.</summary>
     [Signal]
     public delegate void GameplayActionAddedEventHandler(GameplayAction action);
 
+    /// <summary>Emitted at logical removal, before any running retirement window finishes.</summary>
     [Signal]
     public delegate void GameplayActionRemovedEventHandler(GameplayAction action);
 
@@ -69,13 +78,18 @@ public partial class GameplayActionComponent : Node
     private readonly HashSet<GameplayAction> _retiringActions = new();
     private ulong _nextExecutionId = 1;
 
+    /// <summary>Gets or sets the ordered action occurrences explicitly owned by this host.</summary>
     [Export]
     public Godot.Collections.Array<GameplayAction> Actions { get; set; } = new();
 
     [ExportGroup("Context")]
+    /// <summary>Gets or sets the gameplay host exposed through execution contexts.</summary>
+    /// <remarks>The component parent is used when null.</remarks>
     [Export]
     public Node? Host { get; set; }
 
+    /// <summary>Gets or sets the gameplay world exposed through execution contexts.</summary>
+    /// <remarks>The current scene is used when null and the component is inside a scene tree.</remarks>
     [Export]
     public Node? World { get; set; }
 
@@ -91,6 +105,7 @@ public partial class GameplayActionComponent : Node
     internal bool IsAuthoritative =>
         Multiplayer is null || Multiplayer.MultiplayerPeer is null || Multiplayer.IsServer();
 
+    /// <summary>Registers the authored direct-child action set when the component enters the tree.</summary>
     public override void _Ready()
     {
         foreach (GameplayAction action in Actions)
@@ -127,11 +142,13 @@ public partial class GameplayActionComponent : Node
         return true;
     }
 
+    /// <summary>Resolves a currently requestable action occurrence by its stable host-local ID.</summary>
     public GameplayAction? ResolveAction(StringName actionId) =>
         actionId is not null && _actionsById.TryGetValue(actionId, out GameplayAction? action)
             ? action
             : null;
 
+    /// <summary>Logically removes an action, retaining a running occurrence until its execution ends.</summary>
     public bool RemoveAction(StringName actionId)
     {
         GameplayAction? action = ResolveAction(actionId);
@@ -157,6 +174,7 @@ public partial class GameplayActionComponent : Node
         return true;
     }
 
+    /// <summary>Evaluates the action's ordered gameplay rules without reserving or executing it.</summary>
     public GameplayActionAvailability EvaluateAction(
         StringName actionId,
         Node? instigator = null,
@@ -259,6 +277,7 @@ public partial class GameplayActionComponent : Node
         return result;
     }
 
+    /// <summary>Gets whether this host currently has an active execution for the supplied action ID.</summary>
     public bool IsActionExecuting(StringName actionId)
     {
         foreach (ActiveExecution execution in _executionsById.Values)
@@ -272,6 +291,7 @@ public partial class GameplayActionComponent : Node
         return false;
     }
 
+    /// <summary>Gets whether any active execution currently reserves the supplied host-local group.</summary>
     public bool IsConcurrencyGroupExecuting(StringName concurrencyGroup)
     {
         foreach (ActiveExecution execution in _executionsById.Values)
@@ -285,6 +305,7 @@ public partial class GameplayActionComponent : Node
         return false;
     }
 
+    /// <summary>Gets whether the supplied execution ID is still actively reserved.</summary>
     public bool IsExecutionActive(ulong executionId) => _executionsById.ContainsKey(executionId);
 
     internal bool TryGetFirstActiveExecution(
@@ -329,6 +350,7 @@ public partial class GameplayActionComponent : Node
         return false;
     }
 
+    /// <summary>Returns a snapshot of all current and retiring execution presentation slots.</summary>
     public IReadOnlyList<GameplayActionExecutionPresentation> GetExecutionPresentations()
     {
         List<GameplayAction> actions = new(_actionsById.Values);
@@ -336,6 +358,7 @@ public partial class GameplayActionComponent : Node
         return _presentation.GetPresentations(actions);
     }
 
+    /// <summary>Looks up transient execution presentation for one action ID.</summary>
     public bool TryGetExecutionPresentation(
         StringName actionId,
         out GameplayActionExecutionPresentation presentation
@@ -377,6 +400,7 @@ public partial class GameplayActionComponent : Node
         out GameplayActionExecutionPresentation presentation
     ) => _presentation.TryGetInGroup(group, out presentation);
 
+    /// <summary>Publishes or clears normalized discrete progress for an active authoritative execution.</summary>
     public bool ReportExecutionProgress(ulong executionId, float? progress)
     {
         if (
@@ -396,9 +420,11 @@ public partial class GameplayActionComponent : Node
         return changed;
     }
 
+    /// <summary>Attaches a local callable used to derive presentation progress for an active execution.</summary>
     public bool SetExecutionProgressSource(ulong executionId, Callable source) =>
         _presentation.SetSource(executionId, source);
 
+    /// <summary>Removes a derived progress source, returning to the last published/transported value.</summary>
     public bool ClearExecutionProgressSource(ulong executionId) =>
         _presentation.ClearSource(executionId);
 
@@ -459,6 +485,7 @@ public partial class GameplayActionComponent : Node
         Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>> entries
     ) => _presentation.ApplyReplicatedEntries(entries);
 
+    /// <summary>Completes an active authoritative execution and releases its reservation.</summary>
     public bool CompleteExecution(ulong executionId)
     {
         ActiveExecution? execution = EndExecutionCore(executionId);
@@ -474,6 +501,7 @@ public partial class GameplayActionComponent : Node
         return true;
     }
 
+    /// <summary>Cancels an active authoritative execution and releases its reservation.</summary>
     public bool CancelExecution(ulong executionId, string reason = "")
     {
         ActiveExecution? execution = EndExecutionCore(executionId);
@@ -489,6 +517,7 @@ public partial class GameplayActionComponent : Node
         return true;
     }
 
+    /// <summary>Fails an active authoritative execution and releases its reservation.</summary>
     public bool FailExecution(ulong executionId, string reason)
     {
         ActiveExecution? execution = EndExecutionCore(executionId);

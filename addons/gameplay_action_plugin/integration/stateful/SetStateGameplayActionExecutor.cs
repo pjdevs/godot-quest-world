@@ -9,12 +9,15 @@ namespace QuestWorld.GameplayActions.Integration.Stateful;
 [GlobalClass]
 public partial class SetStateGameplayActionExecutor : GameplayActionExecutor
 {
+    /// <summary>Gets or sets the authoritative world-state component to mutate.</summary>
     [Export]
     public StatefulComponent? Stateful { get; set; }
 
+    /// <summary>Gets or sets the state applied when the action executes.</summary>
     [Export]
     public StringName TargetState { get; set; } = new(string.Empty);
 
+    /// <summary>Validates the authored Stateful target and target state.</summary>
     public override void _Ready()
     {
         if (Stateful is null)
@@ -37,6 +40,7 @@ public partial class SetStateGameplayActionExecutor : GameplayActionExecutor
         }
     }
 
+    /// <summary>Applies the target state and completes synchronously when the mutation succeeds.</summary>
     public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         if (Stateful is null || TargetState.IsEmpty)

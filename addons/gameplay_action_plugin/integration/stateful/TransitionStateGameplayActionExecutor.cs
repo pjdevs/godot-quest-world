@@ -9,23 +9,30 @@ namespace QuestWorld.GameplayActions.Integration.Stateful;
 [GlobalClass]
 public partial class TransitionStateGameplayActionExecutor : GameplayActionExecutor
 {
+    /// <summary>Gets or sets the authoritative world-state component driven by the execution.</summary>
     [Export]
     public StatefulComponent? Stateful { get; set; }
 
+    /// <summary>Gets or sets the state applied when execution enters its running lifecycle.</summary>
     [Export]
     public StringName RunningState { get; set; } = new(string.Empty);
 
+    /// <summary>Gets or sets the state applied after successful completion.</summary>
     [Export]
     public StringName CompletedState { get; set; } = new(string.Empty);
 
+    /// <summary>Gets or sets the state restored after cancellation or failure.</summary>
     [Export]
     public StringName CancelledState { get; set; } = new(string.Empty);
 
+    /// <summary>Gets or sets whether requester/access loss cancels the running execution.</summary>
     [Export]
     public bool RequiresPresence { get; set; } = true;
 
+    /// <inheritdoc />
     public override bool RequiresRequesterPresence => RequiresPresence;
 
+    /// <summary>Validates the configured Stateful target and transition states.</summary>
     public override void _Ready()
     {
         if (Stateful is null)
@@ -55,6 +62,7 @@ public partial class TransitionStateGameplayActionExecutor : GameplayActionExecu
         }
     }
 
+    /// <summary>Applies the running state and starts the long-running execution lifecycle.</summary>
     public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         if (Stateful is null)
@@ -67,6 +75,7 @@ public partial class TransitionStateGameplayActionExecutor : GameplayActionExecu
             : new GameplayActionExecutionFailed("This cannot start.");
     }
 
+    /// <summary>Returns the running policy after <see cref="RunningState"/> has been applied.</summary>
     protected virtual GameplayActionExecutionResult StartRunning(
         in GameplayActionContext context
     ) => new GameplayActionExecutionRunning();

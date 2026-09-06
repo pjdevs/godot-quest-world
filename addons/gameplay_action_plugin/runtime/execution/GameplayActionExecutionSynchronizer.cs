@@ -3,12 +3,18 @@ using QuestWorld.GameplayActions.Runtime.Actions;
 
 namespace QuestWorld.GameplayActions.Runtime.Execution;
 
+/// <summary>Replicates transient presentation for executions whose visibility is Replicated.</summary>
+/// <remarks>
+/// This node transports execution snapshots only. It does not execute actions, replicate dynamic
+/// action grants, or replace persistent domain state.
+/// </remarks>
 [GlobalClass]
 public partial class GameplayActionExecutionSynchronizer : MultiplayerSynchronizer
 {
     private const string RevisionKey = "revision";
     private const string EntriesKey = "entries";
 
+    /// <summary>Gets or sets the action component whose visible executions are synchronized.</summary>
     [Export]
     public GameplayActionComponent? Component { get; set; }
 
@@ -30,6 +36,7 @@ public partial class GameplayActionExecutionSynchronizer : MultiplayerSynchroniz
     private long _outgoingRevision;
     private long _lastAppliedRevision;
 
+    /// <summary>Creates the code-owned replication configuration for the transient snapshot.</summary>
     public GameplayActionExecutionSynchronizer()
     {
         RootPath = new NodePath(".");
@@ -47,6 +54,7 @@ public partial class GameplayActionExecutionSynchronizer : MultiplayerSynchroniz
     private bool IsAuthoritative =>
         Multiplayer is null || Multiplayer.MultiplayerPeer is null || Multiplayer.IsServer();
 
+    /// <summary>Starts observing the configured component and publishes authority's initial snapshot.</summary>
     public override void _Ready()
     {
         if (Component is null)
@@ -62,6 +70,7 @@ public partial class GameplayActionExecutionSynchronizer : MultiplayerSynchroniz
         }
     }
 
+    /// <summary>Stops observing the configured component.</summary>
     public override void _ExitTree()
     {
         if (Component is not null && IsInstanceValid(Component))
@@ -70,6 +79,7 @@ public partial class GameplayActionExecutionSynchronizer : MultiplayerSynchroniz
         }
     }
 
+    /// <summary>Hides the technical replicated snapshot from the Inspector.</summary>
     public override void _ValidateProperty(Godot.Collections.Dictionary property)
     {
         if (property["name"].AsString() != nameof(ReplicatedSnapshot))

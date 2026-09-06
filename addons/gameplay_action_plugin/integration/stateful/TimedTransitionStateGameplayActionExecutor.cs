@@ -11,12 +11,15 @@ public partial class TimedTransitionStateGameplayActionExecutor
 {
     private readonly TimedExecution _timedExecution = new();
 
+    /// <summary>Gets or sets the default authoritative running duration in seconds.</summary>
     [Export]
     public float Duration { get; set; }
 
+    /// <summary>Gets or sets how often authoritative linear progress corrections are published.</summary>
     [Export]
     public float CorrectionInterval { get; set; } = 0.5f;
 
+    /// <summary>Computes the authoritative duration for one execution.</summary>
     public virtual float ComputeTimedDuration(in GameplayActionContext context) => Duration;
 
     protected override GameplayActionExecutionResult StartRunning(in GameplayActionContext context)

@@ -4,15 +4,22 @@ using QuestWorld.GameplayActions.Runtime.Actions;
 
 namespace QuestWorld.GameplayActions.Runtime.Execution;
 
+/// <summary>Outcome of attempting to attach a <see cref="TimedExecution"/> to a running action.</summary>
 public enum TimedExecutionStartResult
 {
+    /// <summary>The timer started and now owns the execution deadline.</summary>
     Started,
+    /// <summary>This helper already owns another running execution.</summary>
     AlreadyActive,
+    /// <summary>The requested duration is not finite and strictly positive.</summary>
     InvalidDuration,
+    /// <summary>The supplied execution identifier is absent or no longer active.</summary>
     InvalidExecution,
+    /// <summary>The action component is not attached to an active scene tree.</summary>
     MissingSceneTree,
 }
 
+/// <summary>Composable authoritative deadline and linear-progress policy for a running action.</summary>
 public sealed class TimedExecution : IDisposable
 {
     private GameplayActionComponent? _component;
@@ -21,12 +28,16 @@ public sealed class TimedExecution : IDisposable
     private float _correctionInterval;
     private float _nextCorrection;
 
+    /// <summary>Gets whether this helper currently owns a running execution.</summary>
     public bool IsActive { get; private set; }
 
+    /// <summary>Gets the execution currently owned by this helper, or zero when inactive.</summary>
     public ulong ExecutionId { get; private set; }
 
+    /// <summary>Gets the active execution duration in seconds, or zero when inactive.</summary>
     public float Duration { get; private set; }
 
+    /// <summary>Attaches a real-time deadline and sparse linear progress to an active execution.</summary>
     public TimedExecutionStartResult Start(
         GameplayActionComponent component,
         ulong executionId,
@@ -80,11 +91,13 @@ public sealed class TimedExecution : IDisposable
         return TimedExecutionStartResult.Started;
     }
 
+    /// <summary>Stops this timer only when it currently owns the supplied execution.</summary>
     public bool Stop(ulong executionId)
     {
         return ExecutionId == executionId && Stop();
     }
 
+    /// <summary>Stops the active timer and detaches its local progress source.</summary>
     public bool Stop()
     {
         if (!IsActive)
@@ -115,6 +128,7 @@ public sealed class TimedExecution : IDisposable
         return true;
     }
 
+    /// <summary>Gets current normalized progress from the monotonic real-time deadline.</summary>
     public float GetProgress()
     {
         return IsActive && Duration > 0.0f
@@ -122,6 +136,7 @@ public sealed class TimedExecution : IDisposable
             : 0.0f;
     }
 
+    /// <summary>Stops the timer and releases its subscriptions.</summary>
     public void Dispose()
     {
         Stop();

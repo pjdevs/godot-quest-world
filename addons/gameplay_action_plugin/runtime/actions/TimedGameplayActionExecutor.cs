@@ -3,25 +3,31 @@ using QuestWorld.GameplayActions.Runtime.Execution;
 
 namespace QuestWorld.GameplayActions.Runtime.Actions;
 
+/// <summary>Gameplay executor base for authoritative linear-duration executions.</summary>
 [GlobalClass]
 public abstract partial class TimedGameplayActionExecutor : GameplayActionExecutor
 {
+    /// <summary>Gets or sets the default authoritative execution duration in seconds.</summary>
     [Export]
     public float Duration { get; set; }
 
+    /// <summary>Gets or sets how often authoritative linear progress corrections are published.</summary>
     [Export]
     public float CorrectionInterval { get; set; } = 0.5f;
 
     private readonly TimedExecution _timedExecution = new();
 
+    /// <summary>Gets whether this executor currently owns a running timer.</summary>
     protected bool IsTimerActive => _timedExecution.IsActive;
 
+    /// <summary>Computes the authoritative duration for one execution.</summary>
     public virtual float ComputeTimedDuration(in GameplayActionContext context) => Duration;
 
     internal override GameplayActionProgressSample? GetPredictionSample(
         in GameplayActionContext context
     ) => TimedExecution.BuildPredictionSample(ComputeTimedDuration(context));
 
+    /// <summary>Starts the timer and returns a running result, or a failure when it cannot start.</summary>
     protected GameplayActionExecutionResult RunningTimed(in GameplayActionContext context)
     {
         TimedExecutionStartResult startResult = _timedExecution.Start(

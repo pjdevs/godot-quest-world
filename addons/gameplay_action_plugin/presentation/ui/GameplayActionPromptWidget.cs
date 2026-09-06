@@ -7,12 +7,15 @@ namespace QuestWorld.GameplayActions.Presentation.UI;
 /// <summary>Default prompt showing an action input and its allowed or blocked state.</summary>
 public partial class GameplayActionPromptWidget : PanelContainer, IGameplayActionWidget
 {
+    /// <summary>Gets or sets the label displaying the action name and optional refusal reason.</summary>
     [Export]
     public Label? ActionNameLabel { get; set; }
 
+    /// <summary>Gets or sets the label displaying the mapped input event.</summary>
     [Export]
     public Label? ActionKeyLabel { get; set; }
 
+    /// <summary>Gets or sets the optional progress bar used for hold-selection progress.</summary>
     [Export]
     public ProgressBar? ActionProgress { get; set; }
 
