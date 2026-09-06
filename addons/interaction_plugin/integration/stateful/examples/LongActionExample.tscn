@@ -4,16 +4,17 @@
 [ext_resource type="Script" uid="uid://cpbt7qansaxqx" path="res://addons/stateful_plugin/runtime/StatefulComponent.cs" id="3_stateful"]
 [ext_resource type="Resource" path="res://addons/interaction_plugin/integration/stateful/examples/long_action_states.tres" id="3_states"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="4_prompt"]
+[ext_resource type="Script" uid="uid://canmvbkunu40a" path="res://addons/gameplay_action_plugin/runtime/rules/GameplayActionRule.cs" id="5_5prwp"]
 [ext_resource type="PackedScene" uid="uid://mknaynw5h20v" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="5_indicator"]
 [ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_ll77h"]
 [ext_resource type="Script" uid="uid://c2ca7cnp0rpau" path="res://addons/interaction_plugin/examples/rules/InteractorGroupInteractionRule.cs" id="6_ueomp"]
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="7_action"]
 [ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="8_actiondef"]
-[ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="13_binding"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="9_staterule"]
 [ext_resource type="Script" uid="uid://bir8pc65gbklo" path="res://addons/gameplay_action_plugin/integration/stateful/TimedTransitionStateGameplayActionExecutor.cs" id="10_executor"]
 [ext_resource type="Script" uid="uid://bma1jjw2w4xn3" path="res://addons/gameplay_action_plugin/runtime/execution/GameplayActionExecutionSynchronizer.cs" id="11_execution_sync"]
 [ext_resource type="Script" uid="uid://dwmqsp6eyk4gd" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="12_actions"]
+[ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="13_binding"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
 
@@ -26,11 +27,10 @@ radius = 2.0
 [sub_resource type="SphereShape3D" id="SphereShape3D_p8fn5"]
 radius = 10.0
 
-[sub_resource type="Resource" id="Resource_ll77h"]
-script = ExtResource("6_ueomp")
-RequiredGroup = &"Player"
-MissingGroupReason = "Only the player can use this."
-metadata/_custom_type_script = "uid://c2ca7cnp0rpau"
+[sub_resource type="Resource" id="Resource_activate_binding"]
+script = ExtResource("13_binding")
+InputActionName = &"interact"
+InputRequirement = 1
 
 [sub_resource type="Resource" id="Resource_activate_definition"]
 script = ExtResource("8_actiondef")
@@ -38,12 +38,6 @@ Id = &"activate"
 Label = "Activate"
 Description = "Hold to activate."
 metadata/_custom_type_script = "uid://nyac2n1klfrk"
-
-[sub_resource type="Resource" id="Resource_activate_binding"]
-script = ExtResource("13_binding")
-InputActionName = &"interact"
-ActivationMode = 0
-InputRequirement = 1
 
 [sub_resource type="Resource" id="Resource_activate_phase_rule"]
 script = ExtResource("9_staterule")
@@ -60,6 +54,12 @@ ExpectedStates = Array[StringName]([&"idle"])
 MismatchAvailability = 1
 BlockReason = "This is busy."
 metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
+[sub_resource type="Resource" id="Resource_ll77h"]
+script = ExtResource("6_ueomp")
+RequiredGroup = &"Player"
+MissingGroupReason = "Only the player can use this."
+metadata/_custom_type_script = "uid://c2ca7cnp0rpau"
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_state"]
 properties/0/path = NodePath(".:ReplicatedState")
@@ -86,27 +86,28 @@ debug_color = Color(0, 0.56349266, 0.8623485, 0.41960785)
 
 [node name="InteractionAnchor" type="Marker3D" parent="." unique_id=818464048]
 
-[node name="GameplayActions" type="Node" parent="." unique_id=1343342869 node_paths=PackedStringArray("Actions")]
+[node name="GameplayActions" type="Node" parent="." unique_id=1343342869 node_paths=PackedStringArray("Actions", "Host")]
 script = ExtResource("12_actions")
 Actions = [NodePath("ActivateAction")]
+Host = NodePath("..")
 metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
 
-[node name="ActivateAction" type="Node" parent="GameplayActions" node_paths=PackedStringArray("Executor")]
+[node name="ActivateAction" type="Node" parent="GameplayActions" unique_id=843279043 node_paths=PackedStringArray("Executor")]
 script = ExtResource("7_action")
-Definition = SubResource("Resource_activate_definition")
 DefaultBindingConfig = SubResource("Resource_activate_binding")
+Definition = SubResource("Resource_activate_definition")
 Executor = NodePath("ActivateExecutor")
-Rules = Array[ExtResource("5_ll77h")]([SubResource("Resource_activate_phase_rule"), SubResource("Resource_activate_ready_rule")])
+Rules = Array[ExtResource("5_5prwp")]([SubResource("Resource_activate_phase_rule"), SubResource("Resource_activate_ready_rule")])
 ExecutionVisibility = 1
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
-[node name="ActivateExecutor" type="Node" parent="GameplayActions/ActivateAction" node_paths=PackedStringArray("Stateful")]
+[node name="ActivateExecutor" type="Node" parent="GameplayActions/ActivateAction" unique_id=242168115 node_paths=PackedStringArray("Stateful")]
 script = ExtResource("10_executor")
+Duration = 1.5
 Stateful = NodePath("../../../StatefulComponent")
 RunningState = &"activating"
 CompletedState = &"activated"
 CancelledState = &"idle"
-Duration = 1.5
 metadata/_custom_type_script = "uid://bir8pc65gbklo"
 
 [node name="Interactive" type="Node" parent="." unique_id=1343342868 node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "ActionComponent")]
@@ -121,7 +122,7 @@ IndicationScene = ExtResource("5_indicator")
 ActionComponent = NodePath("../GameplayActions")
 TargetRules = Array[ExtResource("5_ll77h")]([SubResource("Resource_ll77h")])
 
-[node name="GameplayActionExecutionSynchronizer" type="MultiplayerSynchronizer" parent="." node_paths=PackedStringArray("Component")]
+[node name="GameplayActionExecutionSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=1639635664 node_paths=PackedStringArray("Component")]
 script = ExtResource("11_execution_sync")
 Component = NodePath("../GameplayActions")
 metadata/_custom_type_script = "uid://bma1jjw2w4xn3"

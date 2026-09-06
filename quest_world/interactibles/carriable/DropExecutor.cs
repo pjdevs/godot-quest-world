@@ -12,10 +12,12 @@ public partial class DropExecutor : GameplayActionExecutor
     {
         IOriented? owner = context.GetInstigator<IOriented>();
         IInventoryOwner? inventoryOwner = context.GetInstigator<IInventoryOwner>();
+        ICarrier? carrier = context.GetInstigator<ICarrier>();
         IWorldSpawner? worldSpawner = context.GetWorld<IWorldSpawner>();
         SpawnDefinition? spawnDefinition = Item?.SpawnDefinition;
         if (
             owner is null
+            || carrier is null
             || inventoryOwner is null
             || worldSpawner is null
             || Item is null
@@ -37,6 +39,8 @@ public partial class DropExecutor : GameplayActionExecutor
             inventoryOwner.Inventory.AddItem(Item.Id);
             return new GameplayActionExecutionFailed("The carriable could not be spawned.");
         }
+
+        carrier.TryDropVisual();
 
         return new GameplayActionExecutionCompleted();
     }

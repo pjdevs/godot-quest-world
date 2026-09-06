@@ -25,8 +25,7 @@ public partial class NetworkSession : Node
 
     public NetworkLaunchOptions? LaunchOptions { get; private set; }
 
-    public bool IsServer =>
-        LaunchOptions?.Mode is NetworkLaunchMode.Server or NetworkLaunchMode.Host;
+    public bool IsServer => LaunchOptions?.Mode is not NetworkLaunchMode.Client;
 
     public bool IsDedicatedServer => LaunchOptions?.Mode == NetworkLaunchMode.Server;
 

@@ -3,11 +3,16 @@ using QuestWorld.GameplayActions.Runtime.Runner;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Inventory;
 
-public partial class Character : QuestWorld.Character.Character, IOriented, IInventoryOwner
+public partial class Character
+    : QuestWorld.Character.Character,
+        IOriented,
+        IInventoryOwner,
+        ICarrier
 {
     private InteractionInteractor _interactionInteractor = null!;
     private GameplayActionRunner _gameplayActionRunner = null!;
     private InventoryComponent _inventory = null!;
+    private CarryVisualComponent _carryVisualComponent = null!;
     private bool _wasPossessed;
 
     public InteractionInteractor InteractionInteractor => _interactionInteractor;
@@ -37,6 +42,13 @@ public partial class Character : QuestWorld.Character.Character, IOriented, IInv
         if (_inventory == null)
         {
             GD.PushError($"{GetPath()}: project Character requires an InventoryComponent child.");
+            return;
+        }
+
+        _carryVisualComponent = GetNodeOrNull<CarryVisualComponent>("CarryVisualComponent")!;
+        if (_carryVisualComponent == null)
+        {
+            GD.PushError($"{GetPath()}: project Character requires a CarryVisualComponent child.");
             return;
         }
 
@@ -102,4 +114,18 @@ public partial class Character : QuestWorld.Character.Character, IOriented, IInv
             ReleaseInteractionInputs();
         }
     }
+
+    #region ICarrier
+    public bool IsCarrying => _carryVisualComponent.IsCarrying;
+
+    public bool TryCarryVisual(StringName ItemId)
+    {
+        return _carryVisualComponent.TryCarryVisual(ItemId);
+    }
+
+    public bool TryDropVisual()
+    {
+        return _carryVisualComponent.TryDropVisual();
+    }
+    #endregion ICarrier
 }

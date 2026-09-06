@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://7osg2ttwtxmc"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
+size = Vector3(1.5, 0.5, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_a6s0s"]
+albedo_color = Color(0.39, 0.39, 0.39, 1)
+
+[node name="BatteryMesh" type="MeshInstance3D" unique_id=1822535720]
+mesh = SubResource("BoxMesh_vq8ek")
+surface_material_override/0 = SubResource("StandardMaterial3D_a6s0s")

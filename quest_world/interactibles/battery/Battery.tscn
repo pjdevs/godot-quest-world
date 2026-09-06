@@ -1,5 +1,6 @@
 [gd_scene format=3 uid="uid://c615ipxd5fba5"]
 
+[ext_resource type="PackedScene" uid="uid://7osg2ttwtxmc" path="res://quest_world/interactibles/battery/BatteryMesh.tscn" id="1_mvphd"]
 [ext_resource type="Script" uid="uid://dwmqsp6eyk4gd" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="1_t2p7y"]
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="2_p1x0o"]
 [ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="3_p1x0o"]
@@ -7,13 +8,7 @@
 [ext_resource type="Script" uid="uid://cvyflkw40bcp7" path="res://quest_world/interactibles/carriable/TakeExecutor.cs" id="4_sdpir"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="5_sj1vt"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="6_4t8iy"]
-[ext_resource type="Resource" path="res://quest_world/interactibles/battery/BatteryItem.tres" id="7_item"]
-
-[sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
-size = Vector3(1.5, 0.5, 0.5)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_a6s0s"]
-albedo_color = Color(0.39, 0.39, 0.39, 1)
+[ext_resource type="Resource" uid="uid://dh5md4bnp2o3x" path="res://quest_world/interactibles/battery/BatteryItem.tres" id="7_item"]
 
 [sub_resource type="Resource" id="Resource_4t8iy"]
 script = ExtResource("3_tj8cv")
@@ -38,13 +33,12 @@ properties/1/replication_mode = 2
 
 [node name="Battery" type="Node3D" unique_id=1538100754]
 
-[node name="BatteryMesh" type="MeshInstance3D" parent="." unique_id=1598544803]
+[node name="BatteryMesh" parent="." unique_id=1822535720 instance=ExtResource("1_mvphd")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
-mesh = SubResource("BoxMesh_vq8ek")
-surface_material_override/0 = SubResource("StandardMaterial3D_a6s0s")
 
-[node name="ActionComponent" type="Node" parent="." unique_id=1703770989]
+[node name="ActionComponent" type="Node" parent="." unique_id=1703770989 node_paths=PackedStringArray("Actions")]
 script = ExtResource("1_t2p7y")
+Actions = [NodePath("TakeAction")]
 metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
 
 [node name="TakeAction" type="Node" parent="ActionComponent" unique_id=1076240554 node_paths=PackedStringArray("Executor")]

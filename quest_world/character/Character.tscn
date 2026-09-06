@@ -10,25 +10,109 @@
 [ext_resource type="Script" uid="uid://cq7x5laa2qc4c" path="res://addons/gameplay_action_plugin/runtime/runner/GameplayActionRunner.cs" id="8_runner"]
 [ext_resource type="Script" uid="uid://v72ge0wsrrkf" path="res://addons/inventory_plugin/runtime/InventoryComponent.cs" id="9_kksnx"]
 [ext_resource type="Script" uid="uid://b6bybu005qipw" path="res://addons/inventory_plugin/runtime/InventoryReplicationSynchronizer.cs" id="10_8y4fs"]
-[ext_resource type="Script" uid="uid://dn35rp4w1f58" path="res://addons/inventory_plugin/runtime/InventoryItemDefinition.cs" id="10_mxxis"]
-[ext_resource type="Script" uid="uid://bigpf5i68whtl" path="res://addons/inventory_plugin/runtime/InventoryCatalog.cs" id="11_e3fll"]
+[ext_resource type="Resource" uid="uid://vqd34pcyut5r" path="res://quest_world/inventory/InventoryCatalog.tres" id="10_xok31"]
 [ext_resource type="Script" uid="uid://b3dfxqn40hwot" path="res://quest_world/interactibles/battery/ItemActionGrant.cs" id="14_wu3k4"]
-[ext_resource type="Resource" path="res://quest_world/interactibles/battery/BatteryItem.tres" id="15_battery_item"]
+[ext_resource type="Script" uid="uid://daxwfb5jn63w3" path="res://quest_world/character/CarryVisualComponent.cs" id="15_xok31"]
 [ext_resource type="Script" uid="uid://u7x7xha33xn" path="res://addons/gameplay_action_plugin/presentation/ui/GameplayActionPresenter.cs" id="16_cv4cp"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="17_xgwmf"]
 
-[sub_resource type="Resource" id="Resource_e3fll"]
-script = ExtResource("11_e3fll")
-Items = Array[ExtResource("10_mxxis")]([ExtResource("15_battery_item")])
-metadata/_custom_type_script = "uid://bigpf5i68whtl"
-
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_mxxis"]
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_xgwmf"]
+properties/0/path = NodePath(".:CarriedItemId")
+properties/0/spawn = true
+properties/0/replication_mode = 2
 
 [node name="Character" unique_id=493885237 instance=ExtResource("1_base")]
 script = ExtResource("2_project_character")
 
 [node name="UALCharacter" parent="Visual" parent_id_path=PackedInt32Array(1801593725) index="0" unique_id=1190744522]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
+
+[node name="GeneralSkeleton" parent="Visual/UALCharacter/Armature" parent_id_path=PackedInt32Array(1190744522, 1290648370) index="0" unique_id=1989870170]
+bones/1/position = Vector3(0, 0.9167, -0.05010003)
+bones/1/rotation = Quaternion(0, 0, 0, 1)
+bones/3/rotation = Quaternion(0, 0, 0, 1)
+bones/4/rotation = Quaternion(0, 0, 0, 1)
+bones/5/rotation = Quaternion(0, 0, 0, 1)
+bones/6/rotation = Quaternion(0, 0, 0, 1)
+bones/7/rotation = Quaternion(0.5, 0.5, 0.5, -0.5)
+bones/8/rotation = Quaternion(0, 1, 0, 0)
+bones/9/rotation = Quaternion(0, -0.70710677, 0, 0.70710677)
+bones/10/rotation = Quaternion(0, 0.70710677, 0, 0.70710677)
+bones/11/rotation = Quaternion(0, 0, 0, 1)
+bones/12/rotation = Quaternion(0, 0, 0, 1)
+bones/13/rotation = Quaternion(0, 0, 0, 1)
+bones/15/rotation = Quaternion(0, 0, 0, 1)
+bones/16/rotation = Quaternion(0, 0, 0, 1)
+bones/17/rotation = Quaternion(0, 0, 0, 1)
+bones/19/rotation = Quaternion(0, 0, 0, 1)
+bones/20/rotation = Quaternion(0, 0, 0, 1)
+bones/21/rotation = Quaternion(0, 0, 0, 1)
+bones/23/rotation = Quaternion(0, 0, 0, 1)
+bones/24/rotation = Quaternion(0, 0, 0, 1)
+bones/25/rotation = Quaternion(0, 0, 0, 1)
+bones/27/rotation = Quaternion(-0.21418673, 0.67388725, 0.21418673, 0.67388725)
+bones/28/rotation = Quaternion(-1.4901163e-08, 0, 0, 1)
+bones/29/rotation = Quaternion(0, 0, 0, 1)
+bones/30/scale = Vector3(1.0003883, 1.0004874, 1.0003407)
+bones/31/rotation = Quaternion(0.5, -0.5, -0.5, -0.5)
+bones/32/rotation = Quaternion(0, 1, 0, 0)
+bones/33/rotation = Quaternion(0, 0.70710677, 0, 0.70710677)
+bones/34/rotation = Quaternion(0, -0.70710677, 0, 0.70710677)
+bones/35/rotation = Quaternion(0, 0, 0, 1)
+bones/36/rotation = Quaternion(0, 0, 0, 1)
+bones/37/rotation = Quaternion(0, 0, 0, 1)
+bones/38/rotation = Quaternion(3.445894e-08, 1, 1.3150528e-08, -8.7456776e-08)
+bones/39/rotation = Quaternion(0, 0, 0, 1)
+bones/40/rotation = Quaternion(0, 0, 0, 1)
+bones/41/rotation = Quaternion(0, 0, 0, 1)
+bones/43/rotation = Quaternion(0, 0, 0, 1)
+bones/44/rotation = Quaternion(0, 0, 0, 1)
+bones/45/rotation = Quaternion(0, 0, 0, 1)
+bones/46/rotation = Quaternion(-0.03375005, 0.9994303, 2.0461025e-08, -8.709147e-08)
+bones/47/rotation = Quaternion(0, 0, 0, 1)
+bones/48/rotation = Quaternion(0, 0, 0, 1)
+bones/49/rotation = Quaternion(0, 0, 0, 1)
+bones/50/rotation = Quaternion(-0.018857807, 0.9998222, 1.4018108e-08, -2.0655627e-07)
+bones/51/rotation = Quaternion(-0.21418673, -0.67388725, -0.21418673, 0.67388725)
+bones/52/rotation = Quaternion(-1.4901163e-08, 0, 0, 1)
+bones/53/rotation = Quaternion(0, 0, 0, 1)
+bones/54/scale = Vector3(1.0003881, 1.0004876, 1.0003407)
+bones/55/rotation = Quaternion(0, 0, 1, 0)
+bones/56/rotation = Quaternion(0, 1, 0, 0)
+bones/57/rotation = Quaternion(0, 0.70710677, -0.70710677, 0)
+bones/58/rotation = Quaternion(0, 1, 0, 0)
+bones/60/rotation = Quaternion(0, 0, 1, 0)
+bones/61/rotation = Quaternion(0, 1, 0, 0)
+bones/62/rotation = Quaternion(0, 0.70710677, -0.70710677, 0)
+bones/63/rotation = Quaternion(0, 1, 0, 0)
+
+[node name="LookPitchModifier" parent="Visual/UALCharacter/Armature/GeneralSkeleton" index="1"]
+unique_name_in_owner = false
+process_mode = 0
+process_priority = 0
+process_physics_priority = 0
+process_thread_group = 0
+physics_interpolation_mode = 0
+auto_translate_mode = 0
+editor_description = ""
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+rotation_edit_mode = 0
+rotation_order = 2
+top_level = false
+visible = true
+visibility_parent = NodePath("")
+active = true
+influence = 1.0
+
+[node name="CarriableAnchorBone" type="BoneAttachment3D" parent="Visual/UALCharacter/Armature/GeneralSkeleton" index="2" unique_id=1589087597]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9167, -0.05010003)
+bone_name = "Hips"
+bone_idx = 1
+
+[node name="CarriableAnchor" type="Node3D" parent="Visual/UALCharacter/Armature/GeneralSkeleton/CarriableAnchorBone" index="0" unique_id=1440440580]
+transform = Transform3D(1.0000001, 0, 1.4901161e-08, -5.5879354e-09, 0.99999994, 0.00078166276, -2.9802322e-08, -0.0007816553, 0.99999976, 0.12686732, -0.037084937, 0.5143815)
 
 [node name="AnimationTree" parent="." index="2" unique_id=825379154]
 root_node = NodePath("../Visual/UALCharacter")
@@ -66,7 +150,7 @@ PromptContainerScene = ExtResource("5_prompt_container")
 
 [node name="InventoryComponent" type="Node" parent="." index="10" unique_id=1665184357]
 script = ExtResource("9_kksnx")
-Catalog = SubResource("Resource_e3fll")
+Catalog = ExtResource("10_xok31")
 metadata/_custom_type_script = "uid://v72ge0wsrrkf"
 
 [node name="InventoryReplicationSynchronizer" type="MultiplayerSynchronizer" parent="InventoryComponent" index="0" unique_id=858490407 node_paths=PackedStringArray("Inventory")]
@@ -105,3 +189,14 @@ grow_vertical = 2
 [node name="ActionList" type="VBoxContainer" parent="GameplayActionPresenter/ActionContainer" index="0" unique_id=1807339351]
 layout_mode = 2
 alignment = 1
+
+[node name="CarryVisualComponent" type="Node" parent="." index="13" unique_id=753076839 node_paths=PackedStringArray("CarriableAnchor")]
+script = ExtResource("15_xok31")
+CarriableAnchor = NodePath("../Visual/UALCharacter/Armature/GeneralSkeleton/CarriableAnchorBone/CarriableAnchor")
+InventoryCatalog = ExtResource("10_xok31")
+metadata/_custom_type_script = "uid://daxwfb5jn63w3"
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="CarryVisualComponent" index="0" unique_id=1461336339]
+replication_config = SubResource("SceneReplicationConfig_xgwmf")
+
+[editable path="Visual/UALCharacter"]

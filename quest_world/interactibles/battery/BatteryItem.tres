@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://by2x2c86ked5e" path="res://quest_world/interactibles/carriable/CarriableItemDefinition.cs" id="1_definition"]
 [ext_resource type="Texture2D" uid="uid://cpfio4ivhoxcy" path="res://icon.svg" id="2_icon"]
+[ext_resource type="PackedScene" uid="uid://7osg2ttwtxmc" path="res://quest_world/interactibles/battery/BatteryMesh.tscn" id="3_76gx6"]
 [ext_resource type="Resource" path="res://quest_world/interactibles/battery/BatterySpawn.tres" id="3_spawn"]
 [ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="4_binding"]
 
@@ -14,6 +15,7 @@ metadata/_custom_type_script = "uid://clv6g48bftyhm"
 script = ExtResource("1_definition")
 SpawnDefinition = ExtResource("3_spawn")
 DropBindingConfig = SubResource("Resource_drop_binding")
+ItemVisualScene = ExtResource("3_76gx6")
 Id = &"battery"
 DisplayName = "Battery"
 Icon = ExtResource("2_icon")

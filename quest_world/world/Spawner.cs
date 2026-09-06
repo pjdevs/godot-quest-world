@@ -71,7 +71,7 @@ public partial class Spawner : MultiplayerSpawner
         {
             spawned.Name = name;
         }
-        spawnRoot.AddChild(spawned);
+        spawnRoot.AddChild(spawned, true);
         spawned.GlobalTransform = transform;
 
         return spawned;
