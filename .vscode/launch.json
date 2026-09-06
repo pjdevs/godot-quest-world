@@ -10,6 +10,9 @@
             "args": [],
             "cwd": "${workspaceFolder}",
             "stopAtEntry": false,
+            "osx": {
+                "program": "/Applications/Godot_mono.app/Contents/MacOS/Godot"
+            }
         }
     ]
 }
