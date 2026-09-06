@@ -13,7 +13,15 @@ public partial class DropExecutor : GameplayActionExecutor
         IOriented? owner = context.GetInstigator<IOriented>();
         IInventoryOwner? inventoryOwner = context.GetInstigator<IInventoryOwner>();
         IWorldSpawner? worldSpawner = context.GetWorld<IWorldSpawner>();
-        if (owner is null || inventoryOwner is null || worldSpawner is null || Item is null)
+        SpawnDefinition? spawnDefinition = Item?.SpawnDefinition;
+        if (
+            owner is null
+            || inventoryOwner is null
+            || worldSpawner is null
+            || Item is null
+            || spawnDefinition is null
+            || spawnDefinition.Id.IsEmpty
+        )
         {
             return new GameplayActionExecutionFailed("Carriable drop context is incomplete.");
         }
@@ -24,7 +32,7 @@ public partial class DropExecutor : GameplayActionExecutor
         }
 
         SpawnRequest request = new(owner.VisualTransform.Translated(owner.ForwardVector * 1.5f));
-        if (!worldSpawner.TrySpawn(Item.GetSpawnDefinitionId(), request, out _))
+        if (!worldSpawner.TrySpawn(spawnDefinition.Id, request, out _))
         {
             inventoryOwner.Inventory.AddItem(Item.Id);
             return new GameplayActionExecutionFailed("The carriable could not be spawned.");

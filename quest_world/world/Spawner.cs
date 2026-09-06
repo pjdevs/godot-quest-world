@@ -4,7 +4,7 @@ using Godot;
 public partial class Spawner : MultiplayerSpawner
 {
     [Export]
-    public StringName Id { get; set; } = new(string.Empty);
+    public SpawnDefinition? Definition { get; set; }
 
     [Export]
     public PackedScene? Scene { get; set; } = null;

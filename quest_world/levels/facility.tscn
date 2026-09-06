@@ -4,8 +4,9 @@
 [ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/NetworkSession.cs" id="4_wtwud"]
 [ext_resource type="PackedScene" uid="uid://bh7me5hps2qp6" path="res://quest_world/character/Character.tscn" id="5_jnsjd"]
 [ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="6_4k80j"]
-[ext_resource type="Script" uid="uid://djq3dj56kwgo0" path="res://quest_world/world/QuestWorldWorld.cs" id="7_world"]
+[ext_resource type="Script" uid="uid://bys1n7v10yfrv" path="res://quest_world/world/World.cs" id="7_world"]
 [ext_resource type="Script" uid="uid://cd6cl8ol07771" path="res://quest_world/world/Spawner.cs" id="8_generic_spawner"]
+[ext_resource type="Resource" path="res://quest_world/character/PlayerSpawn.tres" id="9_player_spawn"]
 
 [sub_resource type="Environment" id="Environment_20rw3"]
 background_mode = 1
@@ -1513,7 +1514,7 @@ font_size = 48
 [node name="PlayerSpawner" type="MultiplayerSpawner" parent="." unique_id=1259490337]
 spawn_path = NodePath("../Players")
 script = ExtResource("8_generic_spawner")
-Id = &"player"
+Definition = ExtResource("9_player_spawn")
 Scene = ExtResource("5_jnsjd")
 
 [node name="NetworkSession" type="Node" parent="." unique_id=1403936845 node_paths=PackedStringArray("LocalPlayerController", "PlayerSpawner")]

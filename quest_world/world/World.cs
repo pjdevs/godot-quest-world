@@ -59,15 +59,19 @@ public partial class World : Node3D, IWorldSpawner
 
         foreach (Spawner spawner in Spawners)
         {
-            if (spawner.Id.IsEmpty)
+            if (spawner.Definition is null || spawner.Definition.Id.IsEmpty)
             {
-                GD.PushError($"{GetPath()}: every authored Spawner requires an Id.");
+                GD.PushError(
+                    $"{GetPath()}: every authored Spawner requires a Definition with an Id."
+                );
                 return false;
             }
 
-            if (!_spawnersById.TryAdd(spawner.Id, spawner))
+            if (!_spawnersById.TryAdd(spawner.Definition.Id, spawner))
             {
-                GD.PushError($"{GetPath()}: Spawner Id '{spawner.Id}' is declared more than once.");
+                GD.PushError(
+                    $"{GetPath()}: SpawnDefinition Id '{spawner.Definition.Id}' is declared more than once."
+                );
                 return false;
             }
         }
