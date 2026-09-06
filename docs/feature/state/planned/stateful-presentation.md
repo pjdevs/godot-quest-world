@@ -1,103 +1,56 @@
-# Stateful Presentation — vérité autoritaire et représentation locale
+# Stateful Presentation — authoritative truth vs local representation
 
-## Statut
+> **Status: planned.** No `StatefulPresentation` runtime model exists today.
 
-**Proposal.** Ce chantier part d'un problème visible dans le multiplayer Interaction — le joueur peut
-présenter immédiatement une exécution, mais le monde attend encore la mutation puis la réplication du
-`StatefulComponent` — et l'extrait volontairement hors d'Interaction.
+## Problem
 
-> Les références Interaction ont été migrées vers le contrat V4. Cette proposition concerne la
-> prédiction des conséquences Stateful ; elle ne remplace ni la présentation d'exécution V4 ni son
-> `InteractionExecutionSynchronizer`.
+`StatefulComponent` deliberately answers one question only:
 
-Le besoin est plus général : un mur de niveau, un ascenseur déclenché par une `Area3D`, une salle qui s'allume ou s'éteint, une alimentation qui bascule, un objet piloté à distance ou n'importe quel script gameplay peuvent connaître localement la représentation attendue avant que la vérité autoritaire correspondante ait atteint ce peer.
+> **What is true in the world?**
 
-Le système proposé appartient donc à [`stateful_plugin`](../../../../addons/stateful_plugin), avec une intégration optionnelle depuis Interaction. La dépendance reste dans le même sens qu'aujourd'hui : Interaction peut connaître Stateful par son bridge ; Stateful ne connaît jamais Interaction.
+That contract works for gameplay, replication and persistence, but multiplayer presentation may know
+what a local intention is expected to do before the corresponding authoritative Stateful mutation has
+replicated back to this peer.
 
-## Problème
-
-[`StatefulComponent`](../stateful.md) a aujourd'hui un contrat volontairement étroit et utile :
-
-> `Stateful.State` répond à « qu'est-ce qui est vrai dans le monde ? ».
-
-En multiplayer, cela implique qu'un client ne voit une transition d'état qu'après :
+Example:
 
 ```text
-intention locale
-  → commande vers le serveur
-  → validation / mutation autoritaire
-  → réplication du Stateful
-  → StateChangedPresentation
-  → réaction visuelle
+local action request
+→ Gameplay Action prediction / requester acknowledgement
+→ server mutates Stateful to raising
+→ Stateful replication arrives
+→ visual starts reacting to raising
 ```
 
-Interaction masque déjà une partie de ce délai pour son propre protocole : une action peut fournir un
-sample initial de présentation, puis le réconcilier avec l'ACK `InteractionStarted`. Cela rend la barre
-immédiate, mais pas les conséquences visibles de l'action.
+Gameplay Action can already present the **execution** immediately (including predicted timing/progress
+and `RequestedLocally | Observed` relation). It does not predict the **world-state consequence** of that
+execution. Those are separate facts and should remain separate.
 
-Exemple : le joueur appuie sur un bouton qui met un mur en `raising`. La barre peut commencer à `t = 0`, alors que l'animation du mur attend encore que le serveur applique `raising` puis que le `MultiplayerSynchronizer` le réplique.
+The same issue also exists without Interaction: an Area trigger, mission script, remote button or level
+system may all mutate one Stateful object.
 
-Le problème n'est pourtant pas propre à une interaction :
+## Central invariant — truth never becomes predictive
 
-- `LeverWall` possède déjà son propre `StatefulComponent` et n'est pas lui-même un `InteractiveComponent` ;
-- un ascenseur peut être déclenché par une simple zone sans aucune interaction explicite ;
-- une salle peut passer `powered` / `unpowered` depuis une logique de level ou de puzzle ;
-- une porte, une lumière, une alarme ou une machine peuvent être pilotées à distance par plusieurs systèmes différents.
-
-Faire de `StatefulComponent` lui-même un état prédictif résoudrait le symptôme au mauvais niveau.
-
-## Invariant central : la vérité ne devient jamais prédictive
-
-`StatefulComponent` ne change pas de sens.
+`StatefulComponent` does not change meaning:
 
 ```text
 Stateful.State
-    = vérité locale autoritaire
-    = valeur répliquée
-    = valeur persistable
-    = valeur lue par le gameplay
+    = authoritative/local replicated truth
+    = gameplay-readable truth
+    = persistable truth
 ```
 
-En particulier, **aucune API `SetPredictedState()` n'est ajoutée à `StatefulComponent`**.
+There is no `SetPredictedState()` on Stateful. Rules, collision, navigation, quests and save logic keep
+reading `Stateful.State` and its existing signals.
 
-Rules, quêtes, save, collision, navigation, réservations et logique gameplay continuent de lire uniquement `Stateful.State` et ses signaux actuels. `SetState()` reste autoritaire.
-
-La prédiction introduit un second read model, exclusivement destiné à ce que ce peer doit présenter :
+Prediction adds a second optional **presentation-only read model**:
 
 ```text
-StatefulComponent
-    « what is true? »
-
-StatefulPresentation
-    « what should this peer currently show? »
+StatefulComponent      “what is true?”
+StatefulPresentation   “what should this peer currently show?”
 ```
 
-Cela conserve la propriété la plus importante du framework Stateful : lire `Stateful.State` ne demande jamais de savoir si une valeur est confirmée, spéculative, locale ou en cours de réconciliation.
-
-## Proposition : `StatefulPresentation`
-
-Ajouter un composant optionnel dans `stateful_plugin` :
-
-```text
-Door / Wall / Room / Elevator
-├── StatefulComponent
-│   └── MultiplayerSynchronizer
-├── StatefulPresentation
-├── Gameplay
-└── VisualPresentation
-```
-
-`StatefulPresentation` référence explicitement un `StatefulComponent` et expose une valeur effective :
-
-```text
-PresentedState = local presentation override ?? Stateful.State
-```
-
-Sans override, il est un simple miroir de la vérité Stateful. Avec un override, il permet à la présentation locale d'anticiper temporairement cette vérité sans la modifier.
-
-### Esquisse d'API
-
-Le nom exact des petits types peut évoluer à l'implémentation, mais le contrat visé est :
+## Proposed primitive
 
 ```csharp
 [GlobalClass]
@@ -114,338 +67,192 @@ public partial class StatefulPresentation : Node
 }
 ```
 
-Un override retourne un **handle/génération**. Seul le handle encore actif peut le retirer. Un callback retardé appartenant à une ancienne intention ne doit jamais rollback une présentation plus récente.
-
-Une seule valeur peut être présentée à la fois, donc le composant n'a pas besoin d'une pile de predictions : un nouvel override remplace le précédent. Le token sert à protéger le lifecycle, pas à empiler plusieurs vérités concurrentes.
-
-Le composant expose aussi un signal de changement de **valeur présentée**, distinct de `Stateful.StateChanged*`. Il doit permettre au consommateur de distinguer au minimum une valeur actuellement issue d'un override local d'une valeur issue du Stateful, et préserver l'information `isSynchronization` quand le changement vient du Stateful. La forme exacte du signal peut rester légère ; le point essentiel est qu'une réconciliation qui ne change pas `PresentedState` ne rejoue pas la transition visuelle.
-
-## Réconciliation
-
-L'override est temporaire et l'autorité gagne toujours.
-
-### Prediction qui se confirme
+Effective value:
 
 ```text
-client                        serveur
-
-State = idle
-Presented = idle
-
-Override(activating)
-Presented = activating
-                              SetState(activating)
-
-< réplication activating
-State = activating
-override supprimé
-Presented = activating
+PresentedState = active local override ?? Stateful.State
 ```
 
-La dernière étape ne change pas la valeur effective. Le composant retire donc l'override **sans émettre une seconde transition `activating → activating`**. Une animation commencée immédiatement ne redémarre pas quand le réseau confirme ce que le joueur voyait déjà.
+A local override is protected by a handle/generation. Only the currently active handle may clear it; a
+late callback from an older request must not roll back newer presentation.
 
-### Prediction refusée
+One Stateful has one effective presented state, so this is not a stack of speculative truths. A new
+override replaces the previous one.
+
+The component also needs a lightweight presented-state change notification carrying enough information
+to distinguish local override from Stateful-originated change and preserve Stateful's
+`isSynchronization` information when relevant.
+
+## Reconciliation
+
+Authority always wins.
+
+### Matching authoritative state
 
 ```text
-State = idle
-Override(activating)
-Presented = activating
+truth      = idle
+presented  = activating   // local override
 
-< refus / failure
-ClearOverride(handle)
-Presented = idle
+replication: truth = activating
+
+truth      = activating
+presented  = activating   // override absorbed silently
 ```
 
-La présentation rollback vers la vérité actuellement connue. `Stateful.State` n'a jamais bougé.
+Removing the matching override must not replay `activating → activating`; a visual started immediately
+should not restart when network truth catches up.
 
-### L'autorité choisit autre chose
-
-N'importe quel vrai changement de `Stateful.State` **supersède l'override local courant**.
+### Refused/abandoned intention
 
 ```text
-State = idle
-Presented = activating   // override local
+truth      = idle
+presented  = activating
 
-< authoritative locked
+clear active handle
 
-State = locked
-Presented = locked
+truth      = idle
+presented  = idle
 ```
 
-Il n'est pas nécessaire que l'état autoritaire reçu soit exactement celui qui avait été anticipé. Cela couvre naturellement un serveur qui refuse implicitement la transition attendue, un autre joueur qui gagne une race, ou une transition intermédiaire que le peer n'a jamais reçue.
+Only presentation rolls back. Authoritative state never moved locally.
 
-Cette règle évite aussi de bloquer un override sur `activating` si la réplication observable saute directement à `activated`.
+### Authority diverges
 
-## Pourquoi un override de présentation, pas un « predicted state »
+Any genuine Stateful change supersedes the active override, even when it is not the predicted value:
 
-L'API générique ne doit pas supposer que l'override est toujours spéculatif.
+```text
+truth      = idle
+presented  = activating
 
-Une intégration peut l'utiliser :
+replication: truth = locked
 
-- **avant** une réponse serveur : représentation réellement prédite ;
-- **après** un ACK autoritaire mais **avant** que la réplication Stateful correspondante arrive : représentation déjà confirmée, seulement en avance sur le canal de réplication ;
-- depuis un système non-Interaction qui possède son propre protocole de prediction/réconciliation.
+truth      = locked
+presented  = locked
+```
 
-`StatefulPresentation` ne décide donc ni pourquoi l'override existe, ni quand il faut le créer. Il fournit uniquement le mécanisme local et la règle de convergence vers `Stateful.State`.
+This covers races, refusals represented as another state and skipped intermediate transitions.
 
-## Frontière simulation / présentation
+## Simulation / presentation boundary
 
-Un consommateur choisit explicitement le niveau qu'il observe.
-
-| Besoin | Source |
+| Consumer | Source |
 | --- | --- |
-| Rules / gameplay / quêtes | `Stateful.State` |
-| Collision / navigation / simulation | `Stateful.State` |
-| Save | `Stateful.State` |
-| Réplication | `Stateful.State` |
-| Mesh, matériau, lumière, son, VFX, UI | `StatefulPresentation.PresentedState` |
-| Feedback local anticipé | `StatefulPresentation.PresentedState` |
+| gameplay rules / quests | `Stateful.State` |
+| collision / navigation / simulation | `Stateful.State` |
+| save / replication | `Stateful.State` |
+| mesh / material / light / VFX / UI | `StatefulPresentation.PresentedState` when opted in |
+| anticipated local feedback | `StatefulPresentation.PresentedState` |
 
-Cela implique une limite volontaire : **on ne prédit pas la physique en faisant de la présentation**.
+This feature does **not** make predicted presentation into predicted physics. If an AnimationPlayer moves
+both a mesh and an authoritative collider, the visual and simulation responsibilities may need to be
+split before the visual side can safely anticipate state.
 
-Le `LeverWall` actuel est un bon cas test. Son `AnimationPlayer` déplace aussi la collision ; il écoute donc volontairement `StateChanged` et doit continuer à faire tourner cette partie autoritairement. Pour obtenir un mouvement visuel immédiat sans déplacer la collision en avance, la géométrie de présentation et la géométrie/collision autoritaire doivent être séparables. `StatefulPresentation` rend cette séparation possible, il ne prétend pas prédire la simulation.
+## Integration with Gameplay Action
 
-Même sans prediction Interaction, le mur peut alors devenir un consommateur normal du système : sa logique/collision observe le Stateful, son rendu observe le StatefulPresentation. Le mur n'a toujours aucune raison d'être interactif lui-même.
+The old proposal assumed Interaction owned its own execution/prediction protocol. That is no longer true:
+request transport, timing prediction, execution relation and terminal acknowledgements now live in
+`GameplayActionRunner` / `GameplayActionComponent`.
 
-## Interaction reste un consommateur optionnel
+Therefore this proposal does **not** predefine an `InteractionActionPrediction` hook.
 
-Le problème initial demande malgré tout un petit point d'extension dans le core Interaction.
+The first integration should be designed only after the Stateful primitive is validated. It must follow
+these constraints:
 
-Aujourd'hui, une `InteractionAction` possède principalement :
+- consequence prediction is optional and local-only;
+- it never changes authoritative execution semantics or completion;
+- it may react to request/start/reject/complete/cancel/fail lifecycle already exposed by Gameplay Action;
+- it must not duplicate authored target states already owned by Stateful gameplay executors;
+- Interaction may adapt the generic mechanism for target actions, but Stateful never depends on
+  Interaction or Gameplay Action.
 
-```text
-InteractionAction
-├── Definition
-├── Executor
-└── Rules
-```
+The existing executors are current architecture, not future work:
 
-La proposition est d'autoriser un comportement local optionnel distinct de l'executor :
+- `SetStateGameplayActionExecutor`;
+- `TransitionStateGameplayActionExecutor`;
+- `TimedTransitionStateGameplayActionExecutor`.
 
-```text
-InteractionAction
-├── Definition
-├── Executor          // authoritative execution semantics + gameplay mutation
-├── Prediction?       // optional owning-client presentation prediction
-└── Rules
-```
+A future adapter should read their semantic state configuration rather than asking the author to enter
+`TargetState`, `RunningState`, `CompletedState` or `CancelledState` twice.
 
-Nom de travail : `InteractionActionPrediction`.
+## Useful non-Interaction cases
 
-Le core Interaction connaît **quand** une intention locale est prédite, acceptée, refusée, complétée ou annulée. Le predictor sait **quel feedback local** produire pour cette action. Le core n'apprend rien sur Stateful, les animations ou les objets du jeu.
+### Remote wall
 
-Une action sans predictor conserve exactement le comportement actuel.
+A button may request an action that eventually mutates a separate wall Stateful. The wall's simulation
+continues to follow `Stateful.State`; its visual may use a local presentation override while authority is
+catching up.
 
-### Deux predictions différentes, à ne pas fusionner
+### Area-triggered elevator
 
-Le mécanisme existant de durée reste séparé :
+A level trigger can use the same primitive without any `InteractionAction`: local presentation begins,
+the trigger's own server protocol validates/mutates Stateful, then authoritative replication absorbs or
+supersedes the override.
 
-```text
-InteractionExecutionPresentation
-    = présentation générique et transitoire du lifecycle de l'interaction
+### Room power presentation
 
-InteractionActionPrediction
-    = prediction optionnelle des conséquences / feedbacks locaux
-```
+Lights/audio may observe one `StatefulPresentation` while puzzle logic and replication continue to use
+the underlying Stateful. Producers do not need to know which visual consumers exist.
 
-La production de progression reste séparée du predictor Stateful. Une exécution temporisée compose
-`TimedExecution`; une exécution générique peut publier une valeur ou brancher une source locale. Le
-predictor peut observer la présentation obtenue, mais il ne définit jamais la terminaison autoritaire.
+## Implementation plan
 
-Le predictor peut recevoir la durée calculée comme donnée read-only s'il veut synchroniser une animation, mais il ne la définit jamais.
+### 1. Implement the Stateful-only primitive
 
-Invariant :
+- explicit `StatefulComponent` reference;
+- `PresentedState` / `HasLocalOverride`;
+- generation-protected local override;
+- stale clear = no-op;
+- Stateful change supersedes override;
+- matching authority reconciliation is silent;
+- validate override values against the assigned schema;
+- no replication, persistence or `_Process` loop of its own.
 
-> Prediction never defines authoritative execution semantics. It may only anticipate them or provide local presentation feedback.
+Minimum tests:
 
-## Intégration `interaction/stateful`
+- mirror with no override;
+- local override and clear rollback;
+- matching authoritative convergence without duplicate presented transition;
+- divergent authority wins;
+- stale handle cannot clear a newer override;
+- invalid schema state is refused;
+- Stateful synchronization metadata propagates correctly when no override masks it.
 
-Le premier consommateur générique du nouveau hook serait une prediction Stateful dans [`addons/interaction_plugin/integration/stateful`](../../../../addons/interaction_plugin/integration/stateful).
+### 2. Validate on a real world object
 
-Elle relie :
+Use a wall/door/room where visual presentation can be distinguished from authoritative simulation. The
+primitive must make no assumption that its owner is interactive.
 
-```text
-Interaction lifecycle
-        ↓
-Stateful interaction prediction
-        ↓
-StatefulPresentation.OverrideState(...)
-        ↓
-local visuals
-```
+### 3. Design the generic action integration from the delivered Gameplay Action lifecycle
 
-Elle ne fait jamais `Stateful.SetState()` côté client.
+Only after the primitive proves useful, define the smallest local consequence-prediction adapter needed
+by the demo. Prefer a generic Gameplay Action seam if both owned actions and Interaction actions need it;
+otherwise keep the adapter in the consuming integration.
 
-### Lifecycle souhaité
+### 4. Add real network-sequence coverage
 
-Pour un `TransitionStateInteractionExecutor` :
+Verify ordering, not only final state:
 
-```text
-local request
-    → override RunningState immédiatement
+1. local presentation may start before Stateful replication returns;
+2. refusal/abandon restores current truth;
+3. matching authority does not restart visual presentation;
+4. divergent authority supersedes prediction;
+5. instantaneous actions can still anticipate visible consequence;
+6. consequence prediction never defines execution completion;
+7. terminal acknowledgement followed by Stateful replication cannot double-play the same transition.
 
-InteractionStarted ACK
-    → conserver l'override si le Stateful n'a pas déjà rattrapé
+## Non-goals
 
-Stateful réplique RunningState
-    → l'override est absorbé sans redémarrer la présentation
+- no FSM or transition graph in Stateful;
+- no client mutation of `Stateful.State`;
+- no generic collision/navigation/physics rollback;
+- no replication or persistence of presentation overrides;
+- no global prediction manager;
+- no new clock synchronization;
+- no coupling from `stateful_plugin` to Gameplay Action or Interaction;
+- no duplicate Interaction execution/prediction protocol.
 
-InteractionCompleted ACK
-    → si nécessaire, présenter CompletedState immédiatement
-       jusqu'à la réplication correspondante
+## Success criterion
 
-InteractionCancelled ACK
-    → même principe avec CancelledState
+Both statements remain true:
 
-Rejected / Failed avant transition autoritaire
-    → clear de l'override possédé par cette prediction
-```
+> **`Stateful.State` is always world truth.**
 
-Pour un `SetStateInteractionExecutor`, l'action peut être instantanée et avoir une durée d'exécution nulle : le predictor reste utile. Il présente `TargetState` dès la requête puis laisse la réplication autoritaire l'absorber.
-
-Cela traite le cas important que la prediction temporelle actuelle ne peut pas traiter : **une action instantanée peut n'avoir aucune barre à prédire mais énormément de feedback monde à rendre immédiat**.
-
-### Pas de duplication des states
-
-L'intégration ne doit pas demander à l'auteur de configurer :
-
-```text
-Executor.TargetState = open
-Prediction.PredictedState = open
-```
-
-ou :
-
-```text
-Executor.RunningState = activating
-Prediction.RunningState = activating
-```
-
-Les states prédits sont les mêmes sémantiques que celles déjà définies par l'executor autoritaire. Le predictor doit donc les lire depuis la configuration de cet executor — directement avec des adapters spécialisés au départ, ou via une petite query commune dans l'intégration si cela devient utile.
-
-Le choix d'API peut attendre l'implémentation ; l'invariant est fixé : **une seule authoring source pour les states de l'exécution**.
-
-## Cas d'usage hors Interaction
-
-### `LeverWall`
-
-Le bouton peut rester l'Interactive et le mur rester un objet Stateful indépendant.
-
-```text
-Button Interaction
-    → prediction locale du StatefulPresentation du mur
-    → serveur SetState(rising)
-    → Stateful du mur se réplique
-    → presentation converge
-```
-
-La logique du mur n'est pas déplacée dans Interaction. Une autre source peut changer exactement le même mur sans passer par le bouton.
-
-### Ascenseur déclenché par une zone
-
-```text
-player local entre dans Area3D
-    → système de trigger local : OverrideState(moving/opening)
-    → commande / validation serveur propre au système de level
-    → serveur SetState(...)
-    → réplication
-```
-
-Aucune `InteractionAction` n'est nécessaire. Le système de trigger utilise directement `StatefulPresentation` comme primitive de feedback local.
-
-### Salle alimentée / désalimentée
-
-Une salle peut posséder :
-
-```text
-Room
-├── StatefulComponent       powered / unpowered / emergency
-├── StatefulPresentation
-├── LightsPresentation
-├── AudioPresentation
-└── RoomGameplay
-```
-
-Le puzzle d'alimentation, une Area, une interaction distante ou un script de mission peuvent tous muter le même Stateful côté autorité. Les lumières et sons n'ont besoin de connaître aucun de ces producteurs : ils observent uniquement la représentation effective.
-
-C'est la séparation recherchée à l'origine par le framework State : l'état du monde existe indépendamment de la manière dont un joueur ou un système le déclenche, tout en restant intégrable facilement partout.
-
-## Plan d'action
-
-### 1. Livrer `StatefulPresentation` dans le core State
-
-- composant optionnel avec référence explicite au `StatefulComponent` ;
-- `PresentedState` et `HasLocalOverride` ;
-- override local protégé par handle/génération ;
-- un nouvel override remplace l'ancien ;
-- clear d'un vieux handle = no-op ;
-- toute vraie transition Stateful supersède l'override courant ;
-- arrivée autoritaire égale à la valeur présentée = réconciliation silencieuse, sans rejouer la transition ;
-- validation de l'override contre le `StateSchema` du Stateful ;
-- aucune réplication, persistence ou boucle `_Process` propre.
-
-Tests minimum : miroir sans override, override local, rollback, réconciliation identique sans double signal, autorité divergente qui gagne, stale handle incapable de rollback une prediction plus récente, state hors schema refusé, late join/synchronization correctement propagé.
-
-### 2. Valider la frontière sur un vrai objet monde
-
-Faire du `LeverWall` le premier cas d'école : distinguer ce qui doit rester piloté par `Stateful.State` parce que cela affecte collision/simulation, et ce qui peut écouter `StatefulPresentation` pour commencer immédiatement côté visuel.
-
-Le but n'est pas forcément de refactorer toute sa géométrie dans la première task, mais de vérifier que l'API ne suppose jamais que son consommateur est un Interactive.
-
-### 3. Ajouter le hook `InteractionActionPrediction`
-
-- optionnel sur `InteractionAction` ;
-- exécuté uniquement pour la prediction locale du peer propriétaire ;
-- lifecycle request / started / rejected-or-failed / completed / cancelled ;
-- aucune mutation gameplay autoritaire ;
-- une action sans predictor reste inchangée ;
-- le predictor peut lire la durée d'exécution calculée, jamais la définir.
-
-La correlation réseau reste celle du protocole Interaction courant ; l'éventuelle introduction future d'un `RequestId` est un chantier indépendant et ne doit pas être cachée dans cette feature.
-
-### 4. Ajouter l'intégration Stateful
-
-Fournir le ou les predictors génériques nécessaires pour `SetStateInteractionExecutor` et `TransitionStateInteractionExecutor`.
-
-Ils :
-
-- ciblent un `StatefulPresentation` ;
-- tirent leurs states depuis l'executor autoritaire sans duplication d'authoring ;
-- ouvrent l'override dès la requête locale ;
-- rollback sur refus/failure ;
-- laissent la réplication Stateful absorber la prediction ;
-- peuvent utiliser les ACK terminales pour présenter immédiatement `CompletedState` / `CancelledState` si le canal Stateful n'a pas encore rattrapé.
-
-### 5. Tester la vraie séquence réseau
-
-Ajouter des tests qui couvrent explicitement l'ordre temporel, pas seulement la valeur finale :
-
-1. le feedback Stateful commence avant l'ACK serveur ;
-2. un refus restaure la vérité autoritaire ;
-3. une confirmation identique ne redémarre pas l'animation / le signal de présentation ;
-4. une valeur autoritaire différente supersède la prediction ;
-5. une action instantanée bénéficie de la prediction même sans progression d'exécution ;
-6. le predictor Stateful ne définit aucune sémantique de terminaison Interaction ;
-7. completion/cancellation ACK puis réplication Stateful ne produit pas de double transition visible.
-
-## Hors périmètre
-
-- aucune FSM ou règle de transition dans Stateful ;
-- aucune mutation client de `Stateful.State` ;
-- aucune prediction générique de collision, navigation ou physique ;
-- aucune réplication de `StatefulPresentation` ;
-- aucune persistence de l'override local ;
-- aucun système global de rollback gameplay ;
-- aucun clock sync supplémentaire ;
-- aucun déplacement de la terminaison autoritaire dans une abstraction de présentation ;
-- aucun couplage de `stateful_plugin` vers `interaction_plugin`.
-
-## Critère de réussite
-
-Le système est réussi si ces deux phrases restent vraies simultanément :
-
-> **`Stateful.State` est toujours la vérité du monde.**
-
-> **Un peer peut présenter immédiatement la conséquence attendue d'une intention locale sans attendre que cette vérité lui revienne par le réseau.**
-
-Interaction devient alors un producteur particulièrement important de cette anticipation, mais seulement un producteur parmi d'autres.
+> **A peer may show the expected local consequence before that truth returns through replication.**

@@ -6,12 +6,15 @@ using QuestWorld.GameplayActions.Runtime.Bindings;
 
 namespace QuestWorld.GameplayActions.Runtime.Runner;
 
+/// <summary>Owns local action bindings, input gestures, request access and requester networking.</summary>
 [GlobalClass]
 public partial class GameplayActionRunner : Node
 {
+    /// <summary>Emitted when this runner submits an action request.</summary>
     [Signal]
     public delegate void GameplayActionRequestedEventHandler(Node component, StringName actionId);
 
+    /// <summary>Emitted when authority refuses this runner's action request.</summary>
     [Signal]
     public delegate void GameplayActionRejectedEventHandler(
         Node component,
@@ -19,6 +22,7 @@ public partial class GameplayActionRunner : Node
         string reason
     );
 
+    /// <summary>Emitted when authority acknowledges that this runner's action started.</summary>
     [Signal]
     public delegate void GameplayActionStartedEventHandler(
         Node component,
@@ -26,6 +30,7 @@ public partial class GameplayActionRunner : Node
         long executionId
     );
 
+    /// <summary>Emitted when requester-visible execution progress changes.</summary>
     [Signal]
     public delegate void GameplayActionProgressedEventHandler(
         Node component,
@@ -33,6 +38,7 @@ public partial class GameplayActionRunner : Node
         long executionId
     );
 
+    /// <summary>Emitted when this runner's requested execution completes.</summary>
     [Signal]
     public delegate void GameplayActionCompletedEventHandler(
         Node component,
@@ -40,6 +46,7 @@ public partial class GameplayActionRunner : Node
         long executionId
     );
 
+    /// <summary>Emitted when this runner's requested execution is cancelled.</summary>
     [Signal]
     public delegate void GameplayActionCancelledEventHandler(
         Node component,
@@ -48,6 +55,7 @@ public partial class GameplayActionRunner : Node
         string reason
     );
 
+    /// <summary>Emitted when this runner's requested execution fails.</summary>
     [Signal]
     public delegate void GameplayActionFailedEventHandler(
         Node component,
@@ -56,6 +64,7 @@ public partial class GameplayActionRunner : Node
         string reason
     );
 
+    /// <summary>Emitted after a cached binding availability has been explicitly re-evaluated.</summary>
     [Signal]
     public delegate void GameplayActionBindingInvalidatedEventHandler(long bindingId);
 
@@ -69,12 +78,15 @@ public partial class GameplayActionRunner : Node
     private bool _hasKnownLocalControl;
     private bool _lastKnownLocalControl;
 
+    /// <summary>Gets or sets the component whose input actions are automatically bound as owned actions.</summary>
     [Export]
     public GameplayActionComponent? OwnedActionComponent { get; set; }
 
+    /// <summary>Gets or sets the gameplay actor attributed to requests; the parent is used when null.</summary>
     [Export]
     public Node? Instigator { get; set; }
 
+    /// <summary>Gets or sets the authoritative peer that owns this runner's RPC endpoints.</summary>
     [ExportGroup("Network")]
     [Export]
     public int ServerPeerId
@@ -87,6 +99,7 @@ public partial class GameplayActionRunner : Node
         }
     }
 
+    /// <summary>Gets or sets the peer allowed to drive local input for this runner.</summary>
     [Export]
     public int OwnerPeerId { get; set; } = 1;
 
@@ -106,6 +119,7 @@ public partial class GameplayActionRunner : Node
 
     internal bool IsAuthoritativeRunner => IsAuthoritative;
 
+    /// <summary>Gets whether this peer is allowed to sample and submit local input for this runner.</summary>
     public bool IsLocallyControlled
     {
         get
@@ -121,6 +135,7 @@ public partial class GameplayActionRunner : Node
         }
     }
 
+    /// <summary>Initializes RPC authority, requester state and automatic owned-action bindings.</summary>
     public override void _Ready()
     {
         ApplyNetworkAuthority();
@@ -183,6 +198,8 @@ public partial class GameplayActionRunner : Node
         BindAction(OwnedActionComponent!, inputAction.Definition.Id, inputAction, config);
     }
 
+    /// <summary>Creates one runner-local binding to an action still owned by its component.</summary>
+    /// <returns>The created binding, or null when the binding configuration is invalid.</returns>
     public GameplayActionBinding? BindAction(
         GameplayActionComponent component,
         StringName actionId,
@@ -209,12 +226,16 @@ public partial class GameplayActionRunner : Node
         return binding;
     }
 
+    /// <summary>Removes one local binding by its runner-local identifier.</summary>
     public bool UnbindAction(ulong bindingId) => _bindings.Remove(bindingId);
 
+    /// <summary>Removes every local binding owned by the supplied cleanup source.</summary>
     public int UnbindSource(GodotObject source) => _bindings.RemoveSource(source);
 
+    /// <summary>Returns a snapshot of all bindings currently owned by this runner.</summary>
     public IReadOnlyList<GameplayActionBinding> GetBindings() => _bindings.GetBindings();
 
+    /// <summary>Finds the binding matching one component/action/source tuple.</summary>
     public bool TryGetBinding(
         GameplayActionComponent component,
         StringName actionId,
@@ -222,6 +243,8 @@ public partial class GameplayActionRunner : Node
         out GameplayActionBinding? binding
     ) => _bindings.TryGet(component, actionId, source, out binding);
 
+    /// <summary>Returns Input Map actions the locally controlled game loop should currently sample.</summary>
+    /// <remarks>Automatic bindings are excluded; consumed/sustained inputs remain until released.</remarks>
     public IReadOnlyList<StringName> GetRelevantInputs()
     {
         _relevantInputs.Clear();
@@ -258,9 +281,11 @@ public partial class GameplayActionRunner : Node
         }
     }
 
+    /// <summary>Gets the last cached availability for one binding.</summary>
     public GameplayActionAvailability GetBindingAvailability(ulong bindingId) =>
         _bindings.GetAvailability(bindingId);
 
+    /// <summary>Re-evaluates one binding and triggers an automatic edge when it becomes eligible.</summary>
     public void InvalidateBinding(ulong bindingId)
     {
         bool exists = _bindings.TryGet(bindingId, out _);
@@ -275,6 +300,7 @@ public partial class GameplayActionRunner : Node
         RequestAutomaticEdges(automaticEdges);
     }
 
+    /// <summary>Re-evaluates every binding created by one cleanup/invalidation source.</summary>
     public void InvalidateSource(GodotObject source)
     {
         List<ulong> affected = FindBindingIds(binding => binding.Source == source);
@@ -285,6 +311,7 @@ public partial class GameplayActionRunner : Node
         RequestAutomaticEdges(automaticEdges);
     }
 
+    /// <summary>Re-evaluates every binding referring to one action occurrence identity.</summary>
     public void InvalidateAction(GameplayActionComponent component, StringName actionId)
     {
         List<ulong> affected = FindBindingIds(binding =>
@@ -298,6 +325,7 @@ public partial class GameplayActionRunner : Node
         RequestAutomaticEdges(automaticEdges);
     }
 
+    /// <summary>Registers the domain adapter used to validate externally owned actions with this ID.</summary>
     public void RegisterAccessProvider(
         StringName providerId,
         IGameplayActionAccessProvider provider
@@ -311,6 +339,7 @@ public partial class GameplayActionRunner : Node
         _accessProviders[providerId] = provider;
     }
 
+    /// <summary>Removes an access provider only when the same instance is still registered.</summary>
     public bool UnregisterAccessProvider(
         StringName providerId,
         IGameplayActionAccessProvider provider
@@ -319,18 +348,24 @@ public partial class GameplayActionRunner : Node
         && registered == provider
         && _accessProviders.Remove(providerId);
 
+    /// <summary>Feeds one input press edge into the local gesture resolver.</summary>
     public bool TryStartActionInput(StringName inputActionName) =>
         _gestures.TryStart(inputActionName);
 
+    /// <summary>Feeds one input release edge into the local gesture/sustained-request resolver.</summary>
     public bool TryEndActionInput(StringName inputActionName) => _gestures.TryEnd(inputActionName);
 
+    /// <summary>Advances active local hold gestures by the supplied delta in seconds.</summary>
     public void AdvanceGestures(float delta) => _gestures.Advance(delta);
 
+    /// <summary>Gets local hold-selection progress for a binding captured by an active gesture.</summary>
     public bool TryGetBindingHoldProgress(ulong bindingId, out float progress, out float elapsed) =>
         _gestures.TryGetBindingHoldProgress(bindingId, out progress, out elapsed);
 
+    /// <summary>On authority, cancels requested executions whose sustained access has been lost.</summary>
     public void ValidateSustainedExecutions() => _requests.ValidateSustainedExecutions();
 
+    /// <summary>Advances local gestures and authority-side sustained access validation.</summary>
     public override void _Process(double delta)
     {
         AdvanceGestures((float)delta);
@@ -340,6 +375,7 @@ public partial class GameplayActionRunner : Node
         }
     }
 
+    /// <summary>Releases requester state and subscriptions when the runner leaves the tree.</summary>
     public override void _ExitTree()
     {
         _requests.Exit();
@@ -443,6 +479,7 @@ public partial class GameplayActionRunner : Node
         return _requests.TryRequestBinding(matching[0].Binding);
     }
 
+    /// <summary>Reliable server RPC endpoint used by local request transport to start an action.</summary>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,
         CallLocal = false,
@@ -451,6 +488,7 @@ public partial class GameplayActionRunner : Node
     public void ServerTryStartAction(NodePath componentPath, StringName actionId) =>
         _requests.ServerTryStartAction(componentPath, actionId);
 
+    /// <summary>Reliable server RPC endpoint used by requester input release/cancellation.</summary>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,
         CallLocal = false,
@@ -459,6 +497,7 @@ public partial class GameplayActionRunner : Node
     public void ServerTryCancelAction(NodePath componentPath, StringName actionId) =>
         _requests.ServerTryCancelAction(componentPath, actionId);
 
+    /// <summary>Authority RPC endpoint reconciling a refused local request.</summary>
     [Rpc(
         MultiplayerApi.RpcMode.Authority,
         CallLocal = false,
@@ -467,6 +506,7 @@ public partial class GameplayActionRunner : Node
     public void ClientActionRejected(NodePath componentPath, StringName actionId, string reason) =>
         _requests.ClientActionRejected(componentPath, actionId, reason);
 
+    /// <summary>Authority RPC endpoint confirming the execution ID and optional progress sample.</summary>
     [Rpc(
         MultiplayerApi.RpcMode.Authority,
         CallLocal = false,
@@ -493,6 +533,7 @@ public partial class GameplayActionRunner : Node
             revision
         );
 
+    /// <summary>Authority RPC endpoint applying a requester-only progress correction.</summary>
     [Rpc(
         MultiplayerApi.RpcMode.Authority,
         CallLocal = false,
@@ -517,6 +558,7 @@ public partial class GameplayActionRunner : Node
             revision
         );
 
+    /// <summary>Authority RPC endpoint reconciling successful terminal completion.</summary>
     [Rpc(
         MultiplayerApi.RpcMode.Authority,
         CallLocal = false,
@@ -528,6 +570,7 @@ public partial class GameplayActionRunner : Node
         long executionId
     ) => _requests.ClientActionCompleted(componentPath, actionId, executionId);
 
+    /// <summary>Authority RPC endpoint reconciling terminal cancellation.</summary>
     [Rpc(
         MultiplayerApi.RpcMode.Authority,
         CallLocal = false,
@@ -540,6 +583,7 @@ public partial class GameplayActionRunner : Node
         string reason
     ) => _requests.ClientActionCancelled(componentPath, actionId, executionId, reason);
 
+    /// <summary>Authority RPC endpoint reconciling terminal failure.</summary>
     [Rpc(
         MultiplayerApi.RpcMode.Authority,
         CallLocal = false,

@@ -2,116 +2,153 @@
 
 ## Purpose
 
-The reusable Godot 4.7 C# `CharacterBody3D` lives in the `dummy_character_plugin` addon under the `QuestWorld.Character` namespace. It provides camera-relative movement, FPS/TPS views, eight-direction locomotion, sprint, jump/fall/landing, turn-in-place, upper-body pitch and procedural camera effects.
+The reusable Godot 4.7 C# `CharacterBody3D` lives in `addons/dummy_character_plugin` under
+`QuestWorld.Character`. It provides camera-relative movement, FPS/TPS views, directional locomotion,
+sprint, jump/fall/landing, turn-in-place, upper-body pitch and procedural camera effects.
 
-The game keeps a global `Character` subclass at [`quest_world/character/Character.cs`](../../quest_world/character/Character.cs). Its scene composes the generic addon scene with the project's `InteractionInteractor` and `InteractionPresenter`, so the addon remains reusable without an interaction dependency.
+The game keeps a project `Character` subclass in `quest_world/character/Character.cs`. That subclass
+composes Inventory, Gameplay Action and Interaction around the generic character instead of making the
+addon depend on those systems.
 
 ## Architecture
 
-The root is an ordered motor/orchestrator surrounded by focused components:
+The reusable character is an orchestration facade around focused components:
 
 ```text
-QuestWorld.Character.CharacterPlayerController
-        |
-        v
-CharacterInputFrame (raw local input, one physics sample)
-        |
-        v
-CharacterSimulationInput (camera-independent command)
-        |
-        v
-QuestWorld.Character.Character / Simulate (orchestration facade)
-        |
-        v
-QuestWorld.Character.CharacterMovement / Simulate (motor + MoveAndSlide)
-        |
-        v
-CharacterFrameState (immutable post-move snapshot)
-        |-----------------------------|
-        v                             v
-CharacterAnimationController   CharacterCameraEffects
-
-`QuestWorld.Character.CharacterCameraRig` applies look/view configuration from the same input frame.
-`QuestWorld.Character.CharacterLookPitchModifier` remains a post-animation skeleton modifier.
-
-`Character` owns the current view mode, while `CharacterCameraRig` owns the serialized camera configuration: first-person offset, third-person distance, mouse sensitivity and pitch limits. `Character` resolves and orchestrates the rig without duplicating its settings.
-
-The global project `Character` subclass hosts `GameplayActionRunner`, `InteractionInteractor` and
-`InteractionPresenter`. The runner is the single input-loop boundary: the subclass samples the
-runner's relevant inputs and forwards press/release directly to it. A press refreshes Interaction's
-focus bindings first, but the runner remains usable for owned actions when no interactive is focused.
-
-`GameplayActionPresenter` is composed beside the interaction presenter. It consumes only bindings
-whose component is the runner's `OwnedActionComponent`, so inventory-granted actions such as `Drop
-Battery` use the generic action widget while focused `InteractionAction` bindings remain in the target
-prompt.
+CharacterPlayerController
+        ↓
+CharacterInputFrame              # one raw local input sample
+        ↓
+CharacterSimulationInput         # camera-independent simulation command
+        ↓
+Character / Simulate             # composition/orchestration boundary
+        ↓
+CharacterMovement / Simulate     # movement motor + MoveAndSlide
+        ↓
+CharacterFrameState              # immutable post-move snapshot
+        ├──────────────→ CharacterAnimationController
+        └──────────────→ CharacterCameraEffects
 ```
 
-The components are:
+`CharacterCameraRig` owns camera configuration and view transforms. `CharacterLookPitchModifier` remains
+a post-animation skeleton modifier.
 
-- `addons/dummy_character_plugin/scripts/Character.cs`: Godot composition root and orchestration facade. It resolves scene nodes, owns the exported character configuration, adapts camera/input state and applies presentation. Its public `Simulate` method remains as the stable entry point.
-- `addons/dummy_character_plugin/scripts/CharacterMovement.cs`: plain C# movement motor. It owns deterministic movement state, floor transitions and `MoveAndSlide`; `Simulate` consumes `CharacterSimulationInput` plus a plain `CharacterMovementSettings` snapshot and returns `CharacterFrameState`.
-- `addons/dummy_character_plugin/scripts/CharacterPlayerController.cs`: global movement input sampling and explicit `Possess`/`Unpossess` authority.
-- `quest_world/character/Character.cs`: project-only action/interaction composition and generic input forwarding.
-- The remaining `CharacterInputFrame`, `CharacterSimulationInput`, `CharacterFrameState`, animation, camera and pitch scripts stay in the addon namespace `QuestWorld.Character`.
+Movement configuration is serialized once on the Character root. The motor receives a plain
+`CharacterMovementSettings` snapshot; it does not duplicate exported configuration in another Resource
+or component.
 
-The movement configuration stays serialized on `Character`; `CharacterMovementSettings` is only a plain value snapshot, not a `Resource` or a second set of exported properties. This keeps one inspector-facing source of truth while allowing the motor implementation to evolve independently and later support alternative movement modes. Presentation systems do not resample global input or independently infer floor transitions; local-only look deltas are passed directly to camera presentation.
+The project subclass composes:
+
+- `InventoryComponent` + `InventoryReplicationSynchronizer`;
+- `GameplayActionComponent` + `GameplayActionRunner`;
+- `InteractionInteractor` + detector + `InteractionPresenter`;
+- `GameplayActionPresenter` for owned actions such as `Drop Battery`.
+
+The runner is the single gameplay-action input boundary. The project Character samples
+`GetRelevantInputs()` and forwards press/release to the runner. Before a press it refreshes Interaction's
+focused bindings, but owned actions remain usable when no interactive target is focused.
 
 ## Possession and controls
 
-`CharacterPlayerController` owns the input actions and submits one frame to its possessed character before character physics. Switching pawn disables the previous camera and input authority, enables the new camera, and clears incompatible transient state.
+`CharacterPlayerController` samples movement input and submits one frame to its possessed character
+before character physics. Possession explicitly transfers input authority and active camera; losing
+possession clears incompatible transient state.
 
-- `WASD`: camera-relative movement.
-- `Space`: jump.
-- `Shift`: forward or forward-diagonal sprint.
-- Mouse: camera yaw/pitch while captured.
-- `Escape`: release the mouse.
-- Left click: recapture the mouse if UI did not consume the click.
-- `E`: start/end the focused interaction while held in the current scenes; the input loop also forwards any owned gameplay-action bindings.
-
-The test world contains one player controller with the project `res://quest_world/character/Character.tscn` as its spawned scene. Additional characters remain simulated but unpossessed until `Possess(character)` is called.
+Current project controls include WASD movement, Space jump, Shift sprint, mouse look and any Input Map
+actions returned by `GameplayActionRunner.GetRelevantInputs()`.
 
 ## Movement and orientation
 
 - First-person visual yaw follows the camera rig in character-local space.
-- Third-person forward movement faces the local movement direction; lateral/backward movement stays camera-facing for the directional blend space.
-- World directions are converted through the character root basis before assigning the local `Visual.Rotation.Y`, so rotated scene instances stay aligned.
-- Sprint is gated by `SprintForwardInputThreshold` because the current AnimationTree only has a forward sprint clip. Sideways and backward input keep walk speed and directional jog clips.
-- Assigning `CurrentViewMode` invokes the same backed transition as `SetViewMode`, resetting camera effects and incompatible turn state.
+- Third-person forward movement faces local movement direction; lateral/backward movement remains
+  camera-facing for the directional blend space.
+- World directions are converted through the character root basis before assigning visual yaw, so
+  rotated scene instances remain correct.
+- Sprint is currently forward/forward-diagonal because the AnimationTree has a forward sprint clip.
+- Assigning `CurrentViewMode` follows the same transition path as `SetViewMode`, resetting incompatible
+  camera/turn state.
 
-The camera rig is the single serialized owner of the view settings; the `Character` exposes the rig reference to presentation code that needs camera configuration.
+## Landing and animation
 
-## Landing
+Initial floor contact establishes state and is not a gameplay landing. A real landing requires minimum
+air time and impact speed. Landing strength is derived from downward velocity sampled immediately before
+`MoveAndSlide`; animation and camera effects consume the same resulting frame event.
 
-The first `MoveAndSlide` floor sample establishes initial state and is never emitted as a gameplay landing. A real landing requires both:
+Animation priority is:
 
-- at least `MinimumLandingAirTime` (`0.1 s` by default), and
-- at least `MinimumLandingImpactSpeed` (`2 m/s` by default).
+```text
+airborne > turn-in-place > locomotion
+```
 
-Landing strength is derived from the downward velocity immediately before `MoveAndSlide`, ramps to full strength at `FullLandingImpactSpeed`, and scales the procedural camera offset/pitch. Animation receives the same landing event and fires `Jump_Land` as a one-shot overlay.
-
-## Animation priority
-
-Animation priority is `airborne > turn-in-place > locomotion`. Losing the floor or jumping immediately cancels the turn override, so it cannot mask `Jump` or `Fall`. Movement, view-mode changes and loss of possession also cancel incompatible turn state.
-
-Base UAL clips are always validated. `Jump_Land` is required only when landing animation is enabled, and `Turn90_L`/`Turn90_R` only when turn-in-place is enabled.
+Jumping or losing the floor cancels a turn override immediately. View-mode changes, movement and loss of
+possession likewise clear incompatible turn state.
 
 ## Look pitch
 
-`CharacterLookPitchModifier` distributes clamped additive pitch across `spine_01`, `spine_02`, `spine_03`, `neck_01` and `Head`. It applies the UAL 180-degree visual-axis correction, uses 45% influence in third-person and full influence in first-person.
+`CharacterLookPitchModifier` distributes clamped additive pitch across the configured spine/neck/head
+chain, including the UAL visual-axis correction. Missing bones are reported explicitly; an entirely
+missing chain is treated as unusable.
 
-Bone lookup supports common aliases, lists every missing requested bone explicitly and treats an all-missing chain as unusable.
+## Architecture decisions
 
-## Focused regression tests
+### AD-01 — The root is an orchestrator, not a movement monolith
 
-`addons/dummy_character_plugin/tests/CharacterBehaviorTest.cs` intentionally freezes only brittle truths of the generic Character:
+The Character keeps the stable Godot-facing `Simulate` facade while movement, input, animation, camera
+and skeleton responsibilities live in focused units. Extracting responsibilities does not mean inventing
+an abstraction for every line; each component owns a coherent reason to change.
 
-- initial floor contact does not trigger landing;
-- a stronger impact produces a stronger landing effect;
-- a rotated character instance keeps visual and camera yaw aligned;
-- possession transfers input authority and the active camera;
-- airborne state cancels an active turn-in-place override;
-- direct simulation follows its explicit view yaw without reading the local camera rig.
+### AD-02 — Input is sampled once, simulation consumes explicit data
+
+Raw local input becomes a `CharacterInputFrame`, then a camera-independent simulation command. The motor
+and presentation do not re-read global input, which keeps direct simulation and tests deterministic.
+
+### AD-03 — Movement configuration has one serialized source of truth
+
+Inspector-facing movement settings stay on the Character root. `CharacterMovementSettings` is only the
+plain snapshot passed to the motor, preventing two authoring surfaces from drifting while keeping the
+motor independently testable.
+
+### AD-04 — Post-move state is a shared immutable snapshot
+
+Animation and camera effects consume the same `CharacterFrameState` produced by movement. They do not
+independently infer floor transitions, landing impacts or movement state from Godot globals.
+
+### AD-05 — The camera rig owns camera configuration
+
+View offsets, distance, sensitivity and pitch limits belong to `CharacterCameraRig`. The Character owns
+which view mode is active and orchestrates the rig without duplicating its serialized settings.
+
+### AD-06 — Possession owns input authority
+
+A Character can exist and simulate without being controlled. `CharacterPlayerController` explicitly
+possesses/unpossesses a pawn and transfers camera/input authority rather than making every character poll
+local input conditionally.
+
+### AD-07 — Project systems are composed in the project subclass
+
+The reusable character addon does not depend on Interaction, Inventory or Gameplay Action. QuestWorld's
+subclass adds those nodes and project-specific input forwarding, preserving the addon as a reusable
+character rather than a game framework root.
+
+### AD-08 — GameplayActionRunner is the project action-input boundary
+
+Interaction no longer owns the Character's action loop. The runner reports every relevant owned or
+external binding; Interaction only updates the focused bindings that it contributes. This is what lets
+an inventory-granted action and a focused world interaction share input without coupling Character to
+either action type.
+
+### AD-09 — Presentation ownership follows gameplay ownership
+
+`InteractionPresenter` renders target-oriented UI; `GameplayActionPresenter` renders owned player
+actions. Both consume the same generic action presentation model instead of the Character maintaining a
+custom prompt path.
+
+## Regression coverage
+
+Focused Character tests protect the brittle truths rather than every implementation detail: initial
+floor contact is not a landing, impact strength scales, rotated instances keep yaw correct, possession
+transfers authority/camera, airborne state cancels turn-in-place, and direct simulation obeys explicit
+view yaw without sampling the local camera.
 
 The landing-strength test advances one physics tick at a time and then waits for the corresponding
 process frame before sampling presentation. It measures the persistent peak of the camera impulse,
@@ -119,19 +156,5 @@ rather than relying on observing the one-tick `Landed` flag; a render-frame samp
 miss that transient state. Every test scene runner passes `autoFree: true`, because GdUnit4Net's
 `ISceneRunner.Load` default is `false` and would leave the synthetic physics nodes alive at teardown.
 
-Run them with:
-
-```powershell
-$env:GODOT_BIN = (Get-Command godot).Source
-dotnet test quest-world.csproj
-```
-
-GdUnit4Net is referenced through NuGet; no GdUnit source tree is vendored in `addons/`. Its generated runtime bridge directory is ignored by Git.
-
-## Validation
-
-Validated on 2026-08-14 with Godot 4.7.1 Mono:
-
-- `dotnet build quest-world.sln`: 0 warnings, 0 errors.
-- Six focused GdUnit4Net C# tests pass.
-- `test_world.tscn` runs headless for 120 frames without scene, C# or node-path errors; the project subclass is validated through the project scene.
+The multiplayer-specific movement/replication contract is documented separately in
+[`replication.md`](replication.md).

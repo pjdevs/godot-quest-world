@@ -2,107 +2,157 @@
 
 ## Purpose
 
-Addon Godot C# réutilisable qui possède l'**état du monde**, indépendamment de toute interaction : une porte est `closed`/`open`/`locked`, une salle `dry`/`flooded`/`draining`, une alimentation `powered`/`unpowered`/`overloaded`.
+`addons/stateful_plugin` owns **world truth** independently from Interaction or Gameplay Action: a door
+may be `closed/open/locked`, a room `dry/flooded/draining`, a power source
+`powered/unpowered/overloaded`.
 
-Le code runtime et ses contrats sont dans le namespace `QuestWorld.State`, sous [`addons/stateful_plugin`](../../../addons/stateful_plugin).
+`StatefulComponent` answers only “what is true in the world?”. It does not decide whether a player may
+perform an action, who requested a mutation, how a transition is executed, or how consequences should
+be presented.
 
-Cet addon répond uniquement à la question **« qu'est-ce qui est vrai dans le monde ? »**. Il ne répond ni à « le joueur peut-il faire ça ? » (`InteractionRule`), ni à « qui effectue la mutation ? » (`InteractionActionExecutor`).
+## Runtime model
 
-## Delivered
+`StatefulComponent` owns one authoritative `StringName` state. `StateSchema : Resource` optionally
+declares valid values for validation; without a schema, any non-empty state is accepted. A schema is not
+a finite-state machine: it defines no transitions, guards, entry/exit effects or hierarchy.
 
-- `StatefulComponent` possède une valeur `StringName` autoritaire, répliquée, persistable et observable. La valeur est libre : le composant ne donne aucune signification universelle à `open`, `flooded` ou `activating`.
-- `StateSchema` est une `Resource` optionnelle qui déclare les valeurs acceptées. Elle sert à la validation runtime et editor, pas à décrire une machine à états : aucune transition, garde, entry/exit effect ni hiérarchie n'est modélisée. `Schema == null` accepte n'importe quelle valeur.
-- `StatefulSavedState` est le snapshot versionné exposé au système de persistance du projet. L'addon ne stocke aucun fichier.
-- Le plugin editor `StatefulEditorPlugin` enregistre `StatefulInspectorPlugin`, qui délègue ses warnings à `StatefulValidator`. Les scripts runtime ne sont pas `[Tool]`.
+`StatefulSavedState` is a detached versioned persistence snapshot. The addon knows how to validate and
+restore semantic state but owns no files, service locator or save backend.
 
-## Authority, replication and notifications
+## Authority and replication
 
-- `SetState()` est server-only. Il retourne `false` pour un peer non serveur, une valeur absente du `Schema` assigné, ou une valeur déjà appliquée. L'absence de `MultiplayerPeer` compte comme autorité — un jeu sans session est son propre serveur — parce que `Multiplayer.IsServer()` sans peer pousse une erreur *et* répond non, ce qui refusait toute mutation hors session. Voir [`godot-multiplayer-isserver-requires-peer.md`](../../memory/godot-multiplayer-isserver-requires-peer.md).
-- La réplication passe par la propriété technique privée `ReplicatedState`. Un `MultiplayerSynchronizer` enfant du composant réplique le chemin `.:ReplicatedState`. Le gameplay n'assigne jamais cette propriété directement.
-- Le setter répliqué applique la valeur autoritaire du serveur **sans** revalider le schema : le serveur fait autorité et un schema divergent entre builds ne doit pas désynchroniser un client.
-- Trois signaux séparent les scopes consommateurs : `StateChanged` partout, `StateChangedAuthority` uniquement avec autorité (offline, listen host, dedicated server), `StateChangedPresentation` partout sauf sur un dedicated server.
-- Les trois portent la **même signature** `(oldState, newState, isSynchronization)`, ce qui permet de brancher un même handler sur plusieurs canaux.
+`SetState()` is server-authoritative. A peerless/offline game counts as its own authority. A client
+cannot successfully mutate the component.
 
-### `isSynchronization` — rattrapage ou événement vécu
+A child `MultiplayerSynchronizer` transports the private technical `ReplicatedState` property. The
+receiving side applies the server value **without revalidating its local schema**: authority has already
+validated the mutation, and a schema mismatch between builds must not make a client silently diverge
+from authoritative truth.
 
-`isSynchronization` répond à la seule question qu'une transition seule ne peut pas trancher : cet état **devient-il** vrai ici et maintenant, ou ce peer rattrape-t-il une vérité déjà établie ailleurs ?
+Three notifications expose the same transition with different scopes:
 
-| Origine | `isSynchronization` |
+- `StateChanged` — every peer;
+- `StateChangedAuthority` — offline/server authority only;
+- `StateChangedPresentation` — every presentation-capable peer, excluding dedicated server.
+
+All carry `(oldState, newState, isSynchronization)`.
+
+### Synchronization vs lived change
+
+`isSynchronization` distinguishes catching up to existing truth from witnessing a new event:
+
+| Origin | `isSynchronization` |
 | --- | --- |
-| `SetState()` autoritaire | `false` |
-| Valeur répliquée reçue après la première | `false` |
-| **Première** valeur répliquée reçue par un peer (late join) | `true` |
-| **`LoadState()`** (restauration de sauvegarde) | `true` |
+| authoritative `SetState()` | `false` |
+| subsequent replicated transition | `false` |
+| first replicated state / late join | `true` |
+| `LoadState()` | `true` |
 
-La transition est émise dans les deux cas, délibérément : une pose ou une animation pilotée par l'état converge ainsi sans rien savoir, et une porte trouvée déjà ouverte joue son ouverture donc finit avec la bonne collision. Ce que le flag permet, c'est de garder les **one-shots** — son, confettis, caméra, notification — pour un changement que le joueur a réellement vécu. Le pattern d'un feedback :
+The transition is emitted in both cases so state-driven geometry/pose converges. Consumers use the flag
+to suppress one-shot feedback such as audio, particles or notifications when a peer is only catching up.
+On synchronization, `oldState` is not guaranteed to be the world's previous historical state; only
+`newState` is authoritative truth.
 
-```cs
-private void OnStateChangedPresentation(StringName old, StringName @new, bool isSynchronization)
-{
-    if (isSynchronization) { ApplyPose(@new); return; }
-    PlayTransition(old, @new);
-}
-```
+## Mutation and dispatch
 
-Trois points qui font tenir le contrat :
-
-- le marqueur « première réplication reçue » est remis à zéro dans `_Ready`, parce que `ReplicatedState` est un `[Export]` que le chargement de scène écrit avant l'entrée dans l'arbre et qui le consommerait ;
-- il est consommé même par une valeur **égale** à l'état courant. C'est le cas d'un peer qui rejoint un objet que personne n'a touché : le full sync du `MultiplayerSynchronizer` n'émet aucune transition, mais l'arrivée est dépensée, donc la première vraie transition suivante est bien rapportée comme vécue. Un test réseau le prouve dans les deux sens.
-- `oldState` sur une synchronisation est l'`InitialState`, pas l'état réellement précédent : un arrivant peut recevoir `idle → activated` là où le monde a fait `idle → activating → activated`. Un consommateur ne doit donc pas supposer que la paire reçue est une arête de la machine, seulement que `newState` est vrai.
-
-## Mutation and dispatch boundary
-
-Le composant applique dès sa création l'invariant du chantier V2 : aucun signal, RPC ou callback externe pendant une mutation.
+State mutation follows one boundary:
 
 ```text
-SetState / LoadState / replication
-  ↓ validation
-ApplyStateCore   → mutate only, returns StateTransition?
-  ↓ mutation complete
-DispatchStateTransition(transition, isSynchronization)
-  ├─ StateChanged
-  ├─ StateChangedAuthority
-  └─ StateChangedPresentation
+validate
+→ ApplyStateCore()          # mutation only
+→ DispatchStateTransition() # signals after state is coherent
 ```
 
-`ApplyStateCore` et `DispatchStateTransition` sont `internal` : les tests vérifient la transition sans agrandir l'API publique de l'addon.
+No signal, RPC or arbitrary callback defines a partially-mutated state. The internal split is directly
+testable without enlarging the public API.
 
-## Schema validation
+## Schema and persistence validation
 
-- `Schema == null` : valeur libre.
-- `Schema` assigné : `SetState()` refuse une valeur non déclarée, avec un warning, et ne mute ni n'émet rien.
-- `InitialState` non déclaré : `_Ready()` publie une erreur mais **conserve** la valeur. Aucune correction silencieuse n'est appliquée à l'état du monde ; la configuration est signalée dans l'Inspector avant le lancement.
-- `LoadState()` lève `ArgumentOutOfRangeException` pour une version inconnue et pour un état non déclaré par le schema courant. Une sauvegarde plus ancienne qu'une évolution de schema est un problème de migration explicite pour le projet hôte, pas une valeur à ignorer silencieusement.
+- `Schema == null`: state values are free.
+- With a schema, `SetState()` rejects undeclared values without mutation.
+- An invalid authored `InitialState` is reported but never silently replaced.
+- `LoadState()` rejects unsupported versions and states not declared by the current schema.
+- Restoring even the currently visible state can dispatch a synchronization transition, because the
+  consumer still needs to converge to truth that existed before this process/session.
 
-## Persistence boundary
+`StatefulValidator` provides the corresponding editor diagnostics for empty/duplicate schema values and
+invalid initial configuration.
 
-`StatefulSavedState` contient uniquement une version (`1`) et un `StringName`. `LoadState` réutilise le chemin commun de changement d'état et rejoue les signaux même lorsque la valeur restaurée est identique à la valeur courante, avec `isSynchronization = true` : le monde était déjà dans cet état avant que ce process existe, donc rien ne vient de se produire. Aucun fichier, service global ou backend n'est créé.
+## Integrations
 
-## Explicit configuration and validation
+Stateful has no dependency on Interaction or Gameplay Action. Dependencies point **toward** Stateful:
 
-`StatefulValidator` couvre :
+- `StatefulStateInteractionRule` reads state for Interaction availability;
+- Gameplay Action's optional Stateful integration provides generic state-mutating executors such as
+  `SetStateGameplayActionExecutor`, `TransitionStateGameplayActionExecutor` and
+  `TimedTransitionStateGameplayActionExecutor`.
 
-- `StatefulComponent` : `InitialState` vide, `InitialState` absent du `Schema` assigné ;
-- `StateSchema` : aucune valeur déclarée, valeur vide, valeur dupliquée.
+Rules read state; executors mutate it. `InteractiveComponent` does not own or interpret a Stateful
+reference. The old Interaction-specific `InteractionStateful` lifecycle is gone; `StatefulComponent` is
+the single reusable world-state primitive.
 
-Le validator lit les propriétés via l'API Godot (`Get`) afin de fonctionner avec les placeholders editor, comme `InteractionValidator`.
+## Architecture decisions
 
-## Single world-state component
+### AD-01 — State is a free `StringName`, not a framework enum
 
-`InteractionStateful` (enum `Idle/Activating/Activated/Deactivating`) et son `InteractionSavedState` sont supprimés par la Task 12 du chantier [interaction-v2-architecture](../interaction/planned/interaction-v2-architecture.md). `StatefulComponent` est désormais le seul composant d'état monde du projet, et `InteractiveComponent` ne le référence pas : l'interaction ne le lit qu'à travers des rules pures.
+The original Interaction lifecycle enum predicted a small set of generic states and immediately failed
+for doors, rooms and power systems. Stateful instead stores domain-authored names and assigns them no
+universal semantics.
 
-## Validation
+### AD-02 — Schema validation is optional and is not a state machine
 
-```bash
-csharpier format .
-dotnet build
-GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot dotnet test
-```
+`StateSchema` catches typos and invalid authoring while keeping the core agnostic to legal transitions.
+Transition policy belongs to gameplay actions/executors or a future dedicated system, not to the value
+container.
 
-Les tests couvrent la mutation core sans signal, le dispatch de chaque scope exactement une fois, l'application de `InitialState` sans signal au `_Ready`, l'application autoritaire, l'absence de changement pour une valeur identique, la valeur libre sans schema, le refus d'une valeur hors schema, la conservation d'un `InitialState` hors schema, l'application d'une valeur répliquée sans validation de schema, le snapshot/restauration y compris pour une valeur identique et son dispatch en synchronisation sur les trois canaux, le flag à `false` pour un changement autoritaire vécu, le refus d'une version inconnue et d'un état hors schema, la query pure du schema, l'application autoritaire hors arbre sans peer multijoueur, et l'ensemble des warnings du validator.
+### AD-03 — One authoritative truth, replication as transport
 
-## Assumptions and deferred work
+Only authority mutates gameplay state. Replication applies that truth verbatim rather than re-running
+client-side business validation. This avoids two peers deriving different worlds from the same server
+mutation.
 
-- La propriété `ReplicatedState` reste visible dans l'Inspector. Voir [`godot-private-export-inspector-visibility.md`](../../memory/godot-private-export-inspector-visibility.md).
-- Aucune FSM, aucun graphe de transitions, aucun effect d'entrée/sortie : ce serait un autre système.
-- Les primitives d'intégration interaction (`StatefulStateInteractionRule`, `SetStateInteractionExecutor`) sont livrées par la Task 8 du chantier V2 et vivent dans [`addons/interaction_plugin/integration/stateful`](../../../addons/interaction_plugin/integration/stateful) : la dépendance va de l'interaction vers le stateful, jamais l'inverse. Le premier consommateur est `LeverWall`, piloté à distance par `Button.tscn` sans aucun script de glue. Voir [interaction.md](../interaction/interaction.md).
+### AD-04 — Peerless play is authoritative
+
+Offline mode is not a special fake-client path. With no `MultiplayerPeer`, the process is its own server,
+so the same mutation API works in single-player, listen-server and dedicated-server contexts.
+
+### AD-05 — Synchronization is explicit in notifications
+
+A state transition and a player-observed event are not equivalent. The `isSynchronization` bit lets
+simulation/presentation consumers converge their durable state while suppressing one-shot effects for
+late join and save restoration.
+
+### AD-06 — Notification scopes are separate but structurally identical
+
+Universal, authority and presentation signals share one signature. Consumers choose responsibility by
+channel rather than by reconstructing multiplayer role inside every handler.
+
+### AD-07 — Mutation precedes dispatch
+
+The component was designed around `mutate → notify`, not reentrant signal-driven mutation. This keeps
+state invariants deterministic and portable across C#, C++ or stricter native implementations.
+
+### AD-08 — Persistence is detached from storage
+
+The component exports versioned semantic snapshots but no global save system. State ownership and save
+orchestration remain different responsibilities.
+
+### AD-09 — Stateful replaced Interaction state instead of depending on Interaction
+
+Generic world state was extracted into its own addon. Interaction and Gameplay Action consume it through
+optional integration adapters, preserving a one-way dependency graph.
+
+### AD-10 — Current truth and predicted consequences are different models
+
+`StatefulComponent.State` remains the non-predictive source of truth. The still-planned
+[`stateful-presentation.md`](planned/stateful-presentation.md) proposes a separate consequence/presentation
+layer rather than polluting authoritative state with “where this execution is heading”.
+
+## Remaining planned work
+
+[`planned/stateful-presentation.md`](planned/stateful-presentation.md) is intentionally retained: no
+`StatefulPresentation`/consequence model exists in runtime today. It explores how UI can answer questions
+such as “this running action will end in `open`” without changing the authoritative state contract above.
+
+A generic FSM, transition graph and entry/exit effect framework remain explicit non-goals until a real
+gameplay requirement justifies a separate system.

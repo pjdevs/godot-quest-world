@@ -6,24 +6,28 @@ using QuestWorld.Interaction.Runtime.Rules;
 
 namespace QuestWorld.Interaction.Runtime.Actions;
 
-/// <summary>
-/// Interaction specialization of one generic gameplay action occurrence.
-/// </summary>
+/// <summary>Interaction specialization of one generic gameplay action occurrence.</summary>
 [GlobalClass]
 public partial class InteractionAction : InputGameplayAction
 {
+    /// <summary>Access-provider ID used by the runner for externally bound interaction actions.</summary>
     public static readonly StringName InteractionAccessProviderId = new("interaction");
+
+    /// <inheritdoc />
     public override StringName AccessProviderId => InteractionAccessProviderId;
 
+    /// <summary>Gets or sets whether this action is blocked or hidden while its group runs for self.</summary>
     [ExportGroup("Execution Availability")]
     [Export]
     public GameplayActionUnavailableKind WhenExecutingBySelf { get; set; } =
         GameplayActionUnavailableKind.Blocked;
 
+    /// <summary>Gets or sets whether this action is blocked or hidden while its group runs for another.</summary>
     [Export]
     public GameplayActionUnavailableKind WhenExecutingByOther { get; set; } =
         GameplayActionUnavailableKind.Blocked;
 
+    /// <summary>Gets the interactive target hosting this occurrence after runtime preparation.</summary>
     public InteractiveComponent? Interactive { get; internal set; }
 
     private InteractionTargetRulesAdapter? _targetRulesAdapter;

@@ -1,142 +1,138 @@
 # Interaction — authoring polish
 
-> **Status: planned.** Petit pass d'ergonomie après V4. Aucun nouvel invariant gameplay : le but est de supprimer la plomberie d'Inspector et de rendre les scènes lisibles par leur composition.
+> **Status: planned.** Ergonomics-only pass over the current Gameplay Action topology. No execution,
+> networking, availability or ownership invariant changes.
 
-## Goal
+## Current baseline
 
-Le chemin normal d'authoring doit être **composition-first** : si la scène exprime déjà la relation parent/enfant, l'auteur ne doit pas recopier cette relation dans une référence exportée.
-
-```text
-InteractiveComponent
-├── InteractionArea3D
-│   └── CollisionShape3D
-├── IndicationArea3D
-│   └── CollisionShape3D
-├── OpenAction
-│   └── Executor
-└── CloseAction
-    └── Executor
-```
-
-Les références explicites restent disponibles uniquement comme **override** pour les cas où la cible vit ailleurs dans l'arbre.
-
-## 1. Child composition by default
-
-Résolution locale attendue :
-
-- `InteractiveComponent` découvre ses `InteractionAction` enfants directs ;
-- `InteractionAction` utilise son unique `InteractionActionExecutor` enfant direct ;
-- `InteractionExecutionSynchronizer`, interaction area, indication area et anchor suivent le même principe lorsqu'une composition locale non ambiguë existe ;
-- aucune recherche récursive ou heuristique par nom : enfant direct / type explicite seulement ;
-- zéro ou plusieurs candidats lorsque exactement un est requis produit un diagnostic clair.
-
-Les anciennes propriétés de référence peuvent rester pour les cas externes, mais deviennent des overrides :
-
-```text
-resolved value = explicit override ?? composed child/default
-```
-
-Dans l'Inspector, les références d'override doivent être regroupées dans un header repliable du type :
-
-```text
-Overrides
-    Interaction Area
-    Indication Area
-    Interaction Anchor
-    Actions
-    Executor
-    ...
-```
-
-Le chemin commun doit donc montrer surtout les données gameplay, pas le wiring.
-
-## 2. Stateful integration helpers
-
-L'intégration Stateful applique la même règle :
-
-```text
-explicit Stateful override
-    ?? StatefulComponent du scope local de l'Interactive
-```
-
-Une `StatefulStateInteractionRule`, `SetStateInteractionExecutor` ou transition helper ne doit pas demander trois fois la même référence lorsqu'ils pilotent le Stateful de l'objet courant.
-
-Une référence/path explicite reste nécessaire et prioritaire pour lire ou muter un autre objet du level.
-
-Interaction core ne gagne aucune dépendance à Stateful : cette résolution reste entièrement dans `integration/stateful`.
-
-## 3. Small state-transition authoring utilities
-
-Ajouter de petites façades d'authoring construites sur les primitives existantes, sans nouveau state-machine framework.
-
-Cas minimum :
-
-```text
-StatefulTransitionAction
-    From = [closed]
-    To = opened
-```
-
-qui représente conceptuellement :
-
-```text
-StatefulStateInteractionRule(From)
-+
-SetStateInteractionExecutor(To)
-```
-
-Pour une transition longue :
-
-```text
-StatefulRunningTransitionAction
-    From = [closed]
-    Running = opening
-    Completed = opened
-    Cancelled = closed
-```
-
-La fin reste externe par défaut ; une variante/helper timed peut composer `TimedExecution` quand le temps est réellement la policy de completion.
-
-Les helpers peuvent également couvrir le motif fréquent :
-
-```text
-AvailableStates
-BlockedStates + BlockReason
-OtherStates = Hidden
-```
-
-pour éviter d'empiler plusieurs rules Stateful répétitives uniquement afin de présenter correctement une transition en cours.
-
-## Non-goals
-
-- pas de découverte récursive magique ;
-- pas de graph/state-machine générique ;
-- pas de suppression des `InteractionRule` ou executors custom ;
-- pas de couplage Stateful dans Interaction core ;
-- pas de `AND/OR` générique tant qu'un vrai cas Inventory/gameplay ne le justifie ;
-- pas de refactor V4 du lifecycle ou networking.
-
-## Success criterion
-
-La porte de démo doit pouvoir s'authorer approximativement comme :
+The runtime topology is now explicit and stable:
 
 ```text
 Door
 ├── StatefulComponent
+├── GameplayActions                         # GameplayActionComponent
+│   ├── OpenAction                          # InteractionAction
+│   │   └── OpenExecutor                    # GameplayActionExecutor
+│   └── CloseAction
+│       └── CloseExecutor
+├── GameplayActionExecutionSynchronizer?    # optional
 └── InteractiveComponent
-    ├── InteractionArea3D
-    │   └── CollisionShape3D
-    ├── Open : StatefulTransitionAction
-    │   From = [closed]
-    │   To = opened
-    ├── Close : StatefulTransitionAction
-    │   From = [opened]
-    │   To = closed
-    └── Unlock : StatefulTransitionAction
-        From = [locked]
-        To = closed
+    ├── InteractionArea
+    ├── IndicationArea?
+    └── InteractionAnchor
 ```
 
-sans `Actions` array, sans `Executor` NodePath, sans Stateful path répété et sans références d'areas/anchor visibles dans le chemin normal d'Inspector.
+`GameplayActionComponent` is the sole owner of action occurrences. `InteractiveComponent.Actions` is
+already a derived projection of the `InteractionAction` occurrences hosted there; this plan does **not**
+bring back a second Actions array or an Interaction execution synchronizer.
 
-Si un auteur veut sortir de cette composition locale, il ouvre simplement **Overrides** et renseigne la référence explicite.
+The remaining authoring pain is reference plumbing: the scene already expresses obvious local
+relationships, but the Inspector still asks the author to repeat many of them explicitly.
+
+## Goal
+
+Make the normal path **composition-first, override-friendly**:
+
+```text
+resolved dependency = explicit override ?? unique local composed dependency
+```
+
+The runtime ownership model remains explicit and inspectable. Composition inference is only an authoring
+shortcut for relationships that are local, unique and unambiguous.
+
+## 1. Local composition inference
+
+Candidate relationships to infer when the exported override is empty:
+
+- `InteractiveComponent.ActionComponent` → the unique sibling `GameplayActionComponent` in the same
+  authored object scope;
+- `GameplayAction.Executor` → the unique direct-child `GameplayActionExecutor`;
+- `GameplayActionExecutionSynchronizer.Component` → the unique local action host when unambiguous;
+- `InteractiveComponent` area/indication/anchor references → unique direct local children of the
+  corresponding type/role;
+- Stateful integration executors/rules → the unique local `StatefulComponent` when the integration is
+  clearly authored against the same object.
+
+Constraints:
+
+- no recursive tree search;
+- no lookup by node name;
+- no global registry or service locator;
+- no silent choice between several candidates;
+- an explicit Inspector reference always wins;
+- zero/multiple candidates for a required dependency produce a clear validator/runtime diagnostic.
+
+The exact “local object scope” should stay deliberately small (same parent/direct child relationships),
+so moving nodes in a large scene cannot silently retarget gameplay.
+
+## 2. Inspector presentation
+
+Explicit references remain available for non-local composition, but should read as overrides rather than
+mandatory plumbing:
+
+```text
+Overrides
+    Action Component
+    Executor
+    Stateful
+    Interaction Area
+    Indication Area
+    Interaction Anchor
+    Execution Synchronizer Component
+```
+
+The common Inspector path should primarily expose gameplay data:
+
+- action definition;
+- input/binding policy;
+- rules;
+- concurrency and self/other busy outcome;
+- execution visibility;
+- executor-specific gameplay configuration.
+
+## 3. Stateful authoring — only remove repeated references
+
+The current generic Stateful executors already cover the important semantics:
+
+- `SetStateGameplayActionExecutor`;
+- `TransitionStateGameplayActionExecutor`;
+- `TimedTransitionStateGameplayActionExecutor`.
+
+They are **not** future work and this pass must not wrap them in another Interaction lifecycle.
+
+The remaining polish is only dependency resolution. When an executor/rule targets the local object's
+Stateful, it should not need the same NodePath repeated on every action. Explicit references remain
+necessary and higher priority for remote targets such as a button controlling a separate wall.
+
+Interaction core still gains no Stateful dependency; all such resolution stays in the existing optional
+integration packages.
+
+## Non-goals
+
+- no recursive “magic” discovery;
+- no second action collection on `InteractiveComponent`;
+- no Interaction-specific execution or execution synchronizer;
+- no new state-machine/transition framework;
+- no replacement for custom `GameplayActionRule` / `InteractionRule` / executors;
+- no generic AND/OR rule graph without a concrete gameplay need;
+- no lifecycle, requester, prediction or networking refactor.
+
+## Success criterion
+
+A normal door should remain structurally honest while requiring little Inspector wiring:
+
+```text
+Door
+├── StatefulComponent
+├── GameplayActions
+│   ├── Open : InteractionAction
+│   │   └── TransitionExecutor
+│   └── Close : InteractionAction
+│       └── TransitionExecutor
+└── InteractiveComponent
+    ├── InteractionArea
+    └── InteractionAnchor
+```
+
+The author configures gameplay semantics, not duplicate paths. If a dependency intentionally lives
+elsewhere, they open **Overrides** and assign it explicitly.

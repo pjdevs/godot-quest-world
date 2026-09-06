@@ -15,12 +15,15 @@ namespace QuestWorld.GameplayActions.Presentation.UI;
 [GlobalClass]
 public partial class GameplayActionPresenter : CanvasLayer
 {
+    /// <summary>Gets or sets the locally controlled runner whose owned bindings are presented.</summary>
     [Export]
     public GameplayActionRunner? ActionRunner { get; set; }
 
+    /// <summary>Gets or sets the container receiving one control per visible owned binding.</summary>
     [Export]
     public Control? ActionContainer { get; set; }
 
+    /// <summary>Gets or sets the scene instantiated for each presented binding.</summary>
     [Export]
     public PackedScene? ActionScene { get; set; }
 
@@ -28,6 +31,7 @@ public partial class GameplayActionPresenter : CanvasLayer
     private readonly HashSet<ulong> _relevantBindingIds = new();
     private readonly List<ulong> _staleBindingIds = new();
 
+    /// <summary>Reconciles the binding-driven view with current local availability each frame.</summary>
     public override void _Process(double delta)
     {
         if (

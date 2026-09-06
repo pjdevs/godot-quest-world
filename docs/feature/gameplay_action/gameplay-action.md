@@ -2,456 +2,271 @@
 
 ## Status
 
-V1 extraction is complete. Tranches 1 to 4 provide the standalone authoritative host, its full
-execution lifecycle, generic progress/timing, optional replicated presentation, local bindings and
-gestures, typed access validation, requester prediction, lifecycle acknowledgements, and the
-functional migration of Interaction onto these primitives. Tranche 5 closes the extraction: scenes,
-Stateful integrations, and editor diagnostics author only the final topology, and the temporary
-Interaction compatibility lifecycle is gone.
+The V1 extraction is complete. `gameplay_action_plugin` is the generic execution layer used by
+Interaction and by owned player actions such as `Drop Battery`; there is no remaining Interaction
+compatibility execution path.
 
-The approved design is in
-[`planned/gameplay-action-system-v1.md`](planned/gameplay-action-system-v1.md).
+The documentation below describes the current contract. Historical implementation plans are not kept
+as roadmap documents once their decisions have been absorbed here.
 
 ## Package boundary
 
-`addons/gameplay_action_plugin` owns generic action identity, availability rules, execution,
-host-local reservations, and action lifetime. It has no dependency on Interaction, Inventory,
-Stateful, Character, Quest, Dialog, or persistence.
+`addons/gameplay_action_plugin` owns:
 
-Its public namespace is `QuestWorld.GameplayActions`, with action nodes under
-`QuestWorld.GameplayActions.Runtime.Actions`, execution helpers under
-`QuestWorld.GameplayActions.Runtime.Execution`, bindings under
-`QuestWorld.GameplayActions.Runtime.Bindings`, requester routing under
-`QuestWorld.GameplayActions.Runtime.Runner`, typed access contracts under
-`QuestWorld.GameplayActions.Runtime.Access`, and rules under
-`QuestWorld.GameplayActions.Runtime.Rules`.
+- stable action identity and occurrence ownership;
+- ordered availability rules;
+- host-local reservations and concurrency groups;
+- authoritative execution and terminal lifecycle;
+- local input bindings and gesture arbitration;
+- requester transport, acknowledgements and prediction;
+- transient execution presentation and optional replication;
+- a small generic action-presentation read model and default presenter/widget.
 
-## Tranche 1 runtime model
+The core does not know about Interaction, Inventory, Character, quests, dialogs or persistence.
+Stateful adapters live under `integration/stateful`; they are optional integration code, not state
+semantics baked into the action model.
 
-### Definition and occurrence
+## Runtime model
 
-`GameplayActionDefinition` is a reusable `Resource` containing:
+### Definition, occurrence and executor
 
-- `Id`, the stable gameplay and network identity;
-- optional intrinsic `Label` and `Description` metadata.
+`GameplayActionDefinition : Resource` contains the stable `Id` used for lookup/network identity plus
+optional `Label` and `Description` presentation metadata.
 
-`GameplayAction` is one owned occurrence. It references exactly one definition, exactly one
-executor, an ordered rule collection, a host concurrency group, and its future execution visibility.
-Input configuration does not belong to `GameplayAction`. An `InputGameplayAction` may optionally
-expose a `DefaultBindingConfig`; the runner uses that resource only as the authored source for a
-local binding, whose input fields are snapshot values rather than a live reference.
+`GameplayAction : Node` is one occurrence owned by one `GameplayActionComponent`. It references one
+definition, one executor, an ordered `Rules` collection, a host-local concurrency group and an
+execution visibility policy. `InputGameplayAction` adds only an optional `DefaultBindingConfig` so an
+owned action may opt into automatic local binding without making input a concern of every action.
+
+`GameplayActionExecutor` is the single command owner. `Execute()` returns:
+
+```text
+Completed
+Running
+Rejected(reason)
+Failed(reason)
+```
+
+A running execution remains reserved until `CompleteExecution`, `CancelExecution` or `FailExecution`
+reaches it. Terminal callbacks are sent directly to the executor that owns the execution; Godot
+signals are notifications, not the supported place to perform the gameplay mutation.
 
 ### Authoritative host
 
-`GameplayActionComponent` is the concrete host. Its exported `Actions` collection registers only
-explicit authored direct children during `_Ready`; it never discovers the scene tree recursively.
-`AddAction` registers and parents an unowned runtime action, then appends it to `Actions`, which
-`RemoveAction` already takes it out of: the declared collection is the ordered action set of the
-host, not only what the scene authored, so a consumer reading it never has to guess which runtime
-additions it can see. Registration rejects missing definitions, empty IDs, missing executors,
-duplicate IDs, invalid parents, and actions already owned by another component; a refused
-registration declares nothing. Successful runtime mutations emit `GameplayActionAdded` and
-`GameplayActionRemoved` after the action set has changed. `GameplayActionRemoved` is emitted at the
-logical removal boundary, before an active action's retiring window ends, so local bindings can be
-cleaned immediately.
-
-The main public operations delivered by this tranche are:
-
-- `ResolveAction(ActionId)` for stable host-local lookup;
-- `EvaluateAction(ActionId, ...)` for pure ordered rule evaluation;
-- `ExecuteAction(ActionId, out ExecutionId, instigator)` for authority-only execution that bypasses
-  binding/access checks but preserves rules and reservations;
-- `IsActionExecuting(ActionId)` for reservation queries;
-- `CompleteExecution`, `CancelExecution`, and `FailExecution` for terminal control of an execution an
-  executor left running;
-- `RemoveAction(ActionId)` for safe retirement.
-
-There is one way to run an action and where the call comes from does not change it. What separates a
-player request is not a different operation but a requester waiting to be acknowledged, and only the
-request transport attaches one, through the internal `ExecuteRequestedAction`. An execution therefore
-carries a requester exactly when a runner asked for it, which is the single condition the host reads
-before sending a started, progress, or terminal acknowledgement — there is no invocation-kind flag.
-
-Execution evaluates only the action's explicit ordered `Rules` collection; action
-subclasses have no parallel availability hook. It then reserves the stable action ID, the host-local
-concurrency group, and a host-wide execution ID before invoking the one executor. Different
-components never share reservations.
-
-Executors return the union `Completed | Running | Rejected(reason) | Failed(reason)`. A completed or
-failed synchronous result releases its reservation immediately. A running result remains reserved
-until one terminal method succeeds. Every accepted execution notifies its executor exactly once after
-the reservation is released, including synchronous completion/failure. Rejection has no terminal
-callback. An executor exception is logged, converted to `Failed`, and released rather than leaving a
-stale reservation. Terminal calls are idempotent for stale IDs and notify only the executor that owns
-that execution.
-
-Null entries in the exported rule array are ignored so they cannot break the ordered evaluation of
-the remaining authored rules; editor diagnostics can still report the empty slot.
-
-### Retirement
-
-Removing an idle action makes it unresolvable and queues its node for deletion immediately. Removing
-a running action makes it unresolvable for new requests but retains its component ownership, node,
-stable ID reservation, and execution presentation until the execution reaches a terminal outcome.
-The same ID cannot be registered again during this retiring window. Retirement does not implicitly
-cancel gameplay. Removing a locally reconstructed action that only carries replicated presentation
-purges that presentation immediately.
-
-## Tranche 1 verification coverage
-
-The generic tests use no Interaction fixture. They cover intrinsic definition metadata, explicit
-authored registration, runtime ownership and parenting, invalid and duplicate registration,
-multi-host ownership rejection, ordered rule short-circuiting, rule-preserving programmatic
-execution, null rule entries, mutation-before-executor dispatch, executor-exception cleanup, one
-active execution per ID, same-host group exclusion, different-host independence, distinct same-host
-groups, safe retirement, and retirement-time ID reservation.
-
-## Tranche 2 execution lifecycle
-
-### Notifications
-
-The authoritative component emits past-tense Godot signals only after its state mutation and direct
-executor callback have completed:
-
-- `GameplayActionStarted` and `GameplayActionCompleted` carry the execution ID, action, optional
-  instigator, and optional requester;
-- `GameplayActionCancelled` and `GameplayActionFailed` carry the same context plus a reason;
-- `GameplayActionRejected` carries the refused context and reason without emitting `Started`.
-
-Godot signals transport execution identifiers as non-negative signed 64-bit values because that is
-the engine `Variant` integer representation. Runtime contexts and component methods retain the
-existing `ulong` API, whose allocator is explicitly capped at `long.MaxValue`. A refusal before
-reservation uses the zero identifier; an executor-boundary refusal carries the short-lived allocated
-identifier. Unknown action IDs cannot emit an action-bearing signal and are returned directly as a
-rejected result.
-
-Synchronous completion and failure emit `Started` followed immediately by their terminal signal.
-`Running` emits `Started` and retains the reservation until exactly one terminal method succeeds.
-Stale terminal calls remain no-ops.
-
-### Execution presentation and progress
-
-Every authoritative running execution creates one local
-`GameplayActionExecutionPresentation(ExecutionId, ActionId, Progress?)` slot, independently of its
-visibility policy. Consumers read a snapshot through `GetExecutionPresentations()` or look up one
-action with `TryGetExecutionPresentation()`.
-
-The read model also carries a local `GameplayActionExecutionRelation`: `Observed` for a generic or
-replicated execution, and `RequestedLocally` for a prediction or a requester acknowledgement. This
-is local presentation metadata, not a new network field. When a requester later receives the
-replicated snapshot for the same `ExecutionId`, the presentation store keeps `RequestedLocally`
-instead of downgrading the local knowledge to `Observed`.
-
-`ReportExecutionProgress()` publishes a finite discrete value clamped to `[0, 1]`, or `null` to clear
-generic progress. `SetExecutionProgressSource()` attaches a local callable for derived progress and
-`ClearExecutionProgressSource()` returns to the last transported/published value. Linear samples use
-a monotonic real-time clock and are extrapolated locally; revisions prevent an older sample from
-rewinding a newer value even if it arrives inside a newer transport envelope.
-
-The component remains the public lifecycle owner. Slot state, extrapolation, and snapshot codecs live
-in an internal `GameplayActionExecutionPresentationStore` so network/presentation mechanics do not
-inflate the action registry and authoritative dispatcher into another monolith.
-
-### Timing
-
-`TimedGameplayActionExecutor` is the author-facing inheritance path. It computes a strictly positive
-finite duration, publishes sparse linear corrections, and completes the generic execution at its
-deadline. `TimedExecution` exposes the same policy compositionally to executors that already require
-another hierarchy. Both use monotonic real time, so disabling the component's process mode does not
-freeze completion. Open-ended work continues to return `Running` and is completed explicitly.
-
-### Visibility and synchronization
-
-`GameplayActionExecutionVisibility` controls transport, not whether the authority owns a local slot:
-
-- `RequesterOnly` remains local to the authority until the runner/ACK path arrives in tranche 3;
-- `Replicated` is included in snapshots from an explicitly wired
-  `GameplayActionExecutionSynchronizer`;
-- `AuthorityOnly` never enters those snapshots.
-
-The synchronizer transports current transient presentation only. It neither executes actions nor
-replicates dynamic action grants. Snapshot and per-execution revisions reject stale state, absent
-entries remove completed executions, and native `MultiplayerSynchronizer` spawn replication gives a
-late joiner the current running slot. Persistent gameplay truth remains the responsibility of its
-domain component.
-
-## Tranche 2 verification coverage
-
-The standalone generic suite adds lifecycle ordering and uniqueness, all execution outcomes,
-running-slot creation/removal, callable and discrete progress, visibility filtering, stale envelope
-and stale sample handling, replicated-action removal, active retirement presentation, invalid timed
-durations, monotonic timed completion, real ENet observer replication, and late join. Client copies
-prove that replication never invokes their executors.
-
-## Tranche 3 requester pipeline
-
-### Bindings and gestures
-
-`GameplayActionBinding` is a local runtime reference to an action still owned by its original
-`GameplayActionComponent`. It carries its cleanup source, input name, `Press | Hold | Release |
-Automatic` activation mode, optional hold threshold, `None | Pressed` input requirement, priority,
-and opaque presentation context. It is neither replicated nor accepted by the authority as proof of
-access.
-
-`GameplayActionRunner` exposes bind, unbind, source cleanup, availability query, and binding/source/
-action invalidation APIs. Invalidation re-evaluates only the requested cached bindings and emits
-`GameplayActionBindingInvalidated`; automatic bindings latch one continuous eligibility window and
-competing edges select at most one deterministic winner.
-
-`GetRelevantInputs()` is the input-loop boundary for the game. On a locally controlled runner it
-returns every non-automatic bound input, plus inputs whose gesture or sustained request is still
-consumed after a binding disappears. It returns no inputs for a remote runner.
-
-`InputGameplayAction` is the opt-in action type for default input binding. A missing
-`DefaultBindingConfig` is valid and means that no default binding is created; generic actions remain
-free of input concerns.
-
-When a runner has an `OwnedActionComponent`, it observes only that component. At `_Ready` it scans
-the actions already registered; later `GameplayActionAdded` signals bind input actions with the
-action itself as the cleanup source, and `GameplayActionRemoved` unbinds that source immediately.
-This lifecycle also drives local `Automatic` actions through the normal runner request pipeline.
-
-Gesture resolution snapshots candidates at the press edge. A competing hold delays press/release
-selection, the longest reached captured threshold wins, and a consumed gesture cannot trigger a
-second action before release. `HoldDuration` is only the local selection delay. Gameplay duration is
-owned by an executor: a timed action is accepted as `Running`, then completes later from the
-authoritative `TimedGameplayActionExecutor` or `TimedExecution` clock.
-
-`GameplayActionInputRequirement.Pressed` is also local. It remembers which accepted request should
-receive a cancel command when the originating input is released, even if its binding has since been
-removed. Neither the requirement nor the input name crosses the network.
-
-### Access and authoritative execution
-
-Owned actions are requestable through the runner's explicit `OwnedActionComponent`. External actions
-must select a named `IGameplayActionAccessProvider` through their authoritative action type. The
-server resolves its own component and action, validates the RPC sender against `OwnerPeerId`, asks its
-own provider for access, then lets the component re-run gameplay rules and reservations before the
-executor.
-
-Long-running player requests are tracked by the authoritative runner. Executors require requester
-presence by default; while such an external execution is running, the provider's sustained access is
-checked by the server and loss cancels it. Requester teardown or peer disconnection follows the same
-executor policy. An executor that overrides `RequiresRequesterPresence` to `false` makes its work
-world-owned, so spatial loss and requester departure do not cancel it.
-
-### Network, prediction, and acknowledgements
-
-The reliable request payload contains only the component path and stable `ActionId`. Bindings,
-activation modes, hold durations, input requirements, providers, and gameplay rules are never client
-claims. The authority returns requester-only started, progress, rejected, completed, cancelled, and
-failed acknowledgements.
-
-`GameplayActionRunner` owns the network boundary for both owned actions and actions supplied by an
-Interaction interactor. It applies `SetMultiplayerAuthority(ServerPeerId)` to its own node during
-`_Ready` (and when that configuration changes). This is required because a character root can inherit
-the player peer authority recursively, while the runner's `Authority` acknowledgement RPCs must be
-sent by the server. `InteractionInteractor` therefore owns no RPC authority and delegates its local
-control query to the runner.
-
-A timed executor can seed a local progress prediction before the round trip. The started ACK replaces
-that prediction with the authoritative execution ID and sample; rejection clears it. Active ACK IDs
-also guard `AuthorityOnly` actions, which intentionally expose no requester presentation, against
-duplicate local requests. Terminal reconciliation is correlated by component, ActionId, and
-ExecutionId, so a duplicate or stale terminal ACK cannot close a newer execution.
-
-`GameplayActionExecutionRelation` is deliberately resolved independently on each peer: the requester
-learns `RequestedLocally` through prediction/ACK, while observers and late joiners receive
-`Observed` through replication. `GameplayActionExecutionVisibility` still decides whether an
-observer gets a slot at all; a `RequesterOnly` observer remains optimistic rather than bypassing that
-visibility contract.
-
-The replicated execution codec now uses
-`Array<Dictionary<string, Variant>>` internally. An untyped Godot array exists only for the immediate
-`Variant` deserialization boundary in `GameplayActionExecutionSynchronizer`, where every element is
-validated before conversion; malformed input does not consume its snapshot revision.
-
-## Tranche 3 verification coverage
-
-The focused generic tests cover binding ownership and cleanup, strict input configuration, all four
-activation modes, tap/hold snapshots, deterministic conflicts, automatic latching and batched
-competition, scoped invalidation notifications, release cancellation after binding loss, external
-access and sustained-access loss, requester teardown with world-owned survival, prediction,
-AuthorityOnly deduplication, stale terminal ACKs, sender spoof rejection, authoritative access
-rejection, release cancellation, peer disconnection, and real ENet requester/observer separation.
-
-The tranche gate formats all C# sources and builds with zero warnings or errors. The complete test run
-passes 290 of 291 tests; its sole failure is the already tracked Interaction scene regression
-`DoorSynchronizationConvergesPresentationWithoutReplayingUnlockAudio`, which expects `RESET` but
-receives an empty animation name. No GameplayAction test fails in that run.
-
-## Tranche 4 — Interaction integration
-
-### Ownership and compatibility bridge
-
-`InteractionAction`, `InteractionRule`, and `InteractionActionExecutor` are now the useful
-specialization/adapters of the generic contracts. Interaction actions reuse
-`GameplayActionDefinition` and `GameplayActionBindingConfig` directly; no empty Interaction data
-subtypes remain.
-`InteractiveComponent` delegates authoritative evaluation, reservations, execution, progress, and
-presentation storage to `GameplayActionComponent`; `InteractionInteractor` delegates bindings,
-gesture resolution, request transport, acknowledgements, and sustained execution tracking to
-`GameplayActionRunner`.
-
-> Superseded by tranche 5: the bridge and the alias described below no longer exist. This subsection
-> records the tranche-4 checkpoint.
-
-Existing scenes are deliberately still accepted during this checkpoint. When an authored
-`GameplayActionComponent` or `GameplayActionRunner` is absent, a small deferred migration bridge
-installs it and moves/registers the existing action nodes. The bridge refreshes an already-focused
-interactor after registration, and the Interaction execution synchronizer initializes after that
-deferred installation. These are temporary runtime accommodations, not the final authoring model;
-tranche 5 replaces them with explicit scene nodes and removes the parallel legacy lifecycle.
-
-`InteractionAction.ConcurrencyGroup` remains as a tranche-4 compatibility alias for the generic
-`HostConcurrencyGroup`. It is removed with the migrated scene properties in tranche 5.
-
-### Spatial access, rules, and bindings
-
-Interaction owns only its domain-specific policy:
-
-- the detector and focus model decide which targets are locally relevant;
-- the registered `interaction` access provider revalidates authoritative range/candidate access and
-  sustained access for long-running player requests;
-- programmatic execution bypasses spatial access while still evaluating target and action rules;
-- one dynamic target-rule adapter runs before the authored action rules without copying either
-  collection;
-- focus creates contextual generic bindings, focus loss cleans their source, and Interaction
-  invalidates focused bindings as its pull-style rules change;
-- Interaction presentation converts generic availability, lifecycle, progress, and rejection reasons
-  without owning a second execution store.
-
-The generic runner is the sole request path. An input release, lost authoritative access, requester
-teardown, or peer departure cancels a sustained execution according to the executor's requester
-presence policy.
-
-### Tranche 4 verification coverage
-
-The Interaction suites retain behavior-level coverage of focus binding and cleanup, authoritative
-out-of-range refusal, programmatic spatial bypass with rule preservation, sustained-access
-cancellation, requester/observer visibility, late join, progress, prediction, acknowledgements,
-automatic actions, concurrency, and presentation reads projected from the generic store. Obsolete
-unit tests that invoked the former private Interaction execution core directly were removed; the
-generic component suites now own those lifecycle invariants, while Interaction tests cover the
-adapter boundary.
-
-At the tranche checkpoint, formatting and compilation succeed with zero warnings or errors and the
-complete suite passes. The previously tracked door synchronization test now asserts the observable
-closed pose rather than `AnimationPlayer.CurrentAnimation`, which is empty after seeking past the
-very short `RESET` clip on the current Godot runtime.
-
-## Tranche 5 — authored topology and closeout
-
-### Final scene topology
-
-Nothing is installed implicitly any more. The deferred migration bridge and the
-`InteractionAction.ConcurrencyGroup` alias are removed, so a scene declares what it uses:
-
-```
-Interaction/
-  GameplayActions/                     # GameplayActionComponent
-    OpenAction/                        # GameplayAction (or InteractionAction)
-      OpenExecutor                     # GameplayActionExecutor
-  GameplayActionExecutionSynchronizer  # Component = ../GameplayActions
-  InteractiveComponent                 # ActionComponent = ../GameplayActions
-```
-
-Two host invariants shape that layout, and both are diagnosed rather than guessed:
-
-- an authored action must be a **direct child** of its `GameplayActionComponent`; the host refuses to
-  register an action parented elsewhere instead of silently hosting it;
-- a consumer that subscribes to the host on `_Ready` — `InteractiveComponent` does — needs the host
-  assigned before it enters the tree, which an exported `NodePath` guarantees.
-
-The host is authored **beside** its consumer rather than below it. That is not cosmetic: it keeps
-every action at the depth it had before the extraction, so authored relative paths — a
-`StatefulStateInteractionRule.StatefulPath`, a stateful executor's `Stateful` — survive the migration
-unchanged.
-
-### Stateful integration and diagnostics
-
-The generic Stateful executors moved to `addons/gameplay_action_plugin/integration/stateful` as
-`SetStateGameplayActionExecutor`, `TransitionStateGameplayActionExecutor`, and
-`TimedTransitionStateGameplayActionExecutor`; nothing about applying a state is spatial. Interaction
-keeps only `StatefulStateInteractionRule`, which is a spatial-context rule.
-
-`GameplayActionValidator` owns their diagnostics, including the schema checks the Interaction
-validator used to carry: a `TargetState`, `RunningState`, `CompletedState`, or `CancelledState`
-absent from the assigned `StateSchema` is reported at authoring time.
-
-### Tranche 5 verification coverage
-
-Configuration and scene suites assert the final topology directly: the project scenes host their
-actions under `GameplayActions`, the level still overrides the button's cross-scene `Stateful` paths,
-and every required diagnostic is covered. One requester-side lifecycle rule was restored with its
-test: a refusal clears a prediction only, and never the bar of an execution the authority already
-acknowledged and is still driving.
-
-At the tranche checkpoint, `csharpier format .` and `dotnet build` succeed with zero warnings or
-errors, the complete GdUnit4 suite passes (285/285), and the project boots headless with no error or
-warning.
-
-## Tranche 6 — execution context roles
-
-`GameplayActionContext` now exposes the four execution roles without coupling the generic framework
-to a game's scene layout:
-
-- `Instigator` is the gameplay actor responsible for the action;
-- `Host` is the gameplay object owning the action;
-- `World` is the current gameplay world root;
-- `Requester` remains the request transport source, when a runner requested the action.
-
-The context provides `GetInstigator<T>()`, `GetHost<T>()`, and `GetWorld<T>()` typed helpers. The
-`GameplayActionComponent` owns optional `Host` and `World` overrides; when they are absent, the host
-falls back to the component parent and the world to `SceneTree.CurrentScene`. `Node.Owner` is not
-used for either role. `Component` remains available for framework lifecycle operations and is not
-an integration-specific host alias.
-
-The demo `Character` is now the default instigator of its runner, while Interaction derives its
-interactor adapter from that instigator. The Battery executors consume `Character.Inventory`, the
-typed `QuestWorldWorld`, and its `BatterySpawner` instead of resolving global scene paths.
-
-## Deferred, not partially implemented
-
-V1 deliberately stops at the invariants above. The following are **not** present in any partial form,
-and nothing in the current API should be read as a first step towards them:
-
-- **Gameplay tag systems** — granted or required tags consumed by rules. Rules are plain synchronous
-  predicates; there is no tag container, no tag matching, and no tag replication.
-- **Cross-host locks** — concurrency and reservations are strictly host-local, per `ActionId` and per
-  concurrency group. There is no lock spanning two hosts, and no cross-requester cancellation policy.
-- **Target data and invocation payloads** — an execution carries an id, an instigator, a requester,
-  its host, and its action. It carries no arbitrary target or payload.
-- **Generic inventory integration** — the framework still owns no inventory contract. The demo's
-  Battery actions are an application-level consumer that reaches the typed instigator and world
-  context explicitly.
-- **Richer presentation schema** — a definition offers optional intrinsic label/description metadata
-  and a binding preserves opaque integration-owned context. That is the whole contract: no generic
-  HUD policy, no presenter model, no standardized action menu.
-- **Generic grant replication** — a binding is local and never a grant. Granting stays a component
-  ownership change, and no replicated grant synchronizer exists.
-- **Multiple concurrent executions for one `ActionId`** — one active execution maximum, by design.
-
-Each of these must start from an observed use case and preserve the V1 ownership, authority, and
-lifecycle invariants. Their listing here is documentation of a boundary, not a roadmap commitment.
-
-## Action presentation boundary
-
-`GameplayActionPresentation` is now the generic read model for one input-bound action. It carries the
-stable identity, player-facing text, input name, `GameplayActionAvailability`, activation mode, and
-optional per-binding hold progress. `IsAllowed`, `IsAutomatic`, `IsHoldable`, and `BlockReason` are
-derived properties; the activation mode remains the source of truth.
-
-`IGameplayActionWidget` and the default `GameplayActionPromptWidget` live in this addon as well. A
-generic presenter may therefore render actions from any `GameplayActionComponent`; an interaction
-presenter only projects its target-level view and does not define a second availability vocabulary.
-
-Le `GameplayActionRunner` expose aussi `TryGetBindingHoldProgress(bindingId, out progress, out
-elapsed)`. La valeur n'existe que pour un binding `Hold` capturé au début du gesture correspondant ;
-elle est normalisée sur son propre threshold. Les bindings ajoutés après le press, retirés pendant le
-gesture, ou configurés en `Press`/`Release` ne produisent pas de progression.
-
-`GameplayActionPresenter` consomme cette même liste de bindings et ne présente que ceux dont le
-`Component` est le `OwnedActionComponent` du runner. Il ignore les actions `Hidden` et `Automatic`,
-conserve les `Blocked`, réconcilie les contrôles par `binding.Id`, et vide sa vue quand le runner n'est
-pas local.
+`GameplayActionComponent` is the concrete host. Authored actions are explicit direct children listed
+in `Actions`; runtime `AddAction()` joins the same ordered collection. Registration rejects missing
+configuration, duplicate IDs, foreign parents and occurrences already owned by another component.
+
+`EvaluateAction()` is a pure ordered rule pass. `ExecuteAction()` is the authority-only programmatic
+entry point: it bypasses requester/access/binding checks, but still applies action rules and host
+reservations. Player requests ultimately enter the same execution path after the runner has validated
+their requester-specific access.
+
+Reservations are local to one component. One `ActionId` can have at most one active execution and all
+actions sharing a `HostConcurrencyGroup` exclude one another. Different components never share a
+lock.
+
+Removing an idle action makes it unresolvable and frees it. Removing a running action makes it
+unresolvable immediately but keeps its node, ID reservation and transient presentation alive until
+that execution terminates. The same ID cannot be re-added during this retiring window.
+
+### Execution context
+
+Rules and executors receive one `GameplayActionContext` containing:
+
+- `ExecutionId` (`0` while evaluating before a reservation exists);
+- optional `Instigator`, the gameplay actor the action is attributed to;
+- optional `Requester`, present only when a runner requested the action and expects acknowledgements;
+- the owning `Component` and current `Action`;
+- `Host`, defaulting to the component parent unless explicitly overridden;
+- `World`, defaulting to `SceneTree.CurrentScene` unless explicitly overridden.
+
+`GetInstigator<T>()`, `GetHost<T>()` and `GetWorld<T>()` are the integration seam for typed game
+context. The framework deliberately does not replace them with a global game manager.
+
+## Input and requester pipeline
+
+`GameplayActionBinding` is local runtime state, not ownership and not replicated authority. It
+references an action still owned by its component and snapshots the input configuration used for that
+binding:
+
+- `Press`, `Hold`, `Release` or `Automatic` activation;
+- optional hold threshold;
+- `None` or `Pressed` input requirement;
+- priority;
+- cleanup source and opaque presentation context.
+
+`GameplayActionRunner` owns the input/request boundary. When `OwnedActionComponent` contains an
+`InputGameplayAction` with a `DefaultBindingConfig`, the runner creates/removes that binding with the
+action lifecycle. Integrations such as Interaction add external bindings explicitly.
+
+`GetRelevantInputs()` is the game input-loop boundary: a locally controlled runner returns all
+non-automatic bound inputs plus inputs still consumed by an active gesture/sustained request. Remote
+runner copies return none. `TryStartActionInput()` / `TryEndActionInput()` feed edges into the gesture
+resolver.
+
+Hold is a selection gesture, not execution duration. Candidate bindings are captured at the press
+edge; `TryGetBindingHoldProgress()` exposes progress for that captured binding only. A timed gameplay
+execution is a separate lifecycle owned by `TimedGameplayActionExecutor` or compositional
+`TimedExecution`.
+
+Owned actions are always accessible through their runner. An external action names an
+`AccessProviderId`; the authoritative runner resolves its own `IGameplayActionAccessProvider`, validates
+the RPC sender and access, then lets the host re-run rules/reservations. Client bindings and access
+claims never cross the network as proof.
+
+Executors require requester presence by default. An executor may opt out through
+`RequiresRequesterPresence == false` when accepted work becomes world-owned and should survive
+requester/access loss.
+
+## Execution presentation and networking
+
+A running execution owns a transient `GameplayActionExecutionPresentation` slot with stable execution
+and action IDs plus optional progress. Progress can be:
+
+- published discretely with `ReportExecutionProgress()`;
+- derived locally from a callable;
+- represented as a sparse linear sample and extrapolated from monotonic real time.
+
+The internal presentation store owns reconciliation, revisions and extrapolation so
+`GameplayActionComponent` stays the lifecycle owner rather than becoming a network/UI monolith.
+
+`GameplayActionExecutionVisibility` controls transport only:
+
+- `RequesterOnly` — requester acknowledgements, no observer snapshot;
+- `Replicated` — included in an explicitly wired `GameplayActionExecutionSynchronizer` snapshot;
+- `AuthorityOnly` — no remote presentation slot.
+
+Persistent gameplay truth is never inferred from these slots. The synchronizer transports only
+transient execution presentation and never executes actions or replicates dynamic grants.
+
+`GameplayActionExecutionRelation` is local presentation knowledge:
+
+- `RequestedLocally` for prediction/requester acknowledgement;
+- `Observed` for generic/replicated observations.
+
+It is not a network field. If the requester later receives the replicated copy of the same execution,
+its more informative `RequestedLocally` relation is preserved.
+
+The request payload is intentionally small: component path + stable `ActionId`. The authority returns
+started/progress/terminal acknowledgements. Terminal reconciliation includes the `ExecutionId`, so an
+old acknowledgement cannot close a newer execution of the same action.
+
+## Generic action presentation
+
+`GameplayActionPresentation` is the read model for one offered binding: identity, label/description,
+input, availability, activation mode and optional per-binding hold progress.
+
+`GameplayActionPresenter` presents only bindings owned by the runner's `OwnedActionComponent`; external
+bindings remain with their integration-specific presenter. `Hidden` and `Automatic` bindings are not
+shown, while `Blocked` remains presentable with its reason. Controls are reconciled by binding ID, not
+`ActionId`, so two bindings of the same action remain distinct.
+
+`IGameplayActionWidget` and `GameplayActionPromptWidget` are the default generic widget contract and
+implementation. Interaction reuses this action-level read model while adding target-level projection,
+focus and indication.
+
+## Architecture decisions
+
+### AD-01 — Share definitions, own occurrences
+
+V0-style action metadata evolved into `GameplayActionDefinition : Resource` plus
+`GameplayAction : Node`. Shareable identity/presentation data can be reused safely, while executors,
+scene references and runtime ownership stay per occurrence.
+
+### AD-02 — One explicit executor, notifications after the fact
+
+Execution is a command with exactly one configured executor. Signals describe what already happened;
+they are not a broadcast fallback where an unknown number of subscribers may mutate gameplay.
+
+### AD-03 — Rules are the only availability extension point
+
+Availability is `Allowed | Blocked(reason) | Hidden`. Action subclasses do not get a second hidden
+`CanExecute` path: explicit ordered rules are the complete gameplay availability pass. `Hidden` means
+absent from offered choices; `Blocked` remains explainable.
+
+### AD-04 — One execution path, requester is data
+
+Programmatic and player-triggered actions do not have different execution semantics. A requester is
+attached only by request transport and means “this runner is waiting for acknowledgements”; there is
+no invocation-kind flag.
+
+### AD-05 — Concurrency is deliberately host-local
+
+Reservations are by `ActionId` and concurrency group inside one `GameplayActionComponent`. V1 does not
+introduce global locks or a cross-host arbitration service.
+
+### AD-06 — Action removal has a retirement window
+
+Logical removal and node lifetime are separate. A running action disappears from new resolution and
+bindings immediately, but its occurrence survives until its accepted execution reaches a terminal
+state. This avoids cancelling gameplay as a side effect of ownership cleanup.
+
+### AD-07 — Input binding is local derived state
+
+An action is not an input binding. `InputGameplayAction.DefaultBindingConfig` is only an authored source
+for a runner-local binding; bindings are neither replicated grants nor authority evidence. This lets
+the same execution model serve interaction, inventory-granted actions and non-input gameplay.
+
+### AD-08 — The runner owns request networking
+
+`GameplayActionRunner` is the single requester/RPC boundary. The server resolves its own component,
+action and access provider rather than trusting client-side binding data. Interaction therefore adds
+spatial access and bindings without owning a second network execution protocol.
+
+### AD-09 — Progress is presentation, completion is gameplay
+
+Generic progress can be discrete, callable or time-derived, but it never decides whether an execution
+has completed. `TimedExecution` is an explicit execution policy that owns a real deadline; arbitrary
+progress remains a read model.
+
+### AD-10 — Availability, execution and relation stay separate
+
+“May this be offered?”, “what is running?” and “did this peer request it?” are different facts.
+`GameplayActionExecutionRelation` therefore augments transient presentation without changing
+availability or adding a second network state.
+
+### AD-11 — Rich game context is explicit and typed
+
+`Instigator`, `Host` and `World` provide the minimum reach needed by real executors without introducing
+a static service locator. Integration-specific resolution stays outside the generic core; for example,
+Interaction resolves its interactor from the generic instigator through one replaceable seam.
+
+### AD-12 — Presentation ownership follows the generic boundary
+
+Action availability, gesture state, execution presentation and the default action widget belong to
+Gameplay Action. Interaction owns only target-specific detection/focus/projection. This is what lets an
+inventory-granted action and an interaction share the same runner without pretending they are the same
+target UX.
+
+## Deliberately deferred
+
+These are boundaries, not partially implemented features or roadmap commitments:
+
+- gameplay tags, attributes and cooldown frameworks;
+- cross-host locks or global concurrency arbitration;
+- arbitrary target data / invocation payloads;
+- a generic inventory contract;
+- standardized menus/HUD policy beyond the small presentation model;
+- generic replication of dynamic action grants;
+- multiple simultaneous executions for one `ActionId`.
+
+Each should start from a concrete game use case and preserve the V1 ownership, authority and lifecycle
+invariants above.
+
+## Open hardening notes
+
+Four review findings remain worth keeping visible because they concern lifecycle/input robustness rather
+than new features:
+
+- terminal executor callbacks currently run between reservation release and final notification;
+  exception handling should eventually guarantee retirement finalization and terminal notification;
+- a world-owned running execution may outlive the requester node stored with it; terminal requester
+  notification should explicitly guard or detach a freed requester;
+- a gesture snapshots candidate binding IDs on press but re-reads their current cached availability at
+  hold/release resolution, so availability may change the winner inside an already-started gesture;
+- when a `Press` binding shares an input with a `Release` binding, the gesture resolver currently waits
+  for release before resolving that press candidate; this is deterministic but should be confirmed as
+  intended semantics or split into explicit press/release snapshots.
+
+They are intentionally documented as hardening work, not as alternate architecture.
