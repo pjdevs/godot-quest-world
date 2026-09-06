@@ -9,6 +9,8 @@ using QuestWorld.GameplayActions.Runtime.Actions;
 using QuestWorld.GameplayActions.Runtime.Bindings;
 using QuestWorld.GameplayActions.Runtime.Rules;
 using QuestWorld.GameplayActions.Runtime.Runner;
+using QuestWorld.Interaction.Runtime.Interactive;
+using QuestWorld.Inventory;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -17,6 +19,8 @@ public sealed partial class GameplayActionPresenterTest
 {
     private const string ActionScenePath =
         "res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn";
+    private const string BatteryScenePath = "res://quest_world/interactibles/battery/Battery.tscn";
+    private const string CharacterScenePath = "res://quest_world/character/Character.tscn";
 
     [TestCase]
     public async Task PresenterShowsOwnedActionsAndIgnoresExternalBindings()
@@ -138,6 +142,62 @@ public sealed partial class GameplayActionPresenterTest
         await world.Scene.SimulateFrames(1);
 
         AssertThat(world.Actions.GetChildCount()).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task CharacterPresentsAnInventoryGrantedActionThroughTheGenericPresenter()
+    {
+        global::Character character = GD.Load<PackedScene>(CharacterScenePath)
+            .Instantiate<global::Character>();
+        Node3D battery = GD.Load<PackedScene>(BatteryScenePath).Instantiate<Node3D>();
+        Node3D root = AutoFree(new Node3D { Name = "World" });
+        root.AddChild(character);
+        root.AddChild(battery);
+        ISceneRunner scene = ISceneRunner.Load(root);
+        await scene.SimulateFrames(1);
+
+        GameplayActionRunner runner = character.GetNode<GameplayActionRunner>(
+            "GameplayActionRunner"
+        );
+        GameplayActionComponent actions = character.GetNode<GameplayActionComponent>(
+            "GameplayActions"
+        );
+        VBoxContainer actionContainer = character.GetNode<VBoxContainer>(
+            "GameplayActionPresenter/ActionContainer/ActionList"
+        );
+        InventoryComponent inventory = character.GetNode<InventoryComponent>("InventoryComponent");
+        InteractiveComponent batteryInteraction = battery.GetNode<InteractiveComponent>(
+            "InteractiveComponent"
+        );
+
+        AssertThat(actionContainer.GetChildCount()).IsEqual(0);
+        AssertThat(runner.GetBindings().Count).IsEqual(1);
+        AssertThat(runner.GetBindings()[0].Component == actions).IsFalse();
+        AssertThat(batteryInteraction.ActionPromptScene!.ResourcePath).IsEqual(ActionScenePath);
+        GameplayActionComponent batteryActions = battery.GetNode<GameplayActionComponent>(
+            "ActionComponent"
+        );
+        GameplayActionExecutionResult takeResult = batteryActions.ExecuteAction(
+            "take",
+            out _,
+            character
+        );
+        AssertThat(takeResult is GameplayActionExecutionCompleted).IsTrue();
+        AssertThat(inventory.GetItemCount("battery")).IsEqual(1);
+        await scene.SimulateFrames(1);
+
+        AssertThat(actions.ResolveAction("drop_battery") is InputGameplayAction).IsTrue();
+        AssertThat(runner.GetBindings().Count).IsEqual(1);
+        AssertThat(runner.GetBindings()[0].Component == actions).IsTrue();
+        AssertThat(actionContainer.GetChildCount()).IsEqual(1);
+        AssertThat(actionContainer.GetChild<GameplayActionPromptWidget>(0).ActionNameLabel!.Text)
+            .IsEqual("Drop Battery");
+
+        AssertThat(inventory.RemoveItem("battery")).IsEqual(1);
+        await scene.SimulateFrames(1);
+
+        AssertThat(actions.ResolveAction("drop_battery") is null).IsTrue();
+        AssertThat(actionContainer.GetChildCount()).IsEqual(0);
     }
 
     private static PresentationWorld BuildWorld()

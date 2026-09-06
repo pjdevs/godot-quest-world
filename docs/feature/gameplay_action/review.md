@@ -163,3 +163,11 @@ Le dépôt contient actuellement 285 déclarations `[TestCase]`, dont 52 dans le
 Je n’ai cependant pas pu exécuter `dotnet build` ou `dotnet test` : cet environnement n’a ni `dotnet` ni `godot`. Le checkout est propre sur `main` au commit `5d8acee`. `git diff --check` relève seulement une ligne vide terminale dans `.csharpierignore`.
 
 En résumé : la direction et 90 % des frontières sont excellentes. Je corrigerais impérativement l’entrée d’input générique et les deux trous de lifecycle autour des callbacks/requesters, puis le snapshot de geste. Après ça, oui : V1 propre, utile et suffisamment petite pour évoluer à partir de vrais besoins plutôt que de devenir GAS par anticipation.
+
+## Résolution du chantier de présentation
+
+La migration de présentation a résolu le point d’entrée HUD qui restait alors centré sur Interaction :
+`GameplayActionPresenter` rend les bindings owned, le `GameplayActionRunner` expose les inputs et la
+progression par binding, et `InteractionPresenter` conserve seulement la projection target-level. Le
+read model et le widget d'action sont maintenant génériques, avec `binding.Id` comme identité de
+réconciliation et sans classification `InteractionAction` côté gameplay.

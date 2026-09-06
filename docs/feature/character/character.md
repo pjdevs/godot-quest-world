@@ -40,6 +40,11 @@ The global project `Character` subclass hosts `GameplayActionRunner`, `Interacti
 `InteractionPresenter`. The runner is the single input-loop boundary: the subclass samples the
 runner's relevant inputs and forwards press/release directly to it. A press refreshes Interaction's
 focus bindings first, but the runner remains usable for owned actions when no interactive is focused.
+
+`GameplayActionPresenter` is composed beside the interaction presenter. It consumes only bindings
+whose component is the runner's `OwnedActionComponent`, so inventory-granted actions such as `Drop
+Battery` use the generic action widget while focused `InteractionAction` bindings remain in the target
+prompt.
 ```
 
 The components are:
