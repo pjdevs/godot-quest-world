@@ -7,6 +7,7 @@
 [ext_resource type="Script" uid="uid://cvyflkw40bcp7" path="res://quest_world/interactibles/carriable/TakeExecutor.cs" id="4_sdpir"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="5_sj1vt"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="6_4t8iy"]
+[ext_resource type="Resource" path="res://quest_world/interactibles/battery/BatteryItem.tres" id="7_item"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_vq8ek"]
 size = Vector3(1.5, 0.5, 0.5)
@@ -56,7 +57,7 @@ metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
 [node name="TakeExecutor" type="Node" parent="ActionComponent/TakeAction" unique_id=2073787997]
 script = ExtResource("4_sdpir")
-InventoryItem = &"battery"
+Item = ExtResource("7_item")
 
 [node name="InteractiveComponent" type="Node" parent="." unique_id=75349340 node_paths=PackedStringArray("InteractionArea", "InteractionAnchor", "ActionComponent")]
 script = ExtResource("5_sj1vt")

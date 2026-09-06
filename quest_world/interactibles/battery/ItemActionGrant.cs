@@ -1,15 +1,14 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.GameplayActions;
 using QuestWorld.GameplayActions.Runtime.Actions;
+using QuestWorld.GameplayActions.Runtime.Bindings;
 using QuestWorld.Inventory;
 
 [GlobalClass]
 public partial class ItemActionGrant : Node
 {
-    [Export]
-    public Godot.Collections.Dictionary<StringName, PackedScene?> ItemActions { get; set; } = [];
-
     [Export]
     public InventoryComponent? Inventory { get; set; } = null;
 
@@ -27,6 +26,13 @@ public partial class ItemActionGrant : Node
             );
         }
 
+        if (ActionComponent is null)
+        {
+            GD.PushWarning(
+                $"ItemActionGrant: ActionComponent is null on {GetPath()}. Actions will not be granted."
+            );
+        }
+
         Inventory?.ItemQuantityChanged += OnItemQuantityChanged;
     }
 
@@ -37,27 +43,38 @@ public partial class ItemActionGrant : Node
         bool isSynchronization
     )
     {
-        if (!ItemActions.TryGetValue(itemId, out PackedScene? actionScene))
+        if (Inventory?.Catalog?.GetItem(itemId) is not CarriableItemDefinition item)
         {
             return;
         }
 
         if (oldQuantity <= 0 && newQuantity > 0)
         {
-            GameplayAction? action = actionScene?.Instantiate<GameplayAction>();
-
-            if (action is not null)
+            DropExecutor executor = new() { Name = "DropExecutor", Item = item };
+            InputGameplayAction action = new()
             {
-                if (ActionComponent?.AddAction(action) == true)
+                Name = item.DropActionId.ToString(),
+                Definition = new GameplayActionDefinition
                 {
-                    _grantedActionsByItemId[itemId] = action;
-                }
+                    Id = item.DropActionId,
+                    Label = item.DropActionLabel,
+                },
+                DefaultBindingConfig = new GameplayActionBindingConfig
+                {
+                    InputActionName = "interact",
+                },
+                Executor = executor,
+                ExecutionVisibility = GameplayActionExecutionVisibility.AuthorityOnly,
+            };
+            action.AddChild(executor);
+
+            if (ActionComponent?.AddAction(action) == true)
+            {
+                _grantedActionsByItemId[itemId] = action;
             }
             else
             {
-                GD.PushWarning(
-                    $"ItemActionGrant: Failed to instantiate action for item {itemId} on {GetPath()}."
-                );
+                action.Free();
             }
         }
         else if (oldQuantity > 0 && newQuantity <= 0)

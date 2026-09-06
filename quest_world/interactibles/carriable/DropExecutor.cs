@@ -6,31 +6,28 @@ using QuestWorld.GameplayActions.Runtime.Actions;
 public partial class DropExecutor : GameplayActionExecutor
 {
     [Export]
-    public StringName InventoryItem { get; set; } = "";
-
-    [Export]
-    public StringName ItemSpawnDefinitionId { get; set; } = "";
+    public CarriableItemDefinition? Item { get; set; }
 
     public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         IOriented? owner = context.GetInstigator<IOriented>();
         IInventoryOwner? inventoryOwner = context.GetInstigator<IInventoryOwner>();
         IWorldSpawner? worldSpawner = context.GetWorld<IWorldSpawner>();
-        if (owner is null || inventoryOwner is null || worldSpawner is null)
+        if (owner is null || inventoryOwner is null || worldSpawner is null || Item is null)
         {
-            return new GameplayActionExecutionFailed("Battery drop context is incomplete.");
+            return new GameplayActionExecutionFailed("Carriable drop context is incomplete.");
         }
 
-        if (inventoryOwner.Inventory.RemoveItem(InventoryItem) != 1)
+        if (inventoryOwner.Inventory.RemoveItem(Item.Id) != 1)
         {
             return new GameplayActionExecutionFailed("The item is not available to drop.");
         }
 
         SpawnRequest request = new(owner.VisualTransform.Translated(owner.ForwardVector * 1.5f));
-        if (!worldSpawner.TrySpawn(ItemSpawnDefinitionId, request, out _))
+        if (!worldSpawner.TrySpawn(Item.GetSpawnDefinitionId(), request, out _))
         {
-            inventoryOwner.Inventory.AddItem(InventoryItem);
-            return new GameplayActionExecutionFailed("BatterySpawner failed to spawn a battery.");
+            inventoryOwner.Inventory.AddItem(Item.Id);
+            return new GameplayActionExecutionFailed("The carriable could not be spawned.");
         }
 
         return new GameplayActionExecutionCompleted();
