@@ -12,7 +12,7 @@ using QuestWorld.Interaction.Runtime.Interactive;
 /// without a single area, body, or physics frame. The default scoring is kept, so a test that places
 /// two targets still gets the focus the real pipeline would pick.
 /// </remarks>
-internal sealed partial class TestInteractionDetector : InteractionDetector
+public sealed partial class TestInteractionDetector : InteractionDetector
 {
     private readonly Dictionary<InteractiveComponent, InteractionDetectionKind> _detected = new();
     private readonly List<InteractiveComponent> _candidates = new();

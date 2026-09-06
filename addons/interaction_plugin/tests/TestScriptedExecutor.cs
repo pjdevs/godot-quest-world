@@ -12,7 +12,7 @@ using QuestWorld.Interaction.Runtime.Actions;
 /// does, so the executor is reduced to the one decision that changes the protocol: which of the four
 /// results it returns.
 /// </remarks>
-internal sealed partial class TestScriptedExecutor : InteractionActionExecutor
+public sealed partial class TestScriptedExecutor : InteractionActionExecutor
 {
     private readonly TimedExecution _timedExecution = new();
 

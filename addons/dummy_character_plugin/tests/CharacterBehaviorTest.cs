@@ -10,6 +10,7 @@ using Character = QuestWorld.Character.Character;
 
 [TestSuite]
 [RequireGodotRuntime]
+[TestCategory("Runtime")]
 public sealed class CharacterBehaviorTest
 {
     private const string CharacterScenePath = "res://addons/dummy_character_plugin/Character.tscn";

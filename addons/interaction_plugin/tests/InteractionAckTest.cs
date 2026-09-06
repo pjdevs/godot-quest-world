@@ -23,6 +23,7 @@ using static GdUnit4.Assertions;
 /// </remarks>
 [TestSuite]
 [RequireGodotRuntime]
+[TestCategory("Network")]
 public sealed partial class InteractionAckTest
 {
     private static readonly StringName InteractInput = new("interact");

@@ -1,0 +1,140 @@
+version: '3'
+
+vars:
+  PROJECT: quest-world.sln
+
+tasks:
+  default:
+    desc: List available build and test tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the project without running tests
+    cmds:
+      - dotnet build
+
+  tools:restore:
+    internal: true
+    cmds:
+      - dotnet tool restore
+
+  format:
+    desc: Format the repository with CSharpier
+    deps: [tools:restore]
+    cmds:
+      - dotnet tool run csharpier format .
+
+  format:check:
+    desc: Check repository formatting with CSharpier
+    deps: [tools:restore]
+    cmds:
+      - dotnet tool run csharpier check .
+
+  ci:
+    desc: Run formatting check, build, and the explicitly confirmed full test suite
+    cmds:
+      - task: format:check
+      - task: build
+      - task: test:full
+        vars:
+          CONFIRM_FULL: yes
+
+  test:suite:
+    desc: Run one suite by its class name, for example task test:suite SUITE=CharacterBehaviorTest
+    requires:
+      vars: [SUITE]
+    cmds:
+      - task: test:filter
+        vars:
+          FILTER: 'FullyQualifiedName~{{.SUITE}}'
+
+  test:filter:
+    desc: Run a VSTest filter, for example task test:filter FILTER=TestCategory=Network
+    internal: true
+    requires:
+      vars: [FILTER]
+    cmds:
+      - task: test:command
+        vars:
+          DOTNET_ARGS: '--filter "{{.FILTER}}"'
+
+  test:command:
+    internal: true
+    vars:
+      DOTNET_ARGS: '{{default "" .DOTNET_ARGS}}'
+    cmds:
+      - task: test:command:darwin
+        vars:
+          DOTNET_ARGS: '{{.DOTNET_ARGS}}'
+      - task: test:command:windows
+        vars:
+          DOTNET_ARGS: '{{.DOTNET_ARGS}}'
+
+  test:command:darwin:
+    internal: true
+    platforms: [darwin]
+    env:
+      GODOT_BIN: /Applications/Godot_mono.app/Contents/MacOS/Godot
+    cmds:
+      - dotnet test {{.PROJECT}} {{.DOTNET_ARGS}}
+
+  test:command:windows:
+    internal: true
+    platforms: [windows, linux]
+    env:
+      GODOT_BIN: godot
+    cmds:
+      - dotnet test {{.PROJECT}} {{.DOTNET_ARGS}}
+
+  test:interaction:
+    desc: Run all Interaction suites
+    cmds:
+      - task: test:filter
+        vars:
+          FILTER: 'FullyQualifiedName~Interaction'
+
+  test:gameplay:
+    desc: Run all GameplayAction suites
+    cmds:
+      - task: test:filter
+        vars:
+          FILTER: 'FullyQualifiedName~GameplayAction'
+
+  test:character:
+    desc: Run Character suites
+    cmds:
+      - task: test:filter
+        vars:
+          FILTER: 'FullyQualifiedName~Character'
+
+  test:stateful:
+    desc: Run Stateful suites
+    cmds:
+      - task: test:filter
+        vars:
+          FILTER: 'FullyQualifiedName~Stateful'
+
+  test:runtime:
+    desc: Run suites classified as Godot runtime tests
+    cmds:
+      - task: test:filter
+        vars:
+          FILTER: 'TestCategory=Runtime'
+
+  test:network:
+    desc: Run suites classified as network tests
+    cmds:
+      - task: test:filter
+        vars:
+          FILTER: 'TestCategory=Network'
+
+  test:full:
+    desc: Run every test; require an explicit decision before using it
+    requires:
+      vars:
+        - name: CONFIRM_FULL
+          enum: [yes]
+    cmds:
+      - echo "Running the full suite because CONFIRM_FULL=yes was explicitly provided."
+      - task: test:command

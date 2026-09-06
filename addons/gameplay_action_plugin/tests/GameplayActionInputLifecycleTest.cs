@@ -10,6 +10,7 @@ using static GdUnit4.Assertions;
 
 [TestSuite]
 [RequireGodotRuntime]
+[TestCategory("Runtime")]
 public sealed partial class GameplayActionInputLifecycleTest
 {
     [TestCase]

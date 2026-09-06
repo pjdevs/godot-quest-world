@@ -19,6 +19,7 @@ Vertical, one folder per feature with subfolder `scripts` etc.
 
 - Godot CLI available in PATH : `godot`
 - `dotnet`
+- Task available in PATH: `task` (`Taskfile.yml` is the platform-agnostic entry point)
 
 ### Documentation structure
 
@@ -30,8 +31,15 @@ Vertical, one folder per feature with subfolder `scripts` etc.
 
 ### Mandatory Rules
 
-- After each code (not docs tasks) task run `csharpier format .`, `dotnet build` and `$env:GODOT_BIN = (Get-Command godot).Source; dotnet test` on Windows
-  and `GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot dotnet test` on macOS (`godot` is on path but as a symlink so it breaks in headless).
+- After each code (not docs tasks) task run `task format` and `task build`.
+- `task ci` is the complete local/CI gate: it runs `format:check`, `build`, then the explicitly confirmed full suite.
+- Run the smallest impacted test scope first with Task: `task test:suite SUITE=<SuiteName>` or one of the feature tasks documented in [the test strategy](./docs/feature/testing/testing.md).
+- For changes touching network authority, peer lifecycle, replication, shared test fixtures, the GdUnit adapter, or cross-feature runtime behavior, also run `task test:network` or `task test:runtime` as appropriate.
+- The full suite is deliberately not the default and is usually a bad first reflex. Before running it, challenge whether the change is cross-cutting, changes shared infrastructure/fixtures, or is being validated before merge/CI. Only then run `task test:full CONFIRM_FULL=yes`.
+- On Windows, Task sets `GODOT_BIN` to `godot`, which must be available on `PATH`; when it is not, use the direct fallback command with the executable path.
+- On macOS, Task uses `/Applications/Godot_mono.app/Contents/MacOS/Godot` because the `godot` PATH entry is a symlink that breaks in headless mode.
+- Direct fallback commands remain `dotnet test --filter "FullyQualifiedName~<SuiteName>"` with the platform-specific `GODOT_BIN` above.
+- After each task maintain a doc per feature in `docs/feature/<thedoc>.md`
 - CSharpier is the source of truth for C# formatting. For conventions it does not enforce, follow the surrounding code and existing project patterns.
 - Keep the relevant feature documentation current when architecture, invariants, boundaries or public usage materially change.
 - After each workflow pitfall or hard user correction on the implementation (not tweaking a feature or corrections),

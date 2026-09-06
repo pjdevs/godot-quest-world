@@ -11,6 +11,7 @@ using static GdUnit4.Assertions;
 
 [TestSuite]
 [RequireGodotRuntime]
+[TestCategory("Network")]
 public sealed partial class GameplayActionExecutionNetworkTest
 {
     private const int ConnectFrames = 240;
