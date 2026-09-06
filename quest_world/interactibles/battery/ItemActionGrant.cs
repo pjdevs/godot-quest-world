@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Godot;
 using QuestWorld.GameplayActions;
 using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
 using QuestWorld.Inventory;
 
 [GlobalClass]
@@ -59,10 +58,7 @@ public partial class ItemActionGrant : Node
                     Id = item.DropActionId,
                     Label = item.DropActionLabel,
                 },
-                DefaultBindingConfig = new GameplayActionBindingConfig
-                {
-                    InputActionName = "interact",
-                },
+                DefaultBindingConfig = item.DropBindingConfig,
                 Executor = executor,
                 ExecutionVisibility = GameplayActionExecutionVisibility.AuthorityOnly,
             };
