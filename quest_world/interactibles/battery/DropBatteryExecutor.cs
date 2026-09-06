@@ -11,7 +11,7 @@ public partial class DropBatteryExecutor : GameplayActionExecutor
     public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         Character? character = context.GetInstigator<Character>();
-        QuestWorldWorld? world = context.GetWorld<QuestWorldWorld>();
+        World? world = context.GetWorld<World>();
         if (character?.Inventory is null || BatteryItem is null || world?.BatterySpawner is null)
         {
             return new GameplayActionExecutionFailed("Battery drop context is incomplete.");

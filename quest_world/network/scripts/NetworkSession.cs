@@ -4,7 +4,7 @@ using QuestWorld.Character;
 
 public partial class NetworkSession : Node
 {
-    private enum SessionState
+    public enum SessionState
     {
         Stopped,
         Connecting,
@@ -16,14 +16,12 @@ public partial class NetworkSession : Node
     [Export]
     public CharacterPlayerController? LocalPlayerController { get; set; }
 
+    [Export]
+    public PlayerSpawner? PlayerSpawner { get; set; }
+
     private bool _configurationValid;
     private bool _multiplayerSignalsConnected;
     private MultiplayerPeer? _peer;
-    private SessionState _sessionState;
-
-    private QuestWorldWorld? World => GetParent() as QuestWorldWorld;
-
-    private Spawner<Character>? PlayerSpawner => World?.PlayerSpawner;
 
     public NetworkLaunchOptions? LaunchOptions { get; private set; }
 
@@ -33,8 +31,9 @@ public partial class NetworkSession : Node
     public bool IsDedicatedServer => LaunchOptions?.Mode == NetworkLaunchMode.Server;
 
     public int LocalPeerId { get; private set; } = 0;
+    public SessionState State { get; private set; }
 
-    public override void _Ready()
+    public void Initialize()
     {
         List<string> commandLineArguments = [with(OS.GetCmdlineArgs()), .. OS.GetCmdlineUserArgs()];
         _configurationValid = NetworkLaunchOptions.TryParse(
@@ -45,21 +44,20 @@ public partial class NetworkSession : Node
         if (!_configurationValid)
         {
             GD.PushError($"NetworkSession: {parseError}");
-            _sessionState = SessionState.Failed;
+            State = SessionState.Failed;
             GetTree().Quit(2);
             return;
         }
 
         LaunchOptions = launchOptions;
 
-        QuestWorldWorld? world = World;
-        if (world is null || world.PlayerSpawner is null)
+        if (PlayerSpawner is null)
         {
             GD.PushError(
                 "NetworkSession: QuestWorldWorld and QuestWorldWorld.PlayerSpawner are required."
             );
             _configurationValid = false;
-            _sessionState = SessionState.Failed;
+            State = SessionState.Failed;
             return;
         }
 
@@ -74,36 +72,33 @@ public partial class NetworkSession : Node
         {
             case NetworkLaunchMode.Offline:
                 LocalPeerId = 1;
-                _sessionState = SessionState.Active;
-                world.InitializeAuthority();
+                State = SessionState.Active;
                 SpawnPlayer(1);
                 break;
             case NetworkLaunchMode.Host:
                 if (StartServer())
                 {
                     LocalPeerId = 1;
-                    _sessionState = SessionState.Active;
-                    world.InitializeAuthority();
+                    State = SessionState.Active;
                     SpawnPlayer(1);
                 }
                 else
                 {
-                    _sessionState = SessionState.Failed;
+                    State = SessionState.Failed;
                 }
                 break;
             case NetworkLaunchMode.Server:
                 if (StartServer())
                 {
-                    _sessionState = SessionState.Active;
-                    world.InitializeAuthority();
+                    State = SessionState.Active;
                 }
                 else
                 {
-                    _sessionState = SessionState.Failed;
+                    State = SessionState.Failed;
                 }
                 break;
             case NetworkLaunchMode.Client:
-                _sessionState = StartClient() ? SessionState.Connecting : SessionState.Failed;
+                State = StartClient() ? SessionState.Connecting : SessionState.Failed;
                 break;
         }
 
@@ -116,7 +111,7 @@ public partial class NetworkSession : Node
     {
         if (
             !_configurationValid
-            || _sessionState != SessionState.Active
+            || State != SessionState.Active
             || LocalPlayerController is null
             || IsDedicatedServer
             || LocalPeerId <= 0
@@ -125,8 +120,8 @@ public partial class NetworkSession : Node
             return;
         }
 
-        Character? localPlayer = World
-            ?.PlayerSpawner?.GetSpawnRoot()
+        Character? localPlayer = PlayerSpawner
+            ?.GetSpawnRoot()
             ?.GetNodeOrNull<Character>(NetworkPlayerIdentity.GetPlayerName(LocalPeerId));
         if (
             localPlayer != null
@@ -137,7 +132,7 @@ public partial class NetworkSession : Node
             LocalPlayerController.Possess(localPlayer);
             GD.Print($"NetworkSession: possessed local {localPlayer.Name}");
             GD.Print(
-                $"NetworkSession: visible player count={World?.PlayerSpawner?.GetSpawnRoot()?.GetChildCount()}"
+                $"NetworkSession: visible player count={PlayerSpawner?.GetSpawnRoot()?.GetChildCount()}"
             );
         }
     }
@@ -195,8 +190,8 @@ public partial class NetworkSession : Node
             return;
         }
 
-        Character? player = World
-            ?.PlayerSpawner?.GetSpawnRoot()
+        Character? player = PlayerSpawner
+            ?.GetSpawnRoot()
             ?.GetNodeOrNull<Character>(NetworkPlayerIdentity.GetPlayerName((int)peerId));
         if (player != null)
         {
@@ -208,8 +203,8 @@ public partial class NetworkSession : Node
     private void SpawnPlayer(int peerId)
     {
         string playerName = NetworkPlayerIdentity.GetPlayerName(peerId);
-        Character? existingPlayer = World
-            ?.PlayerSpawner?.GetSpawnRoot()
+        Character? existingPlayer = PlayerSpawner
+            ?.GetSpawnRoot()
             ?.GetNodeOrNull<Character>(playerName);
 
         if (existingPlayer is not null)
@@ -218,7 +213,7 @@ public partial class NetworkSession : Node
             return;
         }
 
-        Character? player = World?.PlayerSpawner?.Spawn(
+        Character? player = PlayerSpawner?.Spawn(
             Transform3D.Identity.Translated(NetworkPlayerIdentity.GetSpawnPosition(peerId)),
             playerName
         );
@@ -234,13 +229,13 @@ public partial class NetworkSession : Node
 
     private void OnConnectedToServer()
     {
-        if (_sessionState != SessionState.Connecting || _peer == null)
+        if (State != SessionState.Connecting || _peer == null)
         {
             return;
         }
 
         LocalPeerId = (int)_peer.GetUniqueId();
-        _sessionState = SessionState.Active;
+        State = SessionState.Active;
         GD.Print($"NetworkSession: connected as peer {LocalPeerId}");
     }
 
@@ -272,12 +267,12 @@ public partial class NetworkSession : Node
 
     private void StopSession()
     {
-        if (_sessionState is SessionState.Stopping or SessionState.Stopped)
+        if (State is SessionState.Stopping or SessionState.Stopped)
         {
             return;
         }
 
-        _sessionState = SessionState.Stopping;
+        State = SessionState.Stopping;
         SetProcess(false);
 
         if (_multiplayerSignalsConnected)
@@ -300,6 +295,6 @@ public partial class NetworkSession : Node
         }
 
         peer?.Close();
-        _sessionState = SessionState.Stopped;
+        State = SessionState.Stopped;
     }
 }

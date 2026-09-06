@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://cs4drhmc1bql5"]
 
 [ext_resource type="PackedScene" uid="uid://bh7me5hps2qp6" path="res://quest_world/character/Character.tscn" id="1_character"]
+[ext_resource type="Script" uid="uid://bys1n7v10yfrv" path="res://quest_world/world/World.cs" id="1_dxk44"]
 [ext_resource type="PackedScene" uid="uid://b8e873ujmp8or" path="res://quest_world/interactibles/lever_wall/LeverWall.tscn" id="1_wcunf"]
 [ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="2_player_controller"]
 [ext_resource type="PackedScene" uid="uid://bnrv7fcbbhuga" path="res://quest_world/interactibles/button/Button.tscn" id="3_kevvi"]
@@ -11,7 +12,6 @@
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_staterule"]
 [ext_resource type="Script" uid="uid://cc3a1y8oau6w0" path="res://quest_world/world/PlayerSpawner.cs" id="8_53a43"]
 [ext_resource type="Script" uid="uid://dwo8hrr15xu0s" path="res://quest_world/world/BatterySpawner.cs" id="11_w5rq3"]
-[ext_resource type="Script" uid="uid://djq3dj56kwgo0" path="res://quest_world/world/QuestWorldWorld.cs" id="11_world"]
 [ext_resource type="PackedScene" uid="uid://c615ipxd5fba5" path="res://quest_world/interactibles/battery/Battery.tscn" id="12_53a43"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_edcox"]
@@ -75,10 +75,11 @@ MismatchAvailability = 1
 BlockReason = "The wall is moving."
 metadata/_custom_type_script = "uid://cvrhmun38iql5"
 
-[node name="test_world" type="Node3D" unique_id=1604557493 node_paths=PackedStringArray("BatterySpawner", "PlayerSpawner")]
-script = ExtResource("11_world")
+[node name="test_world" type="Node3D" unique_id=1604557493 node_paths=PackedStringArray("BatterySpawner", "PlayerSpawner", "NetworkSession")]
+script = ExtResource("1_dxk44")
 BatterySpawner = NodePath("BatterySpawner")
 PlayerSpawner = NodePath("PlayerSpawner")
+NetworkSession = NodePath("NetworkSession")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=291661268]
 environment = SubResource("Environment_20rw3")
@@ -183,8 +184,9 @@ AutoSpawn = true
 [node name="PlayerController" type="Node" parent="." unique_id=1335039517]
 script = ExtResource("2_player_controller")
 
-[node name="NetworkSession" type="Node" parent="." unique_id=1403936845 node_paths=PackedStringArray("LocalPlayerController")]
+[node name="NetworkSession" type="Node" parent="." unique_id=1403936845 node_paths=PackedStringArray("LocalPlayerController", "PlayerSpawner")]
 script = ExtResource("3_network_session")
 LocalPlayerController = NodePath("../PlayerController")
+PlayerSpawner = NodePath("../PlayerSpawner")
 
 [editable path="Level/Button"]
