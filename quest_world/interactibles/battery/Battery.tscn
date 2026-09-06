@@ -4,7 +4,7 @@
 [ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="2_p1x0o"]
 [ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="3_p1x0o"]
 [ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="3_tj8cv"]
-[ext_resource type="Script" uid="uid://cq2b53tun566l" path="res://quest_world/interactibles/battery/TakeBatteryExecutor.cs" id="4_sdpir"]
+[ext_resource type="Script" uid="uid://cvyflkw40bcp7" path="res://quest_world/interactibles/carriable/TakeExecutor.cs" id="4_sdpir"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="5_sj1vt"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="6_4t8iy"]
 
@@ -42,23 +42,21 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
 mesh = SubResource("BoxMesh_vq8ek")
 surface_material_override/0 = SubResource("StandardMaterial3D_a6s0s")
 
-[node name="ActionComponent" type="Node" parent="." unique_id=1703770989 node_paths=PackedStringArray("Actions")]
+[node name="ActionComponent" type="Node" parent="." unique_id=1703770989]
 script = ExtResource("1_t2p7y")
-Actions = [NodePath("TakeAction")]
 metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
 
 [node name="TakeAction" type="Node" parent="ActionComponent" unique_id=1076240554 node_paths=PackedStringArray("Executor")]
 script = ExtResource("2_p1x0o")
 DefaultBindingConfig = SubResource("Resource_4t8iy")
 Definition = SubResource("Resource_sdpir")
-Executor = NodePath("TakeBatteryExecutor")
+Executor = NodePath("TakeExecutor")
 ExecutionVisibility = 2
 metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
 
-[node name="TakeBatteryExecutor" type="Node" parent="ActionComponent/TakeAction" unique_id=2073787997]
+[node name="TakeExecutor" type="Node" parent="ActionComponent/TakeAction" unique_id=2073787997]
 script = ExtResource("4_sdpir")
-BatteryItem = &"battery"
-metadata/_custom_type_script = "uid://cq2b53tun566l"
+InventoryItem = &"battery"
 
 [node name="InteractiveComponent" type="Node" parent="." unique_id=75349340 node_paths=PackedStringArray("InteractionArea", "InteractionAnchor", "ActionComponent")]
 script = ExtResource("5_sj1vt")

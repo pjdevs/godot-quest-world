@@ -17,7 +17,7 @@ public partial class NetworkSession : Node
     public CharacterPlayerController? LocalPlayerController { get; set; }
 
     [Export]
-    public PlayerSpawner? PlayerSpawner { get; set; }
+    public Spawner? PlayerSpawner { get; set; }
 
     private bool _configurationValid;
     private bool _multiplayerSignalsConnected;
@@ -213,10 +213,11 @@ public partial class NetworkSession : Node
             return;
         }
 
-        Character? player = PlayerSpawner?.Spawn(
-            Transform3D.Identity.Translated(NetworkPlayerIdentity.GetSpawnPosition(peerId)),
-            playerName
-        );
+        Character? player =
+            PlayerSpawner?.Spawn(
+                Transform3D.Identity.Translated(NetworkPlayerIdentity.GetSpawnPosition(peerId)),
+                playerName
+            ) as Character;
 
         if (player is null)
         {

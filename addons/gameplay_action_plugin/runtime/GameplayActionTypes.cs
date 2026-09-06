@@ -179,15 +179,15 @@ public readonly record struct GameplayActionContext(
     Node? World = null
 )
 {
-    /// <summary>Returns the instigator as the requested Node type, or null when incompatible.</summary>
+    /// <summary>Returns the instigator as the requested type, or null when incompatible.</summary>
     public T? GetInstigator<T>()
-        where T : Node => Instigator as T;
+        where T : class => Instigator as T;
 
-    /// <summary>Returns the gameplay host as the requested Node type, or null when incompatible.</summary>
+    /// <summary>Returns the gameplay host as the requested type, or null when incompatible.</summary>
     public T? GetHost<T>()
-        where T : Node => Host as T;
+        where T : class => Host as T;
 
-    /// <summary>Returns the gameplay world as the requested Node type, or null when incompatible.</summary>
+    /// <summary>Returns the gameplay world as the requested type, or null when incompatible.</summary>
     public T? GetWorld<T>()
-        where T : Node => World as T;
+        where T : class => World as T;
 }

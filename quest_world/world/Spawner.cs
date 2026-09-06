@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using Godot;
 
-public partial class Spawner<T> : MultiplayerSpawner, IWorldSystem
-    where T : Node3D
+public partial class Spawner : MultiplayerSpawner
 {
+    [Export]
+    public StringName Id { get; set; } = new(string.Empty);
+
     [Export]
     public PackedScene? Scene { get; set; } = null;
 
@@ -46,7 +48,7 @@ public partial class Spawner<T> : MultiplayerSpawner, IWorldSystem
         }
     }
 
-    public T? Spawn(Transform3D transform, string? name = null)
+    public Node3D? Spawn(Transform3D transform, string? name = null)
     {
         if (!IsServer() || Scene is null)
         {
@@ -59,20 +61,20 @@ public partial class Spawner<T> : MultiplayerSpawner, IWorldSystem
             return null;
         }
 
-        T? player = Scene.Instantiate<T>();
-        if (player is null)
+        Node3D? spawned = Scene.Instantiate<Node3D>();
+        if (spawned is null)
         {
             return null;
         }
 
         if (name is not null)
         {
-            player.Name = name;
+            spawned.Name = name;
         }
-        spawnRoot.AddChild(player);
-        player.GlobalTransform = transform;
+        spawnRoot.AddChild(spawned);
+        spawned.GlobalTransform = transform;
 
-        return player;
+        return spawned;
     }
 
     public Node3D? GetSpawnRoot() =>

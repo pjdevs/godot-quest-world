@@ -3,7 +3,7 @@ using QuestWorld.GameplayActions.Runtime.Runner;
 using QuestWorld.Interaction.Runtime.Interactor;
 using QuestWorld.Inventory;
 
-public partial class Character : QuestWorld.Character.Character
+public partial class Character : QuestWorld.Character.Character, IOriented, IInventoryOwner
 {
     private InteractionInteractor _interactionInteractor = null!;
     private GameplayActionRunner _gameplayActionRunner = null!;
