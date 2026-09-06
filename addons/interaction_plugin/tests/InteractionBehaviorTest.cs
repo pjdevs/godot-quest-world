@@ -276,7 +276,7 @@ public sealed partial class InteractionBehaviorTest
         Node3D world = new();
         world.AddChild(owner);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
 
         GameplayActionAvailability availability = interactive.EvaluateAvailability(
@@ -315,7 +315,7 @@ public sealed partial class InteractionBehaviorTest
         Node3D world = new();
         world.AddChild(owner);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
 
         GameplayActionAvailability availability = interactive.EvaluateAvailability(
@@ -344,7 +344,7 @@ public sealed partial class InteractionBehaviorTest
         Node3D world = new();
         world.AddChild(owner);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
 
         GameplayActionAvailability blockedAvailability = interactive.EvaluateAvailability(
@@ -650,7 +650,7 @@ public sealed partial class InteractionBehaviorTest
         Node3D world = new();
         world.AddChild(owner);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
 
         AssertThat(interactive.EvaluateAvailability(interactor) is GameplayActionAllowed).IsTrue();
@@ -907,7 +907,7 @@ public sealed partial class InteractionBehaviorTest
         Node3D world = new();
         world.AddChild(owner);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
 
         InteractionAction foreign = CreateAction("foreign");
@@ -2144,14 +2144,15 @@ public sealed partial class InteractionBehaviorTest
             authority.Action,
             out ulong executionId
         );
-        GameplayActionExecutionSynchronizer source = new()
-        {
-            Component = authority.Interactive.ActionComponent,
-        };
-        GameplayActionExecutionSynchronizer destination = new()
-        {
-            Component = receiver.ActionComponent,
-        };
+        GameplayActionExecutionSynchronizer source = AutoFree(
+            new GameplayActionExecutionSynchronizer
+            {
+                Component = authority.Interactive.ActionComponent,
+            }
+        );
+        GameplayActionExecutionSynchronizer destination = AutoFree(
+            new GameplayActionExecutionSynchronizer { Component = receiver.ActionComponent }
+        );
 
         Godot.Collections.Dictionary started = source.CaptureSnapshot();
         AssertThat(destination.ApplySnapshot(started)).IsTrue();
@@ -2602,7 +2603,7 @@ public sealed partial class InteractionBehaviorTest
         TestInteractionDetector detector = AttachDetector(interactor, view);
         world.AddChild(reactor);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
 
         return new CoreWorld(
             world,
@@ -2693,7 +2694,7 @@ public sealed partial class InteractionBehaviorTest
         TestInteractionDetector detector = AttachDetector(interactor, view, ownerPeerId);
         world.AddChild(owner);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         return new TestWorld(
             world,
             runner,
@@ -2914,7 +2915,7 @@ public sealed partial class InteractionBehaviorTest
         TestInteractionDetector detector = AttachDetector(interactor, view);
         world.AddChild(door);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
 
         return new DoorWorld(world, runner, state, interactive, open, close, interactor, detector);
     }

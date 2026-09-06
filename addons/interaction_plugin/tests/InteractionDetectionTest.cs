@@ -170,7 +170,7 @@ public sealed partial class InteractionDetectionTest
         character.AddChild(interactor);
         world.AddChild(target);
         world.AddChild(character);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
 
         for (
             int frame = 0;
@@ -193,10 +193,16 @@ public sealed partial class InteractionDetectionTest
     {
         InteractionInteractor interactor = new();
 
-        AssertThat(interactor.RecalculateFocus()).IsFalse();
-        AssertThat(interactor.FocusedInteractive == null).IsTrue();
-        AssertThat(interactor.TryStartInteractionInput(new StringName("interact"))).IsFalse();
-        interactor.QueueFree();
+        try
+        {
+            AssertThat(interactor.RecalculateFocus()).IsFalse();
+            AssertThat(interactor.FocusedInteractive == null).IsTrue();
+            AssertThat(interactor.TryStartInteractionInput(new StringName("interact"))).IsFalse();
+        }
+        finally
+        {
+            interactor.Free();
+        }
     }
 
     [TestCase]
@@ -205,7 +211,7 @@ public sealed partial class InteractionDetectionTest
         Node3D world = new();
         TestInteractionDetector local = AttachInteractor(world, "Local", ownerPeerId: 1);
         TestInteractionDetector remote = AttachInteractor(world, "Remote", ownerPeerId: 2);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
 
         await runner.SimulateFrames(1);
 
@@ -364,7 +370,7 @@ public sealed partial class InteractionDetectionTest
         interactor.ConfigureActionRunner();
         world.AddChild(target);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
 
         AssertThat(detector.Detect(interactive)).IsEqual(InteractionDetectionKind.Interactible);
@@ -400,7 +406,7 @@ public sealed partial class InteractionDetectionTest
         interactor.ConfigureActionRunner();
         world.AddChild(target);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
 
         await runner.SimulateFrames(4);
         interactor.RecalculateFocus();
@@ -435,7 +441,7 @@ public sealed partial class InteractionDetectionTest
         interactor.ConfigureActionRunner();
         world.AddChild(target);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         return new DetectionWorld(runner, target, interactive, interactor, detector);
     }
 

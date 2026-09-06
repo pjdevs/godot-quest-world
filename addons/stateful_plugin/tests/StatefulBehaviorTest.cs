@@ -296,7 +296,7 @@ public sealed partial class StatefulBehaviorTest
     {
         Node root = new() { Name = "StatefulRoot" };
         root.AddChild(stateful);
-        ISceneRunner runner = ISceneRunner.Load(root);
+        ISceneRunner runner = ISceneRunner.Load(root, autoFree: true);
         await runner.SimulateFrames(1);
 
         return runner;

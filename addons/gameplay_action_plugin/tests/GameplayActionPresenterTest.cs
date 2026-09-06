@@ -150,10 +150,10 @@ public sealed partial class GameplayActionPresenterTest
         global::Character character = GD.Load<PackedScene>(CharacterScenePath)
             .Instantiate<global::Character>();
         Node3D battery = GD.Load<PackedScene>(BatteryScenePath).Instantiate<Node3D>();
-        Node3D root = AutoFree(new Node3D { Name = "World" });
+        Node3D root = new() { Name = "World" };
         root.AddChild(character);
         root.AddChild(battery);
-        ISceneRunner scene = ISceneRunner.Load(root);
+        ISceneRunner scene = ISceneRunner.Load(root, autoFree: true);
         await scene.SimulateFrames(1);
 
         GameplayActionRunner runner = character.GetNode<GameplayActionRunner>(
@@ -202,7 +202,7 @@ public sealed partial class GameplayActionPresenterTest
 
     private static PresentationWorld BuildWorld()
     {
-        Node root = AutoFree(new Node { Name = "World" });
+        Node root = new() { Name = "World" };
         GameplayActionComponent owned = new() { Name = "OwnedActions" };
         root.AddChild(owned);
         GameplayActionRunner runner = new() { Name = "Runner", OwnedActionComponent = owned };
@@ -217,7 +217,13 @@ public sealed partial class GameplayActionPresenterTest
             ActionScene = GD.Load<PackedScene>(ActionScenePath),
         };
         root.AddChild(presenter);
-        return new PresentationWorld(root, runner, owned, actions, ISceneRunner.Load(root));
+        return new PresentationWorld(
+            root,
+            runner,
+            owned,
+            actions,
+            ISceneRunner.Load(root, autoFree: true)
+        );
     }
 
     private static GameplayAction AddAction(GameplayActionComponent component, string id)

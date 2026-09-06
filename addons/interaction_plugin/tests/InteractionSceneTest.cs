@@ -49,7 +49,7 @@ public sealed partial class InteractionSceneTest
     {
         PackedScene scene = GD.Load<PackedScene>(LongActionScenePath);
         Node3D actor = scene.Instantiate<Node3D>();
-        ISceneRunner runner = ISceneRunner.Load(actor);
+        ISceneRunner runner = ISceneRunner.Load(actor, autoFree: true);
         await runner.SimulateFrames(1);
 
         InteractiveComponent interactive = actor.GetNode<InteractiveComponent>("Interactive");
@@ -102,7 +102,7 @@ public sealed partial class InteractionSceneTest
     {
         Node3D door = GD.Load<PackedScene>(DoorScenePath).Instantiate<Node3D>();
         door.Set("IsLocked", true);
-        ISceneRunner runner = ISceneRunner.Load(door);
+        ISceneRunner runner = ISceneRunner.Load(door, autoFree: true);
         await runner.SimulateFrames(1);
         StatefulComponent stateful = door.GetNode<StatefulComponent>(
             "Interaction/StatefulComponent"
@@ -126,7 +126,7 @@ public sealed partial class InteractionSceneTest
         root.AddChild(door);
         root.AddChild(button);
         root.AddChild(longAction);
-        ISceneRunner runner = ISceneRunner.Load(root);
+        ISceneRunner runner = ISceneRunner.Load(root, autoFree: true);
         await runner.SimulateFrames(1);
 
         InteractiveComponent[] templates =
@@ -146,7 +146,7 @@ public sealed partial class InteractionSceneTest
     {
         GameplayActionPromptWidget widget = GD.Load<PackedScene>(ActionPromptScenePath)
             .Instantiate<GameplayActionPromptWidget>();
-        ISceneRunner runner = ISceneRunner.Load(widget);
+        ISceneRunner runner = ISceneRunner.Load(widget, autoFree: true);
         await runner.SimulateFrames(1);
 
         widget.Bind(
@@ -210,7 +210,7 @@ public sealed partial class InteractionSceneTest
         widget.ActionNameLabel = actionName;
         widget.ActionKeyLabel = actionKey;
         widget.ActionProgress = progress;
-        ISceneRunner runner = ISceneRunner.Load(widget);
+        ISceneRunner runner = ISceneRunner.Load(widget, autoFree: true);
         await runner.SimulateFrames(1);
 
         widget.Bind(
@@ -248,12 +248,13 @@ public sealed partial class InteractionSceneTest
     {
         InteractionPromptWidget widget = GD.Load<PackedScene>(PromptScenePath)
             .Instantiate<InteractionPromptWidget>();
-        ISceneRunner runner = ISceneRunner.Load(widget);
+        ISceneRunner runner = ISceneRunner.Load(widget, autoFree: true);
         await runner.SimulateFrames(1);
 
+        InteractiveComponent interactive = AutoFree(new InteractiveComponent());
         widget.Bind(
             new InteractionTargetPresentation(
-                new InteractiveComponent(),
+                interactive,
                 "Door",
                 "A heavy door",
                 new List<GameplayActionPresentation>(),
@@ -291,7 +292,7 @@ public sealed partial class InteractionSceneTest
             "close"
         );
         world.AddChild(owner);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
         InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
 
@@ -338,7 +339,7 @@ public sealed partial class InteractionSceneTest
             "force"
         );
         world.AddChild(owner);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
         InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
         interactive.ActionAt(1).DefaultBindingConfig!.ActivationMode =
@@ -394,7 +395,7 @@ public sealed partial class InteractionSceneTest
         TestInteractiveActor secondOwner = CreateInteractiveActor("Second", new Vector3(1, 0, -3));
         world.AddChild(firstOwner);
         world.AddChild(secondOwner);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
         InteractiveComponent first = firstOwner.GetNode<InteractiveComponent>("Interactive");
         InteractiveComponent second = secondOwner.GetNode<InteractiveComponent>("Interactive");
@@ -437,7 +438,7 @@ public sealed partial class InteractionSceneTest
         world.AddChild(character);
         TestInteractiveActor owner = CreateInteractiveActor("RemoteTarget", new Vector3(0, 0, -2));
         world.AddChild(owner);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
         InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
 
@@ -528,7 +529,7 @@ public sealed partial class InteractionSceneTest
         interactor.AddToGroup("Player");
         world.AddChild(actor);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         InteractiveComponent interactive = actor.GetNode<InteractiveComponent>("Interactive");
 
         return new LongActionWorld(
@@ -577,7 +578,7 @@ public sealed partial class InteractionSceneTest
         InteractiveComponent interactive = owner.GetNode<InteractiveComponent>("Interactive");
         interactive.ActionAt(0).Rules.Add(new DialogInteractionRule());
         world.AddChild(owner);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
         int statusNotifications = 0;
         interactive.InteractiveStatusChanged += () => statusNotifications++;
@@ -721,7 +722,7 @@ public sealed partial class InteractionSceneTest
         interactor.AddChild(view);
         TestInteractionDetector detector = AttachDetector(interactor, view);
         world.AddChild(interactor);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
 
         return new WallControlWorld(runner, interactive, interactor, wallState);

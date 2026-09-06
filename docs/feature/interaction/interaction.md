@@ -772,6 +772,12 @@ diagnostic doit suivre la chaîne `Area3D → candidat → LOS → tier → sign
 
 ## Current presentation boundary
 
+### Test fixture ownership
+
+The interaction tests explicitly own every synthetic Godot node. Detached validator fixtures use
+`AutoFree` (or `Free` in a `finally` block), while scene runners load their root with `autoFree: true`.
+This prevents detached nodes and removed network participants from being reported as orphans.
+
 La disponibilité d'une action d'interaction est désormais directement un
 `GameplayActionAvailability` (`GameplayActionAllowed`, `GameplayActionBlocked` ou
 `GameplayActionHidden`) : Interaction ne maintient plus une seconde union ni des conversions.

@@ -395,7 +395,7 @@ public sealed partial class InteractionNetworkTest
         }
         finally
         {
-            session.Server.InteractorA.QueueFree();
+            session.Server.InteractorA.Free();
             session.Close();
         }
     }
@@ -957,7 +957,7 @@ public sealed partial class InteractionNetworkTest
         world.AddChild(serverRoot);
         world.AddChild(clientRootA);
         world.AddChild(clientRootB);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
 
         SceneTree tree = world.GetTree();

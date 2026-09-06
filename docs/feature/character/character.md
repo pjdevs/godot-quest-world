@@ -113,6 +113,12 @@ Bone lookup supports common aliases, lists every missing requested bone explicit
 - airborne state cancels an active turn-in-place override;
 - direct simulation follows its explicit view yaw without reading the local camera rig.
 
+The landing-strength test advances one physics tick at a time and then waits for the corresponding
+process frame before sampling presentation. It measures the persistent peak of the camera impulse,
+rather than relying on observing the one-tick `Landed` flag; a render-frame sampler can otherwise
+miss that transient state. Every test scene runner passes `autoFree: true`, because GdUnit4Net's
+`ISceneRunner.Load` default is `false` and would leave the synthetic physics nodes alive at teardown.
+
 Run them with:
 
 ```powershell

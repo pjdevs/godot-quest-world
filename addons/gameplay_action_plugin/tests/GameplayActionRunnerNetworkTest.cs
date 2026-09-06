@@ -245,7 +245,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
         world.AddChild(serverRoot);
         world.AddChild(clientRoot);
         world.AddChild(observerRoot);
-        ISceneRunner sceneRunner = ISceneRunner.Load(world);
+        ISceneRunner sceneRunner = ISceneRunner.Load(world, autoFree: true);
         await sceneRunner.SimulateFrames(1);
 
         SceneTree tree = world.GetTree();

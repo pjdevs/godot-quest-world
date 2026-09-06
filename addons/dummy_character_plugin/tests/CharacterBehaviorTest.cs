@@ -47,38 +47,26 @@ public sealed class CharacterBehaviorTest
         ISceneRunner runner = BuildWorld(lowCharacter, highCharacter);
         float lowOffset = 0.0f;
         float highOffset = 0.0f;
-        bool lowLanded = false;
-        bool highLanded = false;
-        int lowFramesAfterLanding = -1;
-        int highFramesAfterLanding = -1;
-        ulong lowLandingFrame = 0;
-        ulong highLandingFrame = 0;
+        int lowGroundedFrames = 0;
+        int highGroundedFrames = 0;
 
         for (int frame = 0; frame < 240; frame++)
         {
-            await runner.SimulateFrames(1);
-            CaptureLandingPeak(
-                lowCharacter,
-                ref lowLanded,
-                ref lowFramesAfterLanding,
-                ref lowLandingFrame,
-                ref lowOffset
-            );
-            CaptureLandingPeak(
-                highCharacter,
-                ref highLanded,
-                ref highFramesAfterLanding,
-                ref highLandingFrame,
-                ref highOffset
-            );
-            if (lowFramesAfterLanding >= 12 && highFramesAfterLanding >= 12)
+            await WaitForNextPhysicsFrame(runner, lowCharacter);
+            CaptureCameraBouncePeak(lowCharacter, ref lowOffset);
+            CaptureCameraBouncePeak(highCharacter, ref highOffset);
+            lowGroundedFrames = lowCharacter.LatestFrame.IsGrounded ? lowGroundedFrames + 1 : 0;
+            highGroundedFrames = highCharacter.LatestFrame.IsGrounded ? highGroundedFrames + 1 : 0;
+            if (lowGroundedFrames >= 12 && highGroundedFrames >= 12)
             {
                 break;
             }
         }
 
-        AssertThat(lowLanded).IsTrue();
-        AssertThat(highLanded).IsTrue();
+        AssertThat(lowGroundedFrames).IsGreater(0);
+        AssertThat(highGroundedFrames).IsGreater(0);
+        AssertThat(lowOffset).IsGreater(0.0f);
+        AssertThat(highOffset).IsGreater(lowOffset + 0.002f);
         AssertThat(highOffset).IsGreater(lowOffset + 0.002f);
     }
 
@@ -209,7 +197,7 @@ public sealed class CharacterBehaviorTest
             world.AddChild(character);
         }
 
-        return ISceneRunner.Load(world);
+        return ISceneRunner.Load(world, autoFree: true);
     }
 
     private static ISceneRunner BuildWorldWithPlayers(
@@ -229,7 +217,7 @@ public sealed class CharacterBehaviorTest
             world.AddChild(player);
         }
 
-        return ISceneRunner.Load(world);
+        return ISceneRunner.Load(world, autoFree: true);
     }
 
     private static StaticBody3D CreateFloor()
@@ -253,29 +241,10 @@ public sealed class CharacterBehaviorTest
         return character;
     }
 
-    private static void CaptureLandingPeak(
-        Character character,
-        ref bool landed,
-        ref int framesAfterLanding,
-        ref ulong landingFrame,
-        ref float peakOffset
-    )
+    private static void CaptureCameraBouncePeak(Character character, ref float peakOffset)
     {
-        if (character.LatestFrame.Landed && character.LatestFrame.FrameNumber != landingFrame)
-        {
-            landed = true;
-            framesAfterLanding = 0;
-            landingFrame = character.LatestFrame.FrameNumber;
-        }
-
-        if (framesAfterLanding < 0 || framesAfterLanding >= 12)
-        {
-            return;
-        }
-
         Node3D cameraEffects = character.GetNode<Node3D>(CameraEffectsPath);
         peakOffset = Math.Max(peakOffset, Math.Abs(cameraEffects.Position.Y));
-        framesAfterLanding++;
     }
 
     private static async Task WaitForNextPhysicsFrame(
@@ -291,7 +260,8 @@ public sealed class CharacterBehaviorTest
             renderFrame++
         )
         {
-            await runner.SimulateFrames(1);
+            await ISceneRunner.SyncPhysicsFrame;
+            await ISceneRunner.SyncProcessFrame;
         }
 
         if (character.LatestFrame.FrameNumber == initialFrame)

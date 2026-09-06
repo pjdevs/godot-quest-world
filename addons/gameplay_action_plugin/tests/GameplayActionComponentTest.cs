@@ -230,7 +230,7 @@ public sealed partial class GameplayActionComponentTest
         TestGameplayActionExecutor executor = new();
         root.AddChild(component);
         component.AddAction(CreateAction("drop", executor));
-        ISceneRunner runner = ISceneRunner.Load(root);
+        ISceneRunner runner = ISceneRunner.Load(root, autoFree: true);
         await runner.SimulateFrames(1);
         component.GetTree().CurrentScene = root;
 
@@ -369,7 +369,7 @@ public sealed partial class GameplayActionComponentTest
         GameplayAction action = CreateRunningAction("heal");
         root.AddChild(component);
         component.AddAction(action);
-        ISceneRunner runner = ISceneRunner.Load(root);
+        ISceneRunner runner = ISceneRunner.Load(root, autoFree: true);
         await runner.SimulateFrames(1);
         component.ExecuteAction(new StringName("heal"), out ulong executionId);
 

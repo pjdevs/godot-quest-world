@@ -31,7 +31,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void InteractiveComponentRequiresExplicitAreaAndAnchor()
     {
-        InteractiveComponent interactive = new();
+        InteractiveComponent interactive = AutoFree(new InteractiveComponent());
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
@@ -77,7 +77,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void InteractorRequiresAnExplicitDetector()
     {
-        InteractionInteractor interactor = new();
+        InteractionInteractor interactor = AutoFree(new InteractionInteractor());
 
         string[] warnings = InteractionValidator.Validate(interactor).ToArray();
 
@@ -87,7 +87,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void DetectorRequiresAnExplicitViewOriginOnly()
     {
-        AreaInteractionDetector detector = new();
+        AreaInteractionDetector detector = AutoFree(new AreaInteractionDetector());
 
         string[] warnings = InteractionValidator.Validate(detector).ToArray();
 
@@ -98,11 +98,9 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void DetectorReportsNegativeRangeAndScoreSettings()
     {
-        AreaInteractionDetector detector = new()
-        {
-            MaxDistance = -1.0f,
-            DistanceScoreCoefficient = -1.0f,
-        };
+        AreaInteractionDetector detector = AutoFree(
+            new AreaInteractionDetector { MaxDistance = -1.0f, DistanceScoreCoefficient = -1.0f }
+        );
 
         string[] warnings = InteractionValidator.Validate(detector).ToArray();
 
@@ -113,7 +111,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void PresenterRequiresExplicitInteractorAndCamera()
     {
-        InteractionPresenter presenter = new();
+        InteractionPresenter presenter = AutoFree(new InteractionPresenter());
 
         string[] warnings = InteractionValidator.Validate(presenter).ToArray();
 
@@ -124,7 +122,9 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void LongActionExecutorRequiresTheStateComponentItDrives()
     {
-        TransitionStateGameplayActionExecutor executor = new();
+        TransitionStateGameplayActionExecutor executor = AutoFree(
+            new TransitionStateGameplayActionExecutor()
+        );
 
         string[] warnings = GameplayActionValidator.Validate(executor).ToArray();
 
@@ -134,7 +134,9 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void TimedStateTransitionRequiresAPositiveFiniteDuration()
     {
-        TimedTransitionStateGameplayActionExecutor executor = new() { Duration = -1.0f };
+        TimedTransitionStateGameplayActionExecutor executor = AutoFree(
+            new TimedTransitionStateGameplayActionExecutor { Duration = -1.0f }
+        );
 
         string[] warnings = GameplayActionValidator.Validate(executor).ToArray();
 
@@ -145,7 +147,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void MissingFocusIsRepresentedByAnAbsentPresentation()
     {
-        InteractionInteractor interactor = new();
+        InteractionInteractor interactor = AutoFree(new InteractionInteractor());
 
         InteractionTargetPresentation? presentation = interactor.GetInteractionPresentation();
 
@@ -187,7 +189,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void ActionExecutionVisibilityDefaultsToRequesterOnly()
     {
-        InteractionAction action = new();
+        InteractionAction action = AutoFree(new InteractionAction());
 
         AssertThat(action.ExecutionVisibility)
             .IsEqual(GameplayActionExecutionVisibility.RequesterOnly);
@@ -196,7 +198,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void InteractionExecutionAvailabilityDefaultsToBlocked()
     {
-        InteractionAction action = new();
+        InteractionAction action = AutoFree(new InteractionAction());
 
         AssertThat(action.WhenExecutingBySelf).IsEqual(GameplayActionUnavailableKind.Blocked);
         AssertThat(action.WhenExecutingByOther).IsEqual(GameplayActionUnavailableKind.Blocked);
@@ -221,7 +223,9 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void ExecutionSynchronizerRequiresAComponent()
     {
-        GameplayActionExecutionSynchronizer synchronizer = new();
+        GameplayActionExecutionSynchronizer synchronizer = AutoFree(
+            new GameplayActionExecutionSynchronizer()
+        );
 
         string[] warnings = GameplayActionValidator.Validate(synchronizer).ToArray();
 
@@ -399,12 +403,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void InteractiveReportsActionsWithoutDefinitionOrExecutor()
     {
-        InteractiveComponent interactive = new()
-        {
-            InteractionArea = new Area3D(),
-            InteractionAnchor = new Node3D(),
-            ActionComponent = new() { Actions = { new InteractionAction() } },
-        };
+        InteractiveComponent interactive = NewValidationInteractive(new InteractionAction());
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
@@ -437,7 +436,7 @@ public sealed partial class InteractionConfigurationTest
         owner.AddChild(interactive);
         interactive.AddAction(action);
         root.AddChild(owner);
-        ISceneRunner runner = ISceneRunner.Load(root);
+        ISceneRunner runner = ISceneRunner.Load(root, autoFree: true);
         await runner.SimulateFrames(1);
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
@@ -449,12 +448,10 @@ public sealed partial class InteractionConfigurationTest
     public void InteractiveReportsDuplicateActionIds()
     {
         GameplayActionDefinition definition = new() { Id = "open" };
-        InteractiveComponent interactive = new()
-        {
-            InteractionArea = new Area3D(),
-            InteractionAnchor = new Node3D(),
-            ActionComponent = new() { Actions = { NewAction(definition), NewAction(definition) } },
-        };
+        InteractiveComponent interactive = NewValidationInteractive(
+            NewAction(definition),
+            NewAction(definition)
+        );
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
@@ -465,19 +462,10 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void InteractiveReportsTwoActionsSharingOneTrigger()
     {
-        InteractiveComponent interactive = new()
-        {
-            InteractionArea = new Area3D(),
-            InteractionAnchor = new Node3D(),
-            ActionComponent = new()
-            {
-                Actions =
-                {
-                    NewAction(new GameplayActionDefinition { Id = "open" }),
-                    NewAction(new GameplayActionDefinition { Id = "force" }),
-                },
-            },
-        };
+        InteractiveComponent interactive = NewValidationInteractive(
+            NewAction(new GameplayActionDefinition { Id = "open" }),
+            NewAction(new GameplayActionDefinition { Id = "force" })
+        );
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
@@ -494,12 +482,7 @@ public sealed partial class InteractionConfigurationTest
         InteractionAction open = NewAction(new GameplayActionDefinition { Id = "open" });
         InteractionAction unlock = NewAction(new GameplayActionDefinition { Id = "unlock" });
         unlock.DefaultBindingConfig!.Priority = 10;
-        InteractiveComponent interactive = new()
-        {
-            InteractionArea = new Area3D(),
-            InteractionAnchor = new Node3D(),
-            ActionComponent = new() { Actions = { open, unlock } },
-        };
+        InteractiveComponent interactive = NewValidationInteractive(open, unlock);
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
@@ -510,7 +493,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void ActionRequiresADefinitionAndAnExecutor()
     {
-        InteractionAction action = new();
+        InteractionAction action = AutoFree(new InteractionAction());
 
         string[] warnings = InteractionValidator.Validate(action).ToArray();
 
@@ -531,14 +514,12 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void ShortActionExecutorReportsAStateOutsideTheSchema()
     {
-        SetStateGameplayActionExecutor executor = new()
-        {
-            Stateful = new StatefulComponent
-            {
-                Schema = new StateSchema { States = new() { "closed" } },
-            },
-            TargetState = "open",
-        };
+        StatefulComponent stateful = AutoFree(
+            new StatefulComponent { Schema = new StateSchema { States = new() { "closed" } } }
+        );
+        SetStateGameplayActionExecutor executor = AutoFree(
+            new SetStateGameplayActionExecutor { Stateful = stateful, TargetState = "open" }
+        );
 
         string[] warnings = GameplayActionValidator.Validate(executor).ToArray();
 
@@ -549,21 +530,33 @@ public sealed partial class InteractionConfigurationTest
     private static InteractiveComponent NewConfiguredInteractive()
     {
         InteractionAction action = NewAction(new GameplayActionDefinition { Id = "open" });
-        GameplayActionComponent component = new() { Actions = { action } };
-        InteractiveComponent interactive = new()
-        {
-            InteractionArea = new Area3D(),
-            InteractionAnchor = new Node3D(),
-            ActionComponent = component,
-        };
+        InteractiveComponent interactive = NewValidationInteractive(action);
         action.PrepareForInteractive(interactive, interactive.TargetRules);
-        component.AddAction(action);
         return interactive;
+    }
+
+    private static InteractiveComponent NewValidationInteractive(params InteractionAction[] actions)
+    {
+        InteractiveComponent interactive = new();
+        interactive.AddChild(new Area3D());
+        interactive.AddChild(new Node3D());
+        GameplayActionComponent component = new();
+        interactive.AddChild(component);
+        interactive.InteractionArea = (Area3D)interactive.GetChild(0);
+        interactive.InteractionAnchor = (Node3D)interactive.GetChild(1);
+        interactive.ActionComponent = component;
+        foreach (InteractionAction action in actions)
+        {
+            component.Actions.Add(action);
+            component.AddChild(action);
+        }
+
+        return AutoFree(interactive);
     }
 
     private static InteractionAction NewAction(GameplayActionDefinition definition)
     {
-        return new()
+        InteractionAction action = new()
         {
             Definition = definition,
             DefaultBindingConfig = new GameplayActionBindingConfig
@@ -573,5 +566,7 @@ public sealed partial class InteractionConfigurationTest
             },
             Executor = new SetStateGameplayActionExecutor(),
         };
+        action.AddChild(action.Executor!);
+        return action;
     }
 }

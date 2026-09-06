@@ -77,7 +77,7 @@ public sealed partial class GameplayActionExecutionNetworkTest
         Node clientRoot = new() { Name = "Client" };
         world.AddChild(serverRoot);
         world.AddChild(clientRoot);
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
 
         SceneTree tree = world.GetTree();

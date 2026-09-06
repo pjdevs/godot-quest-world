@@ -14,7 +14,7 @@ public sealed partial class StatefulConfigurationTest
     [TestCase]
     public void StatefulComponentRequiresAnInitialState()
     {
-        StatefulComponent stateful = new();
+        StatefulComponent stateful = AutoFree(new StatefulComponent());
 
         string[] warnings = StatefulValidator.Validate(stateful).ToArray();
 
@@ -24,11 +24,13 @@ public sealed partial class StatefulConfigurationTest
     [TestCase]
     public void StatefulComponentRequiresAnInitialStateDeclaredByItsSchema()
     {
-        StatefulComponent stateful = new()
-        {
-            InitialState = new StringName("melted"),
-            Schema = CreateSchema("closed", "open"),
-        };
+        StatefulComponent stateful = AutoFree(
+            new StatefulComponent
+            {
+                InitialState = new StringName("melted"),
+                Schema = CreateSchema("closed", "open"),
+            }
+        );
 
         string[] warnings = StatefulValidator.Validate(stateful).ToArray();
 
@@ -39,11 +41,13 @@ public sealed partial class StatefulConfigurationTest
     [TestCase]
     public void StatefulComponentAcceptsAnInitialStateDeclaredByItsSchema()
     {
-        StatefulComponent stateful = new()
-        {
-            InitialState = new StringName("closed"),
-            Schema = CreateSchema("closed", "open"),
-        };
+        StatefulComponent stateful = AutoFree(
+            new StatefulComponent
+            {
+                InitialState = new StringName("closed"),
+                Schema = CreateSchema("closed", "open"),
+            }
+        );
 
         string[] warnings = StatefulValidator.Validate(stateful).ToArray();
 
@@ -53,7 +57,9 @@ public sealed partial class StatefulConfigurationTest
     [TestCase]
     public void StatefulComponentAcceptsAFreeInitialStateWithoutSchema()
     {
-        StatefulComponent stateful = new() { InitialState = new StringName("flooded") };
+        StatefulComponent stateful = AutoFree(
+            new StatefulComponent { InitialState = new StringName("flooded") }
+        );
 
         string[] warnings = StatefulValidator.Validate(stateful).ToArray();
 

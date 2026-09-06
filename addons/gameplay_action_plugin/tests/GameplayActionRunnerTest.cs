@@ -22,7 +22,7 @@ public sealed partial class GameplayActionRunnerTest
         player.AddChild(runner);
         player.SetMultiplayerAuthority(1883133663);
 
-        ISceneRunner scene = ISceneRunner.Load(player);
+        ISceneRunner scene = ISceneRunner.Load(player, autoFree: true);
         await scene.SimulateFrames(1);
 
         AssertThat(runner.GetMultiplayerAuthority()).IsEqual(runner.ServerPeerId);
@@ -402,7 +402,7 @@ public sealed partial class GameplayActionRunnerTest
         GameplayActionRunner runner = new() { Name = "Runner", OwnedActionComponent = component };
         world.AddChild(component);
         world.AddChild(runner);
-        ISceneRunner scene = ISceneRunner.Load(world);
+        ISceneRunner scene = ISceneRunner.Load(world, autoFree: true);
         await scene.SimulateFrames(1);
         runner.BindAction(
             component,

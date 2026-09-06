@@ -526,7 +526,7 @@ public sealed partial class GameplayActionExecutionTest
         TestTimedExecutor executor = new() { Duration = 0.05f };
         root.AddChild(component);
         AddAction(component, "charge", executor);
-        ISceneRunner runner = ISceneRunner.Load(root);
+        ISceneRunner runner = ISceneRunner.Load(root, autoFree: true);
         await runner.SimulateFrames(1);
 
         GameplayActionExecutionResult result = component.ExecuteAction(
@@ -568,7 +568,7 @@ public sealed partial class GameplayActionExecutionTest
         };
         root.AddChild(component);
         AddAction(component, "charge", executor);
-        ISceneRunner runner = ISceneRunner.Load(root);
+        ISceneRunner runner = ISceneRunner.Load(root, autoFree: true);
         await runner.SimulateFrames(1);
         component.ExecuteAction(new StringName("charge"), out ulong executionId);
         TimedExecution timer = new();

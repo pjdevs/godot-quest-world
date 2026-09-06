@@ -493,7 +493,7 @@ public sealed partial class InteractionAckTest
         world.AddChild(actor);
         world.AddChild(interactor);
 
-        ISceneRunner runner = ISceneRunner.Load(world);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         AckWorld built = new(
             runner,
             interactive,
