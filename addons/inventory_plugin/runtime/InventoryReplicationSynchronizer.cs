@@ -95,11 +95,7 @@ public partial class InventoryReplicationSynchronizer : MultiplayerSynchronizer
 
     private void ApplyNetworkAuthority()
     {
-        if (
-            !IsInsideTree()
-            || ServerPeerId <= 0
-            || GetMultiplayerAuthority() == ServerPeerId
-        )
+        if (!IsInsideTree() || ServerPeerId <= 0 || GetMultiplayerAuthority() == ServerPeerId)
         {
             return;
         }
