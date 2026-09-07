@@ -57,11 +57,11 @@
 - `PlayerJoined(PlayerState)`, `PlayerLeft(long participantId, long peerId)`, and `GameSession.CanJoin(long peerId, out string reason)`.
 - Server-side `PlayerStateSpawner.Spawn(Variant)` with `{ participant_id, peer_id }` data and client-side reconstruction through the same factory.
 
-- [ ] **Step 1: Add network tests for server admission, exact replication, no client-authored state, late join state reconstruction, disconnect cleanup, custom `CanJoin`, refusal, and `IsAcceptingPlayers`.**
-- [ ] **Step 2: Run the focused network suite and verify it fails for the absent addon behavior.**
-- [ ] **Step 3: Wire peer signals, `RefuseNewConnections`, server-only admission/despawn, custom spawn/despawn lifecycle, and derived `PlayerStateScene` validation.**
-- [ ] **Step 4: Run the network suite, then the participant/runtime suites.**
-- [ ] **Step 5: Run required format/build/test commands and document any replication ordering findings.**
+- [x] **Step 1: Add network tests for server admission, exact replication, no client-authored state, late join state reconstruction, disconnect cleanup, custom `CanJoin`, refusal, and `IsAcceptingPlayers`.**
+- [x] **Step 2: Run the focused network suite and verify it fails for the absent addon behavior.**
+- [x] **Step 3: Wire peer signals, `RefuseNewConnections`, server-only admission/despawn, custom spawn/despawn lifecycle, and derived `PlayerStateScene` validation.**
+- [x] **Step 4: Run the network suite, then the participant/runtime suites.**
+- [x] **Step 5: Run required format/build/test commands and document any replication ordering findings.**
 
 ### Task 3: Implement replicated current-world spawning and offline travel
 

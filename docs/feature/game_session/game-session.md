@@ -18,5 +18,12 @@ The server allocates participant IDs monotonically and maintains direct indexes 
 Offline sessions create the local participant; dedicated servers and clients do not author a fake
 participant locally.
 
+On an active server, peer admission allocates the next participant ID and sends `{ participant_id,
+peer_id }` through the persistent `PlayerStateSpawner`. The same factory constructs the state on
+remote peers, so identity is initialized before `_Ready()` and derived `PlayerStateScene` roots are
+supported. The server keeps both peer and participant indexes, disconnects peers refused by
+`CanJoin`, and mirrors the admission intent into `MultiplayerPeer.RefuseNewConnections`; disconnects
+despawn the state and remove every index.
+
 World travel and readiness barriers are the next implementation layer. The design contract is recorded
 in [`planned/game-session-design.md`](planned/game-session-design.md).

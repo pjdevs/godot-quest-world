@@ -1,4 +1,4 @@
-namespace QuestWorld.Tests.GameSession;
+namespace QuestWorld.Tests.GameSessionTests;
 
 using System.Threading.Tasks;
 using GdUnit4;

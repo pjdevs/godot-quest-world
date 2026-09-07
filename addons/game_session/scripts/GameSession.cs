@@ -35,11 +35,25 @@ public partial class GameSession : Node
     private readonly Dictionary<long, PlayerState> _playersByParticipantId = new();
     private readonly Dictionary<long, PlayerState> _playersByPeerId = new();
     private bool _initialized;
+    private bool _isAcceptingPlayers = true;
     private long _nextParticipantId = 1;
 
     public GameSessionState State { get; private set; } = GameSessionState.Idle;
 
-    public bool IsAcceptingPlayers { get; set; } = true;
+    public bool IsAcceptingPlayers
+    {
+        get => _isAcceptingPlayers;
+        set
+        {
+            if (_isAcceptingPlayers == value)
+            {
+                return;
+            }
+
+            _isAcceptingPlayers = value;
+            UpdateTransportAdmission();
+        }
+    }
 
     public IReadOnlyList<PlayerState> PlayerStates => _playerStates;
 
@@ -65,6 +79,7 @@ public partial class GameSession : Node
         NetworkSession.Failed += OnNetworkFailed;
         _initialized = true;
         State = GameSessionState.Active;
+        UpdateTransportAdmission();
 
         ReconcileCurrentNetworkSession();
         return State != GameSessionState.Failed;
@@ -105,6 +120,7 @@ public partial class GameSession : Node
         _nextParticipantId = 1;
         _initialized = false;
         State = GameSessionState.Idle;
+        UpdateTransportAdmission();
     }
 
     public bool TryGetPlayerStateByPeerId(long peerId, out PlayerState? playerState) =>
@@ -225,6 +241,8 @@ public partial class GameSession : Node
         {
             State = GameSessionState.Idle;
         }
+
+        UpdateTransportAdmission();
     }
 
     private void OnNetworkFailed(string reason)
@@ -235,20 +253,20 @@ public partial class GameSession : Node
 
     private void AdmitParticipant(long peerId)
     {
-        string reason = string.Empty;
         if (
             !_initialized
             || NetworkSession?.IsServer != true
             || State != GameSessionState.Active
             || _playersByPeerId.ContainsKey(peerId)
-            || !CanJoin(peerId, out reason)
         )
         {
-            if (!string.IsNullOrEmpty(reason))
-            {
-                GD.PushWarning($"{GetPath()}: rejected peer {peerId}: {reason}");
-            }
+            return;
+        }
 
+        if (!CanJoin(peerId, out string reason))
+        {
+            GD.PushWarning($"{GetPath()}: rejected peer {peerId}: {reason}");
+            NetworkSession.Multiplayer.MultiplayerPeer?.DisconnectPeer((int)peerId);
             return;
         }
 
@@ -363,6 +381,19 @@ public partial class GameSession : Node
         }
 
         playerState.QueueFree();
+    }
+
+    private void UpdateTransportAdmission()
+    {
+        if (NetworkSession?.IsServer != true)
+        {
+            return;
+        }
+
+        if (NetworkSession.Multiplayer.MultiplayerPeer is MultiplayerPeer peer)
+        {
+            peer.RefuseNewConnections = !_isAcceptingPlayers || State != GameSessionState.Active;
+        }
     }
 
     public override void _ExitTree()
