@@ -2,8 +2,8 @@
 
 > **Status: planned.** This proposal defines the generic `game_session` addon that sits above
 > `network_session`. It owns persistent participants, `PlayerState` lifecycle, synchronized world travel
-> and the load barrier required before gameplay resumes. It deliberately stops before generic GameMode,
-> GameState, Pawn spawning or project-specific match rules.
+> and the world-load barrier required before gameplay resumes. It deliberately stops before generic
+> GameMode, GameState, Pawn spawning or project-specific match rules.
 
 ## Motivation
 
@@ -12,12 +12,7 @@ The current network refactor successfully isolated transport/session lifecycle i
 peer/session signals. QuestWorld-specific player spawning, ownership and possession currently live in
 `QuestWorldNetworkPlayers`.
 
-That split revealed the next stable boundary.
-
-A connected network peer is not the same thing as a persistent player in a game, and a persistent player
-is not the same thing as the Character/Pawn currently representing that player in one world.
-
-The required lifetimes are different:
+That split reveals the next stable boundary:
 
 ```text
 Network peer
@@ -34,116 +29,108 @@ Character / Pawn
     world-local incarnation
 ```
 
-Real multiplayer flows need this distinction almost immediately:
+A connected peer is not a persistent player, and a persistent player is not the Character/Pawn currently
+representing that player in one world.
 
-- a player selects a character, team or loadout in a lobby and that choice must survive travel;
-- the server must stop accepting players while a travel is in progress or after the project decides the
-  match is closed;
-- all connected participants must load the next world before the server starts world gameplay;
-- player Characters must be recreated from persistent participant data after travel rather than moved from
-  the previous world;
-- host, dedicated-server, client and offline modes should use the same conceptual flow;
-- the networking layer should not know what Character, Pawn, inventory, team, score or match rules mean.
+Real multiplayer flows need this distinction immediately:
 
-These concerns are common enough to justify a reusable addon directly rather than a QuestWorld-only spike.
+- lobby selections such as character, team or loadout must survive travel;
+- the server must decide whether a new peer becomes a game participant;
+- the current world must change on every peer without destroying persistent session state;
+- all required participants must finish loading before world gameplay resumes;
+- late join must reconstruct both persistent `PlayerState` nodes and the current world safely;
+- project code must remain free to decide what Pawn/Character a participant receives.
+
+These concerns are generic enough to justify a reusable addon directly.
 
 ## Relationship to `network_session`
 
-`network_session` remains the lower-level boundary and should not absorb these responsibilities.
+`network_session` remains the lower-level boundary:
 
 ```text
 NetworkSession
-    create / close MultiplayerPeer
-    connection state
+    MultiplayerPeer lifecycle
     local peer id
+    connected / disconnected
     peer connected / disconnected
     host / client / dedicated / offline
 
         ↓ consumed by
 
 GameSession
-    admitted participants
+    participant admission
     PlayerState lifecycle
-    persistent game-session state
-    world travel
-    world-load barrier
+    persistent participant registry
+    world lifecycle
+    synchronized travel
+    world-ready barrier
 ```
 
 The central invariant is:
 
-> `NetworkSession` knows peers. `GameSession` knows participants.
+> `NetworkSession` knows peers. `GameSession` knows participants and the current game world.
 
-`NetworkSession` does not spawn `PlayerState`, decide whether a peer is allowed into the game, coordinate
-world loading or know about gameplay state.
+`NetworkSession` must not know about `PlayerState`, worlds, Characters, teams, loadouts or match flow.
 
 ## Goals
 
-The V1 addon must provide:
+V1 must provide:
 
-1. a persistent `GameSession` node that composes an existing `NetworkSession`;
+1. a persistent `GameSession : Node` that composes an existing `NetworkSession`;
 2. one server-authoritative `PlayerState` per admitted participant;
-3. automatic participant creation from network peer lifecycle;
-4. a small admission hook with default automatic behavior;
-5. project-defined `PlayerState` scenes for persistent game-specific data;
-6. server-authoritative world travel using a `PackedScene` resource path;
-7. a deterministic travel ID and load acknowledgement protocol;
-8. a barrier that completes only after the server and every still-connected participant have loaded the
-   new world;
-9. normal Godot node/scene lifecycle for worlds instantiated under a persistent `WorldContainer`;
-10. signals that let game code compose world-specific Character/Pawn spawning and match logic without
-    subclassing `GameSession` for ordinary integration;
-11. parity across offline, host, dedicated-server and client modes.
+3. automatic participant creation/removal from peer lifecycle;
+4. project-defined `PlayerStateScene` for game-specific persistent data;
+5. a persistent `MultiplayerSpawner` for `PlayerState` lifecycle and late join;
+6. a persistent `MultiplayerSpawner` for the **current world**;
+7. server-authoritative `Travel(PackedScene)` using the world scene resource path as spawn data;
+8. deterministic `TravelId` correlation;
+9. a ready barrier completed only after the server and all still-required remote participants have the new
+   world ready;
+10. late join reconstruction of the current world through native spawner replication rather than a
+    hand-written catch-up scene RPC;
+11. signals for project code to compose Pawn spawning, possession and world-specific game flow;
+12. parity across offline, host, dedicated-server and client modes.
 
 ## Non-goals
 
 V1 does **not** provide:
 
 - generic `GameMode` or `GameState`;
-- generic lobby, warmup, playing, finished or round states;
-- Pawn/Character spawning;
-- PlayerController behavior;
-- possession;
-- team, loadout, score or character-selection schemas;
-- matchmaking;
-- authentication;
-- reconnect/reassociation logic;
+- generic lobby/playing/finished/round states;
+- Character/Pawn spawning;
+- PlayerController behavior or possession;
+- team/loadout/score/character-selection schemas;
+- matchmaking or authentication;
+- reconnect/reassociation;
+- save/profile persistence across game sessions;
 - seamless migration of world-local nodes;
-- save/profile/account persistence across game sessions;
-- client-side authority over `PlayerState`;
-- a generic async loading framework;
+- generic async asset streaming;
 - travel timeout policy;
 - server migration;
-- different client/server world assets or a world-ID registry;
-- arbitrary RPC-based mutation of game-specific `PlayerState` properties.
-
-Project code remains responsible for those concepts unless later repeated implementations prove another
-stable generic boundary.
+- world-ID registries or different client/server assets;
+- client authority over `PlayerState`;
+- arbitrary generic mutation APIs for project-specific `PlayerState` data.
 
 ## Architectural principle: composition first
 
-The addon should fit Godot's scene composition model.
+The addon follows Godot scene composition.
 
-The normal integration path is through authored node references and signals, not inheritance.
+Normal integration is through authored references and signals. A project should be able to use
+`GameSession` without subclassing it.
 
-`GameSession` may expose small protected virtual hooks where inheritance is materially simpler than a
-policy object. In V1, admission is the intended escape hatch. This must not turn the class into a broad
-`QuestWorldGameSession : GameSession` override surface.
+One narrow inheritance escape hatch is allowed for admission because a full policy interface/resource is
+unnecessary plumbing in V1:
 
-Signals are the primary public integration contract for:
+```text
+protected virtual CanJoin(peerId, out reason)
+```
 
-- participant joined/left;
-- travel started;
-- local world loaded;
-- travel completed;
-- travel failure.
-
-A project should be able to use the generic session without subclassing it.
+Do not grow a broad virtual lifecycle surface such as `CreatePawn`, `StartMatch`, `OnWorldLoaded`, etc.
+Those integrations belong to signals/composition.
 
 ## Persistent root topology
 
-The expected game structure is a persistent main scene, not an Autoload-driven architecture.
-
-Conceptual topology:
+The expected topology is a persistent gameplay root scene:
 
 ```text
 Game.tscn
@@ -152,67 +139,48 @@ Game.tscn
 │   ├── Players
 │   │   ├── PlayerState_1
 │   │   └── PlayerState_2
-│   └── PlayerStateSpawner
-├── PlayerController             # optional, project-owned
-└── WorldContainer
-    └── Facility.tscn            # current world, replaced by travel
+│   ├── PlayerStateSpawner
+│   ├── WorldContainer
+│   │   └── Facility                 # runtime-spawned current world
+│   └── WorldSpawner
+└── PlayerController                 # optional, project-owned
 ```
 
-`Game.tscn` survives for the lifetime of the gameplay session. Travel replaces only the current child of
+`Game.tscn` remains `SceneTree.CurrentScene` during gameplay. Travel replaces only the world child under
 `WorldContainer`.
 
-The framework should not require `GameSession` to be an Autoload. Keeping it in a persistent scene gives it
-normal authored references, explicit ownership and testable lifecycle while still surviving world changes.
+The framework does not require `GameSession` to be an Autoload. Keeping it in a persistent scene preserves
+normal authored references, explicit ownership, Remote SceneTree visibility and testable lifecycle.
 
-`SceneTree.CurrentScene` therefore remains the persistent game root during gameplay. A world must not rely
-on `GetTree().CurrentScene` meaning "current gameplay world". Project code should obtain the current world
-from its explicit game/session context or receive the dependency directly.
+Code must therefore stop using `GetTree().CurrentScene` as a synonym for the gameplay world. The current
+world comes from `GameSession.CurrentWorld` or an explicitly injected project context.
 
 ## Lifetime invariants
 
-The following lifetimes are normative.
-
 ### `NetworkSession`
 
-Lives for the current network connection/session.
-
-It may start and stop independently of individual worlds.
+Connection lifetime. It can start/stop independently of individual worlds.
 
 ### `GameSession`
 
-Lives for the current game session and normally shares the persistent `Game.tscn` lifetime.
-
-It is not destroyed during world travel.
+Game-session lifetime. It survives every world travel.
 
 ### `PlayerState`
 
-Created when a peer is admitted as a participant.
-
-Destroyed when that participant leaves in V1.
-
-It survives every world travel while the participant remains admitted.
+Created when a peer is admitted; destroyed when that participant leaves in V1. It survives world travel.
 
 ### World
 
-The current world is the child managed under `WorldContainer`.
-
-It is removed from the tree and freed on successful replacement.
-
-The replacement world is freshly instantiated from a `PackedScene`.
+Exactly zero or one current world is managed beneath the persistent `WorldContainer`. The authoritative
+server spawns it through `WorldSpawner`; clients receive the corresponding native replicated spawn.
 
 ### Character / Pawn
 
-Not owned by `GameSession`.
-
-It belongs to the current world and may be destroyed/recreated on every travel or respawn.
-
-A project uses persistent `PlayerState` data to decide what world-local incarnation to create.
+World-local and outside `game_session`. It may be destroyed/recreated on travel or respawn.
 
 ## `GameSessionState`
 
-The generic state machine should describe **technical session/travel state only**.
-
-Recommended V1 states:
+Technical state only:
 
 ```text
 Idle
@@ -221,173 +189,149 @@ Traveling
 Failed
 ```
 
-Semantics:
+- `Idle`: initialized game flow not currently active or reset;
+- `Active`: participant management is active and no global travel barrier is running;
+- `Traveling`: one server-initiated global world transition is in progress;
+- `Failed`: local unrecoverable state prevents normal continuation.
 
-- `Idle`: `GameSession` is not currently attached to an active game flow or has been reset/shut down;
-- `Active`: participant management is active and no world travel barrier is running;
-- `Traveling`: one authoritative travel is in progress;
-- `Failed`: a local unrecoverable session/travel failure prevents normal continuation.
+Never add `Lobby`, `Playing`, `Warmup`, `Finished`, etc. to this enum. Those are project/world concerns.
 
-Do not add `Lobby`, `Playing`, `Finished`, `RoundEnd`, `Warmup` or similar gameplay concepts to this enum.
-Those belong to project/world logic.
+## Expected configuration
 
-## Expected `GameSession` configuration
-
-The concrete API may follow surrounding C# conventions, but the implementation must expose the following
-conceptual dependencies and state:
+Conceptual authored dependencies:
 
 ```text
 GameSession
     NetworkSession       : NetworkSession
-    WorldContainer       : Node
+    Players              : Node
     PlayerStateScene     : PackedScene
     PlayerStateSpawner   : MultiplayerSpawner
+    WorldContainer       : Node
+    WorldSpawner         : MultiplayerSpawner
 
-    State                : GameSessionState
-    IsAcceptingPlayers   : bool
-    CurrentWorld         : Node?
-    CurrentTravelId      : positive integer / zero when none
-    Players              : stable container / enumerable PlayerState set
+    State
+    IsAcceptingPlayers
+    CurrentWorld
+    CurrentWorldPath
+    CurrentTravelId
 ```
 
-The authored `PlayerStateSpawner.SpawnPath` must point at the stable persistent `Players` container.
+Requirements:
 
-`GameSession` should validate required references during initialization and fail predictably rather than
-silently operating with partial configuration.
+- `PlayerStateSpawner.SpawnPath` points to persistent `Players`;
+- `WorldSpawner.SpawnPath` points to persistent `WorldContainer`;
+- both spawners are persistent and therefore have identical stable paths on every peer before network
+  replication begins;
+- `WorldContainer` contains at most one managed world.
 
-## Initialization and ordering
+## Explicit initialization
 
-The design must not depend on scene-node `_Ready()` ordering for correctness.
+Correctness must not depend on sibling `_Ready()` ordering.
 
-The persistent game integration should explicitly initialize/start the network and game session. Whatever
-exact method names are chosen, `GameSession` initialization must:
+`GameSession.Initialize()` (exact name may follow surrounding conventions) must:
 
-1. validate `NetworkSession`, `WorldContainer`, `PlayerStateScene` and `PlayerStateSpawner`;
-2. configure the custom player-state spawn function;
-3. subscribe to `NetworkSession` lifecycle signals;
-4. reconcile the **current** `NetworkSession` state after subscribing.
+1. validate required references;
+2. configure `PlayerStateSpawner.SpawnFunction`;
+3. configure `WorldSpawner.SpawnFunction`;
+4. subscribe to both spawners' spawn/despawn lifecycle needed for indexes/readiness;
+5. subscribe to `NetworkSession` signals;
+6. reconcile the current `NetworkSession` state after subscriptions are installed.
 
-The reconciliation step is required because offline/host/dedicated `NetworkSession.Start()` may already
-have emitted `Connected` before `GameSession` subscribes.
+This reconciliation is mandatory because host/offline/dedicated `NetworkSession.Start()` can already be
+active before `GameSession` subscribes.
 
-Therefore both sequences must be safe:
+The expected first QuestWorld migration can therefore remain:
 
 ```text
-NetworkSession.Start()
+NetworkSession.Start(options)
 GameSession.Initialize()
 ```
 
-and, if later convenient:
+while the inverse ordering should also remain safe if later convenient.
 
-```text
-GameSession.Initialize()
-NetworkSession.Start()
-```
+# Participants and PlayerState
 
-The first sequence is the expected initial QuestWorld integration.
+## Base `PlayerState`
 
-## Participant model
-
-A participant is represented by a persistent `PlayerState : Node`.
-
-The base `PlayerState` should be deliberately tiny.
-
-Required generic identity:
+`PlayerState : Node` is deliberately tiny:
 
 ```text
 ParticipantId
 PeerId
 ```
 
-No gameplay fields belong in the base class.
+No score, team, ready state, loadout or selected character exists in the generic base.
 
-### `ParticipantId`
+## `ParticipantId`
 
-`ParticipantId` is the stable identity of the participant **within one `GameSession`**.
+Stable identity **within one GameSession**:
 
-V1 requirements:
-
-- assigned by the server;
+- assigned server-side;
 - positive;
-- monotonically allocated or otherwise guaranteed unique for the game-session lifetime;
+- unique for the game-session lifetime;
 - not derived from `PeerId`;
-- not reused after a participant leaves during the same game session;
-- stable across world travels;
-- used for the stable `PlayerState` node name, e.g. `PlayerState_<ParticipantId>`.
+- never reused in the same game session after leave;
+- stable across travel;
+- used for a stable node name such as `PlayerState_<ParticipantId>`.
 
-V1 does not implement reconnection, but keeping this identity distinct avoids hard-coding the future
-assumption that one network connection is the player identity.
+V1 does not implement reconnect, but this prevents the future assumption that a network connection is the
+player identity.
 
-### `PeerId`
+## `PeerId`
 
-`PeerId` identifies the participant's current Godot multiplayer connection.
+Current Godot network peer ID for that participant. In V1 it is fixed until disconnect.
 
-In V1 it remains fixed for the participant lifetime because reconnect/reassociation is out of scope.
+A future reconnect feature may preserve `ParticipantId` while assigning a new `PeerId`.
 
-A future reconnect feature may update `PeerId` while preserving `ParticipantId` and the same
-`PlayerState`.
+## Authority
 
-### Authority
+`PlayerState` remains server authoritative.
 
-`PlayerState` remains **server authoritative**.
-
-Do not call:
+Do **not** call:
 
 ```text
 PlayerState.SetMultiplayerAuthority(PlayerState.PeerId)
 ```
 
-simply because a participant logically owns the player state.
+The peer logically owns the identity, not Godot authority over the persistent state. Character selection,
+loadout, team, score, etc. should follow:
 
-The peer ID is ownership metadata, not Godot multiplayer authority for this node. The server must remain the
-source of truth for persistent game-session state.
+```text
+client request
+    ↓
+server project validation
+    ↓
+server mutates PlayerState
+    ↓
+project-authored MultiplayerSynchronizer replicates accepted data
+```
 
-This is important for character selection, teams, loadouts, score and similar data: clients request
-changes through project-defined APIs; authoritative project code validates and mutates the server-owned
-`PlayerState`; replication then publishes the accepted state.
+## Project-specific PlayerState scene
 
-## Project-specific `PlayerState`
+`GameSession` takes a project-provided `PackedScene PlayerStateScene`.
 
-The addon exposes a `PackedScene PlayerStateScene` rather than forcing every game into one fixed schema.
-
-Example QuestWorld scene:
+Example:
 
 ```text
 QuestWorldPlayerState
-├── script : QuestWorldPlayerState : PlayerState
+├── QuestWorldPlayerState : PlayerState
 │   ├── CharacterDefinitionId
 │   └── LoadoutId
 └── MultiplayerSynchronizer
 ```
 
-A competitive project could instead add:
-
-```text
-TeamId
-SelectedHeroId
-Score
-Kills
-Ready
-```
-
-The generic addon does not inspect these properties.
-
-The project owns their validation and replication configuration. A child `MultiplayerSynchronizer` is the
-preferred Godot-native solution for simple persistent replicated properties.
+The generic addon never inspects those fields.
 
 The invariant is:
 
-> `game_session` replicates the `PlayerState` lifecycle and generic identity. The project replicates the
-> contents it adds to that state.
+> `game_session` replicates `PlayerState` lifecycle and identity; the project replicates the additional
+> persistent contents it owns.
 
-## PlayerState spawn replication
+## PlayerState spawning
 
-Use a dedicated `MultiplayerSpawner` custom spawn for participant lifecycle.
+Use a dedicated persistent `MultiplayerSpawner` custom spawn.
 
-This is preferable to custom create/delete RPCs because Godot already provides authoritative spawn/despawn
-replication and late-join reconstruction.
-
-The server should call the spawner with spawn data containing only generic identity, conceptually:
+Server spawn data is conceptually:
 
 ```text
 {
@@ -396,687 +340,648 @@ The server should call the spawner with spawn data containing only generic ident
 }
 ```
 
-The configured `spawn_function` runs on each peer and must:
+The spawn function on every peer must:
 
 1. instantiate `PlayerStateScene`;
-2. validate that the instantiated root is a `PlayerState`;
-3. assign `ParticipantId` and `PeerId` before the node enters the tree;
-4. assign a deterministic stable name from `ParticipantId`;
-5. return the node **without** calling `AddChild()`.
+2. verify root type `PlayerState`;
+3. assign `ParticipantId` and `PeerId` before tree entry;
+4. assign the deterministic node name;
+5. return the node without calling `AddChild()`.
 
-`MultiplayerSpawner` owns adding the returned node under its `SpawnPath` and replicating that lifecycle.
+`MultiplayerSpawner` owns adding the node under `Players`, replicating spawn/despawn and reconstructing
+existing `PlayerState` nodes for late joins.
 
-The identity data should not require a `MultiplayerSynchronizer`: it is part of spawn construction and
-must already be correct before `_EnterTree()`/`_Ready()` on the `PlayerState` tree.
+Identity is spawn construction data, not a `MultiplayerSynchronizer` concern.
 
-The implementation should preserve one factory/data path across host, client and offline behavior as far as
-Godot's no-peer mode permits. If a small offline adapter is required by engine behavior, it must reuse the
-same spawn-data factory rather than introduce a second participant initialization model.
+Offline behavior may need a tiny engine-specific adapter when no peer exists, but it must reuse the same
+spawn-data/factory path rather than inventing a second initialization model.
 
-Reference: Godot `MultiplayerSpawner.spawn()` custom spawning calls `spawn_function` on peers and adds the
-returned node automatically under `spawn_path`.
+## Participant registry
 
-## Participant registry invariants
-
-`GameSession` must maintain deterministic lookups for participants.
-
-At minimum it should be possible to resolve:
+`GameSession` maintains indexes:
 
 ```text
 ParticipantId -> PlayerState
 PeerId        -> PlayerState
 ```
 
-Required invariants:
+Invariants:
 
-- no duplicate `ParticipantId`;
-- no two current participants share one `PeerId`;
-- a `PlayerState` is registered exactly once when its replicated node becomes part of the persistent player
-  collection;
-- a leaving `PlayerState` is removed from all indexes;
-- project code consumes `PlayerState` objects rather than rebuilding participant identity from node names.
+- no duplicate participant ID;
+- no two current participants share one peer ID;
+- registration happens exactly once when the spawned `PlayerState` enters the persistent collection;
+- removal clears every index;
+- public project code never needs to parse node names.
 
-The stable node name is a replication/path convention, not the primary lookup API.
+## Admission
 
-## Admission flow
-
-Admission is server-owned and automatic by default.
-
-Normal flow:
+Server-owned and automatic by default:
 
 ```text
-NetworkSession.PeerConnected(peerId)
+PeerConnected(peerId)
     ↓
-GameSession technical admission check
+effective admission open?
     ↓
 CanJoin(peerId)
     ↓ accepted
 allocate ParticipantId
     ↓
-PlayerStateSpawner.Spawn(identity data)
+PlayerStateSpawner.Spawn(identity)
     ↓
-PlayerState registered
+register PlayerState
     ↓
 PlayerJoined(PlayerState)
 ```
 
-A client never creates its own authoritative `PlayerState`.
+### Existing local session reconciliation
 
-### Local host/offline participant
+When initializing against an already-active `NetworkSession`:
 
-When `GameSession` reconciles an already-active session:
+- offline: create one participant for local peer ID `1`;
+- host: create the host participant if absent;
+- dedicated server: do not create a fake player for server peer ID `1`;
+- client: never authoritatively create a local `PlayerState`; wait for server replication.
 
-- offline: create one local participant for `NetworkSession.LocalPeerId`;
-- host: create the local host participant if it does not already exist;
-- dedicated server: do **not** create a participant for server peer ID `1` merely because the server is
-  locally connected;
-- client: do not create a local participant; the server's `MultiplayerSpawner` will replicate it.
+## `IsAcceptingPlayers`
 
-This preserves the current distinction between a listen host and a dedicated server.
-
-### `IsAcceptingPlayers`
-
-`GameSession` exposes a project-controlled `IsAcceptingPlayers` intent.
-
-It means:
-
-> outside temporary technical blocks, should new network peers be admitted as game participants?
-
-Examples of project usage:
+Project-controlled intent:
 
 ```text
 Lobby      -> true
 Match lock -> false
 ```
 
-This flag is not a gameplay-state enum. Projects decide when to change it.
+Effective admission is conceptually:
 
-Where practical, the server should reflect effective admission into Godot's
-`MultiplayerPeer.RefuseNewConnections` so clearly closed sessions reject new transport connections early.
+```text
+IsAcceptingPlayers && State == Active
+```
 
-### Travel admission block
+During a global travel, admission is technically blocked regardless of the stored intent. On completion,
+effective admission returns to the project's existing `IsAcceptingPlayers` value.
 
-Travel adds a temporary technical admission block regardless of `IsAcceptingPlayers`.
+Where appropriate, the server mirrors effective admission into Godot's `RefuseNewConnections` to reject
+transport connections early. A race-delivered `PeerConnected` still goes through admission and is rejected
+without creating `PlayerState`.
+
+## `CanJoin` escape hatch
+
+Protected virtual hook only, defaulting to effective admission. A project can specialize max participant
+count or other game-specific rules without a policy object.
+
+If a fully connected peer is rejected, the server disconnects it and does not create a transient
+`PlayerState`.
+
+Rich pre-login handshakes/refusal UX remain out of scope.
+
+## Disconnect
+
+V1 is deliberately immediate:
+
+```text
+PeerDisconnected(peerId)
+    ↓
+remove any travel-ready requirement for peer
+    ↓
+resolve PlayerState
+    ↓
+authoritative despawn/free
+    ↓
+clear indexes
+    ↓
+PlayerLeft(...)
+```
+
+No reconnect grace period or detached state.
+
+# World replication and travel
+
+## Why the world itself uses MultiplayerSpawner
+
+The current world is a network-replicated scene-tree root and should use the same native lifecycle
+mechanism as other replicated scenes.
+
+A **persistent** `WorldSpawner` solves two problems at once:
+
+1. global travel: the server selects the next world once and all peers instantiate the same scene from the
+   same spawn data;
+2. late join: a new peer automatically receives the current world spawn from Godot's existing spawn
+   history, instead of needing a bespoke catch-up scene RPC.
+
+This also ensures the persistent replication root exists before any `MultiplayerSpawner` or synchronizer
+nested inside the world can become relevant on the joining peer.
+
+The generic addon therefore must not implement travel by sending `ChangeSceneToFile()` or by manually
+calling `AddChild()` on each client from a `BeginTravel(resourcePath)` RPC.
+
+## World spawn data
+
+Conceptual custom spawn data:
+
+```text
+{
+    travel_id,
+    resource_path
+}
+```
+
+The `WorldSpawner.SpawnFunction` must:
+
+1. validate a non-empty resource path;
+2. synchronously load the `PackedScene`;
+3. instantiate it;
+4. return the root node without calling `AddChild()`.
+
+`MultiplayerSpawner` then adds the returned node under persistent `WorldContainer`.
+
+The resource path is the V1 travel identity. Client and server builds are assumed to contain the same
+resource.
+
+No world registry/ID abstraction is added until a real need appears.
+
+## Stable world naming
+
+The managed world should have a deterministic name that does not depend on its scene-authored root name.
+
+Recommended convention:
+
+```text
+World_<TravelId>
+```
+
+or another deterministic equivalent set from spawn data before tree entry.
+
+The important invariant is identical path construction across peers and no collision with an old managed
+world during replacement.
+
+## `TravelId`
+
+Monotonically increasing positive server-issued ID.
+
+It correlates:
+
+- world spawn data;
+- local world readiness;
+- client `TravelReady` acknowledgement;
+- global barrier completion.
+
+Stale IDs are ignored, future/unknown IDs rejected/ignored, and only one global travel runs at a time.
+
+## Global travel public API
 
 Conceptually:
-
-```text
-CanAcceptNow = IsAcceptingPlayers && State == Active
-```
-
-Starting travel must refuse new connections/participants until that travel finishes or fails.
-
-Completing travel restores effective admission from the existing `IsAcceptingPlayers` intent. Travel must
-not silently overwrite the project's choice.
-
-### `CanJoin` escape hatch
-
-V1 should not introduce a policy interface/resource for one small admission decision.
-
-Instead `GameSession` may expose a protected virtual hook conceptually equivalent to:
-
-```text
-CanJoin(peerId, out refusalReason)
-```
-
-Default implementation:
-
-- accept when effective admission is open;
-- reject otherwise.
-
-A project that really needs custom validation may subclass only for this hook.
-
-Possible project checks include:
-
-- gameplay max participants smaller than transport max clients;
-- password/token already validated by project code;
-- team capacity;
-- project-specific match lock.
-
-This is an escape hatch, not the preferred integration mechanism for general game-session behavior.
-
-If a peer has already completed the transport connection and `CanJoin` rejects it, the server should
-disconnect that peer rather than create a transient `PlayerState`.
-
-V1 does not provide a rich pre-login handshake or guaranteed client-visible refusal reason.
-
-## Participant leave / disconnect
-
-V1 keeps disconnect behavior deliberately simple.
-
-```text
-NetworkSession.PeerDisconnected(peerId)
-    ↓
-resolve PlayerState by PeerId
-    ↓
-authoritative PlayerState despawn/free
-    ↓
-remove indexes
-    ↓
-PlayerLeft(PlayerState identity/event data)
-```
-
-The participant is removed immediately.
-
-No reconnect grace period, detached `PlayerState`, account identity or reassociation exists in V1.
-
-If the participant leaves while a travel barrier is running, its peer is removed from that barrier so the
-remaining participants can still complete the travel.
-
-## Why PlayerState persists instead of Characters
-
-Persistent player choices belong on `PlayerState`, not on a world-local Character.
-
-Example:
-
-```text
-Lobby
-    PlayerState.CharacterDefinitionId = "manny_red"
-
-Travel to Facility
-    Lobby destroyed
-    PlayerState survives
-
-Facility ready
-    project world integration reads PlayerState
-    -> spawns selected Character definition
-```
-
-This prevents travel from needing to move physical gameplay actors between unrelated scene trees.
-
-It also keeps respawn semantics clean:
-
-```text
-score / team / selected character -> PlayerState
-health / transform / animation    -> Character/Pawn
-```
-
-Each project decides which runtime data is session-persistent versus incarnation-local.
-
-## World travel model
-
-`GameSession` owns the **mechanics** of synchronized world travel but no world-specific gameplay.
-
-Travel is server-authoritative.
-
-Public conceptual API:
 
 ```text
 Travel(PackedScene worldScene)
 ```
 
-Only the authority/server may successfully initiate it.
+Only server/authority may initiate.
 
-V1 requires `worldScene.ResourcePath` to be a valid project resource path. Runtime-generated anonymous
-`PackedScene` instances are not valid travel targets because clients need to load the same resource.
+Requirements before starting:
 
-The same client/server build and asset set are assumed.
+- `State == Active`;
+- `worldScene` is non-null;
+- `worldScene.ResourcePath` is non-empty/loadable;
+- no other global travel is active.
 
-No world registry or abstract `TravelTargetId` is introduced in V1.
+The server should preflight load/instantiate enough to detect ordinary resource/type failure **before**
+retiring the old world or telling clients a new travel has started.
 
-## Travel ID
+## Authoritative global travel sequence
 
-Every server-initiated travel receives a monotonically increasing positive `TravelId`.
-
-The ID exists to make late/out-of-order acknowledgements harmless.
-
-All travel messages include this ID.
-
-Required behavior:
-
-- acknowledgements for an older ID are ignored;
-- acknowledgements for a future/unknown ID are rejected/ignored;
-- `CompleteTravel` applies only to the currently active travel ID;
-- only one travel may be active at a time.
-
-## Reliable travel protocol
-
-Travel control messages are critical state transitions and must use reliable RPC delivery.
-
-Conceptual protocol:
+Conceptual sequence:
 
 ```text
-Server Travel(scene)
+server Travel(scene)
     ↓
-validate/preflight local scene
+preflight scene
     ↓
-TravelId++
+allocate TravelId
 State = Traveling
-block new joins
-snapshot expected participants
+block admission
+snapshot required remote participant peers
     ↓
-reliable BeginTravel(TravelId, resourcePath)
+retire authoritative old world
     ↓
-server performs local world replacement
-clients perform local world replacement
+WorldSpawner.Spawn({TravelId, ResourcePath})
     ↓
-each client -> reliable TravelReady(TravelId)
-server local load -> local-ready flag
+Godot replicates world spawn to peers
     ↓
-server waits for local ready + every still-connected expected participant
+world enters tree on each peer
     ↓
-reliable CompleteTravel(TravelId)
+local GameSession observes managed world ready
     ↓
-all peers State = Active
-TravelCompleted
-```
-
-RPCs must validate authority/sender expectations. A client cannot cause another peer to begin or complete
-travel by directly invoking a receiver method.
-
-Because Godot RPC resolution depends on matching node paths, `GameSession` must exist at the same stable
-path in the persistent game scene on all network peers.
-
-## Local world replacement
-
-Travel does **not** call `SceneTree.ChangeSceneToFile()` for gameplay worlds.
-
-Instead `GameSession` manages the current child under `WorldContainer`.
-
-Required local replacement sequence:
-
-1. synchronously load/resolve the requested `PackedScene` resource;
-2. instantiate the candidate world **before destroying the current world**;
-3. validate the candidate root sufficiently for the generic layer (non-null valid node);
-4. remove the old world from `WorldContainer` so it immediately leaves the active scene tree;
-5. queue/free the old world;
-6. add the new world root under `WorldContainer`;
-7. allow normal Godot `_EnterTree()` / `_Ready()` lifecycle to execute;
-8. set `CurrentWorld` to the new root;
-9. emit local `WorldLoaded` only after the root has completed the normal ready lifecycle expected from
-   `AddChild()`.
-
-Pre-instantiating the candidate before removing the old world ensures a normal resource-load or
-instantiation failure can leave the old world intact.
-
-The generic layer does not define asynchronous gameplay initialization after `_Ready()`. If a world needs
-streaming, backend fetches or other domain-specific readiness, that remains project-specific until a real
-second use case proves the need for a richer generic readiness contract.
-
-Reference: Godot `PackedScene.Instantiate()` creates a node hierarchy that can be manually added anywhere
-in the current scene tree.
-
-## `WorldLoaded` versus `TravelCompleted`
-
-These are distinct semantics and must remain distinct.
-
-### `WorldLoaded`
-
-Local event:
-
-> This process has instantiated the new world, added it under `WorldContainer` and completed normal Godot
-> ready lifecycle for that root.
-
-A client emitting `WorldLoaded` does **not** mean gameplay may begin globally.
-
-### `TravelCompleted`
-
-Synchronized event:
-
-> The server and every participant still required by this travel have loaded the same travel ID, and the
-> server has released the barrier.
-
-This is the normal point for project code to start world gameplay that assumes all participants are
-present.
-
-For QuestWorld, authoritative Character spawning after travel should be triggered from this synchronized
-boundary rather than from raw `PeerConnected`.
-
-## Travel barrier membership
-
-At travel start, the server snapshots the participants that must acknowledge that travel.
-
-Joins are blocked while traveling, so the set can only shrink through disconnect.
-
-The barrier should distinguish:
-
-```text
-server local world readiness
-remote participant peer acknowledgements
-```
-
-This matters for dedicated server mode: peer ID `1` is the server but has no `PlayerState` participant.
-
-Recommended barrier semantics:
-
-- server local world must always load successfully;
-- host peer `1`, if represented by a local `PlayerState`, is satisfied by the server's local load and must
-  not require a duplicate RPC acknowledgement;
-- dedicated server local load is required even though there is no participant for peer `1`;
-- every remote participant present at travel start must acknowledge the current `TravelId`;
-- a disconnect removes that participant's peer from the pending set;
-- completion occurs when local-ready is true and no required remote peer remains pending.
-
-The barrier is travel-specific in V1. Do not prematurely extract a generic reusable `PeerBarrier` until a
-second concrete feature needs the same primitive.
-
-## Client travel acknowledgement
-
-After a remote client completes local replacement and emits local `WorldLoaded`, it sends a reliable
-`TravelReady(TravelId)` to the server.
-
-The server must verify:
-
-- sender corresponds to a current participant;
-- sender was expected by the current barrier;
-- ID equals the current `TravelId`;
-- duplicate ready messages are idempotent.
-
-A duplicate acknowledgement must not produce duplicate completion or signals.
-
-## Travel completion
-
-When the server's barrier reaches zero:
-
-1. the server marks the travel complete exactly once;
-2. server `State` returns to `Active`;
-3. effective admission is restored from `IsAcceptingPlayers`;
-4. server emits local `TravelCompleted`;
-5. server sends reliable `CompleteTravel(TravelId)` to remote peers;
-6. each client validates the current ID, returns to `Active` and emits its local `TravelCompleted`.
-
-The project may begin authoritative world-local participant spawning immediately after server
-`TravelCompleted`; all clients already have the world required to receive those replicated spawns.
-
-## Offline travel
-
-Offline mode follows the same conceptual lifecycle without network messages.
-
-```text
-Travel
+server sets local-ready
+remote clients send reliable TravelReady(TravelId)
     ↓
-State = Traveling
+server waits for local-ready + all required remote peers
     ↓
-replace local world
-    ↓
-WorldLoaded
-    ↓
-local barrier immediately satisfied
+reliable CompleteTravel(TravelId) to remote participants
     ↓
 State = Active
 TravelCompleted
 ```
 
-Offline must not require a separate public API or project integration path.
+The world spawn itself is not a custom travel RPC. Godot's `MultiplayerSpawner` is the authoritative
+replication mechanism.
+
+## Retiring the old world
+
+There must never be two active gameplay worlds longer than required by the replacement operation.
+
+On server global travel:
+
+1. preflight the candidate scene first;
+2. once travel is committed, remove/free the old authoritative world;
+3. let `WorldSpawner` replicate despawn;
+4. spawn the new world.
+
+Clients follow replicated despawn/spawn ordering.
+
+A normal preflight failure therefore leaves the old world intact.
+
+An unexpected failure after old-world retirement is unrecoverable locally and moves `GameSession` to
+`Failed`; V1 does not implement distributed rollback.
+
+## Detecting local `WorldLoaded`
+
+`WorldLoaded` is a **local** semantic event:
+
+> the managed world for this travel exists under `WorldContainer` and its normal Godot ready lifecycle has
+> completed on this process.
+
+The implementation must not infer readiness merely from receipt of spawn data before `_Ready()`.
+
+A focused generic mechanism is required, for example a deferred readiness check after `WorldSpawner.Spawned`
+or an equivalent signal ordering that guarantees the spawned root has completed ready lifecycle. The exact
+mechanism may follow Godot behavior/tests, but the semantic contract is fixed.
+
+No generic async gameplay initialization is included. If a specific world needs streaming/backend work
+after `_Ready()`, that project owns an additional readiness layer.
+
+## `WorldLoaded` vs `TravelCompleted`
+
+They are intentionally distinct:
+
+```text
+WorldLoaded
+    this process has the new world ready
+
+TravelCompleted
+    the server released the barrier because every required process is ready
+```
+
+A client must not globally start gameplay merely because its own `WorldLoaded` fired.
+
+## Global travel barrier
+
+At travel start the server snapshots the **remote participant peers** required to acknowledge.
+
+Barrier state distinguishes:
+
+```text
+server local world readiness
+pending remote participant peer IDs
+```
+
+Rules:
+
+- server local world readiness is always required;
+- host participant peer `1` is satisfied by server local readiness, not a duplicate network ACK;
+- dedicated server has no local `PlayerState` but still requires its own world ready;
+- every remote participant present at travel start must ACK;
+- joins are blocked during global travel;
+- disconnect removes that peer from the pending set;
+- duplicate ACK is idempotent;
+- barrier completes once local-ready is true and pending set is empty.
+
+Do not extract a generic `PeerBarrier` in V1.
+
+## Client `TravelReady`
+
+When a remote participant's process fires local `WorldLoaded` for the current travel ID, it sends a
+reliable acknowledgement to server:
+
+```text
+TravelReady(TravelId)
+```
+
+Server validates:
+
+- RPC sender is a current participant;
+- sender is expected for the active global barrier;
+- ID matches current global travel;
+- duplicate is harmless.
+
+Clients cannot mark another peer ready or complete the barrier.
+
+## Global travel completion
+
+When barrier reaches zero:
+
+1. server marks the travel complete once;
+2. server `State = Active`;
+3. effective admission returns to stored `IsAcceptingPlayers`;
+4. server emits `TravelCompleted(TravelId, CurrentWorld)`;
+5. server reliably notifies remote participants with `CompleteTravel(TravelId)`;
+6. each client validates the ID, enters `Active` and emits its local `TravelCompleted` once.
+
+After server `TravelCompleted`, project code may safely spawn world-local Pawns/Characters because every
+participant required by that global travel already owns the world tree that will receive those spawns.
+
+## Offline travel
+
+Same semantic path without network transport:
+
+```text
+Travel
+ -> State Traveling
+ -> retire old local world
+ -> instantiate via same world spawn factory/path
+ -> WorldLoaded
+ -> local barrier satisfied
+ -> State Active
+ -> TravelCompleted
+```
+
+If `MultiplayerSpawner` cannot perform a no-peer custom spawn directly in the intended way, the offline
+adapter must still call the exact same world-spawn factory and lifecycle registration used by network mode.
+There must not be a second public travel model.
 
 ## Host travel
 
-Host mode uses the server's local world replacement for the host participant and waits only for remote
-participant acknowledgements.
+Host uses authoritative world spawn locally and waits only for remote participant ACKs.
 
-The host should not send an RPC to itself merely to make the code look symmetrical if a direct internal
-call is clearer. Internal logic may unify both paths behind one local `BeginTravel` helper.
+## Dedicated server travel
 
-## Dedicated-server travel
+Dedicated server spawns/loads the authoritative world despite having no local player participant. Local
+world readiness still gates completion.
 
-Dedicated server participates in world loading even though it has no local player participant.
+# Late join while a world is active
 
-The server must instantiate the same authoritative world scene under its persistent `WorldContainer` and
-must not complete travel until that local load succeeds.
+## Native current-world reconstruction
 
-## Travel failure behavior
+Late join while `State == Active` and `IsAcceptingPlayers` permits it.
 
-Distributed rollback is intentionally out of scope.
+After admission, the new peer receives through persistent spawners:
 
-V1 should instead make failure semantics explicit and conservative.
+1. existing `PlayerState` nodes;
+2. its newly created `PlayerState`;
+3. the current world spawn, if one exists.
 
-### Server preflight/load failure
+This is why the world lifecycle uses persistent `WorldSpawner`: the joining peer does not need a bespoke
+`BeginTravel(CurrentWorldPath)` catch-up RPC that could race nested world replication.
 
-If the server cannot load or instantiate the requested scene before replacing the current world:
+## Late-join readiness handshake
 
-- do not broadcast `BeginTravel`;
-- keep the current world active;
-- remain/return `Active`;
-- emit/report travel failure;
-- do not increment externally visible completion state as if travel succeeded.
+A late join still needs a readiness boundary before project code spawns that participant's world-local Pawn
+or otherwise assumes the joining peer can receive world-local replicated nodes.
 
-The implementation may allocate the next internal travel ID only after successful preflight to keep logs
-simple, or allocate then mark it failed; whichever convention is chosen must be deterministic and tested.
+This is **not** a global travel and must not put existing peers into `Traveling`.
 
-### Server unrecoverable replacement failure
+Server tracks a small per-participant pending-world-ready state for the joining peer when `CurrentWorld`
+exists.
 
-If an unexpected failure occurs after the old world has been removed and normal continuation is not
-possible:
-
-- transition `GameSession` to `Failed`;
-- emit failure information;
-- do not claim `TravelCompleted`;
-- leave project code responsible for deciding whether to return to menu, restart or terminate.
-
-### Client load failure
-
-If a client cannot load/instantiate the instructed resource:
+Conceptual flow:
 
 ```text
-client TravelFailed(TravelId, reason)
+peer admitted
     ↓
-server validates sender + current TravelId
+PlayerState replicated
+current WorldSpawner state replicated
     ↓
-server disconnects/removes that participant
+joining client observes current world ready
     ↓
-participant removed from travel barrier
+reliable CurrentWorldReady(currentTravelId)
     ↓
-remaining participants may still complete
+server validates peer + current world identity
+    ↓
+PlayerWorldReady(PlayerState)
 ```
 
-Do not attempt to roll every other peer back to the old world.
+Existing participants continue playing normally throughout.
 
-The failure reason is diagnostic data, not trusted gameplay input.
+If there is no current world yet, admission completes with `PlayerJoined` only; project code can later use
+the next global `TravelCompleted` boundary.
 
-### Timeout
+`CurrentWorldReady` may reuse the same underlying ACK receiver/correlation machinery as `TravelReady` if
+that keeps implementation simpler, but it must not accidentally mutate global `GameSessionState` or the
+active global barrier.
 
-No generic travel timeout is required in V1.
+## `PlayerWorldReady` signal
 
-The addon should expose enough state/signals for project code or a later generic extension to observe a
-travel that remains pending. Do not invent timeout duration/policy without a concrete game requirement.
-
-## Player disconnect during travel
-
-A disconnect during travel must not deadlock the barrier.
-
-Required sequence:
+Provide a server-side semantic signal:
 
 ```text
-PeerDisconnected
-    ↓
-remove pending TravelReady requirement
-    ↓
-remove PlayerState
-    ↓
-PlayerLeft
-    ↓
-re-evaluate barrier
-    ↓
-complete travel if no remaining peers are pending
+PlayerWorldReady(PlayerState)
 ```
 
-The order of internal removal and signal emission may vary, but externally the participant must no longer
-block completion once disconnected.
+Meaning:
 
-## New connection during travel
+> this participant's peer has the current world ready and may safely receive world-local replicated
+> incarnation/spawn state.
 
-New connections should be refused while `State == Traveling`.
+Emission rules:
 
-If a transport race still delivers `PeerConnected` after the travel block is engaged, admission must reject
-the peer and it must not be added to the current barrier or participant set.
+- after a **global travel**, emit once for every participant whose peer is ready once the global barrier is
+  released (host/local participant included as appropriate);
+- after a **late join into an already active world**, emit only for that new participant once its current
+  world ready ACK arrives;
+- do not emit when no current world exists;
+- do not emit twice for duplicate acknowledgements.
 
-V1 does not support joining a travel already in progress.
+This gives project code one participant-oriented composition hook for Pawn spawning without putting Pawn
+logic into `game_session`.
 
-## Late join while active
+For a game that wants to spawn all Pawns together after global travel, it may still simply use
+`TravelCompleted` and iterate `PlayerState`. `PlayerWorldReady` exists primarily to make late join equally
+safe without a second project-specific network protocol.
 
-When `State == Active` and admission is open, a new participant may join normally.
+# Failures
 
-The dedicated `MultiplayerSpawner` for `PlayerState` must ensure the joining peer receives existing
-persistent player states as well as its own newly created state.
+## Server preflight failure
 
-World-state late join behavior beyond this persistent participant registry remains the responsibility of
-world spawners/synchronizers and project networking.
+If requested scene cannot be loaded/instantiated during preflight:
 
-## Signals / composition surface
+- keep old world;
+- do not enter `Traveling` permanently;
+- do not spawn/despawn replicated world state;
+- emit `TravelFailed` diagnostics;
+- do not emit `TravelCompleted`.
 
-Exact C# signal signatures may adapt to Godot Variant constraints, but the addon should expose the
-following semantic events.
+## Unrecoverable server replacement failure
 
-### Participant lifecycle
+If failure occurs after old world was retired and the session cannot continue:
+
+- `State = Failed`;
+- emit failure;
+- never claim completion;
+- project decides whether to restart/exit/menu.
+
+## Client world load/spawn failure
+
+If a client cannot instantiate the world scene from authoritative spawn data, it cannot safely remain in
+that world.
+
+The client reports a reliable diagnostic failure containing current world/travel identity; server validates
+sender and disconnects/removes that participant. Remaining peers are not rolled back.
+
+If failure happened during global travel, removing the participant also removes its pending ACK and barrier
+may continue.
+
+If failure happened during late-join current-world reconstruction, only that joining participant is
+removed.
+
+## Timeout
+
+No generic timeout policy in V1. Expose enough state/signals for later project or generic policy if a real
+requirement appears.
+
+# Signals and queries
+
+## Participant signals
 
 ```text
 PlayerJoined(PlayerState)
-PlayerLeft(...)
+PlayerLeft(identity data or still-valid PlayerState)
+PlayerWorldReady(PlayerState)          # server semantic readiness for current world
 ```
 
-For `PlayerLeft`, code that needs identity after the node is queued for deletion must receive stable
-identity values or receive the signal before the object becomes invalid. Do not expose a signal contract
-that hands consumers an already-freed node.
+`PlayerLeft` must not hand consumers an already-freed node.
 
-### Travel lifecycle
+## World/travel signals
 
 ```text
-TravelStarted(TravelId, resourcePath)
-WorldLoaded(TravelId, currentWorld)
-TravelCompleted(TravelId, currentWorld)
+TravelStarted(TravelId, ResourcePath)
+WorldLoaded(TravelId, CurrentWorld)    # local process
+TravelCompleted(TravelId, CurrentWorld)
 TravelFailed(TravelId, reason)
 ```
 
-Optionally expose a server-side per-peer ready signal if implementation/testing demonstrates real value,
-but it is not a required public abstraction.
-
-Signals should be emitted exactly once per semantic transition.
+Signals fire exactly once per semantic transition.
 
 ## Public queries
 
-Game/project code should be able to query without scanning the scene tree:
+At minimum:
 
 ```text
+State
+IsAcceptingPlayers
+CurrentTravelId
 CurrentWorld
-Players / PlayerStates
+CurrentWorldPath
+PlayerStates / Players
 TryGetPlayerStateByPeerId(peerId)
 TryGetPlayerStateByParticipantId(participantId)
-State
-CurrentTravelId
-IsAcceptingPlayers
 ```
 
-Do not require consumers to parse `PlayerState_<id>` names.
+No consumer should need scene-tree scans or name parsing for participant lookup.
 
-## Match/gameplay state boundary
+# GameMode / GameState boundary
 
-`GameSession` does not become a generic match rules engine.
+The generic framework ends here.
 
-A project may have world-local components such as:
+A world may compose project-specific logic such as:
 
 ```text
-FacilityWorld
+Facility
 ├── FacilityGameMode
 └── FacilityGameState
 ```
 
-or:
+or any other shape. `game_session` neither requires nor models it.
+
+The generic contract ends at:
 
 ```text
-DeathmatchWorld
-├── DeathmatchRules
-└── DeathmatchState
-```
-
-The addon does not require those classes or names.
-
-The generic boundary ends at:
-
-```text
-participants persisted
-world loaded everywhere
-travel completed
+participant exists persistently
+current world exists everywhere required
+participant/world readiness is known
 ```
 
 What the world does next is game-specific.
 
-## Persistent PlayerController boundary
+# Persistent PlayerController boundary
 
-A project's local `PlayerController` may live beside `GameSession` in the persistent game root because its
-lifetime can also span world travel.
+A project-specific local PlayerController may live in the persistent game root beside `GameSession` because
+its lifetime can also span worlds. It remains outside the addon.
 
-This proposal does not move `PlayerController` into `game_session` and does not require every game to use
-one.
+# QuestWorld integration target
 
-A project may listen for the new world's player Character to appear and possess it using its own controller.
+The feature should eliminate `QuestWorldNetworkPlayers` as the owner of generic peer-to-player lifecycle.
 
-## QuestWorld integration target
+Moves into generic `GameSession`:
 
-The proposal should remove the need for `QuestWorldNetworkPlayers` as the owner of generic peer-to-player
-lifecycle.
+- peer admission/removal;
+- persistent `PlayerState` lifecycle;
+- participant indexes;
+- current world replicated lifecycle;
+- global travel barrier;
+- late-join current-world readiness.
 
-Responsibilities move as follows.
+Remains QuestWorld-specific:
 
-### Moves into generic `GameSession`
-
-- listen to peer connected/disconnected;
-- decide whether a peer becomes a participant;
-- persistent participant registry;
-- create/despawn persistent `PlayerState`;
-- survive world travel;
-- travel/load coordination.
-
-### Remains QuestWorld-specific
-
-- `QuestWorldNetworkIdentity` if still useful for Character naming;
-- choosing Character/Pawn scene/definition from `QuestWorldPlayerState`;
-- selecting spawn transforms;
-- spawning/despawning world-local Characters;
-- setting Character `OwnerPeerId` and multiplayer authority;
+- `QuestWorldPlayerState` fields;
+- choosing Character definition from player state;
+- spawn positions;
+- Character/Pawn spawning/despawning;
+- Character `OwnerPeerId` / authority configuration;
 - local possession;
-- resolving the current world's `Spawner`/`IWorldSpawner` integration.
+- current-world `Spawner` / `IWorldSpawner` integration.
 
-Those remaining responsibilities should preferably live at the QuestWorld game/world integration boundary,
-not in a persistent component named `NetworkPlayers` that treats a peer connection as a permanent
-Character.
-
-After travel, the intended QuestWorld flow becomes:
+Intended global travel flow:
 
 ```text
 GameSession.TravelCompleted
     ↓ server
-current QuestWorld World is ready everywhere
-    ↓
 for each QuestWorldPlayerState
-    select Character definition / spawn point
-    spawn Character into current world
-    configure network ownership
-    ↓ clients
-replicated Character appears
-    ↓ local project integration
-possess Character whose OwnerPeerId matches local participant
+    choose Character definition
+    spawn Character into CurrentWorld
+    configure authority
+    ↓
+clients receive Character replication
+    ↓
+local project code possesses matching owner Character
 ```
 
-A peer may therefore exist in the session without currently having a Character, which is an intended
-capability rather than an error.
+Intended late-join flow:
 
-## Persistent game root migration pressure
+```text
+PlayerJoined
+    ↓
+PlayerState exists persistently
+WorldSpawner reconstructs current world on joining client
+    ↓
+PlayerWorldReady(new PlayerState)
+    ↓ server project integration
+spawn only this participant's Character into CurrentWorld
+```
 
-The current `World._Ready()` starts `NetworkSession` and initializes `QuestWorldNetworkPlayers`. That
-responsibility must move upward into the persistent game root when this proposal is implemented.
+A participant may validly exist without a Character between admission and world readiness.
 
-World scenes should return to world concerns:
+## Current QuestWorld root migration
+
+Current `World._Ready()` starts `NetworkSession` and initializes `QuestWorldNetworkPlayers`. That moves to a
+persistent game root.
+
+World scenes return to world-local concerns:
 
 - authored spawners;
-- current-world gameplay;
-- world-local initialization.
+- authoritative world initialization;
+- current-level gameplay.
 
-They should not own the lifetime of `NetworkSession` or `GameSession`.
+They do not own network/game-session lifetime.
 
-Likewise, code such as:
+Any code using:
 
 ```text
 GetTree().CurrentScene as IWorldSpawner
 ```
 
-will no longer be a valid way to find the current gameplay world because `CurrentScene` is the persistent
-game root. Project integration must resolve/inject the actual current world explicitly.
+must be replaced by explicit current-world context/injection because `CurrentScene` becomes persistent
+`Game.tscn`.
 
-This is an intentional architectural improvement, not a travel regression.
-
-## Suggested addon boundary
-
-Expected future runtime location:
+# Suggested addon boundary
 
 ```text
 addons/game_session/
@@ -1086,26 +991,30 @@ addons/game_session/
         PlayerState.cs
 ```
 
-A small authored reusable `.tscn` may be provided if it materially simplifies setting up the stable
-`Players` container and `MultiplayerSpawner`, but the addon should not require a large prefab hierarchy.
+A small reusable `GameSession.tscn` is acceptable if it usefully authors:
 
-`game_session` may depend on `network_session`.
+```text
+GameSession
+├── Players
+├── PlayerStateSpawner
+├── WorldContainer
+└── WorldSpawner
+```
 
-It must not depend on:
+but a large prefab/framework hierarchy is not required.
 
-- QuestWorld game code;
-- dummy character plugin;
-- interaction;
-- gameplay actions;
-- inventory;
-- project `Spawner` abstractions.
+Dependency direction:
 
-## Expected API shape
+```text
+game_session -> network_session
+```
 
-This is a design contract, not a required byte-for-byte signature, but implementations should remain close
-enough that reviewers can explain deviations.
+It must not depend on QuestWorld, Character, Interaction, GameplayAction, Inventory or project-specific
+Spawner abstractions.
 
-Conceptually:
+# Expected API shape
+
+This is a design contract, not an exact signature requirement:
 
 ```text
 PlayerState : Node
@@ -1114,17 +1023,20 @@ PlayerState : Node
 
 GameSession : Node
     NetworkSession
-    WorldContainer
+    Players
     PlayerStateScene
     PlayerStateSpawner
+    WorldContainer
+    WorldSpawner
 
     State
     IsAcceptingPlayers
     CurrentWorld
+    CurrentWorldPath
     CurrentTravelId
 
     Initialize()
-    Shutdown()/Reset()                 # exact lifecycle API may follow existing addon style
+    Shutdown()/Reset()          # exact lifecycle API may match addon conventions
     Travel(PackedScene worldScene)
 
     TryGetPlayerStateByPeerId(...)
@@ -1135,180 +1047,181 @@ GameSession : Node
 
     signal PlayerJoined
     signal PlayerLeft
+    signal PlayerWorldReady
     signal TravelStarted
     signal WorldLoaded
     signal TravelCompleted
     signal TravelFailed
 ```
 
-Do not add broad virtual lifecycle methods such as `OnWorldLoaded`, `OnPlayerSpawned`, `CreatePawn`,
-`StartMatch`, etc. merely to imitate Unreal-style inheritance. Signals/composition own those extensions.
+Do not add generic virtual `CreatePawn`, `StartMatch`, `OnTravelCompleted`, etc. Signals/composition own
+those extensions.
 
-## State mutation rules
+# Authority rules
 
-Server authority must own:
+Server owns:
 
 - participant creation/removal;
-- `ParticipantId` allocation;
+- ParticipantId allocation;
 - admission;
-- `IsAcceptingPlayers` effective transport policy;
-- travel initiation;
-- current authoritative `TravelId`;
-- travel barrier membership/completion.
+- effective connection refusal;
+- world spawn/despawn;
+- TravelId allocation;
+- global barrier membership/completion;
+- per-late-join current-world readiness tracking.
 
 Clients may:
 
-- receive replicated `PlayerState` lifecycle;
-- load an instructed world;
-- acknowledge their own completed travel;
-- report local travel load failure;
-- observe `TravelCompleted` after the server releases the barrier.
+- receive PlayerState/world replicated lifecycle;
+- load/instantiate authoritative spawn data;
+- ACK their own world readiness;
+- report their own local world-instantiation failure;
+- observe completion.
 
 Clients may not:
 
-- create participants;
-- delete another `PlayerState`;
-- initiate authoritative travel;
-- mark another peer ready;
-- complete the barrier;
-- mutate base `PlayerState` identity.
+- create/delete participants;
+- initiate authoritative world travel;
+- spawn authoritative current world;
+- mark another participant ready;
+- complete global barrier;
+- mutate base PlayerState identity.
 
-## Error handling / validation
+# Validation and error handling
 
-Configuration errors should fail early with actionable Godot errors.
-
-Validate at minimum:
+Fail early on configuration errors:
 
 - missing `NetworkSession`;
-- missing `WorldContainer`;
-- missing `PlayerStateSpawner`;
+- missing `Players`;
 - missing `PlayerStateScene`;
+- missing/misconfigured `PlayerStateSpawner`;
+- missing `WorldContainer`;
+- missing/misconfigured `WorldSpawner`;
 - `PlayerStateScene` root is not `PlayerState`;
-- invalid/empty travel resource path;
-- travel requested by non-server;
-- travel requested while already `Traveling`;
 - duplicate participant identities;
-- unexpected TravelReady sender;
-- stale/future travel IDs;
-- client-reported failure from a non-participant.
+- more than one managed world in `WorldContainer`;
+- invalid travel resource path;
+- travel requested client-side;
+- travel requested while already `Traveling`;
+- unexpected/stale readiness sender/ID;
+- current-world failure report from non-participant.
 
-Expected/rejected requests should not necessarily crash or put the session into `Failed`; reserve `Failed`
-for local unrecoverable runtime state.
+Expected refusal/stale messages should be rejected/ignored without forcing `Failed`. Reserve `Failed` for
+local unrecoverable state.
 
-## Testing requirements
+# Testing requirements
 
-This feature changes peer lifecycle, replication and cross-scene runtime behavior, so tests must include
-both focused runtime tests and real network integration tests.
+This feature touches peer lifecycle, replication and cross-world runtime behavior. Tests must include
+focused runtime coverage and real network integration.
 
-The implementation plan should follow the repository test strategy: smallest relevant suites first, then
-`task test:network` / `task test:runtime` as appropriate, and only use the full suite when cross-cutting
-validation justifies it.
+Follow repository policy: smallest impacted suites first, then `task test:network` / `task test:runtime` as
+appropriate; full suite only when cross-cutting validation justifies it.
 
-The final implementation must prove at least the following behavior.
+Minimum behavior to prove:
 
-### Participant lifecycle
+## Participant lifecycle
 
 1. offline initialization creates exactly one local `PlayerState`;
 2. host initialization creates exactly one host `PlayerState`;
-3. dedicated server creates no fake player for server peer ID `1`;
-4. client does not authoritatively create its own `PlayerState`;
-5. server connection admits a remote peer and replicates one `PlayerState` everywhere;
-6. a late join receives all existing `PlayerState` nodes;
-7. disconnect removes the matching `PlayerState` and indexes;
-8. `ParticipantId` and `PeerId` remain distinct and correctly initialized before `PlayerState._Ready()`;
-9. `PlayerState` remains server-authoritative even when `PeerId` is a client ID;
-10. subclassed/project-specific `PlayerStateScene` is instantiated rather than the generic base scene.
+3. dedicated server creates no fake participant for peer `1`;
+4. client never authors its own `PlayerState`;
+5. server admits remote peer and replicates exactly one state everywhere;
+6. late join receives existing `PlayerState` nodes;
+7. disconnect removes state and indexes;
+8. ParticipantId and PeerId are initialized before `PlayerState._Ready()`;
+9. PlayerState remains server-authoritative for client participants;
+10. project-specific derived `PlayerStateScene` is instantiated.
 
-### Admission
+## Admission
 
-11. `IsAcceptingPlayers = false` prevents new participants without removing existing ones;
-12. custom `CanJoin` rejection creates no `PlayerState`;
-13. travel temporarily rejects new joins even if `IsAcceptingPlayers` is true;
-14. successful travel restores admission from the previous project intent.
+11. `IsAcceptingPlayers=false` blocks new participants without removing existing ones;
+12. custom `CanJoin` rejection creates no PlayerState;
+13. global travel temporarily blocks joins;
+14. completion restores effective admission from project intent.
 
-### Local world lifecycle
+## World lifecycle
 
-15. first travel instantiates the requested world under `WorldContainer`;
-16. `WorldLoaded` fires after normal world ready lifecycle;
-17. a second travel removes/exits/frees the old world and instantiates a fresh replacement;
-18. `GameSession` and existing `PlayerState` nodes remain in the scene tree across both travels;
-19. `SceneTree.CurrentScene` / persistent game root is not replaced by gameplay travel;
-20. a local preflight load failure leaves the old world intact and does not emit `TravelCompleted`.
+15. first Travel spawns requested world under persistent `WorldContainer`;
+16. host/client instantiate same resource path from `WorldSpawner` spawn data;
+17. `WorldLoaded` fires only after normal ready lifecycle;
+18. second Travel despawns old world and spawns fresh world;
+19. GameSession and PlayerStates survive both travels;
+20. `SceneTree.CurrentScene` remains persistent game root;
+21. preflight failure keeps old world intact;
+22. WorldSpawner is the network lifecycle owner, not bespoke create/delete RPCs.
 
-### Network travel
+## Global barrier
 
-21. only the server can initiate travel;
-22. host + one client both load the same resource path;
-23. server does not emit synchronized completion until the remote client acknowledges;
-24. client `WorldLoaded` can occur before `TravelCompleted` without starting global gameplay;
-25. duplicate `TravelReady` is idempotent;
-26. stale previous-travel acknowledgement is ignored;
-27. disconnect of a pending peer removes it from the barrier and allows remaining peers to complete;
-28. dedicated server local world readiness is required even without a local `PlayerState`;
-29. offline travel resolves the same lifecycle without RPCs;
-30. client load failure is reported, participant is removed/disconnected, and remaining peers are not
-    rolled back;
-31. `TravelCompleted` fires exactly once per peer for one successful travel ID.
+23. only server can initiate travel;
+24. server waits for remote ACK before `TravelCompleted`;
+25. local `WorldLoaded` may precede global completion;
+26. duplicate ACK is idempotent;
+27. stale ACK is ignored;
+28. disconnect removes pending peer and can release barrier;
+29. dedicated server local world readiness is required;
+30. offline uses same semantic lifecycle without network RPCs;
+31. client load failure removes/disconnects only that participant and does not rollback others;
+32. `TravelCompleted` fires exactly once per successful travel ID per peer.
 
-### Persistent game-specific state
+## Late join with active world
 
-32. a project-specific synchronized property set on `PlayerState` before travel remains present on the same
-    persistent node after at least two world replacements;
-33. newly created world-local Character/Pawn nodes are not required to survive travel for that state to
-    persist.
+33. joining peer receives the current world through persistent `WorldSpawner` without a custom catch-up
+    scene RPC;
+34. existing peers remain `Active` and are not put through a second global travel;
+35. joining peer does not produce `PlayerWorldReady` before its current world is locally ready;
+36. valid readiness ACK emits `PlayerWorldReady` exactly once for that participant;
+37. project can safely spawn the joining participant's world-local Pawn after that signal;
+38. late-join world load failure removes only the joining participant.
 
-## Success criteria
+## Persistent game-specific data
 
-The proposal is successfully implemented when a minimal project can express this flow without custom
-session plumbing:
+39. project-specific PlayerState property set before travel remains on the same persistent node across at
+    least two world replacements;
+40. this persistence does not require Character/Pawn nodes to survive travel.
+
+# Success criteria
+
+A minimal project can express:
 
 ```text
 start host
-    ↓
-GameSession creates host PlayerState
-    ↓
-client connects
-    ↓
-GameSession creates + replicates client PlayerState
-    ↓
-project modifies persistent PlayerState selection data
-    ↓
-server Travel(Facility)
-    ↓
-all peers replace only WorldContainer child
-    ↓
-all peers report loaded
-    ↓
-server releases barrier
-    ↓
-TravelCompleted
-    ↓
-project spawns world-local Characters from persistent PlayerStates
+ -> GameSession creates host PlayerState
+ -> client joins
+ -> server creates/replicates client PlayerState
+ -> project stores lobby selections on PlayerState
+ -> server Travel(Facility)
+ -> WorldSpawner replaces current world everywhere
+ -> all required peers report world ready
+ -> TravelCompleted
+ -> project spawns world-local Pawns from persistent PlayerStates
+ -> later client joins
+ -> PlayerStates + current world reconstruct natively
+ -> PlayerWorldReady(new participant)
+ -> project spawns only that late joiner's Pawn
 ```
 
-The generic addon must remain unaware of what those Characters are or what gameplay begins after the
-barrier.
+The generic addon never knows what those Pawns are.
 
-The resulting architecture should preserve this final boundary:
+Final intended boundary:
 
 ```text
 persistent
-────────────────────────────────
+────────────────────────────────────
 NetworkSession   connection lifecycle
-GameSession      participants + travel
+GameSession      participants + replicated current world + readiness
 PlayerState      persistent participant data
 PlayerController project-local optional controller
 
 travel boundary
-────────────────────────────────
+────────────────────────────────────
 
 world-local
-────────────────────────────────
+────────────────────────────────────
 World            current scene content
-GameMode/State   project-specific if needed
+GameMode/State   project-specific if useful
 Character/Pawn   participant incarnation
 Gameplay actors
 ```
 
-That is the intended stopping point for generic framework work in this area. GameMode/GameState-like
-abstractions remain specific until independent projects prove a reusable contract.
+This is the stopping point for generic framework work in this area. GameMode/GameState-like abstractions
+remain project-specific until independent implementations prove another reusable contract.
