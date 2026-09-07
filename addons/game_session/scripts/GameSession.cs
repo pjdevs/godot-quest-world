@@ -1,0 +1,372 @@
+using System.Collections.Generic;
+using Godot;
+using QuestWorld.Network;
+
+namespace QuestWorld.GameSession;
+
+[GlobalClass]
+public partial class GameSession : Node
+{
+    [Signal]
+    public delegate void PlayerJoinedEventHandler(PlayerState playerState);
+
+    [Signal]
+    public delegate void PlayerLeftEventHandler(long participantId, long peerId);
+
+    [Export]
+    public NetworkSession? NetworkSession { get; set; }
+
+    [Export]
+    public Node? Players { get; set; }
+
+    [Export]
+    public PackedScene? PlayerStateScene { get; set; }
+
+    [Export]
+    public MultiplayerSpawner? PlayerStateSpawner { get; set; }
+
+    [Export]
+    public Node? WorldContainer { get; set; }
+
+    [Export]
+    public MultiplayerSpawner? WorldSpawner { get; set; }
+
+    private readonly List<PlayerState> _playerStates = new();
+    private readonly Dictionary<long, PlayerState> _playersByParticipantId = new();
+    private readonly Dictionary<long, PlayerState> _playersByPeerId = new();
+    private bool _initialized;
+    private long _nextParticipantId = 1;
+
+    public GameSessionState State { get; private set; } = GameSessionState.Idle;
+
+    public bool IsAcceptingPlayers { get; set; } = true;
+
+    public IReadOnlyList<PlayerState> PlayerStates => _playerStates;
+
+    public bool Initialize()
+    {
+        if (_initialized)
+        {
+            return State != GameSessionState.Failed;
+        }
+
+        if (!ValidateConfiguration())
+        {
+            State = GameSessionState.Failed;
+            return false;
+        }
+
+        PlayerStateSpawner!.SpawnFunction = Callable.From<Variant, Node>(SpawnPlayerState);
+        PlayerStateSpawner.Spawned += OnPlayerStateSpawned;
+        NetworkSession!.PeerConnected += OnPeerConnected;
+        NetworkSession.PeerDisconnected += OnPeerDisconnected;
+        NetworkSession.Connected += OnConnected;
+        NetworkSession.Disconnected += OnDisconnected;
+        NetworkSession.Failed += OnNetworkFailed;
+        _initialized = true;
+        State = GameSessionState.Active;
+
+        ReconcileCurrentNetworkSession();
+        return State != GameSessionState.Failed;
+    }
+
+    public void Reset()
+    {
+        if (!_initialized)
+        {
+            return;
+        }
+
+        if (PlayerStateSpawner is not null)
+        {
+            PlayerStateSpawner.Spawned -= OnPlayerStateSpawned;
+        }
+
+        if (NetworkSession is not null)
+        {
+            NetworkSession.PeerConnected -= OnPeerConnected;
+            NetworkSession.PeerDisconnected -= OnPeerDisconnected;
+            NetworkSession.Connected -= OnConnected;
+            NetworkSession.Disconnected -= OnDisconnected;
+            NetworkSession.Failed -= OnNetworkFailed;
+        }
+
+        foreach (PlayerState playerState in _playerStates.ToArray())
+        {
+            if (IsInstanceValid(playerState))
+            {
+                playerState.QueueFree();
+            }
+        }
+
+        _playerStates.Clear();
+        _playersByParticipantId.Clear();
+        _playersByPeerId.Clear();
+        _nextParticipantId = 1;
+        _initialized = false;
+        State = GameSessionState.Idle;
+    }
+
+    public bool TryGetPlayerStateByPeerId(long peerId, out PlayerState? playerState) =>
+        _playersByPeerId.TryGetValue(peerId, out playerState);
+
+    public bool TryGetPlayerStateByParticipantId(
+        long participantId,
+        out PlayerState? playerState
+    ) => _playersByParticipantId.TryGetValue(participantId, out playerState);
+
+    protected virtual bool CanJoin(long peerId, out string reason)
+    {
+        if (!IsAcceptingPlayers || State != GameSessionState.Active)
+        {
+            reason = "The game session is not accepting players.";
+            return false;
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
+    private bool ValidateConfiguration()
+    {
+        if (NetworkSession is null)
+        {
+            return FailConfiguration("NetworkSession is required.");
+        }
+
+        if (Players is null)
+        {
+            return FailConfiguration("Players is required.");
+        }
+
+        if (PlayerStateScene is null)
+        {
+            return FailConfiguration("PlayerStateScene is required.");
+        }
+
+        if (PlayerStateSpawner is null)
+        {
+            return FailConfiguration("PlayerStateSpawner is required.");
+        }
+
+        if (WorldContainer is null)
+        {
+            return FailConfiguration("WorldContainer is required.");
+        }
+
+        if (WorldSpawner is null)
+        {
+            return FailConfiguration("WorldSpawner is required.");
+        }
+
+        if (PlayerStateSpawner.GetNodeOrNull(PlayerStateSpawner.GetPathTo(Players)) != Players)
+        {
+            return FailConfiguration("PlayerStateSpawner must point to Players through SpawnPath.");
+        }
+
+        if (WorldSpawner.GetNodeOrNull(WorldSpawner.GetPathTo(WorldContainer)) != WorldContainer)
+        {
+            return FailConfiguration(
+                "WorldSpawner must point to WorldContainer through SpawnPath."
+            );
+        }
+
+        Node? probe = PlayerStateScene.Instantiate();
+        if (probe is not PlayerState)
+        {
+            probe?.Free();
+            return FailConfiguration("PlayerStateScene root must inherit PlayerState.");
+        }
+
+        probe.Free();
+        return true;
+    }
+
+    private bool FailConfiguration(string reason)
+    {
+        GD.PushError($"{GetPath()}: {reason}");
+        return false;
+    }
+
+    private void ReconcileCurrentNetworkSession()
+    {
+        if (NetworkSession?.State != SessionState.Active || !NetworkSession.IsServer)
+        {
+            return;
+        }
+
+        if (!NetworkSession.IsDedicatedServer && NetworkSession.LocalPeerId > 0)
+        {
+            AdmitParticipant(NetworkSession.LocalPeerId);
+        }
+    }
+
+    private void OnConnected() => ReconcileCurrentNetworkSession();
+
+    private void OnPeerConnected(long peerId)
+    {
+        if (NetworkSession?.IsServer == true)
+        {
+            AdmitParticipant(peerId);
+        }
+    }
+
+    private void OnPeerDisconnected(long peerId)
+    {
+        if (NetworkSession?.IsServer == true)
+        {
+            RemoveParticipant(peerId);
+        }
+    }
+
+    private void OnDisconnected()
+    {
+        if (State == GameSessionState.Active)
+        {
+            State = GameSessionState.Idle;
+        }
+    }
+
+    private void OnNetworkFailed(string reason)
+    {
+        GD.PushError($"{GetPath()}: NetworkSession failed: {reason}");
+        State = GameSessionState.Failed;
+    }
+
+    private void AdmitParticipant(long peerId)
+    {
+        string reason = string.Empty;
+        if (
+            !_initialized
+            || NetworkSession?.IsServer != true
+            || State != GameSessionState.Active
+            || _playersByPeerId.ContainsKey(peerId)
+            || !CanJoin(peerId, out reason)
+        )
+        {
+            if (!string.IsNullOrEmpty(reason))
+            {
+                GD.PushWarning($"{GetPath()}: rejected peer {peerId}: {reason}");
+            }
+
+            return;
+        }
+
+        long participantId = _nextParticipantId++;
+        Godot.Collections.Dictionary<string, Variant> spawnData = new()
+        {
+            ["participant_id"] = participantId,
+            ["peer_id"] = peerId,
+        };
+        PlayerState? playerState = PlayerStateSpawner!.Spawn(spawnData) as PlayerState;
+        if (playerState is null && NetworkSession.Multiplayer.MultiplayerPeer is null)
+        {
+            playerState = SpawnPlayerState(spawnData) as PlayerState;
+            if (playerState is not null)
+            {
+                Players!.AddChild(playerState, true);
+            }
+        }
+
+        if (playerState is null || !RegisterPlayerState(playerState))
+        {
+            GD.PushError($"{GetPath()}: failed to create PlayerState for peer {peerId}.");
+            playerState?.QueueFree();
+            return;
+        }
+
+        EmitSignal(SignalName.PlayerJoined, playerState);
+    }
+
+    private Node SpawnPlayerState(Variant data)
+    {
+        if (data.VariantType != Variant.Type.Dictionary)
+        {
+            return null!;
+        }
+
+        Godot.Collections.Dictionary payload = data.AsGodotDictionary();
+        if (
+            !payload.TryGetValue("participant_id", out Variant participantValue)
+            || !payload.TryGetValue("peer_id", out Variant peerValue)
+            || participantValue.VariantType != Variant.Type.Int
+            || peerValue.VariantType != Variant.Type.Int
+        )
+        {
+            return null!;
+        }
+
+        long participantId = participantValue.AsInt64();
+        long peerId = peerValue.AsInt64();
+        if (participantId <= 0 || peerId <= 0 || PlayerStateScene is null)
+        {
+            return null!;
+        }
+
+        Node? node = PlayerStateScene.Instantiate();
+        if (node is not PlayerState playerState)
+        {
+            node?.Free();
+            return null!;
+        }
+
+        playerState.InitializeIdentity(participantId, peerId);
+        playerState.Name = $"PlayerState_{participantId}";
+        return playerState;
+    }
+
+    private void OnPlayerStateSpawned(Node node)
+    {
+        if (node is not PlayerState playerState || !RegisterPlayerState(playerState))
+        {
+            GD.PushError($"{GetPath()}: replicated PlayerState has invalid identity.");
+        }
+    }
+
+    private bool RegisterPlayerState(PlayerState playerState)
+    {
+        if (
+            !IsInstanceValid(playerState)
+            || playerState.ParticipantId <= 0
+            || playerState.PeerId <= 0
+            || _playersByParticipantId.ContainsKey(playerState.ParticipantId)
+            || _playersByPeerId.ContainsKey(playerState.PeerId)
+        )
+        {
+            return false;
+        }
+
+        _playerStates.Add(playerState);
+        _playersByParticipantId.Add(playerState.ParticipantId, playerState);
+        _playersByPeerId.Add(playerState.PeerId, playerState);
+        playerState.TreeExiting += () => UnregisterPlayerState(playerState);
+        return true;
+    }
+
+    private void UnregisterPlayerState(PlayerState playerState)
+    {
+        if (!_playersByParticipantId.Remove(playerState.ParticipantId))
+        {
+            return;
+        }
+
+        _playersByPeerId.Remove(playerState.PeerId);
+        _playerStates.Remove(playerState);
+        EmitSignal(SignalName.PlayerLeft, playerState.ParticipantId, playerState.PeerId);
+    }
+
+    private void RemoveParticipant(long peerId)
+    {
+        if (!_playersByPeerId.TryGetValue(peerId, out PlayerState? playerState))
+        {
+            return;
+        }
+
+        playerState.QueueFree();
+    }
+
+    public override void _ExitTree()
+    {
+        Reset();
+    }
+}

@@ -39,11 +39,11 @@
 - `GameSession.Initialize()`, `GameSession.Reset()`, `GameSession.PlayerStateScene`, `GameSession.Players`, `GameSession.PlayerStateSpawner`, `GameSession.WorldContainer`, and `GameSession.WorldSpawner`.
 - `GameSession.State`, `IsAcceptingPlayers`, `CurrentTravelId`, `CurrentWorld`, `CurrentWorldPath`, `PlayerStates`, `TryGetPlayerStateByPeerId(long, out PlayerState)`, and `TryGetPlayerStateByParticipantId(long, out PlayerState)`.
 
-- [ ] **Step 1: Write tests for identity-before-ready, offline/host/dedicated/client admission, indexes, and invalid configuration.** Use real Godot nodes and a derived `PlayerState` scene; assert that missing dependencies leave the session uninitialized and that offline initialization creates exactly one state.
-- [ ] **Step 2: Run `dotnet test --filter FullyQualifiedName~GameSessionConfigurationTest` and `...~GameSessionParticipantTest` to observe the expected missing-type failures.**
-- [ ] **Step 3: Implement the enum, base state, exported dependencies, validation, custom player-state spawn factory, participant indexes, admission reconciliation, and lifecycle signals.**
-- [ ] **Step 4: Run the focused suites and confirm they pass.**
-- [ ] **Step 5: Run formatting/build/tests required by `AGENTS.md` and update the feature doc with the public contract.**
+- [x] **Step 1: Write tests for identity-before-ready, offline/host/dedicated/client admission, indexes, and invalid configuration.** Use real Godot nodes and a derived `PlayerState` scene; assert that missing dependencies leave the session uninitialized and that offline initialization creates exactly one state.
+- [x] **Step 2: Run `dotnet test --filter FullyQualifiedName~GameSessionConfigurationTest` and `...~GameSessionParticipantTest` to observe the expected missing-type failures.**
+- [x] **Step 3: Implement the enum, base state, exported dependencies, validation, custom player-state spawn factory, participant indexes, admission reconciliation, and lifecycle signals.**
+- [x] **Step 4: Run the focused suites and confirm they pass.**
+- [x] **Step 5: Run formatting/build/tests required by `AGENTS.md` and update the feature doc with the public contract.**
 
 ### Task 2: Implement native PlayerState replication and peer lifecycle
 
