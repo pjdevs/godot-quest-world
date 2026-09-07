@@ -40,6 +40,7 @@ or component.
 The project subclass composes:
 
 - `InventoryComponent` + `InventoryReplicationSynchronizer`;
+- `CarryComponent`, which owns carried-item transactions, replication and best-effort visuals;
 - `GameplayActionComponent` + `GameplayActionRunner`;
 - `InteractionInteractor` + detector + `InteractionPresenter`;
 - `GameplayActionPresenter` for owned actions such as `Drop Battery`.
@@ -47,6 +48,11 @@ The project subclass composes:
 The runner is the single gameplay-action input boundary. The project Character samples
 `GetRelevantInputs()` and forwards press/release to the runner. Before a press it refreshes Interaction's
 focused bindings, but owned actions remain usable when no interactive target is focused.
+
+`Character` is also the composition root for carry dependencies: it gives `CarryComponent` its
+orientation and current world spawner. The component itself performs no scene-tree lookup while taking
+or dropping. It drops server-side during `_ExitTree()` so removing a player does not silently destroy
+the carried world item.
 
 ## Possession and controls
 

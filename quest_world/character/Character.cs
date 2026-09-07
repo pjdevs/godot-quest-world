@@ -12,7 +12,7 @@ public partial class Character
     private InteractionInteractor _interactionInteractor = null!;
     private GameplayActionRunner _gameplayActionRunner = null!;
     private InventoryComponent _inventory = null!;
-    private CarryVisualComponent _carryVisualComponent = null!;
+    private CarryComponent _carryComponent = null!;
     private bool _wasPossessed;
 
     public InteractionInteractor InteractionInteractor => _interactionInteractor;
@@ -45,13 +45,15 @@ public partial class Character
             return;
         }
 
-        _carryVisualComponent = GetNodeOrNull<CarryVisualComponent>("CarryVisualComponent")!;
-        if (_carryVisualComponent == null)
+        _carryComponent = GetNodeOrNull<CarryComponent>("CarryComponent")!;
+        if (_carryComponent == null)
         {
-            GD.PushError($"{GetPath()}: project Character requires a CarryVisualComponent child.");
+            GD.PushError($"{GetPath()}: project Character requires a CarryComponent child.");
             return;
         }
 
+        _carryComponent.Carrier = this;
+        _carryComponent.WorldSpawner = GetTree().CurrentScene as IWorldSpawner;
         _gameplayActionRunner.OwnerPeerId = OwnerPeerId;
     }
 
@@ -116,16 +118,16 @@ public partial class Character
     }
 
     #region ICarrier
-    public bool IsCarrying => _carryVisualComponent.IsCarrying;
+    public bool IsCarrying => _carryComponent.IsCarrying;
 
-    public bool TryCarryVisual(StringName ItemId)
+    public bool TryTake(StringName itemId, Node3D carriableObject)
     {
-        return _carryVisualComponent.TryCarryVisual(ItemId);
+        return _carryComponent.TryTake(itemId, carriableObject);
     }
 
-    public bool TryDropVisual()
+    public bool TryDrop(StringName itemId)
     {
-        return _carryVisualComponent.TryDropVisual();
+        return _carryComponent.TryDrop(itemId);
     }
     #endregion ICarrier
 }

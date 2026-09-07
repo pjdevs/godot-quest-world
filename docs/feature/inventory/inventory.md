@@ -5,9 +5,10 @@
 `addons/inventory_plugin` provides a deliberately small server-authoritative inventory: catalog-backed
 item IDs, integer quantities, replication snapshots/deltas and detached persistence data.
 
-It is now integrated into the QuestWorld demo. The project `Character` owns an `InventoryComponent` and
-`InventoryReplicationSynchronizer`; the Battery flow adds/removes the `battery` entry and derives the
-player-owned `Drop Battery` gameplay action from that replicated inventory truth.
+It is now integrated into the QuestWorld demo. The project `Character` owns an `InventoryComponent`,
+`InventoryReplicationSynchronizer` and project-level `CarryComponent`; the Battery flow adds/removes
+the `battery` entry and derives the player-owned `Drop Battery` gameplay action from that replicated
+inventory truth.
 
 The runtime consists of:
 
@@ -69,8 +70,12 @@ authoritative inventory changes
 The server adding a dynamic action node is not expected to replicate that node. Every peer reconstructs
 the derived action only after receiving the inventory truth from which it follows.
 
-The inverse Battery interaction is equally domain-specific: an interaction executor mutates the
-Character inventory and world object. Inventory itself never depends on Interaction or Gameplay Action.
+The inverse Battery interaction is equally domain-specific. Thin take/drop executors delegate to the
+project `CarryComponent`, which owns the complete server-side transaction across inventory, carried ID
+and world object. Replacing a carried item rolls back the new inventory addition if the old item cannot
+spawn. Dropping removes the inventory entry first and restores it if spawning fails; `CarriedItemId` is
+cleared only after a successful spawn. Missing carry visuals are logged but never invalidate gameplay.
+Inventory itself never depends on Interaction, Character carry semantics or Gameplay Action.
 
 ## Architecture decisions
 

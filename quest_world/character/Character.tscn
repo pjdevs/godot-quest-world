@@ -12,7 +12,7 @@
 [ext_resource type="Script" uid="uid://b6bybu005qipw" path="res://addons/inventory_plugin/runtime/InventoryReplicationSynchronizer.cs" id="10_8y4fs"]
 [ext_resource type="Resource" uid="uid://vqd34pcyut5r" path="res://quest_world/inventory/InventoryCatalog.tres" id="10_xok31"]
 [ext_resource type="Script" uid="uid://b3dfxqn40hwot" path="res://quest_world/interactibles/battery/ItemActionGrant.cs" id="14_wu3k4"]
-[ext_resource type="Script" uid="uid://daxwfb5jn63w3" path="res://quest_world/character/CarryVisualComponent.cs" id="15_xok31"]
+[ext_resource type="Script" uid="uid://daxwfb5jn63w3" path="res://quest_world/character/CarryComponent.cs" id="15_xok31"]
 [ext_resource type="Script" uid="uid://u7x7xha33xn" path="res://addons/gameplay_action_plugin/presentation/ui/GameplayActionPresenter.cs" id="16_cv4cp"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="17_xgwmf"]
 
@@ -190,13 +190,13 @@ grow_vertical = 2
 layout_mode = 2
 alignment = 1
 
-[node name="CarryVisualComponent" type="Node" parent="." index="13" unique_id=753076839 node_paths=PackedStringArray("CarriableAnchor")]
+[node name="CarryComponent" type="Node" parent="." index="13" unique_id=753076839 node_paths=PackedStringArray("CarriableAnchor", "Inventory")]
 script = ExtResource("15_xok31")
 CarriableAnchor = NodePath("../Visual/UALCharacter/Armature/GeneralSkeleton/CarriableAnchorBone/CarriableAnchor")
-InventoryCatalog = ExtResource("10_xok31")
+Inventory = NodePath("../InventoryComponent")
 metadata/_custom_type_script = "uid://daxwfb5jn63w3"
 
-[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="CarryVisualComponent" index="0" unique_id=1461336339]
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="CarryComponent" index="0" unique_id=1461336339]
 replication_config = SubResource("SceneReplicationConfig_xgwmf")
 
 [editable path="Visual/UALCharacter"]

@@ -22,7 +22,7 @@ If the answer is no, run the impacted suite or feature task instead.
 
 Categories are declared on the test suite with `[TestCategory("Runtime")]` or `[TestCategory("Network")]`. A suite belongs to one primary category; a network suite is understood to be runtime-backed as well.
 
-The current 321 cases are classified as 253 `Runtime` cases and 68 `Network` cases. No `Fast` suite exists yet because the current test assembly still requires the Godot runtime for every suite.
+The current 322 cases are classified as 254 `Runtime` cases and 68 `Network` cases. No `Fast` suite exists yet because the current test assembly still requires the Godot runtime for every suite.
 
 `InteractionBehaviorTest` was split into focused suites without deleting cases:
 
@@ -40,7 +40,9 @@ The large network suite follows the same rule and is split into `InteractionNetw
 
 ## Commands
 
-Task is the platform-agnostic entry point. It configures the correct headless Godot executable on macOS and expects `godot` on `PATH` on Windows.
+Task is the platform-agnostic entry point. It configures the correct Godot executable on macOS,
+expects `godot` on `PATH` on Windows and applies `gdunit4.runsettings`, whose `--headless` runtime
+parameter prevents GdUnit from opening a graphical Godot window.
 
 ```text
 task --list
@@ -51,6 +53,7 @@ task test:suite SUITE=CharacterBehaviorTest
 task test:suite SUITE=InteractionNetworkTest
 task test:interaction
 task test:gameplay
+task test:game
 task test:character
 task test:stateful
 task test:network
@@ -67,7 +70,7 @@ task test:full CONFIRM_FULL=yes
 When Task is unavailable, use the VSTest filter directly:
 
 ```text
-GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot dotnet test --filter "FullyQualifiedName~InteractionNetworkTest"
+GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot dotnet test --settings gdunit4.runsettings --filter "FullyQualifiedName~InteractionNetworkTest"
 ```
 
 On Windows, set `GODOT_BIN` to the Godot executable path if `godot` is not on `PATH`. See `AGENTS.md` for the required build and validation policy.
@@ -79,6 +82,7 @@ On Windows, set `GODOT_BIN` to the Godot executable path if `godot` is not on `P
 | One test or one suite | `task test:suite SUITE=<SuiteName>` | The feature task if helpers or neighboring suites changed. |
 | Interaction behavior | `task test:interaction` | `task test:network` for authority/replication/lifecycle changes. |
 | GameplayAction behavior | `task test:gameplay` | `task test:network` for network suites or authority changes. |
+| Quest World gameplay integration | `task test:game` | `task test:network` for authority, replication or peer lifecycle changes. |
 | Shared Godot/GdUnit fixture or adapter | `task test:runtime` | `task test:network` if peer behavior can be affected. |
 | Cross-feature refactor or pre-merge validation | — | `task test:full CONFIRM_FULL=yes`, after the criteria above are satisfied. |
 

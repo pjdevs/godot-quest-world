@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <GdUnit4>
+    <Parameters>--headless</Parameters>
+  </GdUnit4>
+</RunSettings>

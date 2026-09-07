@@ -7,6 +7,11 @@ The GdUnit VSTest adapter needs `GODOT_BIN` when a suite has `[RequireGodotRunti
 - macOS: `/Applications/Godot_mono.app/Contents/MacOS/Godot`
 - Windows and Linux: `godot`, resolved through `PATH`
 
+`[RequireGodotRuntime]` only tells the adapter to start Godot; it does not imply headless execution.
+Every test command therefore also loads `gdunit4.runsettings`, which passes `--headless` through the
+adapter's supported `GdUnit4/Parameters` setting. Do not append arguments to `GODOT_BIN`: that variable
+must remain an executable path.
+
 The local GdUnit adapter exposes `[TestCategory]` through the VSTest property `TestCategory`, so filters use `TestCategory=Network` and `TestCategory=Runtime`. `Category=...` does not select these suites with the versions pinned by this project.
 
 The full suite is guarded by `CONFIRM_FULL=yes` so running it is an explicit decision rather than the default feedback loop.

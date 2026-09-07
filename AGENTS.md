@@ -38,7 +38,7 @@ Vertical, one folder per feature with subfolder `scripts` etc.
 - The full suite is deliberately not the default and is usually a bad first reflex. Before running it, challenge whether the change is cross-cutting, changes shared infrastructure/fixtures, or is being validated before merge/CI. Only then run `task test:full CONFIRM_FULL=yes`.
 - On Windows, Task sets `GODOT_BIN` to `godot`, which must be available on `PATH`; when it is not, use the direct fallback command with the executable path.
 - On macOS, Task uses `/Applications/Godot_mono.app/Contents/MacOS/Godot` because the `godot` PATH entry is a symlink that breaks in headless mode.
-- Direct fallback commands remain `dotnet test --filter "FullyQualifiedName~<SuiteName>"` with the platform-specific `GODOT_BIN` above.
+- Direct fallback commands remain `dotnet test --settings gdunit4.runsettings --filter "FullyQualifiedName~<SuiteName>"` with the platform-specific `GODOT_BIN` above.
 - After each task maintain a doc per feature in `docs/feature/<thedoc>.md`
 - CSharpier is the source of truth for C# formatting. For conventions it does not enforce, follow the surrounding code and existing project patterns.
 - Keep the relevant feature documentation current when architecture, invariants, boundaries or public usage materially change.
