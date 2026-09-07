@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="quest-world"
-run/main_scene="uid://cs4drhmc1bql5"
+run/main_scene="res://quest_world/game/Game.tscn"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 config/icon="res://icon.svg"
 

@@ -33,3 +33,22 @@ world, allocates a monotonic `CurrentTravelId`, and asks the persistent `WorldSp
 `World_<travelId>` from `{ travel_id, resource_path }`. A normal ready-frame check emits `WorldLoaded`
 once and completes the local barrier; failed preflight leaves the previous world intact. The current
 world remains beneath `WorldContainer`, so the session and `PlayerState` nodes survive replacement.
+
+Networked travel uses a reliable `BeginTravel` RPC plus the native `WorldSpawner`. The server snapshots
+remote peers present at travel start, waits for their `TravelReady(CurrentTravelId)` acknowledgements and
+its own local readiness, then emits `TravelCompleted` once and reliably releases clients with
+`CompleteTravel`. Duplicate or stale acknowledgements are ignored, disconnects release their pending
+entry, and `WorldLoadFailed` removes only the reporting participant. Admission is refused while the
+global barrier is active.
+
+When a peer joins an active world, the persistent spawners reconstruct both `PlayerState` and the current
+world. The joining process sends `CurrentWorldReady(CurrentTravelId)` after its local `WorldLoaded`
+event; the server then emits `PlayerWorldReady` only for that participant. Existing participants remain
+`Active` throughout late-join reconstruction. The feature test suite covers host/client, dedicated
+server, disconnect release, late join, and isolated client failure paths.
+
+QuestWorld now has a persistent `quest_world/game/Game.tscn` root. It owns `NetworkSession`,
+`GameSession`, the derived `QuestWorldPlayerState` scene, the player integration, and the optional local
+controller. `World` scenes are world-only content: they retain their project spawners and authority
+initialization but no longer start networking or own player integration. Character carry behavior finds
+its `IWorldSpawner` ancestor, so it no longer depends on `SceneTree.CurrentScene` being the world.

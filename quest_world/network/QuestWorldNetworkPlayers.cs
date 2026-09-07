@@ -1,18 +1,22 @@
+using System.Collections.Generic;
 using Godot;
 using QuestWorld.Character;
-using QuestWorld.Network;
+using QuestWorld.GameSession;
+using GameSessionNode = QuestWorld.GameSession.GameSession;
+using ProjectCharacter = global::Character;
+
+namespace QuestWorld.Network;
 
 public partial class QuestWorldNetworkPlayers : Node
 {
     [Export]
-    public NetworkSession? NetworkSession { get; set; }
-
-    [Export]
-    public Spawner? PlayerSpawner { get; set; }
+    public GameSessionNode? GameSession { get; set; }
 
     [Export]
     public CharacterPlayerController? LocalPlayerController { get; set; }
 
+    private readonly Dictionary<long, ProjectCharacter> _charactersByPeerId = new();
+    private Spawner? _playerSpawner;
     private bool _initialized;
 
     public void Initialize()
@@ -22,49 +26,46 @@ public partial class QuestWorldNetworkPlayers : Node
             return;
         }
 
-        if (NetworkSession is null)
+        if (GameSession is null)
         {
-            GD.PushError($"{GetPath()}: NetworkSession is required.");
+            GD.PushError($"{GetPath()}: GameSession is required.");
             return;
         }
 
-        if (PlayerSpawner is null)
-        {
-            GD.PushError($"{GetPath()}: PlayerSpawner is required.");
-            return;
-        }
-
-        PlayerSpawner.Spawned += OnPlayerSpawned;
-        NetworkSession.PeerConnected += OnPeerConnected;
-        NetworkSession.PeerDisconnected += OnPeerDisconnected;
-        NetworkSession.Connected += OnConnected;
-        NetworkSession.Failed += OnFailed;
+        GameSession.PlayerJoined += OnPlayerJoined;
+        GameSession.PlayerLeft += OnPlayerLeft;
+        GameSession.PlayerWorldReady += OnPlayerWorldReady;
+        GameSession.WorldLoaded += OnWorldLoaded;
+        GameSession.TravelCompleted += OnTravelCompleted;
         _initialized = true;
 
+        RefreshCurrentWorld();
         SynchronizeCurrentSession();
     }
 
     public override void _Process(double delta)
     {
+        if (!_initialized || GameSession is null)
+        {
+            return;
+        }
+
+        RefreshCurrentWorld();
         if (
-            !_initialized
-            || NetworkSession is null
-            || NetworkSession.State != SessionState.Active
+            GameSession.NetworkSession?.State != SessionState.Active
             || LocalPlayerController is null
-            || NetworkSession.IsDedicatedServer
-            || NetworkSession.LocalPeerId <= 0
+            || GameSession.NetworkSession.IsDedicatedServer
+            || GameSession.NetworkSession.LocalPeerId <= 0
         )
         {
             return;
         }
 
-        Character? localPlayer = PlayerSpawner
-            ?.GetSpawnRoot()
-            ?.GetNodeOrNull<Character>(
-                QuestWorldNetworkIdentity.GetPlayerName(NetworkSession.LocalPeerId)
-            );
+        ProjectCharacter? localPlayer = GetCurrentWorldPlayer(
+            GameSession.NetworkSession.LocalPeerId
+        );
         if (
-            localPlayer != null
+            localPlayer is not null
             && localPlayer.IsLocalNetworkAuthority
             && LocalPlayerController.ControlledCharacter != localPlayer
         )
@@ -72,7 +73,7 @@ public partial class QuestWorldNetworkPlayers : Node
             LocalPlayerController.Possess(localPlayer);
             GD.Print($"QuestWorldNetworkPlayers: possessed local {localPlayer.Name}");
             GD.Print(
-                $"QuestWorldNetworkPlayers: visible player count={PlayerSpawner?.GetSpawnRoot()?.GetChildCount()}"
+                $"QuestWorldNetworkPlayers: visible player count={_playerSpawner?.GetSpawnRoot()?.GetChildCount()}"
             );
         }
     }
@@ -80,48 +81,134 @@ public partial class QuestWorldNetworkPlayers : Node
     private void SynchronizeCurrentSession()
     {
         if (
-            NetworkSession?.State == SessionState.Active
-            && NetworkSession.IsServer
-            && !NetworkSession.IsDedicatedServer
+            GameSession?.NetworkSession?.IsServer == true
+            && GameSession.State == GameSessionState.Active
+            && GameSession.CurrentWorld is not null
         )
         {
-            SpawnPlayer(NetworkSession.LocalPeerId);
+            foreach (PlayerState playerState in GameSession.PlayerStates)
+            {
+                SpawnPlayer(playerState);
+            }
         }
     }
 
-    private void OnConnected()
+    private void OnPlayerJoined(PlayerState playerState)
     {
-        SynchronizeCurrentSession();
+        // A participant can be admitted while its late-join world is still rebuilding. The
+        // PlayerWorldReady signal is the only safe point for creating its world-local Character.
     }
 
-    private void OnPeerConnected(long peerId)
+    private void OnPlayerLeft(long participantId, long peerId)
     {
-        if (NetworkSession?.IsServer == true)
+        if (_charactersByPeerId.Remove(peerId, out ProjectCharacter? character))
         {
-            SpawnPlayer((int)peerId);
+            if (IsInstanceValid(character))
+            {
+                character.QueueFree();
+            }
+
+            GD.Print(
+                $"QuestWorldNetworkPlayers: despawned {QuestWorldNetworkIdentity.GetPlayerName((int)peerId)}"
+            );
         }
     }
 
-    private void OnPeerDisconnected(long peerId)
+    private void OnPlayerWorldReady(PlayerState playerState)
     {
-        if (NetworkSession?.IsServer != true)
+        SpawnPlayer(playerState);
+    }
+
+    private void OnWorldLoaded(long travelId, Node world)
+    {
+        RefreshCurrentWorld();
+    }
+
+    private void OnTravelCompleted(long travelId, Node world)
+    {
+        if (world is World currentWorld && GameSession?.NetworkSession?.IsServer == true)
+        {
+            currentWorld.InitializeAuthority();
+        }
+
+        RefreshCurrentWorld();
+    }
+
+    private void RefreshCurrentWorld()
+    {
+        Spawner? nextSpawner = GetCurrentWorldSpawner();
+        if (nextSpawner == _playerSpawner)
         {
             return;
         }
 
-        Character? player = PlayerSpawner
-            ?.GetSpawnRoot()
-            ?.GetNodeOrNull<Character>(QuestWorldNetworkIdentity.GetPlayerName((int)peerId));
-        if (player != null)
+        if (_playerSpawner is not null && GodotObject.IsInstanceValid(_playerSpawner))
         {
-            player.QueueFree();
-            GD.Print($"QuestWorldNetworkPlayers: despawned {player.Name}");
+            _playerSpawner.Spawned -= OnPlayerSpawned;
         }
+
+        _charactersByPeerId.Clear();
+        _playerSpawner = nextSpawner;
+        if (_playerSpawner is not null)
+        {
+            _playerSpawner.Spawned += OnPlayerSpawned;
+            Node3D? spawnRoot = _playerSpawner.GetSpawnRoot();
+            if (spawnRoot is not null)
+            {
+                foreach (Node child in spawnRoot.GetChildren())
+                {
+                    OnPlayerSpawned(child);
+                }
+            }
+        }
+    }
+
+    private Spawner? GetCurrentWorldSpawner() =>
+        GameSession?.CurrentWorld?.GetNodeOrNull<Spawner>("PlayerSpawner");
+
+    private ProjectCharacter? GetCurrentWorldPlayer(long peerId) =>
+        _playerSpawner
+            ?.GetSpawnRoot()
+            ?.GetNodeOrNull<ProjectCharacter>(QuestWorldNetworkIdentity.GetPlayerName((int)peerId));
+
+    private void SpawnPlayer(PlayerState playerState)
+    {
+        if (
+            GameSession?.NetworkSession?.IsServer != true
+            || GameSession.State != GameSessionState.Active
+            || GameSession.CurrentWorld is null
+            || _playerSpawner is null
+        )
+        {
+            return;
+        }
+
+        int peerId = (int)playerState.PeerId;
+        if (_charactersByPeerId.ContainsKey(peerId) || GetCurrentWorldPlayer(peerId) is not null)
+        {
+            return;
+        }
+
+        string playerName = QuestWorldNetworkIdentity.GetPlayerName(peerId);
+        ProjectCharacter? player =
+            _playerSpawner.Spawn(
+                Transform3D.Identity.Translated(QuestWorldNetworkIdentity.GetSpawnPosition(peerId)),
+                playerName
+            ) as ProjectCharacter;
+        if (player is null)
+        {
+            GD.PushError($"QuestWorldNetworkPlayers: failed to spawn {playerName}.");
+            return;
+        }
+
+        ConfigurePlayerAuthority(player, peerId);
+        _charactersByPeerId[peerId] = player;
+        GD.Print($"QuestWorldNetworkPlayers: spawned {playerName} at {player.Position}");
     }
 
     private void OnPlayerSpawned(Node node)
     {
-        if (node is not Character character)
+        if (node is not ProjectCharacter character)
         {
             return;
         }
@@ -135,50 +222,10 @@ public partial class QuestWorldNetworkPlayers : Node
         }
 
         ConfigurePlayerAuthority(character, peerId);
+        _charactersByPeerId[peerId] = character;
     }
 
-    private void OnFailed(string reason)
-    {
-        GD.PushError($"QuestWorldNetworkPlayers: {reason}");
-    }
-
-    private void SpawnPlayer(int peerId)
-    {
-        if (PlayerSpawner is null)
-        {
-            return;
-        }
-
-        string playerName = QuestWorldNetworkIdentity.GetPlayerName(peerId);
-        Character? existingPlayer = PlayerSpawner
-            .GetSpawnRoot()
-            ?.GetNodeOrNull<Character>(playerName);
-
-        if (existingPlayer is not null)
-        {
-            GD.PushWarning(
-                $"QuestWorldNetworkPlayers: player {playerName} already exists; skipping spawn."
-            );
-            return;
-        }
-
-        Character? player =
-            PlayerSpawner.Spawn(
-                Transform3D.Identity.Translated(QuestWorldNetworkIdentity.GetSpawnPosition(peerId)),
-                playerName
-            ) as Character;
-
-        if (player is null)
-        {
-            GD.PushError($"QuestWorldNetworkPlayers: failed to spawn {playerName}.");
-            return;
-        }
-
-        ConfigurePlayerAuthority(player, peerId);
-        GD.Print($"QuestWorldNetworkPlayers: spawned {playerName} at {player.Position}");
-    }
-
-    private static void ConfigurePlayerAuthority(Character character, int peerId)
+    private static void ConfigurePlayerAuthority(ProjectCharacter character, int peerId)
     {
         character.OwnerPeerId = peerId;
         character.SetMultiplayerAuthority(peerId);
@@ -186,19 +233,22 @@ public partial class QuestWorldNetworkPlayers : Node
 
     public override void _ExitTree()
     {
-        if (_initialized && NetworkSession is not null)
+        if (_initialized && GameSession is not null)
         {
-            if (PlayerSpawner is not null)
-            {
-                PlayerSpawner.Spawned -= OnPlayerSpawned;
-            }
-
-            NetworkSession.PeerConnected -= OnPeerConnected;
-            NetworkSession.PeerDisconnected -= OnPeerDisconnected;
-            NetworkSession.Connected -= OnConnected;
-            NetworkSession.Failed -= OnFailed;
+            GameSession.PlayerJoined -= OnPlayerJoined;
+            GameSession.PlayerLeft -= OnPlayerLeft;
+            GameSession.PlayerWorldReady -= OnPlayerWorldReady;
+            GameSession.WorldLoaded -= OnWorldLoaded;
+            GameSession.TravelCompleted -= OnTravelCompleted;
         }
 
+        if (_playerSpawner is not null && GodotObject.IsInstanceValid(_playerSpawner))
+        {
+            _playerSpawner.Spawned -= OnPlayerSpawned;
+        }
+
+        _charactersByPeerId.Clear();
+        _playerSpawner = null;
         _initialized = false;
     }
 }

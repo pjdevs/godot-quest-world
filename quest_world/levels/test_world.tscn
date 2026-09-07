@@ -3,10 +3,7 @@
 [ext_resource type="PackedScene" uid="uid://bh7me5hps2qp6" path="res://quest_world/character/Character.tscn" id="1_character"]
 [ext_resource type="Script" uid="uid://bys1n7v10yfrv" path="res://quest_world/world/World.cs" id="1_dxk44"]
 [ext_resource type="PackedScene" uid="uid://b8e873ujmp8or" path="res://quest_world/interactibles/lever_wall/LeverWall.tscn" id="1_wcunf"]
-[ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="2_player_controller"]
 [ext_resource type="PackedScene" uid="uid://bnrv7fcbbhuga" path="res://quest_world/interactibles/button/Button.tscn" id="3_kevvi"]
-[ext_resource type="Script" path="res://addons/network_session/scripts/NetworkSession.cs" id="3_network_session"]
-[ext_resource type="Script" path="res://quest_world/network/QuestWorldNetworkPlayers.cs" id="3_network_players"]
 [ext_resource type="PackedScene" uid="uid://ccfh2n8mfm2gn" path="res://addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn" id="4_2dls1"]
 [ext_resource type="Script" uid="uid://canmvbkunu40a" path="res://addons/gameplay_action_plugin/runtime/rules/GameplayActionRule.cs" id="4_onb8u"]
 [ext_resource type="PackedScene" uid="uid://biblv21jbgvwk" path="res://quest_world/interactibles/door/Door.tscn" id="6_onb8u"]
@@ -77,11 +74,9 @@ MismatchAvailability = 1
 BlockReason = "The wall is moving."
 metadata/_custom_type_script = "uid://cvrhmun38iql5"
 
-[node name="test_world" type="Node3D" unique_id=1604557493 node_paths=PackedStringArray("Spawners", "NetworkSession", "NetworkPlayers")]
+[node name="test_world" type="Node3D" unique_id=1604557493 node_paths=PackedStringArray("Spawners")]
 script = ExtResource("1_dxk44")
 Spawners = [NodePath("PlayerSpawner"), NodePath("BatterySpawner")]
-NetworkSession = NodePath("NetworkSession")
-NetworkPlayers = NodePath("NetworkPlayers")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=291661268]
 environment = SubResource("Environment_20rw3")
@@ -184,17 +179,5 @@ script = ExtResource("11_w5rq3")
 Definition = ExtResource("14_battery_spawn")
 Scene = ExtResource("12_53a43")
 AutoSpawn = true
-
-[node name="PlayerController" type="Node" parent="." unique_id=1335039517]
-script = ExtResource("2_player_controller")
-
-[node name="NetworkSession" type="Node" parent="." unique_id=1403936845]
-script = ExtResource("3_network_session")
-
-[node name="NetworkPlayers" type="Node" parent="." node_paths=PackedStringArray("NetworkSession", "PlayerSpawner", "LocalPlayerController")]
-script = ExtResource("3_network_players")
-NetworkSession = NodePath("../NetworkSession")
-PlayerSpawner = NodePath("../PlayerSpawner")
-LocalPlayerController = NodePath("../PlayerController")
 
 [editable path="Level/Button"]

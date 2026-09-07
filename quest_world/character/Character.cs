@@ -66,7 +66,7 @@ public partial class Character
         }
 
         _carryComponent.Carrier = this;
-        _carryComponent.WorldSpawner = GetTree().CurrentScene as IWorldSpawner;
+        _carryComponent.WorldSpawner = FindWorldSpawner();
         _gameplayActionRunner.OwnerPeerId = OwnerPeerId;
     }
 
@@ -128,6 +128,22 @@ public partial class Character
         {
             ReleaseInteractionInputs();
         }
+    }
+
+    private IWorldSpawner? FindWorldSpawner()
+    {
+        Node? current = this;
+        while (current is not null)
+        {
+            if (current is IWorldSpawner worldSpawner)
+            {
+                return worldSpawner;
+            }
+
+            current = current.GetParent();
+        }
+
+        return null;
     }
 
     #region ICarrier

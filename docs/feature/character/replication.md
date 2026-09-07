@@ -65,6 +65,13 @@ Godot recommande également de laisser le Character sous autorité serveur et de
 
 ## Architecture cible
 
+Le bootstrap de session est désormais séparé du monde : `Game.tscn` reste la scène persistante et
+`GameSession` remplace uniquement le monde enfant sous `WorldContainer`. Les `Character` sont donc
+des incarnations world-locales recréées à chaque travel, tandis que `QuestWorldPlayerState` porte les
+données persistantes du participant. La glue `QuestWorldNetworkPlayers` attend `PlayerWorldReady`
+avant de créer une incarnation autoritaire et résout le contexte `IWorldSpawner` par l'ancêtre du
+Character, sans dépendre de `SceneTree.CurrentScene`.
+
 ```mermaid
 flowchart LR
     Input["PlayerController local"] --> Command["InputCommand<br/>tick, move, yaw, pitch, buttons"]
@@ -188,16 +195,16 @@ Les arguments applicatifs se placent après `--`, qui sépare les arguments Godo
 
 ```powershell
 # Serveur dédié sans caméra ni joueur local
-godot --headless --path . --scene res://quest_world/levels/test_world.tscn -- --server --port=7000 --max-players=8
+godot --headless --path . --scene res://quest_world/game/Game.tscn -- --server --port=7000 --max-players=8
 
 # Listen-server avec un joueur local
-godot --path . --scene res://quest_world/levels/test_world.tscn -- --host --port=7000
+godot --path . --scene res://quest_world/game/Game.tscn -- --host --port=7000
 
 # Client graphique
-godot --path . --scene res://quest_world/levels/test_world.tscn -- --client --connect=127.0.0.1 --port=7000
+godot --path . --scene res://quest_world/game/Game.tscn -- --client --connect=127.0.0.1 --port=7000
 
 # Client headless de smoke test
-godot --headless --path . --scene res://quest_world/levels/test_world.tscn -- --client --connect=127.0.0.1 --port=7000
+godot --headless --path . --scene res://quest_world/game/Game.tscn -- --client --connect=127.0.0.1 --port=7000
 ```
 
 Sans mode explicite, la scène reste jouable en offline et `QuestWorldNetworkPlayers` crée localement

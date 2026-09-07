@@ -1,0 +1,46 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://quest_world/game/Game.cs" id="1_game"]
+[ext_resource type="Script" path="res://addons/network_session/scripts/NetworkSession.cs" id="2_network"]
+[ext_resource type="Script" path="res://addons/game_session/scripts/GameSession.cs" id="3_session"]
+[ext_resource type="PackedScene" path="res://quest_world/network/QuestWorldPlayerState.tscn" id="4_player_state"]
+[ext_resource type="Script" path="res://quest_world/network/QuestWorldNetworkPlayers.cs" id="5_players"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="6_controller"]
+[ext_resource type="PackedScene" path="res://quest_world/levels/test_world.tscn" id="7_world"]
+
+[node name="Game" type="Node3D" node_paths=PackedStringArray("NetworkSession", "GameSession", "NetworkPlayers")]
+script = ExtResource("1_game")
+NetworkSession = NodePath("NetworkSession")
+GameSession = NodePath("GameSession")
+NetworkPlayers = NodePath("NetworkPlayers")
+InitialWorld = ExtResource("7_world")
+
+[node name="NetworkSession" type="Node" parent="."]
+script = ExtResource("2_network")
+
+[node name="GameSession" type="Node" parent="." node_paths=PackedStringArray("NetworkSession", "Players", "PlayerStateSpawner", "WorldContainer", "WorldSpawner")]
+script = ExtResource("3_session")
+NetworkSession = NodePath("../NetworkSession")
+Players = NodePath("Players")
+PlayerStateScene = ExtResource("4_player_state")
+PlayerStateSpawner = NodePath("PlayerStateSpawner")
+WorldContainer = NodePath("WorldContainer")
+WorldSpawner = NodePath("WorldSpawner")
+
+[node name="Players" type="Node" parent="GameSession"]
+
+[node name="PlayerStateSpawner" type="MultiplayerSpawner" parent="GameSession"]
+spawn_path = NodePath("../Players")
+
+[node name="WorldContainer" type="Node3D" parent="GameSession"]
+
+[node name="WorldSpawner" type="MultiplayerSpawner" parent="GameSession"]
+spawn_path = NodePath("../WorldContainer")
+
+[node name="NetworkPlayers" type="Node" parent="." node_paths=PackedStringArray("GameSession", "LocalPlayerController")]
+script = ExtResource("5_players")
+GameSession = NodePath("../GameSession")
+LocalPlayerController = NodePath("../PlayerController")
+
+[node name="PlayerController" type="Node" parent="."]
+script = ExtResource("6_controller")
