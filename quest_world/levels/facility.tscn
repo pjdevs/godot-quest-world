@@ -1,7 +1,8 @@
 [gd_scene format=3 uid="uid://peffdrkl4o2n"]
 
 [ext_resource type="PackedScene" uid="uid://biblv21jbgvwk" path="res://quest_world/interactibles/door/Door.tscn" id="1_r2hu2"]
-[ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/QuestWorldNetworkSession.cs" id="4_wtwud"]
+[ext_resource type="Script" path="res://addons/network_session/scripts/NetworkSession.cs" id="4_wtwud"]
+[ext_resource type="Script" path="res://quest_world/network/QuestWorldNetworkPlayers.cs" id="4_network_players"]
 [ext_resource type="PackedScene" uid="uid://bh7me5hps2qp6" path="res://quest_world/character/Character.tscn" id="5_jnsjd"]
 [ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="6_4k80j"]
 [ext_resource type="Script" uid="uid://bys1n7v10yfrv" path="res://quest_world/world/World.cs" id="7_world"]
@@ -98,10 +99,11 @@ emission_enabled = true
 emission = Color(1, 0.05, 0.02, 1)
 emission_energy_multiplier = 4.0
 
-[node name="Facility" type="Node3D" unique_id=1604557493 node_paths=PackedStringArray("Spawners", "NetworkSession")]
+[node name="Facility" type="Node3D" unique_id=1604557493 node_paths=PackedStringArray("Spawners", "NetworkSession", "NetworkPlayers")]
 script = ExtResource("7_world")
 Spawners = [NodePath("PlayerSpawner")]
 NetworkSession = NodePath("NetworkSession")
+NetworkPlayers = NodePath("NetworkPlayers")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=291661268]
 environment = SubResource("Environment_20rw3")
@@ -1517,10 +1519,14 @@ script = ExtResource("8_generic_spawner")
 Definition = ExtResource("9_player_spawn")
 Scene = ExtResource("5_jnsjd")
 
-[node name="NetworkSession" type="Node" parent="." unique_id=1403936845 node_paths=PackedStringArray("LocalPlayerController", "PlayerSpawner")]
+[node name="NetworkSession" type="Node" parent="." unique_id=1403936845]
 script = ExtResource("4_wtwud")
-LocalPlayerController = NodePath("../PlayerController")
+
+[node name="NetworkPlayers" type="Node" parent="." node_paths=PackedStringArray("NetworkSession", "PlayerSpawner", "LocalPlayerController")]
+script = ExtResource("4_network_players")
+NetworkSession = NodePath("../NetworkSession")
 PlayerSpawner = NodePath("../PlayerSpawner")
+LocalPlayerController = NodePath("../PlayerController")
 
 [node name="PlayerController" type="Node" parent="." unique_id=1335039517]
 script = ExtResource("6_4k80j")

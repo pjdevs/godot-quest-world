@@ -19,10 +19,13 @@ It is responsible for creating and closing `ENetMultiplayerPeer`, wiring Godot m
 and transitioning `SessionState`. It does not know about characters, spawners, controllers or
 QuestWorld gameplay.
 
-`quest_world/network/scripts/QuestWorldNetworkSession.cs` is the current QuestWorld integration
-facade. It parses the project command line, keeps the authored `PlayerSpawner` and
-`LocalPlayerController` references, and temporarily retains player spawning, despawning and local
-possession while the QuestWorld player glue is extracted.
+`quest_world/network/QuestWorldNetworkPlayers.cs` is the QuestWorld integration glue. It references
+the generic session, the authored `PlayerSpawner` and the local `CharacterPlayerController`. It
+owns player spawning and despawning from peer lifecycle signals, resolves the local player by peer
+ID, and performs local possession.
+
+`World._Ready()` parses the project command line, starts the generic session, initializes the player
+glue, and then initializes authoritative world spawners.
 
 `NetworkPlayerIdentity` remains QuestWorld-owned. Its player naming and spawn-position conventions
 are not part of the generic addon contract.
@@ -49,8 +52,8 @@ Without an explicit mode, the session starts offline. Offline and host sessions 
 The addon emits peer and session lifecycle signals instead of spawning gameplay nodes. Integrations
 subscribe to those signals and decide what a peer means in their own domain.
 
-### QuestWorld keeps the compatibility facade during extraction
+### QuestWorld keeps player ownership outside the session
 
-The current scene contract remains `World.NetworkSession` and the authored node remains named
-`NetworkSession`. The script now derives from the generic addon session so the player lifecycle can
-move into a dedicated QuestWorld manager without changing the network transport contract.
+The authored `NetworkSession` node uses the generic addon script. A separate `NetworkPlayers` node
+connects the session to QuestWorld's character and spawner concepts without adding those concepts to
+the transport layer.

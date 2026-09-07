@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using QuestWorld.Network;
 
 [GlobalClass]
 public partial class World : Node3D, IWorldSpawner
@@ -8,7 +9,10 @@ public partial class World : Node3D, IWorldSpawner
     public Godot.Collections.Array<Spawner> Spawners { get; set; } = new();
 
     [Export]
-    public QuestWorldNetworkSession? NetworkSession { get; set; }
+    public NetworkSession? NetworkSession { get; set; }
+
+    [Export]
+    public QuestWorldNetworkPlayers? NetworkPlayers { get; set; }
 
     private readonly Dictionary<StringName, Spawner> _spawnersById = new();
 
@@ -25,7 +29,32 @@ public partial class World : Node3D, IWorldSpawner
             return;
         }
 
-        NetworkSession.Initialize();
+        if (NetworkPlayers is null)
+        {
+            GD.PushError("QuestWorldWorld: QuestWorldWorld.NetworkPlayers is required.");
+            return;
+        }
+
+        List<string> commandLineArguments = [with(OS.GetCmdlineArgs()), .. OS.GetCmdlineUserArgs()];
+        if (
+            !NetworkLaunchOptions.TryParse(
+                commandLineArguments,
+                out NetworkLaunchOptions? launchOptions,
+                out string parseError
+            )
+        )
+        {
+            GD.PushError($"QuestWorldWorld: {parseError}");
+            GetTree().Quit(2);
+            return;
+        }
+
+        if (!NetworkSession.Start(launchOptions!))
+        {
+            return;
+        }
+
+        NetworkPlayers.Initialize();
 
         if (NetworkSession.IsServer)
         {
