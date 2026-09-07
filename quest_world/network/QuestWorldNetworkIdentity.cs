@@ -1,7 +1,9 @@
 using System;
 using Godot;
 
-public static class NetworkPlayerIdentity
+namespace QuestWorld.Network;
+
+public static class QuestWorldNetworkIdentity
 {
     public const string PlayerNamePrefix = "Player_";
 

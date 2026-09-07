@@ -27,8 +27,8 @@ ID, configures `OwnerPeerId` and multiplayer authority explicitly, and performs 
 `World._Ready()` parses the project command line, starts the generic session, initializes the player
 glue, and then initializes authoritative world spawners.
 
-`NetworkPlayerIdentity` remains QuestWorld-owned. Its player naming and spawn-position conventions
-are not part of the generic addon contract.
+`QuestWorldNetworkIdentity` remains QuestWorld-owned. Its player naming, peer-name parsing and
+spawn-position conventions are not part of the generic addon contract.
 
 ## Launch modes
 

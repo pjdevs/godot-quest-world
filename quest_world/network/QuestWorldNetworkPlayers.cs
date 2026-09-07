@@ -61,7 +61,7 @@ public partial class QuestWorldNetworkPlayers : Node
         Character? localPlayer = PlayerSpawner
             ?.GetSpawnRoot()
             ?.GetNodeOrNull<Character>(
-                NetworkPlayerIdentity.GetPlayerName(NetworkSession.LocalPeerId)
+                QuestWorldNetworkIdentity.GetPlayerName(NetworkSession.LocalPeerId)
             );
         if (
             localPlayer != null
@@ -111,7 +111,7 @@ public partial class QuestWorldNetworkPlayers : Node
 
         Character? player = PlayerSpawner
             ?.GetSpawnRoot()
-            ?.GetNodeOrNull<Character>(NetworkPlayerIdentity.GetPlayerName((int)peerId));
+            ?.GetNodeOrNull<Character>(QuestWorldNetworkIdentity.GetPlayerName((int)peerId));
         if (player != null)
         {
             player.QueueFree();
@@ -126,7 +126,7 @@ public partial class QuestWorldNetworkPlayers : Node
             return;
         }
 
-        if (!NetworkPlayerIdentity.TryGetPeerId(character.Name, out int peerId))
+        if (!QuestWorldNetworkIdentity.TryGetPeerId(character.Name, out int peerId))
         {
             GD.PushError(
                 $"QuestWorldNetworkPlayers: spawned Character {character.GetPath()} has no valid peer identity."
@@ -149,7 +149,7 @@ public partial class QuestWorldNetworkPlayers : Node
             return;
         }
 
-        string playerName = NetworkPlayerIdentity.GetPlayerName(peerId);
+        string playerName = QuestWorldNetworkIdentity.GetPlayerName(peerId);
         Character? existingPlayer = PlayerSpawner
             .GetSpawnRoot()
             ?.GetNodeOrNull<Character>(playerName);
@@ -164,7 +164,7 @@ public partial class QuestWorldNetworkPlayers : Node
 
         Character? player =
             PlayerSpawner.Spawn(
-                Transform3D.Identity.Translated(NetworkPlayerIdentity.GetSpawnPosition(peerId)),
+                Transform3D.Identity.Translated(QuestWorldNetworkIdentity.GetSpawnPosition(peerId)),
                 playerName
             ) as Character;
 

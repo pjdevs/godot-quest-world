@@ -169,7 +169,8 @@ Note de l’audit initial : une modification non commitée de `CharacterPlayerCo
 Le bootstrap multi-instance est maintenant disponible pour expérimenter le flow réseau avant l’autorité serveur complète :
 
 - `NetworkLaunchOptions` parse les modes `offline`, `host`, `server` et `client`, ainsi que l’adresse, le port et le nombre maximal de joueurs.
-- `NetworkSession` configure `ENetMultiplayerPeer`, connecte les signaux de connexion et possède le cycle de vie des joueurs.
+- `NetworkSession` configure `ENetMultiplayerPeer`, connecte les signaux de connexion et expose le cycle de vie de la session.
+- `QuestWorldNetworkPlayers` possède le cycle de vie des Characters joueurs côté QuestWorld.
 - `Players` est le conteneur réseau stable et `PlayerSpawner` est un `MultiplayerSpawner` dont l’autorité est le serveur.
 - Le serveur ajoute un Character nommé `Player_<peerId>` à chaque connexion et le retire à la déconnexion. Les late joins reçoivent les joueurs déjà présents via le spawner.
 - `QuestWorldNetworkPlayers` assigne explicitement `OwnerPeerId` et appelle `SetMultiplayerAuthority()`
@@ -199,7 +200,9 @@ godot --path . --scene res://quest_world/levels/test_world.tscn -- --client --co
 godot --headless --path . --scene res://quest_world/levels/test_world.tscn -- --client --connect=127.0.0.1 --port=7000
 ```
 
-Sans mode explicite, la scène reste jouable en offline et le `NetworkSession` crée localement `Player_1`. Les peer IDs ENet clients étant aléatoires, ils sont ramenés à seize slots bornés uniquement pour le placement visuel de ce prototype.
+Sans mode explicite, la scène reste jouable en offline et `QuestWorldNetworkPlayers` crée localement
+`Player_1`. Les peer IDs ENet clients étant aléatoires, ils sont ramenés à seize slots bornés
+uniquement pour le placement visuel de ce prototype.
 
 Ce spike ne constitue pas encore l’architecture finale : le client peut déplacer son Character et publier directement sa pose, il n’y a ni validation serveur, ni commandes RPC, ni prédiction/réconciliation, ni interpolation dédiée. Les collisions entre clients peuvent donc diverger et le mouvement reste facilement falsifiable. Les prochains points peuvent réutiliser le bootstrap, les chemins de scène, le cycle de spawn et les identités sans conserver ce modèle d’autorité.
 
