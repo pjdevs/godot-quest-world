@@ -130,8 +130,8 @@
 - Modify: only files needed for fixes found by verification/review
 - Modify: `docs/feature/game_session/game-session.md`
 
-- [ ] **Step 1: Re-read the spec and check all 40 minimum behaviors against tests and public API.**
-- [ ] **Step 2: Run `csharpier format .`, `dotnet build`, and the full Godot-backed test suite from the worktree.**
-- [ ] **Step 3: Run headless runtime smoke checks for the persistent root and demo world, inspect logs, and review `git diff --check`.**
-- [ ] **Step 4: Dispatch a code review against the worktree diff, fix Critical/Important findings with new failing tests first, and rerun verification.**
-- [ ] **Step 5: Commit the implementation on `feat/game-session` with a focused message and report the worktree path, commit, tests, and any non-blocking environment warnings.**
+- [x] **Step 1: Re-read the spec and check all 40 minimum behaviors against tests and public API.**
+- [x] **Step 2: Run `csharpier format .`, `dotnet build`, and the full Godot-backed test suite from the worktree.**
+- [x] **Step 3: Run headless runtime smoke checks for the persistent root and demo world, inspect logs, and review `git diff --check`.**
+- [x] **Step 4: Review the complete worktree diff against the design boundary and fix the identified test/runtime lifecycle issues before rerunning verification.**
+- [x] **Step 5: Commit the implementation on `feat/game-session` with a focused message and report the worktree path, commit, tests, and any non-blocking environment warnings.**
