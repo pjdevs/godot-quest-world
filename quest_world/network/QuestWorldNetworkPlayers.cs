@@ -34,6 +34,7 @@ public partial class QuestWorldNetworkPlayers : Node
             return;
         }
 
+        PlayerSpawner.Spawned += OnPlayerSpawned;
         NetworkSession.PeerConnected += OnPeerConnected;
         NetworkSession.PeerDisconnected += OnPeerDisconnected;
         NetworkSession.Connected += OnConnected;
@@ -118,6 +119,24 @@ public partial class QuestWorldNetworkPlayers : Node
         }
     }
 
+    private void OnPlayerSpawned(Node node)
+    {
+        if (node is not Character character)
+        {
+            return;
+        }
+
+        if (!NetworkPlayerIdentity.TryGetPeerId(character.Name, out int peerId))
+        {
+            GD.PushError(
+                $"QuestWorldNetworkPlayers: spawned Character {character.GetPath()} has no valid peer identity."
+            );
+            return;
+        }
+
+        ConfigurePlayerAuthority(character, peerId);
+    }
+
     private void OnFailed(string reason)
     {
         GD.PushError($"QuestWorldNetworkPlayers: {reason}");
@@ -155,13 +174,25 @@ public partial class QuestWorldNetworkPlayers : Node
             return;
         }
 
+        ConfigurePlayerAuthority(player, peerId);
         GD.Print($"QuestWorldNetworkPlayers: spawned {playerName} at {player.Position}");
+    }
+
+    private static void ConfigurePlayerAuthority(Character character, int peerId)
+    {
+        character.OwnerPeerId = peerId;
+        character.SetMultiplayerAuthority(peerId);
     }
 
     public override void _ExitTree()
     {
         if (_initialized && NetworkSession is not null)
         {
+            if (PlayerSpawner is not null)
+            {
+                PlayerSpawner.Spawned -= OnPlayerSpawned;
+            }
+
             NetworkSession.PeerConnected -= OnPeerConnected;
             NetworkSession.PeerDisconnected -= OnPeerDisconnected;
             NetworkSession.Connected -= OnConnected;

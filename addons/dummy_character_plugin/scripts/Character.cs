@@ -58,7 +58,7 @@ public partial class Character : CharacterBody3D
 
     [ExportGroup("Networking")]
     [Export]
-    public int OwnerPeerId { get; private set; } = 1;
+    public int OwnerPeerId { get; set; } = 1;
 
     [Export]
     public bool NetworkIsGrounded { get; set; } = true;
@@ -111,15 +111,6 @@ public partial class Character : CharacterBody3D
     public Vector3 ForwardVector => -_visual.GlobalBasis.Z;
 
     public Transform3D VisualTransform => _visual.GlobalTransform;
-
-    public override void _EnterTree()
-    {
-        if (NetworkPlayerIdentity.TryGetPeerId(Name, out int peerId))
-        {
-            OwnerPeerId = peerId;
-            SetMultiplayerAuthority(peerId);
-        }
-    }
 
     public override void _Ready()
     {

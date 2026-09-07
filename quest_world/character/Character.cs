@@ -19,6 +19,19 @@ public partial class Character
 
     public InventoryComponent Inventory => _inventory;
 
+    public new int OwnerPeerId
+    {
+        get => base.OwnerPeerId;
+        set
+        {
+            base.OwnerPeerId = value;
+            if (_gameplayActionRunner != null)
+            {
+                _gameplayActionRunner.OwnerPeerId = value;
+            }
+        }
+    }
+
     public override void _Ready()
     {
         base._Ready();

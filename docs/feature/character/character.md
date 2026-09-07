@@ -149,6 +149,13 @@ either action type.
 actions. Both consume the same generic action presentation model instead of the Character maintaining a
 custom prompt path.
 
+### AD-10 — Network ownership is assigned by the integration layer
+
+The reusable Character does not infer a peer from its scene-tree name. QuestWorld's
+`QuestWorldNetworkPlayers` assigns `OwnerPeerId` and calls `SetMultiplayerAuthority()` when a player
+is spawned. This keeps peer identity explicit and prevents a generic Character addon from depending
+on QuestWorld's `Player_<peerId>` naming convention.
+
 ## Regression coverage
 
 Focused Character tests protect the brittle truths rather than every implementation detail: initial

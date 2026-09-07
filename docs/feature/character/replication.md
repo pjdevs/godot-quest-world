@@ -172,7 +172,9 @@ Le bootstrap multi-instance est maintenant disponible pour expérimenter le flow
 - `NetworkSession` configure `ENetMultiplayerPeer`, connecte les signaux de connexion et possède le cycle de vie des joueurs.
 - `Players` est le conteneur réseau stable et `PlayerSpawner` est un `MultiplayerSpawner` dont l’autorité est le serveur.
 - Le serveur ajoute un Character nommé `Player_<peerId>` à chaque connexion et le retire à la déconnexion. Les late joins reçoivent les joueurs déjà présents via le spawner.
-- Chaque copie du Character extrait son `OwnerPeerId` de son nom dans `_EnterTree()` et applique `SetMultiplayerAuthority()` avant le démarrage du synchronizer.
+- `QuestWorldNetworkPlayers` assigne explicitement `OwnerPeerId` et appelle `SetMultiplayerAuthority()`
+  sur chaque Character spawné. La convention `Player_<peerId>` reste limitée à la glue QuestWorld ; le
+  Character générique ne lit plus son nom pour déduire son propriétaire.
 - Seul le Character autoritaire local consomme l’input et exécute `Simulate()`. Un contrôleur local refuse également de posséder un Character distant.
 - `MultiplayerSynchronizer` réplique pour ce spike la position, la rotation racine, la vélocité, l’orientation visuelle et les angles de caméra.
 - Les proxies ne simulent pas la physique, mais rejouent leur présentation d’animation depuis la vélocité et l’état grounded synchronisés. Cela couvre locomotion, sprint, saut, chute et détection locale de l’atterrissage pour le spike.

@@ -22,7 +22,7 @@ QuestWorld gameplay.
 `quest_world/network/QuestWorldNetworkPlayers.cs` is the QuestWorld integration glue. It references
 the generic session, the authored `PlayerSpawner` and the local `CharacterPlayerController`. It
 owns player spawning and despawning from peer lifecycle signals, resolves the local player by peer
-ID, and performs local possession.
+ID, configures `OwnerPeerId` and multiplayer authority explicitly, and performs local possession.
 
 `World._Ready()` parses the project command line, starts the generic session, initializes the player
 glue, and then initializes authoritative world spawners.
@@ -56,4 +56,5 @@ subscribe to those signals and decide what a peer means in their own domain.
 
 The authored `NetworkSession` node uses the generic addon script. A separate `NetworkPlayers` node
 connects the session to QuestWorld's character and spawner concepts without adding those concepts to
-the transport layer.
+the transport layer. The `Player_<peerId>` node name remains an integration convention used by the
+glue to identify remote spawned copies; it is not interpreted by the Character itself.
