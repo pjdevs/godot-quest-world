@@ -16,7 +16,8 @@ internal static partial class GameSessionTestFixtures
 
     public static async Task<NetworkFixture> Connect(
         bool acceptingPlayers = true,
-        bool rejectRemotePlayers = false
+        bool rejectRemotePlayers = false,
+        bool dedicatedServer = false
     )
     {
         int port = _nextPort++;
@@ -46,7 +47,12 @@ internal static partial class GameSessionTestFixtures
         );
         await runner.SimulateFrames(1);
 
-        AssertThat(server.Network.Start(CreateHostOptions(port))).IsTrue();
+        AssertThat(
+                server.Network.Start(
+                    dedicatedServer ? CreateServerOptions(port) : CreateHostOptions(port)
+                )
+            )
+            .IsTrue();
         AssertThat(server.GameSession.Initialize()).IsTrue();
         AssertThat(client.Network.Start(CreateClientOptions(port))).IsTrue();
         AssertThat(client.GameSession.Initialize()).IsTrue();
@@ -77,7 +83,7 @@ internal static partial class GameSessionTestFixtures
         }
         await runner.SimulateFrames(12);
 
-        return new NetworkFixture(runner, root, server, client, serverApi, clientApi);
+        return new NetworkFixture(runner, root, port, server, client, serverApi, clientApi);
     }
 
     private static PeerSession BuildPeer(
@@ -137,6 +143,9 @@ internal static partial class GameSessionTestFixtures
     private static NetworkLaunchOptions CreateHostOptions(int port) =>
         ParseOptions("--host", "--port", port.ToString());
 
+    private static NetworkLaunchOptions CreateServerOptions(int port) =>
+        ParseOptions("--server", "--port", port.ToString());
+
     private static NetworkLaunchOptions CreateClientOptions(int port) =>
         ParseOptions("--client", "--port", port.ToString());
 
@@ -152,22 +161,65 @@ internal static partial class GameSessionTestFixtures
     internal sealed record NetworkFixture(
         ISceneRunner Runner,
         Node Root,
+        int Port,
         PeerSession Server,
         PeerSession Client,
         MultiplayerApi ServerApi,
         MultiplayerApi ClientApi
     )
     {
+        private readonly List<NetworkSession> _additionalNetworks = new();
+
         public async Task Pump(int frames = 1) => await Runner.SimulateFrames((uint)frames);
+
+        public async Task<LatePeer> JoinLate(string name = "LateClient")
+        {
+            Node branch = new() { Name = name };
+            Root.AddChild(branch);
+            MultiplayerApi api = Attach(Root.GetTree(), branch);
+            PeerSession late = BuildPeer(
+                branch,
+                true,
+                false,
+                new NetworkSession { Name = "NetworkSession" }
+            );
+            await Pump();
+            AssertThat(late.Network.Start(CreateClientOptions(Port))).IsTrue();
+            AssertThat(late.GameSession.Initialize()).IsTrue();
+
+            for (int frame = 0; frame < ConnectFrames; frame++)
+            {
+                await Pump();
+                if (api.GetUniqueId() > 1)
+                {
+                    break;
+                }
+            }
+
+            AssertThat(api.GetUniqueId()).IsGreater(1);
+            await Pump(12);
+            _additionalNetworks.Add(late.Network);
+            return new LatePeer(late, api);
+        }
 
         public void Close()
         {
+            foreach (NetworkSession network in _additionalNetworks)
+            {
+                network.Stop();
+            }
+
             Client.Network.Stop();
             Server.Network.Stop();
         }
     }
 
     internal sealed record PeerSession(NetworkSession Network, GameSessionNode GameSession);
+
+    internal sealed record LatePeer(PeerSession Session, MultiplayerApi Api)
+    {
+        public GameSessionNode GameSession => Session.GameSession;
+    }
 
     private sealed partial class RejectingGameSession : GameSessionNode
     {
