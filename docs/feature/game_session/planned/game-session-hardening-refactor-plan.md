@@ -86,7 +86,9 @@ addons/game_session/tests/
 └── fixtures/
     ├── NestedSpawnerWorld.tscn
     ├── NestedSpawnerWorld.cs
-    └── NestedSpawnedNode.tscn
+    ├── NestedSpawnedNode.tscn
+    ├── ReplicatedTestPlayerState.cs
+    └── ReplicatedTestPlayerState.tscn
 ```
 
 Do **not** split `GameSession` into multiple partial classes. The two new helper classes should contain state/invariants while `GameSession.cs` remains the one runtime integration surface.
@@ -560,9 +562,9 @@ Do **not** split `GameSession` into multiple partial classes. The two new helper
   }
   ```
 
-  `OnPlayerStateSpawned` calls `RegisterPlayerState`. The server admission path must not emit `PlayerJoined` separately.
+  `OnPlayerStateSpawned` calls `RegisterPlayerState` for replicated remote-side spawns. The authoritative server path must also call `RegisterPlayerState(playerState)` on the node returned by `PlayerStateSpawner.Spawn(...)`; `MultiplayerSpawner.Spawned` must not be assumed to perform local-authority registration. Neither path emits `PlayerJoined` anywhere except inside `RegisterPlayerState`.
 
-  For offline fallback, after `Players.AddChild(playerState, true)`, call the same `RegisterPlayerState(playerState)` path if the spawner did not emit it.
+  For offline fallback, after `Players.AddChild(playerState, true)`, call the same `RegisterPlayerState(playerState)` path.
 
 - [ ] **Step 5: Make server participant removal synchronous before free.**
 
@@ -682,6 +684,8 @@ Do **not** split `GameSession` into multiple partial classes. The two new helper
       _isCurrentWorldReady = false;
   }
   ```
+
+  `OnWorldSpawned(Node node)` calls `AdoptCurrentWorld(...)` for replicated remote-side world spawns. The authoritative `Travel()` path must also call `AdoptCurrentWorld(world, travelId, resourcePath)` on the node returned by `WorldSpawner.Spawn(...)`; do not assume `WorldSpawner.Spawned` performs authority-side adoption.
 
   `OnWorldDespawned(Node node)` calls `ClearCurrentWorld(node)` for remote replicas. The authoritative `RetireCurrentWorld()` clears the reference synchronously before freeing the old node.
 
@@ -804,6 +808,8 @@ Do **not** split `GameSession` into multiple partial classes. The two new helper
   State = GameSessionState.Traveling;
   NetworkSession.SetAcceptingConnections(false);
   ```
+
+  After the authoritative `WorldSpawner.Spawn(spawnData)` succeeds, call `AdoptCurrentWorld(world, travelId, resourcePath)` directly.
 
   At completion:
 
@@ -1139,14 +1145,15 @@ Do **not** split `GameSession` into multiple partial classes. The two new helper
 - Create: `addons/game_session/tests/fixtures/NestedSpawnerWorld.cs`
 - Create: `addons/game_session/tests/fixtures/NestedSpawnerWorld.tscn`
 - Create: `addons/game_session/tests/fixtures/NestedSpawnedNode.tscn`
+- Create: `addons/game_session/tests/fixtures/ReplicatedTestPlayerState.cs`
+- Create: `addons/game_session/tests/fixtures/ReplicatedTestPlayerState.tscn`
 - Modify: `addons/game_session/tests/GameSessionTravelNetworkTest.cs`
 - Modify: `addons/game_session/tests/GameSessionTestFixtures.cs`
-- Modify: `quest_world/network/QuestWorldPlayerState.cs` only if testable persistent state needs a clearer property than `AvatarId`; otherwise keep `AvatarId`.
 - Modify: `docs/memory/game-session-world-replication-pitfalls.md` only if the test reveals a new engine ordering constraint.
 
 **Interfaces:**
 - Generic automated proof must exercise a persistent `WorldSpawner` spawning a world which itself contains a child `MultiplayerSpawner` with already-spawned replicated state before a late client joins.
-- Derived `PlayerState` state must remain on the same persistent node across two world travels.
+- A **test-only** derived `PlayerState` with a `MultiplayerSynchronizer` proves project-extensible synchronized state without making `game_session` tests depend on QuestWorld.
 
 - [ ] **Step 1: Create a minimal nested-spawner world fixture.**
 
@@ -1225,34 +1232,58 @@ Do **not** split `GameSession` into multiple partial classes. The two new helper
 
   This test is the automated proof for the architectural reason `WorldSpawner` is persistent.
 
-- [ ] **Step 3: Add a persistent derived-PlayerState test that actually mutates synchronized project data.**
+- [ ] **Step 3: Create a test-only replicated PlayerState scene.**
 
-  Update the network fixture so it can use a custom `PlayerStateScene`, then run:
+  `ReplicatedTestPlayerState.cs`:
+
+  ```csharp
+  using Godot;
+  using QuestWorld.GameSession;
+
+  namespace QuestWorld.Tests.GameSessionTests.Fixtures;
+
+  public partial class ReplicatedTestPlayerState : PlayerState
+  {
+      [Export]
+      public string SelectionId { get; set; } = "default";
+  }
+  ```
+
+  Author `ReplicatedTestPlayerState.tscn` with a child `MultiplayerSynchronizer` whose replication config synchronizes `.:SelectionId` from server authority.
+
+- [ ] **Step 4: Add a persistent derived-PlayerState test that mutates synchronized test data.**
+
+  Update the network fixture so `Connect(...)` can receive an optional custom `PlayerStateScene`, then run:
 
   ```csharp
   [TestCase]
   public async Task DerivedPlayerStatePropertySurvivesTwoWorldTravels()
   {
-      NetworkFixture fixture = await ConnectWithQuestWorldPlayerStateScene();
-      QuestWorldPlayerState state =
-          (QuestWorldPlayerState)fixture.Server.GameSession.PlayerStates[0];
-      long instanceId = (long)state.GetInstanceId();
-      state.AvatarId = "red";
+      PackedScene playerStateScene = GD.Load<PackedScene>(ReplicatedPlayerStatePath);
+      NetworkFixture fixture = await GameSessionTestFixtures.Connect(playerStateScene: playerStateScene);
+      ReplicatedTestPlayerState state =
+          (ReplicatedTestPlayerState)fixture.Server.GameSession.PlayerStates[0];
+      ulong instanceId = state.GetInstanceId();
+      state.SelectionId = "red";
       await fixture.Pump(6);
 
-      await TravelAndWait(WorldA);
-      await TravelAndWait(WorldB);
+      await TravelAndWait(fixture, WorldA);
+      await TravelAndWait(fixture, WorldB);
 
-      QuestWorldPlayerState after =
-          (QuestWorldPlayerState)fixture.Server.GameSession.PlayerStates[0];
-      AssertThat((long)after.GetInstanceId()).IsEqual(instanceId);
-      AssertThat(after.AvatarId).IsEqual("red");
+      ReplicatedTestPlayerState after =
+          (ReplicatedTestPlayerState)fixture.Server.GameSession.PlayerStates[0];
+      AssertThat(after.GetInstanceId()).IsEqual(instanceId);
+      AssertThat(after.SelectionId).IsEqual("red");
+
+      ReplicatedTestPlayerState remote =
+          (ReplicatedTestPlayerState)fixture.Client.GameSession.PlayerStates[0];
+      AssertThat(remote.SelectionId).IsEqual("red");
   }
   ```
 
-  Also assert the remote client sees the synchronized `AvatarId` value. Do not satisfy this requirement with only the generic base `PlayerState`.
+  This test must remain entirely inside `addons/game_session/tests`; it must not reference `QuestWorldPlayerState` or any QuestWorld project type.
 
-- [ ] **Step 4: Add travel+disconnect coverage with the nested fixture.**
+- [ ] **Step 5: Add travel+disconnect coverage with the nested fixture.**
 
   Start a second global travel while a remote participant exists, disconnect it before readiness completion, and assert:
 
@@ -1263,7 +1294,7 @@ Do **not** split `GameSession` into multiple partial classes. The two new helper
   WorldContainer contains exactly one new world
   ```
 
-- [ ] **Step 5: Run focused and full network validation.**
+- [ ] **Step 6: Run focused and full network validation.**
 
   ```bash
   task test:suite SUITE=GameSessionTravelNetworkTest
@@ -1273,10 +1304,10 @@ Do **not** split `GameSession` into multiple partial classes. The two new helper
   task test:network
   ```
 
-- [ ] **Step 6: Commit the proof fixtures/tests.**
+- [ ] **Step 7: Commit the proof fixtures/tests.**
 
   ```bash
-  git add addons/game_session/tests quest_world/network docs/memory
+  git add addons/game_session/tests docs/memory
   git commit -m "test(game-session): cover nested spawner late join"
   ```
 
