@@ -7,11 +7,26 @@ namespace QuestWorld.GameSession;
 [GlobalClass]
 public partial class GameSession : Node
 {
+    private const string TravelIdMeta = "game_session_travel_id";
+    private const string WorldPathMeta = "game_session_world_path";
+
     [Signal]
     public delegate void PlayerJoinedEventHandler(PlayerState playerState);
 
     [Signal]
     public delegate void PlayerLeftEventHandler(long participantId, long peerId);
+
+    [Signal]
+    public delegate void TravelStartedEventHandler(long travelId, string resourcePath);
+
+    [Signal]
+    public delegate void WorldLoadedEventHandler(long travelId, Node world);
+
+    [Signal]
+    public delegate void TravelCompletedEventHandler(long travelId, Node world);
+
+    [Signal]
+    public delegate void TravelFailedEventHandler(long travelId, string reason);
 
     [Export]
     public NetworkSession? NetworkSession { get; set; }
@@ -37,6 +52,9 @@ public partial class GameSession : Node
     private bool _initialized;
     private bool _isAcceptingPlayers = true;
     private long _nextParticipantId = 1;
+    private Node? _currentWorld;
+    private bool _localWorldReady;
+    private bool _worldLoadedEmitted;
 
     public GameSessionState State { get; private set; } = GameSessionState.Idle;
 
@@ -57,6 +75,17 @@ public partial class GameSession : Node
 
     public IReadOnlyList<PlayerState> PlayerStates => _playerStates;
 
+    public long CurrentTravelId { get; private set; }
+
+    public Node? CurrentWorld => _currentWorld;
+
+    public string CurrentWorldPath { get; private set; } = string.Empty;
+
+    public bool IsLocalWorldReady => _localWorldReady;
+
+    private bool IsOfflineSession =>
+        NetworkSession?.LaunchOptions?.Mode == NetworkLaunchMode.Offline;
+
     public bool Initialize()
     {
         if (_initialized)
@@ -71,7 +100,9 @@ public partial class GameSession : Node
         }
 
         PlayerStateSpawner!.SpawnFunction = Callable.From<Variant, Node>(SpawnPlayerState);
+        WorldSpawner!.SpawnFunction = Callable.From<Variant, Node>(SpawnWorld);
         PlayerStateSpawner.Spawned += OnPlayerStateSpawned;
+        WorldSpawner.Spawned += OnWorldSpawned;
         NetworkSession!.PeerConnected += OnPeerConnected;
         NetworkSession.PeerDisconnected += OnPeerDisconnected;
         NetworkSession.Connected += OnConnected;
@@ -97,6 +128,11 @@ public partial class GameSession : Node
             PlayerStateSpawner.Spawned -= OnPlayerStateSpawned;
         }
 
+        if (WorldSpawner is not null)
+        {
+            WorldSpawner.Spawned -= OnWorldSpawned;
+        }
+
         if (NetworkSession is not null)
         {
             NetworkSession.PeerConnected -= OnPeerConnected;
@@ -117,10 +153,100 @@ public partial class GameSession : Node
         _playerStates.Clear();
         _playersByParticipantId.Clear();
         _playersByPeerId.Clear();
+        if (_currentWorld is not null && IsInstanceValid(_currentWorld))
+        {
+            _currentWorld.QueueFree();
+        }
+
+        _currentWorld = null;
+        CurrentTravelId = 0;
+        CurrentWorldPath = string.Empty;
         _nextParticipantId = 1;
         _initialized = false;
         State = GameSessionState.Idle;
         UpdateTransportAdmission();
+    }
+
+    public bool Travel(PackedScene? worldScene)
+    {
+        if (!_initialized)
+        {
+            return FailTravel("GameSession must be initialized before travel.");
+        }
+
+        if (NetworkSession?.IsServer != true)
+        {
+            return FailTravel("Only the server can initiate travel.");
+        }
+
+        if (State != GameSessionState.Active)
+        {
+            return FailTravel("A world travel is already in progress.");
+        }
+
+        if (worldScene is null || string.IsNullOrWhiteSpace(worldScene.ResourcePath))
+        {
+            return FailTravel("Travel requires a loadable world resource path.");
+        }
+
+        string resourcePath = worldScene.ResourcePath;
+        PackedScene? preflight = ResourceLoader.Load<PackedScene>(resourcePath);
+        if (preflight is null)
+        {
+            return FailTravel($"Unable to load world scene '{resourcePath}'.");
+        }
+
+        Node? preflightInstance = preflight.Instantiate();
+        if (preflightInstance is null)
+        {
+            return FailTravel($"Unable to instantiate world scene '{resourcePath}'.");
+        }
+
+        preflightInstance.Free();
+        long travelId = ++CurrentTravelId;
+        CurrentWorldPath = resourcePath;
+        State = GameSessionState.Traveling;
+        _localWorldReady = false;
+        _worldLoadedEmitted = false;
+        UpdateTransportAdmission();
+        EmitSignal(SignalName.TravelStarted, travelId, resourcePath);
+
+        if (_currentWorld is not null && IsInstanceValid(_currentWorld))
+        {
+            _currentWorld.Free();
+        }
+
+        _currentWorld = null;
+        Godot.Collections.Dictionary<string, Variant> spawnData = new()
+        {
+            ["travel_id"] = travelId,
+            ["resource_path"] = resourcePath,
+        };
+        Node? world = WorldSpawner!.Spawn(spawnData) as Node;
+        if (world is null && IsOfflineSession)
+        {
+            world = SpawnWorld(spawnData);
+            if (world is not null)
+            {
+                WorldContainer!.AddChild(world, true);
+            }
+        }
+
+        if (world is null)
+        {
+            State = GameSessionState.Failed;
+            UpdateTransportAdmission();
+            EmitSignal(
+                SignalName.TravelFailed,
+                travelId,
+                $"Unable to spawn world scene '{resourcePath}'."
+            );
+            return false;
+        }
+
+        _currentWorld = world;
+        ScheduleWorldReadinessCheck();
+        return true;
     }
 
     public bool TryGetPlayerStateByPeerId(long peerId, out PlayerState? playerState) =>
@@ -173,6 +299,11 @@ public partial class GameSession : Node
         if (WorldSpawner is null)
         {
             return FailConfiguration("WorldSpawner is required.");
+        }
+
+        if (WorldContainer.GetChildCount() > 1)
+        {
+            return FailConfiguration("WorldContainer may contain at most one managed world.");
         }
 
         if (PlayerStateSpawner.GetNodeOrNull(PlayerStateSpawner.GetPathTo(Players)) != Players)
@@ -331,6 +462,111 @@ public partial class GameSession : Node
         playerState.InitializeIdentity(participantId, peerId);
         playerState.Name = $"PlayerState_{participantId}";
         return playerState;
+    }
+
+    private Node SpawnWorld(Variant data)
+    {
+        if (data.VariantType != Variant.Type.Dictionary)
+        {
+            return null!;
+        }
+
+        Godot.Collections.Dictionary payload = data.AsGodotDictionary();
+        if (
+            !payload.TryGetValue("travel_id", out Variant travelValue)
+            || !payload.TryGetValue("resource_path", out Variant pathValue)
+            || travelValue.VariantType != Variant.Type.Int
+            || pathValue.VariantType != Variant.Type.String
+        )
+        {
+            return null!;
+        }
+
+        long travelId = travelValue.AsInt64();
+        string resourcePath = pathValue.AsString();
+        if (travelId <= 0 || string.IsNullOrWhiteSpace(resourcePath))
+        {
+            return null!;
+        }
+
+        PackedScene? scene = ResourceLoader.Load<PackedScene>(resourcePath);
+        Node? world = scene?.Instantiate();
+        if (world is null)
+        {
+            return null!;
+        }
+
+        world.Name = $"World_{travelId}";
+        world.SetMeta(TravelIdMeta, travelId);
+        world.SetMeta(WorldPathMeta, resourcePath);
+        return world;
+    }
+
+    private void OnWorldSpawned(Node node)
+    {
+        if (
+            !node.HasMeta(TravelIdMeta)
+            || !node.HasMeta(WorldPathMeta)
+            || node.GetMeta(TravelIdMeta).VariantType != Variant.Type.Int
+            || node.GetMeta(WorldPathMeta).VariantType != Variant.Type.String
+        )
+        {
+            GD.PushError($"{GetPath()}: replicated world has invalid spawn metadata.");
+            return;
+        }
+
+        _currentWorld = node;
+        CurrentTravelId = node.GetMeta(TravelIdMeta).AsInt64();
+        CurrentWorldPath = node.GetMeta(WorldPathMeta).AsString();
+        if (State == GameSessionState.Active)
+        {
+            State = GameSessionState.Traveling;
+        }
+
+        ScheduleWorldReadinessCheck();
+    }
+
+    private void ScheduleWorldReadinessCheck()
+    {
+        GetTree().CreateTimer(0.0).Timeout += CompleteLocalWorldReadiness;
+    }
+
+    public void CompleteLocalWorldReadiness()
+    {
+        if (
+            _currentWorld is null
+            || !IsInstanceValid(_currentWorld)
+            || _worldLoadedEmitted
+            || _currentWorld.GetMeta(TravelIdMeta, 0L).AsInt64() != CurrentTravelId
+        )
+        {
+            return;
+        }
+
+        _localWorldReady = true;
+        _worldLoadedEmitted = true;
+        EmitSignal(SignalName.WorldLoaded, CurrentTravelId, _currentWorld);
+        if (IsOfflineSession)
+        {
+            State = GameSessionState.Active;
+            UpdateTransportAdmission();
+            EmitSignal(SignalName.TravelCompleted, CurrentTravelId, _currentWorld);
+        }
+    }
+
+    private bool FailTravel(string reason)
+    {
+        GD.PushWarning($"{GetPath()}: {reason}");
+        EmitSignal(SignalName.TravelFailed, CurrentTravelId, reason);
+        return false;
+    }
+
+    public override void _Process(double delta)
+    {
+        if (State == GameSessionState.Traveling && !_worldLoadedEmitted)
+        {
+            CompleteLocalWorldReadiness();
+        }
     }
 
     private void OnPlayerStateSpawned(Node node)

@@ -75,11 +75,11 @@
 - `Travel(PackedScene worldScene)` returning `bool`.
 - `TravelStarted(long travelId, string resourcePath)`, `WorldLoaded(long travelId, Node world)`, `TravelCompleted(long travelId, Node world)`, and `TravelFailed(long travelId, string reason)`.
 
-- [ ] **Step 1: Add offline tests for first travel, replacement travel, persistent session/player state, preflight failure, duplicate/in-progress/client rejection, one-world invariant, and ready lifecycle after `_Ready()`.**
-- [ ] **Step 2: Run the focused travel suite and observe the expected failures.**
-- [ ] **Step 3: Implement validated scene preflight, monotonic travel IDs, persistent `WorldSpawner` custom spawn data, old-world retirement, local readiness observation, offline barrier completion, and failure transitions.**
-- [ ] **Step 4: Run the travel suite and verify each semantic signal fires once.**
-- [ ] **Step 5: Run required format/build/test commands and update the feature doc.**
+- [x] **Step 1: Add offline tests for first travel, replacement travel, persistent session/player state, preflight failure, duplicate/in-progress/client rejection, one-world invariant, and ready lifecycle after `_Ready()`.**
+- [x] **Step 2: Run the focused travel suite and observe the expected failures.**
+- [x] **Step 3: Implement validated scene preflight, monotonic travel IDs, persistent `WorldSpawner` custom spawn data, old-world retirement, local readiness observation, offline barrier completion, and failure transitions.**
+- [x] **Step 4: Run the travel suite and verify each semantic signal fires once.**
+- [x] **Step 5: Run required format/build/test commands and update the feature doc.**
 
 ### Task 4: Add network travel readiness and late-join handling
 

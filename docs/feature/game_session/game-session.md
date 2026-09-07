@@ -27,3 +27,9 @@ despawn the state and remove every index.
 
 World travel and readiness barriers are the next implementation layer. The design contract is recorded
 in [`planned/game-session-design.md`](planned/game-session-design.md).
+
+The offline travel slice now validates and preflights a resource path before retiring the current
+world, allocates a monotonic `CurrentTravelId`, and asks the persistent `WorldSpawner` to construct
+`World_<travelId>` from `{ travel_id, resource_path }`. A normal ready-frame check emits `WorldLoaded`
+once and completes the local barrier; failed preflight leaves the previous world intact. The current
+world remains beneath `WorldContainer`, so the session and `PlayerState` nodes survive replacement.
