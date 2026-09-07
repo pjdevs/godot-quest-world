@@ -8,7 +8,7 @@ public partial class World : Node3D, IWorldSpawner
     public Godot.Collections.Array<Spawner> Spawners { get; set; } = new();
 
     [Export]
-    public NetworkSession? NetworkSession { get; set; }
+    public QuestWorldNetworkSession? NetworkSession { get; set; }
 
     private readonly Dictionary<StringName, Spawner> _spawnersById = new();
 

@@ -5,7 +5,7 @@
 [ext_resource type="PackedScene" uid="uid://b8e873ujmp8or" path="res://quest_world/interactibles/lever_wall/LeverWall.tscn" id="1_wcunf"]
 [ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="2_player_controller"]
 [ext_resource type="PackedScene" uid="uid://bnrv7fcbbhuga" path="res://quest_world/interactibles/button/Button.tscn" id="3_kevvi"]
-[ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/NetworkSession.cs" id="3_network_session"]
+[ext_resource type="Script" uid="uid://cdqfiu14d2rk" path="res://quest_world/network/scripts/QuestWorldNetworkSession.cs" id="3_network_session"]
 [ext_resource type="PackedScene" uid="uid://ccfh2n8mfm2gn" path="res://addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn" id="4_2dls1"]
 [ext_resource type="Script" uid="uid://canmvbkunu40a" path="res://addons/gameplay_action_plugin/runtime/rules/GameplayActionRule.cs" id="4_onb8u"]
 [ext_resource type="PackedScene" uid="uid://biblv21jbgvwk" path="res://quest_world/interactibles/door/Door.tscn" id="6_onb8u"]
