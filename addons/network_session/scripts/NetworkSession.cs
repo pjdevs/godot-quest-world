@@ -68,6 +68,33 @@ public partial class NetworkSession : Node
         return true;
     }
 
+    public bool SetAcceptingConnections(bool accepting)
+    {
+        if (!IsServer || Multiplayer.MultiplayerPeer is not MultiplayerPeer peer)
+        {
+            return false;
+        }
+
+        peer.RefuseNewConnections = !accepting;
+        return true;
+    }
+
+    public bool DisconnectPeer(long peerId)
+    {
+        if (
+            !IsServer
+            || peerId <= 0
+            || peerId == LocalPeerId
+            || Multiplayer.MultiplayerPeer is not MultiplayerPeer peer
+        )
+        {
+            return false;
+        }
+
+        peer.DisconnectPeer((int)peerId);
+        return true;
+    }
+
     public void Stop()
     {
         if (State is SessionState.Stopped or SessionState.Stopping)

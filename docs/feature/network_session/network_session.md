@@ -11,17 +11,19 @@ outside the generic session layer.
 `addons/network_session/scripts/NetworkSession.cs` is the generic runtime boundary. It exposes:
 
 - `Start(NetworkLaunchOptions options)` and `Stop()`;
+- `SetAcceptingConnections(bool)` and `DisconnectPeer(long)` as narrow, defensive server controls;
 - `LocalPeerId`, `IsServer`, `IsDedicatedServer` and `State`;
 - peer-connected and peer-disconnected signals;
 - connected, disconnected and failed session signals.
 
 It is responsible for creating and closing `ENetMultiplayerPeer`, wiring Godot multiplayer signals,
-and transitioning `SessionState`. It does not know about characters, spawners, controllers or
-QuestWorld gameplay.
+transitioning `SessionState`, controlling server admission at the transport level, and disconnecting
+remote peers on request. It does not know about participants, characters, spawners, controllers or
+QuestWorld gameplay. Consumers never mutate or invoke the underlying `MultiplayerPeer` directly.
 
 `quest_world/game/Game.tscn` is now the persistent project root. Its `Game` script parses the project
-command line, starts `NetworkSession`, initializes `GameSession`, and requests the initial world on
-the server. `QuestWorldNetworkPlayers` consumes `GameSession` participant and readiness signals to
+command line, initializes `GameSession` and `QuestWorldNetworkPlayers`, starts `NetworkSession`, then
+requests the initial world on the server. `QuestWorldNetworkPlayers` consumes `GameSession` participant and readiness signals to
 spawn world-local Characters; it no longer owns transport peer lifecycle directly.
 
 World scenes are content-only. Their authored spawners remain available to project gameplay, while
@@ -50,7 +52,10 @@ Without an explicit mode, the session starts offline. Offline and host sessions 
 ### Generic session owns peer lifecycle only
 
 The addon emits peer and session lifecycle signals instead of spawning gameplay nodes. Integrations
-subscribe to those signals and decide what a peer means in their own domain.
+subscribe to those signals and decide what a peer means in their own domain. Server-side consumers use
+the narrow `SetAcceptingConnections` and `DisconnectPeer` controls; both return `false` when the local
+session lacks server authority or an applicable live peer. Admission policy and participant identity stay
+outside this transport boundary.
 
 ### QuestWorld keeps player ownership outside the session
 

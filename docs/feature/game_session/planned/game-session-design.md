@@ -222,7 +222,8 @@ Requirements:
 - `WorldSpawner.SpawnPath` points to persistent `WorldContainer`;
 - both spawners are persistent and therefore have identical stable paths on every peer before network
   replication begins;
-- `WorldContainer` contains at most one managed world.
+- `WorldContainer` is empty when `GameSession` initializes and later contains at most one managed world;
+- every managed world originates from the persistent `WorldSpawner`.
 
 ## Explicit initialization
 
@@ -235,19 +236,33 @@ Correctness must not depend on sibling `_Ready()` ordering.
 3. configure `WorldSpawner.SpawnFunction`;
 4. subscribe to both spawners' spawn/despawn lifecycle needed for indexes/readiness;
 5. subscribe to `NetworkSession` signals;
-6. reconcile the current `NetworkSession` state after subscriptions are installed.
+6. remain `Idle` until the subscribed `NetworkSession.Connected` transition starts a fresh runtime
+   session.
 
-This reconciliation is mandatory because host/offline/dedicated `NetworkSession.Start()` can already be
-active before `GameSession` subscribes.
-
-The expected first QuestWorld migration can therefore remain:
+There is one supported bootstrap order. Authored integrations subscribe before network startup:
 
 ```text
-NetworkSession.Start(options)
 GameSession.Initialize()
+QuestWorldNetworkPlayers.Initialize()
+NetworkSession.Start(options)
 ```
 
-while the inverse ordering should also remain safe if later convenient.
+Initializing after an already-running network session is invalid; `GameSession` does not reconstruct
+arbitrary peer history. The persistent `Game` root owns this ordering.
+
+When `NetworkSession.Disconnected` fires, the initialized `GameSession` clears participants, current
+world, active travel, and late-join readiness state, then returns to `Idle`. The authored node remains
+initialized and subscribed, so a later `NetworkSession.Start()` begins a fresh runtime session.
+
+Transport ownership remains inside `network_session`:
+
+```text
+GameSession admission intent -> NetworkSession.SetAcceptingConnections(...)
+GameSession rejection/failure -> NetworkSession.DisconnectPeer(...)
+```
+
+`GameSession` never mutates `MultiplayerPeer.RefuseNewConnections` or calls
+`MultiplayerPeer.DisconnectPeer` directly.
 
 # Participants and PlayerState
 
@@ -393,9 +408,9 @@ register PlayerState
 PlayerJoined(PlayerState)
 ```
 
-### Existing local session reconciliation
+### Fresh runtime session startup
 
-When initializing against an already-active `NetworkSession`:
+When the initialized `GameSession` receives `NetworkSession.Connected`:
 
 - offline: create one participant for local peer ID `1`;
 - host: create the host participant if absent;
@@ -522,7 +537,7 @@ It correlates:
 
 - world spawn data;
 - local world readiness;
-- client `TravelReady` acknowledgement;
+- client `WorldReady` acknowledgement;
 - global barrier completion.
 
 Stale IDs are ignored, future/unknown IDs rejected/ignored, and only one global travel runs at a time.
@@ -657,23 +672,26 @@ Rules:
 
 Do not extract a generic `PeerBarrier` in V1.
 
-## Client `TravelReady`
+## Client `WorldReady`
 
 When a remote participant's process fires local `WorldLoaded` for the current travel ID, it sends a
 reliable acknowledgement to server:
 
 ```text
-TravelReady(TravelId)
+WorldReady(TravelId)
 ```
 
 Server validates:
 
 - RPC sender is a current participant;
-- sender is expected for the active global barrier;
-- ID matches current global travel;
+- ID matches the current world/travel;
+- sender is expected by the active global barrier, or is pending readiness as a late join;
 - duplicate is harmless.
 
-Clients cannot mark another peer ready or complete the barrier.
+For an active global travel, the acknowledgement removes the sender from that travel's pending set. For
+a late join while no global travel is active, it clears only that participant's late-join pending state
+and emits `PlayerWorldReady`. Stale, duplicate, and unexpected acknowledgements are ignored. Clients
+cannot mark another peer ready or complete the barrier.
 
 ## Global travel completion
 
@@ -752,9 +770,9 @@ current WorldSpawner state replicated
     ↓
 joining client observes current world ready
     ↓
-reliable CurrentWorldReady(currentTravelId)
+reliable WorldReady(currentTravelId)
     ↓
-server validates peer + current world identity
+server interprets sender from authoritative pending state
     ↓
 PlayerWorldReady(PlayerState)
 ```
@@ -764,9 +782,9 @@ Existing participants continue playing normally throughout.
 If there is no current world yet, admission completes with `PlayerJoined` only; project code can later use
 the next global `TravelCompleted` boundary.
 
-`CurrentWorldReady` may reuse the same underlying ACK receiver/correlation machinery as `TravelReady` if
-that keeps implementation simpler, but it must not accidentally mutate global `GameSessionState` or the
-active global barrier.
+The same `WorldReady` RPC serves global travel and late join. The server's authoritative active-travel and
+pending-late-join sets determine the meaning; a late-join acknowledgement must not mutate global
+`GameSessionState` or the active global barrier.
 
 ## `PlayerWorldReady` signal
 
@@ -1036,7 +1054,6 @@ GameSession : Node
     CurrentTravelId
 
     Initialize()
-    Shutdown()/Reset()          # exact lifecycle API may match addon conventions
     Travel(PackedScene worldScene)
 
     TryGetPlayerStateByPeerId(...)
