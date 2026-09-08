@@ -46,21 +46,21 @@ world, allocates a monotonic `CurrentTravelId`, and asks the persistent `WorldSp
 once and completes the local barrier; failed preflight leaves the previous world intact. The current
 world remains beneath `WorldContainer`, so the session and `PlayerState` nodes survive replacement.
 
-Networked travel uses a reliable `BeginTravel` RPC plus the native `WorldSpawner`. The server snapshots
-remote peers present at travel start, waits for their `WorldReady(CurrentTravelId)` acknowledgements and
-its own local readiness, then emits `TravelCompleted` once and reliably releases clients with
-`CompleteTravel`. The same `WorldReady` RPC acknowledges a late join when no global travel is active;
-authoritative pending sets classify the sender, so duplicate, stale, or unexpected acknowledgements are
-no-ops. Because native spawner replication, `BeginTravel`, and `CompleteTravel` can cross subsystem
-boundaries in different frames, an already-ready client re-sends the same idempotent `WorldReady`
-acknowledgement when `BeginTravel` arrives. A small client correlation state retains an early
-`CompleteTravel` until both the matching begin event and local world readiness are observed, and remembers
-completed IDs so delayed duplicates cannot restart a finished travel. Disconnects release their pending
-entry, and `WorldLoadFailed` removes only the reporting participant. The one active global travel is held
-by an explicit server state object containing its ID, resource path, local-ready flag, and pending peer
-set. Starting that global travel clears the previous late-join pending set because the new participant
-snapshot and barrier supersede readiness for the old world. Admission is refused while that state is
-active.
+Networked travel uses reliable `BeginTravel` and `CompleteTravel` RPCs on the default channel plus the
+native `WorldSpawner`. Reliable packets keep their order on one channel, so the client consumes
+`CompleteTravel` directly after validating the current travel, local readiness, and world instance. The
+ordering that can cross subsystem boundaries is the native world spawn versus `BeginTravel`: an already
+ready client re-sends the same idempotent `WorldReady` acknowledgement when `BeginTravel` arrives. The
+server snapshots remote peers present at travel start, waits for their `WorldReady(CurrentTravelId)`
+acknowledgements and its own local readiness, then emits `TravelCompleted` once. The same `WorldReady`
+RPC acknowledges a late join when no global travel is active; authoritative pending sets classify the
+sender, so duplicate, stale, or unexpected acknowledgements are no-ops. Disconnects release their
+pending entry, and `WorldLoadFailed` removes only the reporting participant. The one active global travel
+is held by an explicit server state object containing its ID and pending peer set; local world readiness
+remains owned by `GameSession`. Starting that global travel clears the previous late-join pending set
+because the new participant snapshot and barrier supersede readiness for the old world. Admission is
+refused while that state is active. Preflight rejection returns `false` and leaves the current world
+intact; `TravelFailed` is reserved for failures after a travel ID has been allocated.
 
 When a peer joins an active world, the persistent spawners reconstruct both `PlayerState` and the current
 world before replaying spawn history from any `MultiplayerSpawner` nested inside that world. The joining

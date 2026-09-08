@@ -14,17 +14,15 @@ using static GdUnit4.Assertions;
 public sealed class GameSessionTravelTest
 {
     [TestCase]
-    public void ClientCompletionCanArriveBeforeTheMatchingTravelBegins()
+    public void TravelStateCompletesWhenAllRemotePeersAreReady()
     {
-        GameSessionClientTravelState state = new();
+        GameSessionTravelState state = new(2, new[] { 3L });
 
-        state.ObserveCompletion(2);
+        AssertThat(state.IsComplete).IsFalse();
 
-        AssertThat(state.CanBegin(2)).IsTrue();
-        AssertThat(state.CanComplete(2)).IsTrue();
-        AssertThat(state.MarkCompleted(2)).IsTrue();
-        AssertThat(state.CanBegin(2)).IsFalse();
-        AssertThat(state.CanComplete(2)).IsFalse();
+        AssertThat(state.MarkPeerReady(3)).IsTrue();
+        AssertThat(state.IsComplete).IsTrue();
+        AssertThat(state.MarkPeerReady(3)).IsFalse();
     }
 
     [TestCase]
@@ -88,9 +86,9 @@ public sealed class GameSessionTravelTest
         OfflineFixture fixture = await StartOfflineFixture();
         Node currentWorld = fixture.GameSession.CurrentWorld!;
         int completed = 0;
-        string? failure = null;
+        bool failureRaised = false;
         fixture.GameSession.TravelCompleted += (_, _) => completed++;
-        fixture.GameSession.TravelFailed += (_, reason) => failure = reason;
+        fixture.GameSession.TravelFailed += (_, _) => failureRaised = true;
 
         AssertThat(fixture.GameSession.Travel(new PackedScene())).IsFalse();
         await fixture.Runner.SimulateFrames(1);
@@ -98,7 +96,7 @@ public sealed class GameSessionTravelTest
         AssertThat(fixture.GameSession.State).IsEqual(GameSessionState.Active);
         AssertThat(fixture.GameSession.CurrentWorld == currentWorld).IsTrue();
         AssertThat(completed).IsEqual(0);
-        AssertThat(string.IsNullOrWhiteSpace(failure)).IsFalse();
+        AssertThat(failureRaised).IsFalse();
         fixture.Close();
     }
 
