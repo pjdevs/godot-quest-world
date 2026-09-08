@@ -188,7 +188,11 @@ Le bootstrap multi-instance est maintenant disponible pour expérimenter le flow
 - `PlayerCharacterSpawnManager` assigne explicitement `OwnerPeerId` et appelle `SetMultiplayerAuthority()`
   sur chaque Character spawné. La convention `Player_<peerId>` reste limitée à la glue QuestWorld ; le
   Character générique ne lit plus son nom pour déduire son propriétaire.
-- Seul le Character autoritaire local consomme l’input et exécute `Simulate()`. Un contrôleur local refuse également de posséder un Character distant.
+- Le `PlayerSpawner` transporte `peer_id` et `local_transform` dans son payload de spawn. Son
+  `spawn_function` instancie le Character, applique `OwnerPeerId` et l'authority racine avant le retour
+  à `MultiplayerSpawner`, donc avant l'entrée dans l'arbre. Les sous-systèmes qui reprennent l'authority
+  serveur pendant `_EnterTree()` ou `_Ready()` ne sont plus écrasés après leur initialisation.
+- Seul le Character autoritaire local consomme l'input et exécute `Simulate()`. Un contrôleur local refuse également de posséder un Character distant.
 - `MultiplayerSynchronizer` réplique pour ce spike la position, la rotation racine, la vélocité, l’orientation visuelle et les angles de caméra.
 - Les proxies ne simulent pas la physique, mais rejouent leur présentation d’animation depuis la vélocité et l’état grounded synchronisés. Cela couvre locomotion, sprint, saut, chute et détection locale de l’atterrissage pour le spike.
 

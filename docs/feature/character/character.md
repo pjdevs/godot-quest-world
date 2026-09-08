@@ -154,9 +154,10 @@ custom prompt path.
 ### AD-10 — Network ownership is assigned by the integration layer
 
 The reusable Character does not infer a peer from its scene-tree name. QuestWorld's
-`PlayerCharacterSpawnManager` assigns `OwnerPeerId` and calls `SetMultiplayerAuthority()` when a player
-is spawned. This keeps peer identity explicit and prevents a generic Character addon from depending
-on QuestWorld's `Player_<peerId>` naming convention.
+`PlayerCharacterSpawnManager` sends the peer identity as spawn data and assigns `OwnerPeerId` plus
+`SetMultiplayerAuthority()` inside the spawner's `spawn_function`, before the Character enters the tree.
+This keeps peer identity explicit, preserves component lifecycle authority claims, and prevents a generic
+Character addon from depending on QuestWorld's `Player_<peerId>` naming convention.
 
 ## Regression coverage
 

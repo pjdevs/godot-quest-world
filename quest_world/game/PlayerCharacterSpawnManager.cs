@@ -8,6 +8,9 @@ namespace QuestWorld.Network;
 
 public partial class PlayerCharacterSpawnManager : Node
 {
+    private const string PeerIdKey = "peer_id";
+    private const string LocalTransformKey = "local_transform";
+
     [Export]
     public World? World { get; set; }
 
@@ -36,6 +39,7 @@ public partial class PlayerCharacterSpawnManager : Node
             return;
         }
 
+        PlayerSpawner.SpawnFunction = Callable.From<Variant, Node>(SpawnPlayerCharacter);
         World.GameSessionAttached += Initialize;
 
         if (World.GameSession is not null)
@@ -164,12 +168,31 @@ public partial class PlayerCharacterSpawnManager : Node
             return;
         }
 
+        Node3D? spawnRoot = PlayerSpawner.GetSpawnRoot();
+        if (spawnRoot is null)
+        {
+            GD.PushError("QuestWorldNetworkPlayers: player spawn root is unavailable.");
+            return;
+        }
+
         string playerName = PlayerNetworkIdentity.GetPlayerName(peerId);
-        QuestWorldCharacter? player =
-            PlayerSpawner.Spawn(
-                Transform3D.Identity.Translated(PlayerNetworkIdentity.GetSpawnPosition(peerId)),
-                playerName
-            ) as QuestWorldCharacter;
+        Transform3D globalTransform = Transform3D.Identity.Translated(
+            PlayerNetworkIdentity.GetSpawnPosition(peerId)
+        );
+        Godot.Collections.Dictionary<string, Variant> spawnData = new()
+        {
+            [PeerIdKey] = peerId,
+            [LocalTransformKey] = spawnRoot.GlobalTransform.AffineInverse() * globalTransform,
+        };
+        QuestWorldCharacter? player = PlayerSpawner.Spawn(spawnData) as QuestWorldCharacter;
+        if (player is null && IsOfflineSession)
+        {
+            player = SpawnPlayerCharacter(spawnData) as QuestWorldCharacter;
+            if (player is not null)
+            {
+                spawnRoot.AddChild(player, true);
+            }
+        }
         if (player is null)
         {
             GD.PushError($"QuestWorldNetworkPlayers: failed to spawn {playerName}.");
@@ -195,7 +218,6 @@ public partial class PlayerCharacterSpawnManager : Node
             return;
         }
 
-        ConfigurePlayerAuthority(character, peerId);
         _charactersByPeerId[peerId] = character;
         character.TreeExiting += () =>
         {
@@ -209,11 +231,46 @@ public partial class PlayerCharacterSpawnManager : Node
         };
     }
 
-    private static void ConfigurePlayerAuthority(QuestWorldCharacter character, int peerId)
+    private Node SpawnPlayerCharacter(Variant data)
     {
+        if (data.VariantType != Variant.Type.Dictionary || PlayerSpawner?.Scene is null)
+        {
+            return null!;
+        }
+
+        Godot.Collections.Dictionary payload = data.AsGodotDictionary();
+        if (
+            !payload.TryGetValue(PeerIdKey, out Variant peerValue)
+            || !payload.TryGetValue(LocalTransformKey, out Variant localTransformValue)
+            || peerValue.VariantType != Variant.Type.Int
+            || localTransformValue.VariantType != Variant.Type.Transform3D
+        )
+        {
+            return null!;
+        }
+
+        int peerId = peerValue.AsInt32();
+        if (peerId <= 0)
+        {
+            return null!;
+        }
+
+        Node? node = PlayerSpawner.Scene.Instantiate();
+        if (node is not QuestWorldCharacter character)
+        {
+            node?.Free();
+            return null!;
+        }
+
+        character.Name = PlayerNetworkIdentity.GetPlayerName(peerId);
         character.OwnerPeerId = peerId;
         character.SetMultiplayerAuthority(peerId);
+        character.Transform = localTransformValue.AsTransform3D();
+        return character;
     }
+
+    private bool IsOfflineSession =>
+        _gameSession?.NetworkSession?.LaunchOptions?.Mode == NetworkLaunchMode.Offline;
 
     public override void _ExitTree()
     {

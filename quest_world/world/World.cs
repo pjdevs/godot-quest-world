@@ -27,7 +27,9 @@ public partial class World : Node3D, IWorldSpawner
     {
         if (GameSession is not null)
         {
-            GD.PushError($"{GetPath()}: GameSession is already attached. World should not attach multiple GameSessions in a single lifecycle.");
+            GD.PushError(
+                $"{GetPath()}: GameSession is already attached. World should not attach multiple GameSessions in a single lifecycle."
+            );
             return;
         }
 
