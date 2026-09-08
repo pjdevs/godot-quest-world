@@ -47,15 +47,15 @@ internal static partial class GameSessionTestFixtures
         );
         await runner.SimulateFrames(1);
 
+        AssertThat(server.GameSession.Initialize()).IsTrue();
+        AssertThat(client.GameSession.Initialize()).IsTrue();
         AssertThat(
                 server.Network.Start(
                     dedicatedServer ? CreateServerOptions(port) : CreateHostOptions(port)
                 )
             )
             .IsTrue();
-        AssertThat(server.GameSession.Initialize()).IsTrue();
         AssertThat(client.Network.Start(CreateClientOptions(port))).IsTrue();
-        AssertThat(client.GameSession.Initialize()).IsTrue();
 
         for (int frame = 0; frame < ConnectFrames; frame++)
         {
@@ -184,8 +184,8 @@ internal static partial class GameSessionTestFixtures
                 new NetworkSession { Name = "NetworkSession" }
             );
             await Pump();
-            AssertThat(late.Network.Start(CreateClientOptions(Port))).IsTrue();
             AssertThat(late.GameSession.Initialize()).IsTrue();
+            AssertThat(late.Network.Start(CreateClientOptions(Port))).IsTrue();
 
             for (int frame = 0; frame < ConnectFrames; frame++)
             {

@@ -19,8 +19,8 @@ public sealed class GameSessionParticipantTest
         ISceneRunner runner = ISceneRunner.Load(fixture.Root, autoFree: true);
         await runner.SimulateFrames(1);
 
-        AssertThat(fixture.Network.Start(CreateOfflineOptions())).IsTrue();
         AssertThat(fixture.GameSession.Initialize()).IsTrue();
+        AssertThat(fixture.Network.Start(CreateOfflineOptions())).IsTrue();
 
         AssertThat(fixture.GameSession.State).IsEqual(GameSessionState.Active);
         AssertThat(fixture.GameSession.PlayerStates.Count).IsEqual(1);

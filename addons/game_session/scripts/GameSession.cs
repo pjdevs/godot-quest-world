@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using QuestWorld.Network;
 
@@ -49,19 +50,14 @@ public partial class GameSession : Node
     [Export]
     public MultiplayerSpawner? WorldSpawner { get; set; }
 
-    private readonly List<PlayerState> _playerStates = new();
-    private readonly Dictionary<long, PlayerState> _playersByParticipantId = new();
-    private readonly Dictionary<long, PlayerState> _playersByPeerId = new();
-    private readonly HashSet<long> _pendingTravelPeers = new();
+    private readonly GameSessionParticipantRegistry _participants = new();
     private readonly HashSet<long> _pendingLateJoinPeers = new();
     private bool _initialized;
     private bool _isAcceptingPlayers = true;
     private long _nextParticipantId = 1;
     private Node? _currentWorld;
-    private bool _localWorldReady;
     private bool _worldLoadedEmitted;
-    private bool _globalTravelActive;
-    private long _expectedGlobalTravelId;
+    private GameSessionTravelState? _activeTravel;
 
     public GameSessionState State { get; private set; } = GameSessionState.Idle;
 
@@ -80,7 +76,7 @@ public partial class GameSession : Node
         }
     }
 
-    public IReadOnlyList<PlayerState> PlayerStates => _playerStates;
+    public IReadOnlyList<PlayerState> PlayerStates => _participants.Players;
 
     public long CurrentTravelId { get; private set; }
 
@@ -88,7 +84,7 @@ public partial class GameSession : Node
 
     public string CurrentWorldPath { get; private set; } = string.Empty;
 
-    public bool IsLocalWorldReady => _localWorldReady;
+    public bool IsLocalWorldReady => _worldLoadedEmitted;
 
     private bool IsOfflineSession =>
         NetworkSession?.LaunchOptions?.Mode == NetworkLaunchMode.Offline;
@@ -116,11 +112,8 @@ public partial class GameSession : Node
         NetworkSession.Disconnected += OnDisconnected;
         NetworkSession.Failed += OnNetworkFailed;
         _initialized = true;
-        State = GameSessionState.Active;
-        UpdateTransportAdmission();
-
-        ReconcileCurrentNetworkSession();
-        return State != GameSessionState.Failed;
+        State = GameSessionState.Idle;
+        return true;
     }
 
     public void Reset()
@@ -149,7 +142,7 @@ public partial class GameSession : Node
             NetworkSession.Failed -= OnNetworkFailed;
         }
 
-        foreach (PlayerState playerState in _playerStates.ToArray())
+        foreach (PlayerState playerState in _participants.Players.ToArray())
         {
             if (IsInstanceValid(playerState))
             {
@@ -157,10 +150,7 @@ public partial class GameSession : Node
             }
         }
 
-        _playerStates.Clear();
-        _playersByParticipantId.Clear();
-        _playersByPeerId.Clear();
-        _pendingTravelPeers.Clear();
+        _participants.Clear();
         _pendingLateJoinPeers.Clear();
         if (_currentWorld is not null && IsInstanceValid(_currentWorld))
         {
@@ -170,10 +160,8 @@ public partial class GameSession : Node
         _currentWorld = null;
         CurrentTravelId = 0;
         CurrentWorldPath = string.Empty;
-        _localWorldReady = false;
         _worldLoadedEmitted = false;
-        _globalTravelActive = false;
-        _expectedGlobalTravelId = 0;
+        _activeTravel = null;
         _nextParticipantId = 1;
         _initialized = false;
         State = GameSessionState.Idle;
@@ -219,18 +207,14 @@ public partial class GameSession : Node
         long travelId = ++CurrentTravelId;
         CurrentWorldPath = resourcePath;
         State = GameSessionState.Traveling;
-        _localWorldReady = false;
         _worldLoadedEmitted = false;
-        _globalTravelActive = true;
-        _expectedGlobalTravelId = travelId;
-        _pendingTravelPeers.Clear();
-        foreach (PlayerState playerState in _playerStates)
-        {
-            if (playerState.PeerId != NetworkSession.LocalPeerId)
-            {
-                _pendingTravelPeers.Add(playerState.PeerId);
-            }
-        }
+        _activeTravel = new GameSessionTravelState(
+            travelId,
+            resourcePath,
+            _participants
+                .Players.Where(playerState => playerState.PeerId != NetworkSession.LocalPeerId)
+                .Select(playerState => playerState.PeerId)
+        );
         UpdateTransportAdmission();
         EmitSignal(SignalName.TravelStarted, travelId, resourcePath);
         if (!IsOfflineSession)
@@ -277,12 +261,12 @@ public partial class GameSession : Node
     }
 
     public bool TryGetPlayerStateByPeerId(long peerId, out PlayerState? playerState) =>
-        _playersByPeerId.TryGetValue(peerId, out playerState);
+        _participants.TryGetByPeerId(peerId, out playerState);
 
     public bool TryGetPlayerStateByParticipantId(
         long participantId,
         out PlayerState? playerState
-    ) => _playersByParticipantId.TryGetValue(participantId, out playerState);
+    ) => _participants.TryGetByParticipantId(participantId, out playerState);
 
     protected virtual bool CanJoin(long peerId, out string reason)
     {
@@ -328,21 +312,26 @@ public partial class GameSession : Node
             return FailConfiguration("WorldSpawner is required.");
         }
 
-        if (WorldContainer.GetChildCount() > 1)
-        {
-            return FailConfiguration("WorldContainer may contain at most one managed world.");
-        }
-
-        if (PlayerStateSpawner.GetNodeOrNull(PlayerStateSpawner.GetPathTo(Players)) != Players)
-        {
-            return FailConfiguration("PlayerStateSpawner must point to Players through SpawnPath.");
-        }
-
-        if (WorldSpawner.GetNodeOrNull(WorldSpawner.GetPathTo(WorldContainer)) != WorldContainer)
+        if (NetworkSession.State != SessionState.Stopped)
         {
             return FailConfiguration(
-                "WorldSpawner must point to WorldContainer through SpawnPath."
+                "NetworkSession must be stopped before GameSession initializes."
             );
+        }
+
+        if (WorldContainer.GetChildCount() != 0)
+        {
+            return FailConfiguration("WorldContainer must be empty before GameSession starts.");
+        }
+
+        if (PlayerStateSpawner.GetNodeOrNull(PlayerStateSpawner.SpawnPath) != Players)
+        {
+            return FailConfiguration("PlayerStateSpawner.SpawnPath must point to Players.");
+        }
+
+        if (WorldSpawner.GetNodeOrNull(WorldSpawner.SpawnPath) != WorldContainer)
+        {
+            return FailConfiguration("WorldSpawner.SpawnPath must point to WorldContainer.");
         }
 
         Node? probe = PlayerStateScene.Instantiate();
@@ -362,20 +351,20 @@ public partial class GameSession : Node
         return false;
     }
 
-    private void ReconcileCurrentNetworkSession()
+    private void OnConnected()
     {
-        if (NetworkSession?.State != SessionState.Active || !NetworkSession.IsServer)
-        {
-            return;
-        }
+        State = GameSessionState.Active;
+        UpdateTransportAdmission();
 
-        if (!NetworkSession.IsDedicatedServer && NetworkSession.LocalPeerId > 0)
+        if (
+            NetworkSession?.IsServer == true
+            && !NetworkSession.IsDedicatedServer
+            && NetworkSession.LocalPeerId > 0
+        )
         {
             AdmitParticipant(NetworkSession.LocalPeerId);
         }
     }
-
-    private void OnConnected() => ReconcileCurrentNetworkSession();
 
     private void OnPeerConnected(long peerId)
     {
@@ -383,7 +372,7 @@ public partial class GameSession : Node
         {
             if (State != GameSessionState.Active || !IsAcceptingPlayers)
             {
-                NetworkSession.Multiplayer.MultiplayerPeer?.DisconnectPeer((int)peerId);
+                NetworkSession.DisconnectPeer(peerId);
                 return;
             }
 
@@ -395,7 +384,7 @@ public partial class GameSession : Node
     {
         if (NetworkSession?.IsServer == true)
         {
-            _pendingTravelPeers.Remove(peerId);
+            _activeTravel?.RemovePeer(peerId);
             _pendingLateJoinPeers.Remove(peerId);
             RemoveParticipant(peerId);
             TryCompleteTravel();
@@ -424,7 +413,7 @@ public partial class GameSession : Node
             !_initialized
             || NetworkSession?.IsServer != true
             || State != GameSessionState.Active
-            || _playersByPeerId.ContainsKey(peerId)
+            || _participants.TryGetByPeerId(peerId, out _)
         )
         {
             return;
@@ -433,7 +422,7 @@ public partial class GameSession : Node
         if (!CanJoin(peerId, out string reason))
         {
             GD.PushWarning($"{GetPath()}: rejected peer {peerId}: {reason}");
-            NetworkSession.Multiplayer.MultiplayerPeer?.DisconnectPeer((int)peerId);
+            NetworkSession.DisconnectPeer(peerId);
             return;
         }
 
@@ -444,7 +433,7 @@ public partial class GameSession : Node
             ["peer_id"] = peerId,
         };
         PlayerState? playerState = PlayerStateSpawner!.Spawn(spawnData) as PlayerState;
-        if (playerState is null && NetworkSession.Multiplayer.MultiplayerPeer is null)
+        if (playerState is null && IsOfflineSession)
         {
             playerState = SpawnPlayerState(spawnData) as PlayerState;
             if (playerState is not null)
@@ -523,22 +512,20 @@ public partial class GameSession : Node
         }
 
         bool worldWasAlreadyReady =
-            _localWorldReady
+            _worldLoadedEmitted
             && _currentWorld is not null
             && _currentWorld.GetMeta(TravelIdMeta, 0L).AsInt64() == travelId;
         CurrentTravelId = travelId;
         CurrentWorldPath = resourcePath;
-        _expectedGlobalTravelId = travelId;
-        _globalTravelActive = true;
-        _localWorldReady = false;
+        _activeTravel = new GameSessionTravelState(travelId, resourcePath, []);
         _worldLoadedEmitted = false;
         State = GameSessionState.Traveling;
         EmitSignal(SignalName.TravelStarted, travelId, resourcePath);
 
         if (worldWasAlreadyReady)
         {
-            _localWorldReady = true;
             _worldLoadedEmitted = true;
+            _activeTravel.MarkLocalWorldReady();
             RpcId(1, nameof(TravelReady), travelId);
         }
     }
@@ -599,14 +586,15 @@ public partial class GameSession : Node
         if (
             NetworkSession?.IsServer != true
             || State != GameSessionState.Traveling
-            || travelId != CurrentTravelId
+            || _activeTravel is null
+            || travelId != _activeTravel.Id
         )
         {
             return;
         }
 
         long senderPeerId = Multiplayer.GetRemoteSenderId();
-        if (!_pendingTravelPeers.Remove(senderPeerId))
+        if (!_activeTravel.MarkPeerReady(senderPeerId))
         {
             return;
         }
@@ -624,16 +612,16 @@ public partial class GameSession : Node
         if (
             NetworkSession?.IsServer == true
             || State != GameSessionState.Traveling
-            || travelId != CurrentTravelId
-            || !_localWorldReady
+            || _activeTravel is null
+            || travelId != _activeTravel.Id
+            || !_activeTravel.IsLocalWorldReady
             || _currentWorld is null
         )
         {
             return;
         }
 
-        _globalTravelActive = false;
-        _expectedGlobalTravelId = 0;
+        _activeTravel = null;
         State = GameSessionState.Active;
         EmitSignal(SignalName.TravelCompleted, travelId, _currentWorld);
     }
@@ -661,7 +649,7 @@ public partial class GameSession : Node
             return;
         }
 
-        if (_playersByPeerId.TryGetValue(senderPeerId, out PlayerState? playerState))
+        if (_participants.TryGetByPeerId(senderPeerId, out PlayerState? playerState))
         {
             EmitSignal(SignalName.PlayerWorldReady, playerState);
         }
@@ -690,7 +678,7 @@ public partial class GameSession : Node
         }
 
         long senderPeerId = Multiplayer.GetRemoteSenderId();
-        if (!_playersByPeerId.ContainsKey(senderPeerId))
+        if (!_participants.TryGetByPeerId(senderPeerId, out _))
         {
             return;
         }
@@ -698,7 +686,7 @@ public partial class GameSession : Node
         GD.PushError(
             $"{GetPath()}: peer {senderPeerId} failed to load travel {travelId}: {reason}"
         );
-        NetworkSession.Multiplayer.MultiplayerPeer?.DisconnectPeer((int)senderPeerId);
+        NetworkSession.DisconnectPeer(senderPeerId);
     }
 
     private void OnWorldSpawned(Node node)
@@ -717,7 +705,7 @@ public partial class GameSession : Node
         _currentWorld = node;
         CurrentTravelId = node.GetMeta(TravelIdMeta).AsInt64();
         CurrentWorldPath = node.GetMeta(WorldPathMeta).AsString();
-        bool isGlobalTravel = _globalTravelActive && _expectedGlobalTravelId == CurrentTravelId;
+        bool isGlobalTravel = _activeTravel?.Id == CurrentTravelId;
         if (isGlobalTravel)
         {
             State = GameSessionState.Traveling;
@@ -743,8 +731,11 @@ public partial class GameSession : Node
             return;
         }
 
-        _localWorldReady = true;
         _worldLoadedEmitted = true;
+        if (_activeTravel?.Id == CurrentTravelId)
+        {
+            _activeTravel.MarkLocalWorldReady();
+        }
         EmitSignal(SignalName.WorldLoaded, CurrentTravelId, _currentWorld);
         if (NetworkSession?.IsServer == true)
         {
@@ -776,18 +767,15 @@ public partial class GameSession : Node
     }
 
     private bool IsGlobalTravelReady() =>
-        _globalTravelActive
-        && _expectedGlobalTravelId == CurrentTravelId
-        && State == GameSessionState.Traveling;
+        _activeTravel?.Id == CurrentTravelId && State == GameSessionState.Traveling;
 
     private void TryCompleteTravel()
     {
         if (
             NetworkSession?.IsServer != true
-            || !_globalTravelActive
+            || _activeTravel is null
             || State != GameSessionState.Traveling
-            || !_localWorldReady
-            || _pendingTravelPeers.Count > 0
+            || !_activeTravel.IsComplete
             || _currentWorld is null
         )
         {
@@ -796,13 +784,12 @@ public partial class GameSession : Node
 
         long travelId = CurrentTravelId;
         Node world = _currentWorld;
-        _globalTravelActive = false;
-        _expectedGlobalTravelId = 0;
+        _activeTravel = null;
         State = GameSessionState.Active;
         UpdateTransportAdmission();
         Rpc(nameof(CompleteTravel), travelId);
         EmitSignal(SignalName.TravelCompleted, travelId, world);
-        foreach (PlayerState playerState in _playerStates.ToArray())
+        foreach (PlayerState playerState in _participants.Players.ToArray())
         {
             EmitSignal(SignalName.PlayerWorldReady, playerState);
         }
@@ -832,35 +819,29 @@ public partial class GameSession : Node
             !IsInstanceValid(playerState)
             || playerState.ParticipantId <= 0
             || playerState.PeerId <= 0
-            || _playersByParticipantId.ContainsKey(playerState.ParticipantId)
-            || _playersByPeerId.ContainsKey(playerState.PeerId)
+            || !_participants.TryAdd(playerState)
         )
         {
             return false;
         }
 
-        _playerStates.Add(playerState);
-        _playersByParticipantId.Add(playerState.ParticipantId, playerState);
-        _playersByPeerId.Add(playerState.PeerId, playerState);
         playerState.TreeExiting += () => UnregisterPlayerState(playerState);
         return true;
     }
 
     private void UnregisterPlayerState(PlayerState playerState)
     {
-        if (!_playersByParticipantId.Remove(playerState.ParticipantId))
+        if (!_participants.Remove(playerState))
         {
             return;
         }
 
-        _playersByPeerId.Remove(playerState.PeerId);
-        _playerStates.Remove(playerState);
         EmitSignal(SignalName.PlayerLeft, playerState.ParticipantId, playerState.PeerId);
     }
 
     private void RemoveParticipant(long peerId)
     {
-        if (!_playersByPeerId.TryGetValue(peerId, out PlayerState? playerState))
+        if (!_participants.TryGetByPeerId(peerId, out PlayerState? playerState))
         {
             return;
         }
@@ -875,10 +856,9 @@ public partial class GameSession : Node
             return;
         }
 
-        if (NetworkSession.Multiplayer.MultiplayerPeer is MultiplayerPeer peer)
-        {
-            peer.RefuseNewConnections = !_isAcceptingPlayers || State != GameSessionState.Active;
-        }
+        NetworkSession.SetAcceptingConnections(
+            _isAcceptingPlayers && State == GameSessionState.Active
+        );
     }
 
     public override void _ExitTree()

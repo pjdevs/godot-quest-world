@@ -19,8 +19,8 @@ public sealed class GameSessionTravelTest
         OfflineFixture fixture = CreateFixture();
         ISceneRunner runner = ISceneRunner.Load(fixture.Root, autoFree: true);
         await runner.SimulateFrames(1);
-        AssertThat(fixture.Network.Start(CreateOfflineOptions())).IsTrue();
         AssertThat(fixture.GameSession.Initialize()).IsTrue();
+        AssertThat(fixture.Network.Start(CreateOfflineOptions())).IsTrue();
         List<string> events = new();
         fixture.GameSession.TravelStarted += (travelId, path) =>
             events.Add($"started:{travelId}:{path}");
@@ -90,8 +90,8 @@ public sealed class GameSessionTravelTest
         OfflineFixture fixture = CreateFixture();
         fixture.Runner = ISceneRunner.Load(fixture.Root, autoFree: true);
         await fixture.Runner.SimulateFrames(1);
-        AssertThat(fixture.Network.Start(CreateOfflineOptions())).IsTrue();
         AssertThat(fixture.GameSession.Initialize()).IsTrue();
+        AssertThat(fixture.Network.Start(CreateOfflineOptions())).IsTrue();
         PackedScene firstScene = GD.Load<PackedScene>(
             "res://addons/game_session/tests/fixtures/WorldA.tscn"
         );
@@ -106,8 +106,8 @@ public sealed class GameSessionTravelTest
         OfflineFixture fixture = CreateFixture();
         fixture.Runner = ISceneRunner.Load(fixture.Root, autoFree: true);
         await fixture.Runner.SimulateFrames(1);
-        AssertThat(fixture.Network.Start(CreateOfflineOptions())).IsTrue();
         AssertThat(fixture.GameSession.Initialize()).IsTrue();
+        AssertThat(fixture.Network.Start(CreateOfflineOptions())).IsTrue();
         PackedScene firstScene = GD.Load<PackedScene>(
             "res://addons/game_session/tests/fixtures/WorldA.tscn"
         );

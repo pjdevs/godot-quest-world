@@ -8,13 +8,15 @@ travel. It does not know about Characters, Pawns, teams, loadouts, match rules, 
 
 ## Current implementation
 
-`GameSession` is explicitly initialized after its authored references are available. It validates the
-`NetworkSession`, persistent `Players`, `PlayerStateScene`, `PlayerStateSpawner`, `WorldContainer`, and
-`WorldSpawner` dependencies, then configures the player-state custom spawn function and reconciles an
-already-active offline, host, or dedicated session.
+`GameSession` is explicitly initialized after its authored references are available and before networking
+starts. It validates the `NetworkSession`, persistent `Players`, `PlayerStateScene`,
+`PlayerStateSpawner`, empty `WorldContainer`, and `WorldSpawner` dependencies, including both authored
+spawner paths. Initialization configures callbacks and subscriptions while the session remains `Idle`;
+the subsequent `NetworkSession.Connected` signal starts the runtime session and enters `Active`.
 
 `PlayerState` receives a positive `ParticipantId` and current `PeerId` before it enters the scene tree.
-The server allocates participant IDs monotonically and maintains direct indexes by both identities.
+The server allocates participant IDs monotonically. A dedicated participant registry is the single source
+of truth for the ordered list and both identity indexes.
 Offline sessions create the local participant; dedicated servers and clients do not author a fake
 participant locally.
 
@@ -22,7 +24,7 @@ On an active server, peer admission allocates the next participant ID and sends 
 peer_id }` through the persistent `PlayerStateSpawner`. The same factory constructs the state on
 remote peers, so identity is initialized before `_Ready()` and derived `PlayerStateScene` roots are
 supported. The server keeps both peer and participant indexes, disconnects peers refused by
-`CanJoin`, and mirrors the admission intent into `MultiplayerPeer.RefuseNewConnections`; disconnects
+`CanJoin`, and mirrors admission intent through `NetworkSession.SetAcceptingConnections`; disconnects
 despawn the state and remove every index.
 
 World travel and readiness barriers are the next implementation layer. The design contract is recorded
@@ -38,8 +40,9 @@ Networked travel uses a reliable `BeginTravel` RPC plus the native `WorldSpawner
 remote peers present at travel start, waits for their `TravelReady(CurrentTravelId)` acknowledgements and
 its own local readiness, then emits `TravelCompleted` once and reliably releases clients with
 `CompleteTravel`. Duplicate or stale acknowledgements are ignored, disconnects release their pending
-entry, and `WorldLoadFailed` removes only the reporting participant. Admission is refused while the
-global barrier is active.
+entry, and `WorldLoadFailed` removes only the reporting participant. The one active global travel is held
+by an explicit state object containing its ID, resource path, local-ready flag, and pending peer set.
+Admission is refused while that state is active.
 
 When a peer joins an active world, the persistent spawners reconstruct both `PlayerState` and the current
 world. The joining process sends `CurrentWorldReady(CurrentTravelId)` after its local `WorldLoaded`
@@ -49,6 +52,8 @@ server, disconnect release, late join, and isolated client failure paths.
 
 QuestWorld now has a persistent `quest_world/game/Game.tscn` root. It owns `NetworkSession`,
 `GameSession`, the derived `QuestWorldPlayerState` scene, the player integration, and the optional local
-controller. `World` scenes are world-only content: they retain their project spawners and authority
+controller. Its bootstrap order is `GameSession.Initialize()`, project integration initialization, then
+`NetworkSession.Start()`, ensuring no synchronous connection signal can be missed. `World` scenes are
+world-only content: they retain their project spawners and authority
 initialization but no longer start networking or own player integration. Character carry behavior finds
 its `IWorldSpawner` ancestor, so it no longer depends on `SceneTree.CurrentScene` being the world.

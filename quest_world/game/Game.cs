@@ -49,18 +49,19 @@ public partial class Game : Node3D
             return false;
         }
 
-        if (!NetworkSession!.Start(launchOptions!))
-        {
-            return false;
-        }
-
         if (!GameSession!.Initialize())
         {
-            NetworkSession.Stop();
             return false;
         }
 
         NetworkPlayers!.Initialize();
+
+        if (!NetworkSession!.Start(launchOptions!))
+        {
+            GameSession.Reset();
+            return false;
+        }
+
         _initialized = true;
 
         if (InitialWorld is not null && NetworkSession.IsServer && GameSession.CurrentWorld is null)
