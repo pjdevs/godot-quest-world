@@ -8,7 +8,7 @@ outside the generic session layer.
 
 ## Current architecture
 
-`addons/network_session/scripts/NetworkSession.cs` is the generic runtime boundary. It exposes:
+`addons/network_session/runtime/NetworkSession.cs` is the generic runtime boundary. It exposes:
 
 - `Start(NetworkLaunchOptions options)` and `Stop()`;
 - `SetAcceptingConnections(bool)` and `DisconnectPeer(long)` as narrow, defensive server controls;
@@ -22,14 +22,14 @@ remote peers on request. It does not know about participants, characters, spawne
 QuestWorld gameplay. Consumers never mutate or invoke the underlying `MultiplayerPeer` directly.
 
 `quest_world/game/Game.tscn` is now the persistent project root. Its `Game` script parses the project
-command line, initializes `GameSession` and `QuestWorldNetworkPlayers`, starts `NetworkSession`, then
-requests the initial world on the server. `QuestWorldNetworkPlayers` consumes `GameSession` participant and readiness signals to
+command line, initializes `GameSession` and `PlayerCharacterSpawnManager`, starts `NetworkSession`, then
+requests the initial world on the server. `PlayerCharacterSpawnManager` consumes `GameSession` participant and readiness signals to
 spawn world-local Characters; it no longer owns transport peer lifecycle directly.
 
 World scenes are content-only. Their authored spawners remain available to project gameplay, while
 network startup and the optional local controller live under the persistent `Game` root.
 
-`QuestWorldNetworkIdentity` remains QuestWorld-owned. Its player naming, peer-name parsing and
+`PlayerNetworkIdentity` remains QuestWorld-owned. Its player naming, peer-name parsing and
 spawn-position conventions are not part of the generic addon contract.
 
 ## Launch modes

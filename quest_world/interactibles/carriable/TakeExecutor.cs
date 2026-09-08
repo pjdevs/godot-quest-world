@@ -1,6 +1,6 @@
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Actions;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Actions;
 
 [GlobalClass]
 public partial class TakeExecutor : GameplayActionExecutor

@@ -1,8 +1,8 @@
 using System.Collections.Generic;
+using GameSessionPlugin;
 using Godot;
-using QuestWorld.GameSession;
+using NetworkPlugin;
 using QuestWorld.Network;
-using GameSessionNode = QuestWorld.GameSession.GameSession;
 
 namespace QuestWorld.Game;
 
@@ -13,10 +13,10 @@ public partial class Game : Node3D
     public NetworkSession? NetworkSession { get; set; }
 
     [Export]
-    public GameSessionNode? GameSession { get; set; }
+    public GameSession? GameSession { get; set; }
 
     [Export]
-    public QuestWorldNetworkPlayers? NetworkPlayers { get; set; }
+    public PlayerCharacterSpawnManager? NetworkPlayers { get; set; }
 
     [Export]
     public PackedScene? InitialWorld { get; set; }

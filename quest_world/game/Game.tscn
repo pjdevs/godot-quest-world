@@ -1,46 +1,46 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://bidh12jpss1f0"]
 
-[ext_resource type="Script" path="res://quest_world/game/Game.cs" id="1_game"]
-[ext_resource type="Script" path="res://addons/network_session/scripts/NetworkSession.cs" id="2_network"]
-[ext_resource type="Script" path="res://addons/game_session/scripts/GameSession.cs" id="3_session"]
-[ext_resource type="PackedScene" path="res://quest_world/network/QuestWorldPlayerState.tscn" id="4_player_state"]
-[ext_resource type="Script" path="res://quest_world/network/QuestWorldNetworkPlayers.cs" id="5_players"]
-[ext_resource type="Script" path="res://addons/dummy_character_plugin/scripts/CharacterPlayerController.cs" id="6_controller"]
-[ext_resource type="PackedScene" path="res://quest_world/levels/test_world.tscn" id="7_world"]
+[ext_resource type="Script" uid="uid://il633enryda4" path="res://quest_world/game/Game.cs" id="1_game"]
+[ext_resource type="Script" uid="uid://h28783rtt3jd" path="res://addons/network_session/runtime/NetworkSession.cs" id="2_network"]
+[ext_resource type="Script" uid="uid://dfsrfqj1r4wif" path="res://addons/game_session/runtime/GameSession.cs" id="3_session"]
+[ext_resource type="PackedScene" path="res://quest_world/character/QuestWorldPlayerState.tscn" id="4_player_state"]
+[ext_resource type="Script" uid="uid://j7janlk8f7i5" path="res://quest_world/game/PlayerCharacterSpawnManager.cs" id="5_players"]
+[ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/runtime/CharacterPlayerController.cs" id="6_controller"]
+[ext_resource type="PackedScene" uid="uid://cs4drhmc1bql5" path="res://quest_world/levels/test_world.tscn" id="7_world"]
 
-[node name="Game" type="Node3D" node_paths=PackedStringArray("NetworkSession", "GameSession", "NetworkPlayers")]
+[node name="Game" type="Node3D" unique_id=622032196 node_paths=PackedStringArray("NetworkSession", "GameSession", "NetworkPlayers")]
 script = ExtResource("1_game")
 NetworkSession = NodePath("NetworkSession")
 GameSession = NodePath("GameSession")
-NetworkPlayers = NodePath("NetworkPlayers")
+NetworkPlayers = NodePath("PlayerCharacterSpawnManager")
 InitialWorld = ExtResource("7_world")
 
-[node name="NetworkSession" type="Node" parent="."]
+[node name="NetworkSession" type="Node" parent="." unique_id=1271805403]
 script = ExtResource("2_network")
 
-[node name="GameSession" type="Node" parent="." node_paths=PackedStringArray("NetworkSession", "Players", "PlayerStateSpawner", "WorldContainer", "WorldSpawner")]
+[node name="GameSession" type="Node" parent="." unique_id=1934202768 node_paths=PackedStringArray("NetworkSession", "Players", "PlayerStateSpawner", "WorldContainer", "WorldSpawner")]
 script = ExtResource("3_session")
 NetworkSession = NodePath("../NetworkSession")
-Players = NodePath("Players")
+Players = NodePath("PlayerStates")
 PlayerStateScene = ExtResource("4_player_state")
 PlayerStateSpawner = NodePath("PlayerStateSpawner")
 WorldContainer = NodePath("WorldContainer")
 WorldSpawner = NodePath("WorldSpawner")
 
-[node name="Players" type="Node" parent="GameSession"]
+[node name="PlayerStates" type="Node" parent="GameSession" unique_id=1085996740]
 
-[node name="PlayerStateSpawner" type="MultiplayerSpawner" parent="GameSession"]
-spawn_path = NodePath("../Players")
+[node name="PlayerStateSpawner" type="MultiplayerSpawner" parent="GameSession" unique_id=1346129094]
+spawn_path = NodePath("../PlayerStates")
 
-[node name="WorldContainer" type="Node3D" parent="GameSession"]
+[node name="WorldContainer" type="Node3D" parent="GameSession" unique_id=1950128579]
 
-[node name="WorldSpawner" type="MultiplayerSpawner" parent="GameSession"]
+[node name="WorldSpawner" type="MultiplayerSpawner" parent="GameSession" unique_id=783495533]
 spawn_path = NodePath("../WorldContainer")
 
-[node name="NetworkPlayers" type="Node" parent="." node_paths=PackedStringArray("GameSession", "LocalPlayerController")]
+[node name="PlayerCharacterSpawnManager" type="Node" parent="." unique_id=1109349989 node_paths=PackedStringArray("GameSession", "LocalPlayerController")]
 script = ExtResource("5_players")
 GameSession = NodePath("../GameSession")
 LocalPlayerController = NodePath("../PlayerController")
 
-[node name="PlayerController" type="Node" parent="."]
+[node name="PlayerController" type="Node" parent="." unique_id=15120692]
 script = ExtResource("6_controller")

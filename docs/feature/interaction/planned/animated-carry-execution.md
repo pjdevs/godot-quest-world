@@ -341,11 +341,11 @@ QuestWorld carry vertical slice:
 - `quest_world/interactibles/carriable/TakeExecutor.cs`
 - `quest_world/interactibles/carriable/DropExecutor.cs`
   - become thin Running lifecycle adapters;
-- `quest_world/character/Character.cs`
+- `quest_world/character/QuestWorldCharacter.cs`
   - translate character simulation events into generic interrupts and wire carry presentation if needed;
 - `quest_world/character/Character.tscn`
   - add carry operation replication/presentation wiring and the required AnimationTree one-shot/blend;
-- `addons/dummy_character_plugin/scripts/CharacterAnimationController.cs`
+- `addons/dummy_character_plugin/runtime/CharacterAnimationController.cs`
   - consume semantic carry motion without taking ownership of carry gameplay;
 - `quest_world/tests/CarryComponentTest.cs`
   - keep all existing transaction tests and add operation timing/cancel behavior.

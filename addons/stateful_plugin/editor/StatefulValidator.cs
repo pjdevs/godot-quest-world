@@ -2,7 +2,7 @@
 
 using System.Collections.Generic;
 using Godot;
-using QuestWorld.State;
+using StatefulPlugin;
 
 namespace StatefulPlugin.Editor;
 

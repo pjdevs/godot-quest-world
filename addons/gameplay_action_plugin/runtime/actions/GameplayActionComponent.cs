@@ -1,10 +1,10 @@
 using System.Collections.Generic;
+using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Rules;
+using GameplayActionPlugin.Runtime.Runner;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Execution;
-using QuestWorld.GameplayActions.Runtime.Rules;
-using QuestWorld.GameplayActions.Runtime.Runner;
 
-namespace QuestWorld.GameplayActions.Runtime.Actions;
+namespace GameplayActionPlugin.Runtime.Actions;
 
 /// <summary>Authoritative host owning action occurrences, reservations and execution lifecycle.</summary>
 [GlobalClass]

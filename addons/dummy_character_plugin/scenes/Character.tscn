@@ -1,0 +1,185 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/runtime/Character.cs" id="1_8gjjr"]
+[ext_resource type="PackedScene" path="res://addons/dummy_character_plugin/scenes/ual_character.tscn" id="2_pbax8"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/runtime/CharacterCameraRig.cs" id="3_camera_rig"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/runtime/CharacterCameraEffects.cs" id="4_camera_effects"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/runtime/CharacterAnimationController.cs" id="5_animation_controller"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_woadn"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_character"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:rotation")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:velocity")
+properties/2/spawn = true
+properties/2/replication_mode = 1
+properties/3/path = NodePath("Visual:rotation")
+properties/3/spawn = true
+properties/3/replication_mode = 1
+properties/4/path = NodePath("CameraYaw:rotation")
+properties/4/spawn = true
+properties/4/replication_mode = 1
+properties/5/path = NodePath("CameraYaw/CameraPitch:rotation")
+properties/5/spawn = true
+properties/5/replication_mode = 1
+properties/6/path = NodePath(".:NetworkIsGrounded")
+properties/6/spawn = true
+properties/6/replication_mode = 1
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_wye7m"]
+animation = &"Jump"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_04ykt"]
+animation = &"Jump_Start"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_2fkie"]
+animation = &"Idle"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_pgkk8"]
+animation = &"Jog_Fwd"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_0egyl"]
+animation = &"Jog_Bwd"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_kksnx"]
+animation = &"Jog_Left"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_8y4fs"]
+animation = &"Jog_Right"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_mxxis"]
+animation = &"Sprint"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_land"]
+animation = &"Jump_Land"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_turn_left"]
+animation = &"Turn90_L"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_turn_right"]
+animation = &"Turn90_R"
+
+[sub_resource type="AnimationNodeBlendSpace2D" id="AnimationNodeBlendSpace2D_e3fll"]
+blend_point_0/node = SubResource("AnimationNodeAnimation_2fkie")
+blend_point_0/pos = Vector2(0, 0)
+blend_point_0/name = &"0"
+blend_point_1/node = SubResource("AnimationNodeAnimation_pgkk8")
+blend_point_1/pos = Vector2(0, 0.5)
+blend_point_1/name = &"1"
+blend_point_2/node = SubResource("AnimationNodeAnimation_0egyl")
+blend_point_2/pos = Vector2(0, -0.5)
+blend_point_2/name = &"2"
+blend_point_3/node = SubResource("AnimationNodeAnimation_kksnx")
+blend_point_3/pos = Vector2(-0.5, 0)
+blend_point_3/name = &"3"
+blend_point_4/node = SubResource("AnimationNodeAnimation_8y4fs")
+blend_point_4/pos = Vector2(0.5, 0)
+blend_point_4/name = &"4"
+blend_point_5/node = SubResource("AnimationNodeAnimation_mxxis")
+blend_point_5/pos = Vector2(0, 1)
+blend_point_5/name = &"5"
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_wu3k4"]
+xfade_time = 0.15
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_xok31"]
+xfade_time = 0.15
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_cv4cp"]
+xfade_time = 0.15
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_xgwmf"]
+xfade_time = 0.15
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_turn_left"]
+xfade_time = 0.1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_turn_right"]
+xfade_time = 0.1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_turn_left_to_locomotion"]
+xfade_time = 0.1
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_turn_right_to_locomotion"]
+xfade_time = 0.1
+
+[sub_resource type="AnimationNodeOneShot" id="AnimationNodeOneShot_landing"]
+fadein_time = 0.05
+fadeout_time = 0.25
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_character"]
+scale = 1.0
+
+[sub_resource type="AnimationNodeStateMachine" id="AnimationNodeStateMachine_gl8e6"]
+states/Fall/node = SubResource("AnimationNodeAnimation_wye7m")
+states/Fall/position = Vector2(500, 0)
+states/Jump/node = SubResource("AnimationNodeAnimation_04ykt")
+states/Jump/position = Vector2(250, -100)
+states/Locomotion/node = SubResource("AnimationNodeBlendSpace2D_e3fll")
+states/Locomotion/position = Vector2(0, 0)
+states/TurnLeft/node = SubResource("AnimationNodeAnimation_turn_left")
+states/TurnLeft/position = Vector2(-250, 0)
+states/TurnRight/node = SubResource("AnimationNodeAnimation_turn_right")
+states/TurnRight/position = Vector2(-250, 100)
+transitions = ["Start", "Locomotion", SubResource("AnimationNodeStateMachineTransition_wu3k4"), "Locomotion", "Jump", SubResource("AnimationNodeStateMachineTransition_xok31"), "Jump", "Fall", SubResource("AnimationNodeStateMachineTransition_cv4cp"), "Fall", "Locomotion", SubResource("AnimationNodeStateMachineTransition_xgwmf"), "Locomotion", "TurnLeft", SubResource("AnimationNodeStateMachineTransition_turn_left"), "Locomotion", "TurnRight", SubResource("AnimationNodeStateMachineTransition_turn_right"), "TurnLeft", "Locomotion", SubResource("AnimationNodeStateMachineTransition_turn_left_to_locomotion"), "TurnRight", "Locomotion", SubResource("AnimationNodeStateMachineTransition_turn_right_to_locomotion")]
+
+[sub_resource type="AnimationNodeBlendTree" id="AnimationNodeBlendTree_character"]
+nodes/StateMachine/node = SubResource("AnimationNodeStateMachine_gl8e6")
+nodes/StateMachine/position = Vector2(0, 0)
+nodes/LandOneShot/node = SubResource("AnimationNodeOneShot_landing")
+nodes/LandOneShot/position = Vector2(300, 0)
+nodes/LandAnimation/node = SubResource("AnimationNodeAnimation_land")
+nodes/LandAnimation/position = Vector2(0, 200)
+nodes/TimeScale/node = SubResource("AnimationNodeTimeScale_character")
+nodes/TimeScale/position = Vector2(550, 0)
+node_connections = [&"output", 0, &"TimeScale", &"TimeScale", 0, &"LandOneShot", &"LandOneShot", 0, &"StateMachine", &"LandOneShot", 1, &"LandAnimation"]
+
+[node name="Character" type="CharacterBody3D" unique_id=121661981]
+script = ExtResource("1_8gjjr")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1110473491]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_woadn")
+
+[node name="Visual" type="Node3D" parent="." unique_id=1801593725]
+
+[node name="UALCharacter" type="Node3D" parent="Visual" unique_id=1190744522 instance=ExtResource("2_pbax8")]
+rotation = Vector3(0, 3.1415927, 0)
+
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=825379154]
+tree_root = SubResource("AnimationNodeBlendTree_character")
+anim_player = NodePath("../Visual/UALCharacter/AnimationPlayer")
+active = true
+parameters/StateMachine/Locomotion/blend_position = Vector2(0, 0)
+parameters/TimeScale/scale = 1.5
+
+[node name="AnimationController" type="Node" parent="."]
+script = ExtResource("5_animation_controller")
+
+[node name="CameraYaw" type="Node3D" parent="." unique_id=902288204]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+script = ExtResource("3_camera_rig")
+
+[node name="CameraPitch" type="Node3D" parent="CameraYaw" unique_id=1989956000]
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraYaw/CameraPitch" unique_id=1407311582]
+spring_length = 4.0
+margin = 0.1
+
+[node name="CameraAnchor" type="Node3D" parent="CameraYaw/CameraPitch/SpringArm3D"]
+
+[node name="CameraEffects" type="Node3D" parent="CameraYaw/CameraPitch/SpringArm3D/CameraAnchor"]
+script = ExtResource("4_camera_effects")
+
+[node name="Camera3D" type="Camera3D" parent="CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects" unique_id=1024725433]
+current = false
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
+replication_config = SubResource("SceneReplicationConfig_character")

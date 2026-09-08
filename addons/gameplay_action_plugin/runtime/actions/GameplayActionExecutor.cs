@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.GameplayActions.Runtime.Actions;
+namespace GameplayActionPlugin.Runtime.Actions;
 
 /// <summary>Base class for the single gameplay command executed by one action occurrence.</summary>
 [GlobalClass]

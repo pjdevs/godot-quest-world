@@ -2,13 +2,13 @@
 
 using System.Collections.Generic;
 using Godot;
-using QuestWorld.GameplayActions.Integration.Stateful;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.GameplayActions.Runtime.Execution;
-using QuestWorld.GameplayActions.Runtime.Runner;
+using GameplayActionPlugin.Integration.Stateful;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Runner;
 
-namespace QuestWorld.GameplayActions.Editor;
+namespace GameplayActionPlugin.Editor;
 
 public static class GameplayActionValidator
 {

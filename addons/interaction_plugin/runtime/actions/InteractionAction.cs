@@ -1,10 +1,10 @@
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Actions;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.Interaction.Runtime.Interactive;
-using QuestWorld.Interaction.Runtime.Rules;
+using InteractionPlugin.Runtime.Interactive;
+using InteractionPlugin.Runtime.Rules;
 
-namespace QuestWorld.Interaction.Runtime.Actions;
+namespace InteractionPlugin.Runtime.Actions;
 
 /// <summary>Interaction specialization of one generic gameplay action occurrence.</summary>
 [GlobalClass]

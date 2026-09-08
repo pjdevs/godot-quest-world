@@ -5,15 +5,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Editor;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Rules;
+using GameplayActionPlugin.Runtime.Runner;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Editor;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.GameplayActions.Runtime.Execution;
-using QuestWorld.GameplayActions.Runtime.Rules;
-using QuestWorld.GameplayActions.Runtime.Runner;
 using static GdUnit4.Assertions;
 
 [TestSuite]

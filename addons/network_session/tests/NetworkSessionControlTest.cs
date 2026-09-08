@@ -4,7 +4,7 @@ using System;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
-using QuestWorld.Network;
+using NetworkPlugin;
 using static GdUnit4.Assertions;
 
 [TestSuite]

@@ -1,7 +1,7 @@
+using GameplayActionPlugin.Runtime.Bindings;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Bindings;
 
-namespace QuestWorld.GameplayActions.Runtime.Actions;
+namespace GameplayActionPlugin.Runtime.Actions;
 
 /// <summary>Gameplay action occurrence that may provide a default local input binding.</summary>
 [GlobalClass]

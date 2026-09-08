@@ -1,16 +1,16 @@
 namespace QuestWorld.Tests.GameplayActions;
 
 using System.Threading.Tasks;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Presentation.UI;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Rules;
+using GameplayActionPlugin.Runtime.Runner;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Presentation.UI;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.GameplayActions.Runtime.Rules;
-using QuestWorld.GameplayActions.Runtime.Runner;
-using QuestWorld.Interaction.Runtime.Interactive;
-using QuestWorld.Inventory;
+using InteractionPlugin.Runtime.Interactive;
+using InventoryPlugin;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -148,8 +148,8 @@ public sealed partial class GameplayActionPresenterTest
     [TestCase]
     public async Task CharacterPresentsAnInventoryGrantedActionThroughTheGenericPresenter()
     {
-        global::Character character = GD.Load<PackedScene>(CharacterScenePath)
-            .Instantiate<global::Character>();
+        global::QuestWorldCharacter character = GD.Load<PackedScene>(CharacterScenePath)
+            .Instantiate<global::QuestWorldCharacter>();
         Node3D battery = GD.Load<PackedScene>(BatteryScenePath).Instantiate<Node3D>();
         Node3D root = new() { Name = "World" };
         root.AddChild(character);

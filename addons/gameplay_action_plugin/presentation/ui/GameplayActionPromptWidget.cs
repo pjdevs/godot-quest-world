@@ -1,8 +1,8 @@
 using System.Linq;
+using GameplayActionPlugin;
 using Godot;
-using QuestWorld.GameplayActions;
 
-namespace QuestWorld.GameplayActions.Presentation.UI;
+namespace GameplayActionPlugin.Presentation.UI;
 
 /// <summary>Default prompt showing an action input and its allowed or blocked state.</summary>
 public partial class GameplayActionPromptWidget : PanelContainer, IGameplayActionWidget

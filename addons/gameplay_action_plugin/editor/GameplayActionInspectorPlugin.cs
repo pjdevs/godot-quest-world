@@ -2,7 +2,7 @@
 
 using Godot;
 
-namespace QuestWorld.GameplayActions.Editor;
+namespace GameplayActionPlugin.Editor;
 
 [Tool]
 public partial class GameplayActionInspectorPlugin : EditorInspectorPlugin

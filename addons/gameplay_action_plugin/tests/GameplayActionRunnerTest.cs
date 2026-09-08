@@ -1,13 +1,13 @@
 namespace QuestWorld.Tests.GameplayActions;
 
 using System.Threading.Tasks;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Access;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Runner;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Access;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.GameplayActions.Runtime.Runner;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -542,7 +542,7 @@ public sealed partial class GameplayActionRunnerTest
     }
 
     private sealed partial class MutableRule(GameplayActionAvailability result)
-        : QuestWorld.GameplayActions.Runtime.Rules.GameplayActionRule
+        : GameplayActionPlugin.Runtime.Rules.GameplayActionRule
     {
         public GameplayActionAvailability Result { get; set; } = result;
 

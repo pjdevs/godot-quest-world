@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Actions;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.Inventory;
+using InventoryPlugin;
 
 [GlobalClass]
 public partial class ItemActionGrant : Node

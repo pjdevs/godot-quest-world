@@ -1,8 +1,8 @@
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Execution;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Execution;
 
-namespace QuestWorld.GameplayActions.Integration.Stateful;
+namespace GameplayActionPlugin.Integration.Stateful;
 
 /// <summary>Timed variant of the generic three-state transition executor.</summary>
 [GlobalClass]

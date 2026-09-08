@@ -2,14 +2,14 @@ namespace QuestWorld.Tests.GameplayActions;
 
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Access;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Runner;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Access;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.GameplayActions.Runtime.Execution;
-using QuestWorld.GameplayActions.Runtime.Runner;
 using static GdUnit4.Assertions;
 
 [TestSuite]

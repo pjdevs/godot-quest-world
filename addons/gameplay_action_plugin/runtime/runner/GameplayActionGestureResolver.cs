@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using GameplayActionPlugin.Runtime.Bindings;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Bindings;
 
-namespace QuestWorld.GameplayActions.Runtime.Runner;
+namespace GameplayActionPlugin.Runtime.Runner;
 
 internal sealed class GameplayActionGestureResolver(
     GameplayActionBindingStore bindings,

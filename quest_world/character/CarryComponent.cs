@@ -1,5 +1,5 @@
 using Godot;
-using QuestWorld.Inventory;
+using InventoryPlugin;
 
 [GlobalClass]
 public partial class CarryComponent : Node, ICarrier

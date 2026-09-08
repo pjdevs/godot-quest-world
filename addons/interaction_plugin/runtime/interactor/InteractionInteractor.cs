@@ -1,15 +1,15 @@
 using System.Collections.Generic;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Access;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Runner;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Access;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.GameplayActions.Runtime.Runner;
-using QuestWorld.Interaction.Runtime.Actions;
-using QuestWorld.Interaction.Runtime.Detection;
-using QuestWorld.Interaction.Runtime.Interactive;
+using InteractionPlugin.Runtime.Actions;
+using InteractionPlugin.Runtime.Detection;
+using InteractionPlugin.Runtime.Interactive;
 
-namespace QuestWorld.Interaction.Runtime.Interactor;
+namespace InteractionPlugin.Runtime.Interactor;
 
 internal readonly record struct FocusChangeResult(
     InteractiveComponent? Previous,

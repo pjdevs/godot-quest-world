@@ -1,9 +1,9 @@
 namespace QuestWorld.Tests.GameSessionTests;
 
 using System.Threading.Tasks;
+using GameSessionPlugin;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameSession;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -17,7 +17,7 @@ public sealed class GameSessionNetworkTest
         GameSessionTestFixtures.NetworkFixture fixture = await GameSessionTestFixtures.Connect();
         try
         {
-            QuestWorld.GameSession.GameSession gameSession = fixture.Client.GameSession;
+            GameSessionPlugin.GameSession gameSession = fixture.Client.GameSession;
             PackedScene world = GD.Load<PackedScene>(
                 "res://addons/game_session/tests/fixtures/WorldA.tscn"
             );

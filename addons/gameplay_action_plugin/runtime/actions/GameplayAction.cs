@@ -1,7 +1,7 @@
+using GameplayActionPlugin.Runtime.Rules;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Rules;
 
-namespace QuestWorld.GameplayActions.Runtime.Actions;
+namespace GameplayActionPlugin.Runtime.Actions;
 
 /// <summary>One host-owned gameplay action occurrence with rules, executor and execution policy.</summary>
 [GlobalClass]

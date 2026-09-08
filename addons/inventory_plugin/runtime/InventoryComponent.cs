@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Godot;
 
-namespace QuestWorld.Inventory;
+namespace InventoryPlugin;
 
 /// <summary>Owns one authoritative collection of catalog-backed item quantities.</summary>
 /// <remarks>

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.GameplayActions;
+namespace GameplayActionPlugin;
 
 /// <summary>Read-only snapshot of one gameplay action offered through an input binding.</summary>
 /// <param name="ActionId">Stable gameplay and network identity of the action.</param>

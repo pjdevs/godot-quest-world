@@ -2,17 +2,17 @@
 
 using System.Collections.Generic;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Editor;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Execution;
-using QuestWorld.Interaction;
-using QuestWorld.Interaction.Integration.Stateful;
-using QuestWorld.Interaction.Presentation.UI;
-using QuestWorld.Interaction.Runtime.Actions;
-using QuestWorld.Interaction.Runtime.Detection;
-using QuestWorld.Interaction.Runtime.Interactive;
-using QuestWorld.Interaction.Runtime.Interactor;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Editor;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Execution;
+using InteractionPlugin;
+using InteractionPlugin.Integration.Stateful;
+using InteractionPlugin.Presentation.UI;
+using InteractionPlugin.Runtime.Actions;
+using InteractionPlugin.Runtime.Detection;
+using InteractionPlugin.Runtime.Interactive;
+using InteractionPlugin.Runtime.Interactor;
 
 namespace InteractionPlugin.Editor;
 

@@ -1,8 +1,8 @@
 namespace QuestWorld.Tests;
 
+using GameplayActionPlugin;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameplayActions;
 using static GdUnit4.Assertions;
 
 [TestSuite]

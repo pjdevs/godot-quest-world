@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Godot;
-using QuestWorld.Interaction.Runtime.Interactive;
+using InteractionPlugin.Runtime.Interactive;
 
-namespace QuestWorld.Interaction.Runtime.Detection;
+namespace InteractionPlugin.Runtime.Detection;
 
 /// <summary>Detects the targets a widened cast from the view sweeps through.</summary>
 /// <remarks>

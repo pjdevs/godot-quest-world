@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Execution;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.GameplayActions.Runtime.Execution;
 
-namespace QuestWorld.GameplayActions.Runtime.Runner;
+namespace GameplayActionPlugin.Runtime.Runner;
 
 internal sealed class GameplayActionRequestPipeline(
     GameplayActionRunner owner,

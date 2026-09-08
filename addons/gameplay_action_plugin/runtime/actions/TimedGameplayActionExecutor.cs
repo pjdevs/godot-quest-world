@@ -1,7 +1,7 @@
+using GameplayActionPlugin.Runtime.Execution;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Execution;
 
-namespace QuestWorld.GameplayActions.Runtime.Actions;
+namespace GameplayActionPlugin.Runtime.Actions;
 
 /// <summary>Gameplay executor base for authoritative linear-duration executions.</summary>
 [GlobalClass]

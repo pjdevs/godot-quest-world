@@ -3,25 +3,25 @@ namespace QuestWorld.Tests;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Editor;
+using GameplayActionPlugin.Integration.Stateful;
+using GameplayActionPlugin.Presentation.UI;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Execution;
 using GdUnit4;
 using Godot;
+using InteractionPlugin;
 using InteractionPlugin.Editor;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Editor;
-using QuestWorld.GameplayActions.Integration.Stateful;
-using QuestWorld.GameplayActions.Presentation.UI;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.GameplayActions.Runtime.Execution;
-using QuestWorld.Interaction;
-using QuestWorld.Interaction.Integration.Stateful;
-using QuestWorld.Interaction.Presentation.UI;
-using QuestWorld.Interaction.Runtime.Actions;
-using QuestWorld.Interaction.Runtime.Detection;
-using QuestWorld.Interaction.Runtime.Interactive;
-using QuestWorld.Interaction.Runtime.Interactor;
-using QuestWorld.Interaction.Runtime.Rules;
-using QuestWorld.State;
+using InteractionPlugin.Integration.Stateful;
+using InteractionPlugin.Presentation.UI;
+using InteractionPlugin.Runtime.Actions;
+using InteractionPlugin.Runtime.Detection;
+using InteractionPlugin.Runtime.Interactive;
+using InteractionPlugin.Runtime.Interactor;
+using InteractionPlugin.Runtime.Rules;
+using StatefulPlugin;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -243,14 +243,13 @@ public sealed partial class InteractionConfigurationTest
         AssertThat(typeof(InteractiveComponent).GetProperty("Stateful") == null).IsTrue();
         AssertThat(
                 typeof(InteractiveComponent).Assembly.GetType(
-                    "QuestWorld.Interaction.Runtime.State.InteractionStateful"
+                    "InteractionPlugin.Runtime.State.InteractionStateful"
                 ) == null
             )
             .IsTrue();
         AssertThat(
-                typeof(InteractiveComponent).Assembly.GetType(
-                    "QuestWorld.Interaction.InteractionState"
-                ) == null
+                typeof(InteractiveComponent).Assembly.GetType("InteractionPlugin.InteractionState")
+                    == null
             )
             .IsTrue();
     }

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.Inventory;
+namespace InventoryPlugin;
 
 /// <summary>Static presentation data for one inventory item.</summary>
 /// <remarks>

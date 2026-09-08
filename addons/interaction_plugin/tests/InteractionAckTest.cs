@@ -2,16 +2,16 @@ namespace QuestWorld.Tests;
 
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Execution;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.GameplayActions.Runtime.Execution;
-using QuestWorld.Interaction;
-using QuestWorld.Interaction.Runtime.Actions;
-using QuestWorld.Interaction.Runtime.Interactive;
-using QuestWorld.Interaction.Runtime.Interactor;
+using InteractionPlugin;
+using InteractionPlugin.Runtime.Actions;
+using InteractionPlugin.Runtime.Interactive;
+using InteractionPlugin.Runtime.Interactor;
 using static GdUnit4.Assertions;
 
 /// <summary>Covers the authoritative acknowledgement the requesting peer receives.</summary>

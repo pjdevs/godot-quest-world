@@ -1,18 +1,18 @@
 using System;
 using System.Collections.Generic;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Rules;
+using GameplayActionPlugin.Runtime.Runner;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.GameplayActions.Runtime.Execution;
-using QuestWorld.GameplayActions.Runtime.Rules;
-using QuestWorld.GameplayActions.Runtime.Runner;
-using QuestWorld.Interaction.Runtime.Actions;
-using QuestWorld.Interaction.Runtime.Detection;
-using QuestWorld.Interaction.Runtime.Interactor;
-using QuestWorld.Interaction.Runtime.Rules;
+using InteractionPlugin.Runtime.Actions;
+using InteractionPlugin.Runtime.Detection;
+using InteractionPlugin.Runtime.Interactor;
+using InteractionPlugin.Runtime.Rules;
 
-namespace QuestWorld.Interaction.Runtime.Interactive;
+namespace InteractionPlugin.Runtime.Interactive;
 
 /// <summary>
 /// Defines an interactable target, evaluates its rules, and owns the execution of its actions.

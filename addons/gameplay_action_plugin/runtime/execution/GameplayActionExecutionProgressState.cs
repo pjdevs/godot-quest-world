@@ -1,7 +1,7 @@
 using System;
 using Godot;
 
-namespace QuestWorld.GameplayActions.Runtime.Execution;
+namespace GameplayActionPlugin.Runtime.Execution;
 
 internal readonly record struct GameplayActionProgressSample(
     float ProgressBase,

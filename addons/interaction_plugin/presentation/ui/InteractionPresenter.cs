@@ -1,12 +1,12 @@
 using System.Collections.Generic;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Presentation.UI;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Presentation.UI;
-using QuestWorld.Interaction;
-using QuestWorld.Interaction.Runtime.Interactive;
-using QuestWorld.Interaction.Runtime.Interactor;
+using InteractionPlugin;
+using InteractionPlugin.Runtime.Interactive;
+using InteractionPlugin.Runtime.Interactor;
 
-namespace QuestWorld.Interaction.Presentation.UI;
+namespace InteractionPlugin.Presentation.UI;
 
 /// <summary>
 /// Creates and projects prompt and indication widgets for one locally controlled interactor.

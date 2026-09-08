@@ -1,8 +1,8 @@
 using System;
+using GameplayActionPlugin.Runtime.Actions;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Actions;
 
-namespace QuestWorld.GameplayActions.Runtime.Execution;
+namespace GameplayActionPlugin.Runtime.Execution;
 
 /// <summary>Outcome of attempting to attach a <see cref="TimedExecution"/> to a running action.</summary>
 public enum TimedExecutionStartResult

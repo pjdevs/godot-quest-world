@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 
-namespace QuestWorld.GameplayActions.Runtime.Runner;
+namespace GameplayActionPlugin.Runtime.Runner;
 
 internal sealed class GameplayActionGesturePlan(
     StringName input,

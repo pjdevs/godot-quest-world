@@ -1,9 +1,9 @@
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Actions;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.State;
+using StatefulPlugin;
 
-namespace QuestWorld.GameplayActions.Integration.Stateful;
+namespace GameplayActionPlugin.Integration.Stateful;
 
 /// <summary>Sets one Stateful component state as an instant gameplay action.</summary>
 [GlobalClass]

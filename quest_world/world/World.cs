@@ -9,8 +9,6 @@ public partial class World : Node3D, IWorldSpawner
 
     private readonly Dictionary<StringName, Spawner> _spawnersById = new();
 
-    public Spawner? PlayerSpawner => GetNodeOrNull<Spawner>("PlayerSpawner");
-
     public override void _Ready()
     {
         if (!IndexSpawners())

@@ -1,9 +1,9 @@
 namespace QuestWorld.Tests.Interaction;
 
+using GameplayActionPlugin.Runtime.Actions;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.Interaction.Runtime.Actions;
+using InteractionPlugin.Runtime.Actions;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -17,16 +17,12 @@ public sealed partial class InteractionInputMigrationTest
         InteractionAction action = AutoFree(new InteractionAction());
         System.Reflection.Assembly assembly = typeof(InteractionAction).Assembly;
         AssertThat(
-                assembly.GetType(
-                    "QuestWorld.Interaction.Runtime.Actions.InteractionActionDefinition"
-                )
+                assembly.GetType("InteractionPlugin.Runtime.Actions.InteractionActionDefinition")
                     is null
             )
             .IsTrue();
         AssertThat(
-                assembly.GetType(
-                    "QuestWorld.Interaction.Runtime.Actions.InteractionActionBindingConfig"
-                )
+                assembly.GetType("InteractionPlugin.Runtime.Actions.InteractionActionBindingConfig")
                     is null
             )
             .IsTrue();

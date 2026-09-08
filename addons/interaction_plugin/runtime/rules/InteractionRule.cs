@@ -1,11 +1,11 @@
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Rules;
+using GameplayActionPlugin.Runtime.Runner;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Rules;
-using QuestWorld.GameplayActions.Runtime.Runner;
-using QuestWorld.Interaction.Runtime.Actions;
-using QuestWorld.Interaction.Runtime.Interactor;
+using InteractionPlugin.Runtime.Actions;
+using InteractionPlugin.Runtime.Interactor;
 
-namespace QuestWorld.Interaction.Runtime.Rules;
+namespace InteractionPlugin.Runtime.Rules;
 
 /// <summary>
 /// Base resource for reusable gameplay conditions such as inventory, quest, or progression checks.

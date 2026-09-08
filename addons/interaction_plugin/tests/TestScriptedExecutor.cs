@@ -1,10 +1,10 @@
 namespace QuestWorld.Tests;
 
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Execution;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Execution;
-using QuestWorld.Interaction;
-using QuestWorld.Interaction.Runtime.Actions;
+using InteractionPlugin;
+using InteractionPlugin.Runtime.Actions;
 
 /// <summary>Executor whose single outcome and duration a test writes before the command runs.</summary>
 /// <remarks>

@@ -1,7 +1,7 @@
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Actions;
 
-namespace QuestWorld.GameplayActions;
+namespace GameplayActionPlugin;
 
 /// <summary>Availability result indicating that an action may be requested.</summary>
 public sealed record GameplayActionAllowed();

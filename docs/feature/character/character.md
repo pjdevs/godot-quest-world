@@ -3,10 +3,10 @@
 ## Purpose
 
 The reusable Godot 4.7 C# `CharacterBody3D` lives in `addons/dummy_character_plugin` under
-`QuestWorld.Character`. It provides camera-relative movement, FPS/TPS views, directional locomotion,
+`DummyCharacterPlugin`. It provides camera-relative movement, FPS/TPS views, directional locomotion,
 sprint, jump/fall/landing, turn-in-place, upper-body pitch and procedural camera effects.
 
-The game keeps a project `Character` subclass in `quest_world/character/Character.cs`. That subclass
+The game keeps a project `QuestWorldCharacter` subclass in `quest_world/character/QuestWorldCharacter.cs`. That subclass
 composes Inventory, Gameplay Action and Interaction around the generic character instead of making the
 addon depend on those systems.
 
@@ -154,7 +154,7 @@ custom prompt path.
 ### AD-10 — Network ownership is assigned by the integration layer
 
 The reusable Character does not infer a peer from its scene-tree name. QuestWorld's
-`QuestWorldNetworkPlayers` assigns `OwnerPeerId` and calls `SetMultiplayerAuthority()` when a player
+`PlayerCharacterSpawnManager` assigns `OwnerPeerId` and calls `SetMultiplayerAuthority()` when a player
 is spawned. This keeps peer identity explicit and prevents a generic Character addon from depending
 on QuestWorld's `Player_<peerId>` naming convention.
 

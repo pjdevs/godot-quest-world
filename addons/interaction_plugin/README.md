@@ -345,6 +345,6 @@ Required references are never guessed from parents, siblings, names, or recursiv
 
 ### Scope and example
 
-The core is namespaced under `QuestWorld.Interaction` and has no Quest, Inventory, Dialog, Character, Stateful, persistence, or transport abstraction dependency. The optional integration depends on the [`stateful_plugin`](../stateful_plugin/README.md), never the reverse.
+The core is namespaced under `InteractionPlugin` and has no Quest, Inventory, Dialog, Character, Stateful, persistence, or transport abstraction dependency. The optional integration depends on the [`stateful_plugin`](../stateful_plugin/README.md), never the reverse.
 
 [`integration/stateful/examples/LongActionExample.tscn`](integration/stateful/examples/LongActionExample.tscn) is the duplicable reference scene: explicit areas and anchor, default widgets, a replicated `StatefulComponent`, pure state rules, a replicated action with `GameplayActionExecutionSynchronizer`, and a `TimedTransitionStateGameplayActionExecutor`, with no script on the scene root. Instant project templates such as Door and Button keep the default requester-only execution presentation because their durable result is already carried by Stateful.

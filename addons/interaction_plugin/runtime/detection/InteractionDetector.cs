@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Godot;
-using QuestWorld.Interaction.Runtime.Interactive;
+using InteractionPlugin.Runtime.Interactive;
 
-namespace QuestWorld.Interaction.Runtime.Detection;
+namespace InteractionPlugin.Runtime.Detection;
 
 /// <summary>Replaceable source and spatial filter deciding what one interactor may interact with.</summary>
 /// <remarks>

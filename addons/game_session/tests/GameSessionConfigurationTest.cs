@@ -1,10 +1,10 @@
 namespace QuestWorld.Tests.GameSessionTests;
 
 using System.Threading.Tasks;
+using GameSessionPlugin;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameSession;
-using QuestWorld.Network;
+using NetworkPlugin;
 using static GdUnit4.Assertions;
 
 [TestSuite]

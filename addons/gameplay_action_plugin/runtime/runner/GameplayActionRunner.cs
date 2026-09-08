@@ -1,10 +1,10 @@
 using System.Collections.Generic;
+using GameplayActionPlugin.Runtime.Access;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Access;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
 
-namespace QuestWorld.GameplayActions.Runtime.Runner;
+namespace GameplayActionPlugin.Runtime.Runner;
 
 /// <summary>Owns local action bindings, input gestures, request access and requester networking.</summary>
 [GlobalClass]

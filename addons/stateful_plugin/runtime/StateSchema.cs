@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.State;
+namespace StatefulPlugin;
 
 /// <summary>
 /// Optional list of the state values a <see cref="StatefulComponent"/> is allowed to hold.

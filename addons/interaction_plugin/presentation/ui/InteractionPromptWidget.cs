@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.Interaction.Presentation.UI;
+namespace InteractionPlugin.Presentation.UI;
 
 /// <summary>Default target-level prompt frame showing the target name above its action prompts.</summary>
 /// <remarks>

@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using GameplayActionPlugin.Runtime.Actions;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Actions;
 
-namespace QuestWorld.GameplayActions.Runtime.Bindings;
+namespace GameplayActionPlugin.Runtime.Bindings;
 
 internal readonly record struct GameplayActionBindingCandidate(
     GameplayActionBinding Binding,

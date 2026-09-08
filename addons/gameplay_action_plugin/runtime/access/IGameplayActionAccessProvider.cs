@@ -1,7 +1,7 @@
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Runner;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Runner;
 
-namespace QuestWorld.GameplayActions.Runtime.Access;
+namespace GameplayActionPlugin.Runtime.Access;
 
 /// <summary>Read-only context used to validate runner access to an externally owned action.</summary>
 /// <param name="Runner">Runner requesting or sustaining access.</param>

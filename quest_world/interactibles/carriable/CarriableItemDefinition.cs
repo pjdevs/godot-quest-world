@@ -1,6 +1,6 @@
+using GameplayActionPlugin.Runtime.Bindings;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.Inventory;
+using InventoryPlugin;
 
 [GlobalClass]
 public partial class CarriableItemDefinition : InventoryItemDefinition

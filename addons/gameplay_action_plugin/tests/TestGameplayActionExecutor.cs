@@ -1,8 +1,8 @@
 namespace QuestWorld.Tests.GameplayActions;
 
 using System;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Actions;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Actions;
 
 public sealed partial class TestGameplayActionExecutor : GameplayActionExecutor
 {

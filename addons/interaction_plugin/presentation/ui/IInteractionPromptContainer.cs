@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.Interaction.Presentation.UI;
+namespace InteractionPlugin.Presentation.UI;
 
 /// <summary>Contract implemented by the target-level frame that stacks the action prompts.</summary>
 /// <remarks>

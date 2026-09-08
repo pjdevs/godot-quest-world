@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.Inventory;
+namespace InventoryPlugin;
 
 /// <summary>Read-only snapshot of one item stack.</summary>
 /// <param name="ItemId">Stable item identifier.</param>

@@ -2,9 +2,9 @@ namespace QuestWorld.Tests.GameSessionTests;
 
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using GameSessionPlugin;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameSession;
 using QuestWorld.Tests.GameSessionTests.Fixtures;
 using static GdUnit4.Assertions;
 

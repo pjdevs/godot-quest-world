@@ -1,9 +1,9 @@
+using GameplayActionPlugin;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.Interaction.Runtime.Rules;
-using QuestWorld.State;
+using InteractionPlugin.Runtime.Rules;
+using StatefulPlugin;
 
-namespace QuestWorld.Interaction.Integration.Stateful;
+namespace InteractionPlugin.Integration.Stateful;
 
 /// <summary>
 /// Makes one action available only while a <see cref="StatefulComponent"/> holds an expected state.

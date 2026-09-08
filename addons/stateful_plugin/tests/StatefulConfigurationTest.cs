@@ -3,7 +3,7 @@ namespace QuestWorld.Tests;
 using System.Linq;
 using GdUnit4;
 using Godot;
-using QuestWorld.State;
+using StatefulPlugin;
 using StatefulPlugin.Editor;
 using static GdUnit4.Assertions;
 

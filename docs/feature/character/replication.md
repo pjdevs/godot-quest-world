@@ -68,7 +68,7 @@ Godot recommande également de laisser le Character sous autorité serveur et de
 Le bootstrap de session est désormais séparé du monde : `Game.tscn` reste la scène persistante et
 `GameSession` remplace uniquement le monde enfant sous `WorldContainer`. Les `Character` sont donc
 des incarnations world-locales recréées à chaque travel, tandis que `QuestWorldPlayerState` porte les
-données persistantes du participant. La glue `QuestWorldNetworkPlayers` attend `PlayerWorldReady`
+données persistantes du participant. La glue `PlayerCharacterSpawnManager` attend `PlayerWorldReady`
 avant de créer une incarnation autoritaire et résout le contexte `IWorldSpawner` par l'ancêtre du
 Character, sans dépendre de `SceneTree.CurrentScene`.
 
@@ -182,10 +182,10 @@ Le bootstrap multi-instance est maintenant disponible pour expérimenter le flow
 
 - `NetworkLaunchOptions` parse les modes `offline`, `host`, `server` et `client`, ainsi que l’adresse, le port et le nombre maximal de joueurs.
 - `NetworkSession` configure `ENetMultiplayerPeer`, connecte les signaux de connexion et expose le cycle de vie de la session.
-- `QuestWorldNetworkPlayers` possède le cycle de vie des Characters joueurs côté QuestWorld.
+- `PlayerCharacterSpawnManager` possède le cycle de vie des Characters joueurs côté QuestWorld.
 - `Players` est le conteneur réseau stable et `PlayerSpawner` est un `MultiplayerSpawner` dont l’autorité est le serveur.
 - Le serveur ajoute un Character nommé `Player_<peerId>` à chaque connexion et le retire à la déconnexion. Les late joins reçoivent les joueurs déjà présents via le spawner.
-- `QuestWorldNetworkPlayers` assigne explicitement `OwnerPeerId` et appelle `SetMultiplayerAuthority()`
+- `PlayerCharacterSpawnManager` assigne explicitement `OwnerPeerId` et appelle `SetMultiplayerAuthority()`
   sur chaque Character spawné. La convention `Player_<peerId>` reste limitée à la glue QuestWorld ; le
   Character générique ne lit plus son nom pour déduire son propriétaire.
 - Seul le Character autoritaire local consomme l’input et exécute `Simulate()`. Un contrôleur local refuse également de posséder un Character distant.
@@ -212,7 +212,7 @@ godot --path . --scene res://quest_world/game/Game.tscn -- --client --connect=12
 godot --headless --path . --scene res://quest_world/game/Game.tscn -- --client --connect=127.0.0.1 --port=7000
 ```
 
-Sans mode explicite, la scène reste jouable en offline et `QuestWorldNetworkPlayers` crée localement
+Sans mode explicite, la scène reste jouable en offline et `PlayerCharacterSpawnManager` crée localement
 `Player_1`. Les peer IDs ENet clients étant aléatoires, ils sont ramenés à seize slots bornés
 uniquement pour le placement visuel de ce prototype.
 

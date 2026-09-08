@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.State;
+namespace StatefulPlugin;
 
 /// <summary>Result of a local state mutation, dispatched after the mutation completed.</summary>
 /// <param name="OldState">Value applied before the mutation.</param>

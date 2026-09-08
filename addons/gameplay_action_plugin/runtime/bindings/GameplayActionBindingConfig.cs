@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.GameplayActions.Runtime.Bindings;
+namespace GameplayActionPlugin.Runtime.Bindings;
 
 /// <summary>Authoring data copied into one local gameplay action input binding.</summary>
 [GlobalClass]

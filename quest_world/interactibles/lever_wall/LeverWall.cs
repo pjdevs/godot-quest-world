@@ -1,5 +1,5 @@
 using Godot;
-using QuestWorld.State;
+using StatefulPlugin;
 
 /// <summary>Wall raised and lowered by a remote button, owning its own transition duration.</summary>
 /// <remarks>

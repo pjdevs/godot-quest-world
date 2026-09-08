@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using GameplayActionPlugin.Runtime.Actions;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Actions;
 
-namespace QuestWorld.GameplayActions.Runtime.Execution;
+namespace GameplayActionPlugin.Runtime.Execution;
 
 internal readonly record struct GameplayActionExecutionPresentationSource(
     ulong ExecutionId,

@@ -1,5 +1,5 @@
 using Godot;
-using QuestWorld.State;
+using StatefulPlugin;
 
 public partial class Door : Node3D
 {

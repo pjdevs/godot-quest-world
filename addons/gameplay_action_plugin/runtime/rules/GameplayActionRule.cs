@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.GameplayActions.Runtime.Rules;
+namespace GameplayActionPlugin.Runtime.Rules;
 
 /// <summary>Pure ordered availability rule evaluated before an action is reserved.</summary>
 [GlobalClass]

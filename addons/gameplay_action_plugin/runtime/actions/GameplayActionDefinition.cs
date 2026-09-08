@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.GameplayActions.Runtime.Actions;
+namespace GameplayActionPlugin.Runtime.Actions;
 
 /// <summary>Reusable identity and player-facing metadata shared by gameplay action occurrences.</summary>
 [GlobalClass]

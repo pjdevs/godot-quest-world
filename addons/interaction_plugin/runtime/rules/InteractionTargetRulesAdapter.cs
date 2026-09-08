@@ -1,8 +1,8 @@
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Rules;
-using QuestWorld.Interaction.Runtime.Interactive;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Rules;
+using InteractionPlugin.Runtime.Interactive;
 
-namespace QuestWorld.Interaction.Runtime.Rules;
+namespace InteractionPlugin.Runtime.Rules;
 
 /// <summary>
 /// Injects one InteractiveComponent's target-level rules ahead of the authored action rules without

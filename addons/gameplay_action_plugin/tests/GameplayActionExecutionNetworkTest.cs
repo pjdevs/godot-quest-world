@@ -2,11 +2,11 @@ namespace QuestWorld.Tests.GameplayActions;
 
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Execution;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Execution;
 using static GdUnit4.Assertions;
 
 [TestSuite]

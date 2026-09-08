@@ -3,12 +3,11 @@ namespace QuestWorld.Tests.GameSessionTests;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using GameSessionPlugin;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameSession;
-using QuestWorld.Network;
+using NetworkPlugin;
 using static GdUnit4.Assertions;
-using GameSessionNode = QuestWorld.GameSession.GameSession;
 
 internal static partial class GameSessionTestFixtures
 {
@@ -101,9 +100,9 @@ internal static partial class GameSessionTestFixtures
         PackedScene? playerStateScene = null
     )
     {
-        GameSessionNode gameSession = rejectRemotePlayers
+        GameSession gameSession = rejectRemotePlayers
             ? new RejectingGameSession { Name = "GameSession" }
-            : new GameSessionNode { Name = "GameSession" };
+            : new GameSession { Name = "GameSession" };
         Node players = new() { Name = "Players" };
         MultiplayerSpawner playerStateSpawner = new()
         {
@@ -249,14 +248,14 @@ internal static partial class GameSessionTestFixtures
         }
     }
 
-    internal sealed record PeerSession(NetworkSession Network, GameSessionNode GameSession);
+    internal sealed record PeerSession(NetworkSession Network, GameSession GameSession);
 
     internal sealed record LatePeer(PeerSession Session, MultiplayerApi Api)
     {
-        public GameSessionNode GameSession => Session.GameSession;
+        public GameSession GameSession => Session.GameSession;
     }
 
-    private sealed partial class RejectingGameSession : GameSessionNode
+    private sealed partial class RejectingGameSession : GameSession
     {
         protected override bool CanJoin(long peerId, out string reason)
         {

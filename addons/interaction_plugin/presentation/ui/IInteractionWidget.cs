@@ -1,4 +1,4 @@
-namespace QuestWorld.Interaction.Presentation.UI;
+namespace InteractionPlugin.Presentation.UI;
 
 /// <summary>Contract implemented by target-level controls such as prompt containers and indications.</summary>
 public interface IInteractionWidget

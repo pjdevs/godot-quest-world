@@ -98,4 +98,4 @@ Internally, `ApplyStateCore` finishes the mutation before `DispatchStateTransiti
 
 ### Scope
 
-The runtime is namespaced under `QuestWorld.State`, creates no input action, and has no Interaction, Quest, Inventory, Dialog, Character, or storage dependency. `StatefulValidator` supplies editor diagnostics without making runtime scripts `[Tool]`.
+The runtime is namespaced under `StatefulPlugin`, creates no input action, and has no Interaction, Quest, Inventory, Dialog, Character, or storage dependency. `StatefulValidator` supplies editor diagnostics without making runtime scripts `[Tool]`.

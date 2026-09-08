@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Godot;
-using QuestWorld.Interaction.Runtime.Interactive;
+using InteractionPlugin.Runtime.Interactive;
 
-namespace QuestWorld.Interaction.Runtime.Detection;
+namespace InteractionPlugin.Runtime.Detection;
 
 /// <summary>Detects targets through the detection areas each target authors around itself.</summary>
 /// <remarks>

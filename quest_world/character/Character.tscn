@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://bh7me5hps2qp6"]
 
-[ext_resource type="PackedScene" path="res://addons/dummy_character_plugin/Character.tscn" id="1_base"]
-[ext_resource type="Script" uid="uid://bxsevotpa0f2d" path="res://quest_world/character/Character.cs" id="2_project_character"]
+[ext_resource type="PackedScene" path="res://addons/dummy_character_plugin/scenes/Character.tscn" id="1_base"]
+[ext_resource type="Script" uid="uid://bxsevotpa0f2d" path="res://quest_world/character/QuestWorldCharacter.cs" id="2_project_character"]
 [ext_resource type="Script" uid="uid://yahimljmakge" path="res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" id="3_interactor"]
 [ext_resource type="Script" uid="uid://drgb3r1muwfvx" path="res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" id="4_presenter"]
 [ext_resource type="PackedScene" uid="uid://m4nr18qimc1s" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="5_prompt_container"]

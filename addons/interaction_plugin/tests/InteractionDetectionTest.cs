@@ -2,16 +2,16 @@ namespace QuestWorld.Tests;
 
 using System.Linq;
 using System.Threading.Tasks;
+using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
 using GdUnit4;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.Interaction;
-using QuestWorld.Interaction.Runtime.Actions;
-using QuestWorld.Interaction.Runtime.Detection;
-using QuestWorld.Interaction.Runtime.Interactive;
-using QuestWorld.Interaction.Runtime.Interactor;
+using InteractionPlugin;
+using InteractionPlugin.Runtime.Actions;
+using InteractionPlugin.Runtime.Detection;
+using InteractionPlugin.Runtime.Interactive;
+using InteractionPlugin.Runtime.Interactor;
 using static GdUnit4.Assertions;
 
 [TestSuite]

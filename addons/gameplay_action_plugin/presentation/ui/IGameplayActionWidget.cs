@@ -1,6 +1,6 @@
-using QuestWorld.GameplayActions;
+using GameplayActionPlugin;
 
-namespace QuestWorld.GameplayActions.Presentation.UI;
+namespace GameplayActionPlugin.Presentation.UI;
 
 /// <summary>Contract implemented by controls presenting one gameplay action.</summary>
 public interface IGameplayActionWidget

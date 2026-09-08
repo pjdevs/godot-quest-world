@@ -1,7 +1,7 @@
 using System;
 using Godot;
 
-namespace QuestWorld.State;
+namespace StatefulPlugin;
 
 /// <summary>
 /// Owns one authoritative world-state value that can be replicated, persisted, and observed.

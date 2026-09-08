@@ -2,18 +2,18 @@ namespace QuestWorld.Tests;
 
 using System;
 using System.Threading.Tasks;
+using DummyCharacterPlugin;
 using GdUnit4;
 using Godot;
-using QuestWorld.Character;
 using static GdUnit4.Assertions;
-using Character = QuestWorld.Character.Character;
 
 [TestSuite]
 [RequireGodotRuntime]
 [TestCategory("Runtime")]
 public sealed class CharacterBehaviorTest
 {
-    private const string CharacterScenePath = "res://addons/dummy_character_plugin/Character.tscn";
+    private const string CharacterScenePath =
+        "res://addons/dummy_character_plugin/scenes/Character.tscn";
     private const string CameraEffectsPath =
         "CameraYaw/CameraPitch/SpringArm3D/CameraAnchor/CameraEffects";
     private const string CameraPath = $"{CameraEffectsPath}/Camera3D";

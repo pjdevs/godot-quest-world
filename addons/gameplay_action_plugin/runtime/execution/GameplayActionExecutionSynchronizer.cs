@@ -1,7 +1,7 @@
+using GameplayActionPlugin.Runtime.Actions;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Actions;
 
-namespace QuestWorld.GameplayActions.Runtime.Execution;
+namespace GameplayActionPlugin.Runtime.Execution;
 
 /// <summary>Replicates transient presentation for executions whose visibility is Replicated.</summary>
 /// <remarks>

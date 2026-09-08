@@ -1,8 +1,8 @@
+using GameplayActionPlugin;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.Interaction.Runtime.Rules;
+using InteractionPlugin.Runtime.Rules;
 
-namespace QuestWorld.Interaction.Examples.Rules;
+namespace InteractionPlugin.Examples.Rules;
 
 /// <summary>Rule that always blocks interaction with a configurable reason.</summary>
 [GlobalClass]

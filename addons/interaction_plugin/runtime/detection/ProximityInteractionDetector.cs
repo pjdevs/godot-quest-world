@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Godot;
-using QuestWorld.Interaction.Runtime.Interactive;
+using InteractionPlugin.Runtime.Interactive;
 
-namespace QuestWorld.Interaction.Runtime.Detection;
+namespace InteractionPlugin.Runtime.Detection;
 
 /// <summary>Detects every target within a radius, without any physics at all.</summary>
 /// <remarks>

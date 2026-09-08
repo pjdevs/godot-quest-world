@@ -1,5 +1,5 @@
+using GameSessionPlugin;
 using Godot;
-using QuestWorld.GameSession;
 
 namespace QuestWorld.Tests.GameSessionTests.Fixtures;
 

@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using Godot;
-using QuestWorld.GameplayActions;
-using QuestWorld.Interaction.Runtime.Actions;
-using QuestWorld.Interaction.Runtime.Interactive;
-using QuestWorld.Interaction.Runtime.Interactor;
+using GameplayActionPlugin;
+using InteractionPlugin.Runtime.Actions;
+using InteractionPlugin.Runtime.Interactive;
+using InteractionPlugin.Runtime.Interactor;
 
-namespace QuestWorld.Interaction;
+namespace InteractionPlugin;
 
 /// <summary>Tier one target reaches for one interactor, decided by its detector.</summary>
 /// <remarks>

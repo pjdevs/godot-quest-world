@@ -1,7 +1,7 @@
+using GameplayActionPlugin.Runtime.Actions;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Actions;
 
-namespace QuestWorld.GameplayActions.Runtime.Bindings;
+namespace GameplayActionPlugin.Runtime.Bindings;
 
 /// <summary>Local runtime binding referencing an action still owned by its original component.</summary>
 /// <param name="Id">Runner-local stable binding identifier.</param>

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.Inventory;
+namespace InventoryPlugin;
 
 /// <summary>Replicates an inventory spawn snapshot and consolidated on-change quantity batches.</summary>
 /// <remarks>

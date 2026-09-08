@@ -1,10 +1,10 @@
 using System.Collections.Generic;
+using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Runner;
 using Godot;
-using QuestWorld.GameplayActions.Runtime.Actions;
-using QuestWorld.GameplayActions.Runtime.Bindings;
-using QuestWorld.GameplayActions.Runtime.Runner;
 
-namespace QuestWorld.GameplayActions.Presentation.UI;
+namespace GameplayActionPlugin.Presentation.UI;
 
 /// <summary>Presents the locally owned, manually triggered actions of one gameplay runner.</summary>
 /// <remarks>

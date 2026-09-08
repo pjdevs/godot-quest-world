@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.Inventory;
+namespace InventoryPlugin;
 
 /// <summary>Declares every item identifier accepted by an inventory.</summary>
 [GlobalClass]

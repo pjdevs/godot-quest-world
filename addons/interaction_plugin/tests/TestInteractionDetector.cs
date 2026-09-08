@@ -2,9 +2,9 @@ namespace QuestWorld.Tests;
 
 using System.Collections.Generic;
 using Godot;
-using QuestWorld.Interaction;
-using QuestWorld.Interaction.Runtime.Detection;
-using QuestWorld.Interaction.Runtime.Interactive;
+using InteractionPlugin;
+using InteractionPlugin.Runtime.Detection;
+using InteractionPlugin.Runtime.Interactive;
 
 /// <summary>Detector whose source and tiers are written directly by a test.</summary>
 /// <remarks>

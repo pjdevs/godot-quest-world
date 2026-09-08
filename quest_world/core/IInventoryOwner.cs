@@ -1,4 +1,4 @@
-using QuestWorld.Inventory;
+using InventoryPlugin;
 
 public interface IInventoryOwner
 {

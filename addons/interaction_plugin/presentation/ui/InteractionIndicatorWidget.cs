@@ -1,6 +1,6 @@
 using Godot;
 
-namespace QuestWorld.Interaction.Presentation.UI;
+namespace InteractionPlugin.Presentation.UI;
 
 /// <summary>Default non-focused indication showing the name of a target that offers an action.</summary>
 /// <remarks>
