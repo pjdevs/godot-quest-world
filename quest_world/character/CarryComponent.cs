@@ -20,12 +20,13 @@ public partial class CarryComponent : Node, ICarrier
         get => _carriedItemId;
         set
         {
-            if (_carriedItemId == value)
+            StringName? normalized = value is StringName itemId && !itemId.IsEmpty ? itemId : null;
+            if (_carriedItemId == normalized)
             {
                 return;
             }
 
-            _carriedItemId = value;
+            _carriedItemId = normalized;
             OnCarriedItemChanged();
         }
     }

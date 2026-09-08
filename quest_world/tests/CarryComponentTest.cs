@@ -13,6 +13,18 @@ using static GdUnit4.Assertions;
 public sealed class CarryComponentTest
 {
     [TestCase]
+    public void EmptyReplicatedItemIdIsNormalizedToNoCarriedItem()
+    {
+        CarryComponent carry = new();
+
+        carry.CarriedItemId = new StringName();
+
+        AssertThat(carry.CarriedItemId is null).IsTrue();
+        AssertThat(carry.IsCarrying).IsFalse();
+        carry.Free();
+    }
+
+    [TestCase]
     public async Task CarryFlowKeepsInventoryWorldAndLifecycleConsistent()
     {
         StringName batteryId = new("battery");

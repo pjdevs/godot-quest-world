@@ -52,7 +52,9 @@ focused bindings, but owned actions remain usable when no interactive target is 
 `Character` is also the composition root for carry dependencies: it gives `CarryComponent` its
 orientation and current world spawner. The component itself performs no scene-tree lookup while taking
 or dropping. It drops server-side during `_ExitTree()` so removing a player does not silently destroy
-the carried world item.
+the carried world item. Godot may deserialize an absent synchronized `StringName` as an empty value;
+`CarryComponent` normalizes that sentinel to `null`, so an empty replicated slot never creates a visual
+or triggers a drop during teardown.
 
 ## Possession and controls
 
