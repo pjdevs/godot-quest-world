@@ -41,8 +41,9 @@ The large network suite follows the same rule and is split into `InteractionNetw
 ## Commands
 
 Task is the platform-agnostic entry point. It configures the correct Godot executable on macOS,
-expects `godot` on `PATH` on Windows and applies `gdunit4.runsettings`, whose `--headless` runtime
-parameter prevents GdUnit from opening a graphical Godot window.
+resolves the Linux executable from `PATH` to an absolute path for GdUnit, keeps the Windows
+`godot` convention, and applies `gdunit4.runsettings`, whose `--headless` runtime parameter
+prevents GdUnit from opening a graphical Godot window.
 
 ```text
 task --list

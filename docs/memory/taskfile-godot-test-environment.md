@@ -5,7 +5,8 @@ The GdUnit VSTest adapter needs `GODOT_BIN` when a suite has `[RequireGodotRunti
 `Taskfile.yml` therefore routes test execution through platform-specific helper tasks and sets `GODOT_BIN` at the task level:
 
 - macOS: `/Applications/Godot_mono.app/Contents/MacOS/Godot`
-- Windows and Linux: `godot`, resolved through `PATH`
+- Windows: `godot`, resolved through `PATH` by the test environment
+- Linux: `command -v godot`, resolved to an absolute executable path before invoking the adapter
 
 `[RequireGodotRuntime]` only tells the adapter to start Godot; it does not imply headless execution.
 Every test command therefore also loads `gdunit4.runsettings`, which passes `--headless` through the

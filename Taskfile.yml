@@ -70,6 +70,9 @@ tasks:
       - task: test:command:windows
         vars:
           DOTNET_ARGS: '{{.DOTNET_ARGS}}'
+      - task: test:command:linux
+        vars:
+          DOTNET_ARGS: '{{.DOTNET_ARGS}}'
 
   test:command:darwin:
     internal: true
@@ -81,9 +84,18 @@ tasks:
 
   test:command:windows:
     internal: true
-    platforms: [windows, linux]
+    platforms: [windows]
     env:
       GODOT_BIN: godot
+    cmds:
+      - dotnet test {{.PROJECT}} --settings gdunit4.runsettings {{.DOTNET_ARGS}}
+
+  test:command:linux:
+    internal: true
+    platforms: [linux]
+    env:
+      GODOT_BIN:
+        sh: command -v godot
     cmds:
       - dotnet test {{.PROJECT}} --settings gdunit4.runsettings {{.DOTNET_ARGS}}
 
