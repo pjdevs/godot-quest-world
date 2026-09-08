@@ -39,3 +39,7 @@
 - Faire assert au harnais qu'il est vraiment distribué (`serverApi.IsServer()` vrai, les deux autres
   faux, et l'executor qui n'a tourné que sur l'autorité). Sans ces gardes, une régression sur l'autorité
   ferait dégénérer toute la suite en appels locaux, verte et sans valeur.
+- Une barrière réseau de test ne doit pas arrêter `SimulateFrames` dès que le serveur atteint son état
+  final si le serveur vient seulement d'envoyer la notification de completion. Attendre explicitement
+  l'état final de chaque pair concerné avant d'asserter évite une dépendance à la même frame qui devient
+  intermittente sous charge.

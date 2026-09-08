@@ -1,7 +1,7 @@
 # Game session replication findings
 
 - The world and travel RPC are both reliable, but the client can observe the native world spawn before
-  `BeginTravel`. A client that is already locally ready must re-send `TravelReady` when `BeginTravel`
+  `BeginTravel`. A client that is already locally ready must re-send `WorldReady` when `BeginTravel`
   arrives so the server barrier cannot remain pending.
 - `MultiplayerSpawner.Spawned` is a local lifecycle signal and is not a safe source of current state for
   a persistent integration node. Re-scan the current world spawner root after binding so a Character

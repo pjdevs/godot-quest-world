@@ -1,9 +1,9 @@
 # Generic Game Session
 
-> **Status: planned.** This proposal defines the generic `game_session` addon that sits above
-> `network_session`. It owns persistent participants, `PlayerState` lifecycle, synchronized world travel
-> and the world-load barrier required before gameplay resumes. It deliberately stops before generic
-> GameMode, GameState, Pawn spawning or project-specific match rules.
+> **Status: implemented and verified.** This design defines the generic `game_session` addon that sits
+> above `network_session`. It owns persistent participants, `PlayerState` lifecycle, synchronized world
+> travel and the world-load barrier required before gameplay resumes. It deliberately stops before
+> generic GameMode, GameState, Pawn spawning or project-specific match rules.
 
 ## Motivation
 
@@ -587,7 +587,7 @@ world enters tree on each peer
 local GameSession observes managed world ready
     ↓
 server sets local-ready
-remote clients send reliable TravelReady(TravelId)
+remote clients send reliable WorldReady(TravelId)
     ↓
 server waits for local-ready + all required remote peers
     ↓
@@ -990,13 +990,8 @@ World scenes return to world-local concerns:
 
 They do not own network/game-session lifetime.
 
-Any code using:
-
-```text
-GetTree().CurrentScene as IWorldSpawner
-```
-
-must be replaced by explicit current-world context/injection because `CurrentScene` becomes persistent
+Any code treating `SceneTree.CurrentScene` as the active `IWorldSpawner` must use explicit
+current-world context/injection instead because `CurrentScene` becomes persistent
 `Game.tscn`.
 
 # Suggested addon boundary
