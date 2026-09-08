@@ -19,7 +19,8 @@ internal static partial class GameSessionTestFixtures
         bool acceptingPlayers = true,
         bool rejectRemotePlayers = false,
         bool dedicatedServer = false,
-        Action<PeerSession, PeerSession>? beforeStart = null
+        Action<PeerSession, PeerSession>? beforeStart = null,
+        PackedScene? playerStateScene = null
     )
     {
         int port = _nextPort++;
@@ -39,13 +40,15 @@ internal static partial class GameSessionTestFixtures
             serverBranch,
             acceptingPlayers,
             rejectRemotePlayers,
-            new NetworkSession { Name = "NetworkSession" }
+            new NetworkSession { Name = "NetworkSession" },
+            playerStateScene
         );
         PeerSession client = BuildPeer(
             clientBranch,
             true,
             false,
-            new NetworkSession { Name = "NetworkSession" }
+            new NetworkSession { Name = "NetworkSession" },
+            playerStateScene
         );
         await runner.SimulateFrames(1);
 
@@ -94,7 +97,8 @@ internal static partial class GameSessionTestFixtures
         Node branch,
         bool acceptingPlayers,
         bool rejectRemotePlayers,
-        NetworkSession network
+        NetworkSession network,
+        PackedScene? playerStateScene = null
     )
     {
         GameSessionNode gameSession = rejectRemotePlayers
@@ -118,7 +122,7 @@ internal static partial class GameSessionTestFixtures
         gameSession.AddChild(worldSpawner);
         gameSession.NetworkSession = network;
         gameSession.Players = players;
-        gameSession.PlayerStateScene = CreatePlayerStateScene();
+        gameSession.PlayerStateScene = playerStateScene ?? CreatePlayerStateScene();
         gameSession.PlayerStateSpawner = playerStateSpawner;
         gameSession.WorldContainer = worldContainer;
         gameSession.WorldSpawner = worldSpawner;
@@ -176,7 +180,10 @@ internal static partial class GameSessionTestFixtures
 
         public async Task Pump(int frames = 1) => await Runner.SimulateFrames((uint)frames);
 
-        public async Task<LatePeer> JoinLate(string name = "LateClient")
+        public async Task<LatePeer> JoinLate(
+            string name = "LateClient",
+            Action<PeerSession>? beforeStart = null
+        )
         {
             Node branch = new() { Name = name };
             Root.AddChild(branch);
@@ -185,9 +192,11 @@ internal static partial class GameSessionTestFixtures
                 branch,
                 true,
                 false,
-                new NetworkSession { Name = "NetworkSession" }
+                new NetworkSession { Name = "NetworkSession" },
+                Server.GameSession.PlayerStateScene
             );
             await Pump();
+            beforeStart?.Invoke(late);
             AssertThat(late.GameSession.Initialize()).IsTrue();
             AssertThat(late.Network.Start(CreateClientOptions(Port))).IsTrue();
 

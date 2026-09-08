@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
 using QuestWorld.GameSession;
+using QuestWorld.Tests.GameSessionTests.Fixtures;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -12,6 +13,12 @@ using static GdUnit4.Assertions;
 [TestCategory("Network")]
 public sealed class GameSessionTravelNetworkTest
 {
+    private const string NestedWorldPath =
+        "res://addons/game_session/tests/fixtures/NestedSpawnerWorld.tscn";
+
+    private const string ReplicatedPlayerStatePath =
+        "res://addons/game_session/tests/fixtures/ReplicatedTestPlayerState.tscn";
+
     [TestCase]
     public async Task ClientDisconnectDuringTravelClearsRuntimeSession()
     {
@@ -113,8 +120,10 @@ public sealed class GameSessionTravelNetworkTest
                 }
             };
 
-            GameSessionTestFixtures.LatePeer late = await fixture.JoinLate();
-            late.GameSession.WorldLoaded += (_, _) => lateEvents.Add("late-loaded");
+            GameSessionTestFixtures.LatePeer late = await fixture.JoinLate(
+                beforeStart: lateSession =>
+                    lateSession.GameSession.WorldLoaded += (_, _) => lateEvents.Add("late-loaded")
+            );
             await fixture.Pump(24);
 
             AssertThat(fixture.Server.GameSession.PlayerStates.Count).IsEqual(3);
@@ -123,7 +132,112 @@ public sealed class GameSessionTravelNetworkTest
             AssertThat(late.GameSession.CurrentWorldPath).IsEqual(world.ResourcePath);
             AssertThat(late.GameSession.CurrentWorld is not null).IsTrue();
             AssertThat(existingClientCompletions).IsEqual(0);
-            AssertThat(lateEvents.Contains("server-ready")).IsTrue();
+            AssertThat(lateEvents).IsEqual(new List<string> { "late-loaded", "server-ready" });
+        }
+        finally
+        {
+            fixture.Close();
+        }
+    }
+
+    [TestCase]
+    public async Task LateJoinReconstructsCurrentWorldBeforeNestedSpawnHistory()
+    {
+        GameSessionTestFixtures.NetworkFixture fixture = await GameSessionTestFixtures.Connect();
+        try
+        {
+            PackedScene nestedWorld = GD.Load<PackedScene>(NestedWorldPath);
+            AssertThat(fixture.Server.GameSession.Travel(nestedWorld)).IsTrue();
+            await WaitForActive(fixture);
+
+            NestedSpawnerWorld serverWorld = (NestedSpawnerWorld)
+                fixture.Server.GameSession.CurrentWorld!;
+            AssertThat(serverWorld.SpawnReplicatedNode("ExistingNestedActor") is not null).IsTrue();
+            await fixture.Pump(8);
+
+            GameSessionTestFixtures.LatePeer late = await fixture.JoinLate();
+            await fixture.Pump(24);
+
+            AssertThat(late.GameSession.CurrentWorld is NestedSpawnerWorld).IsTrue();
+            AssertThat(
+                    late.GameSession.CurrentWorld!.GetNode("NestedRoot")
+                        .HasNode("ExistingNestedActor")
+                )
+                .IsTrue();
+        }
+        finally
+        {
+            fixture.Close();
+        }
+    }
+
+    [TestCase]
+    public async Task DerivedPlayerStatePropertySurvivesTwoWorldTravels()
+    {
+        PackedScene playerStateScene = GD.Load<PackedScene>(ReplicatedPlayerStatePath);
+        GameSessionTestFixtures.NetworkFixture fixture = await GameSessionTestFixtures.Connect(
+            playerStateScene: playerStateScene
+        );
+        try
+        {
+            AssertThat(
+                    fixture.Server.GameSession.TryGetPlayerStateByPeerId(
+                        1,
+                        out PlayerState? serverPlayer
+                    )
+                )
+                .IsTrue();
+            ReplicatedTestPlayerState state = (ReplicatedTestPlayerState)serverPlayer!;
+            ulong instanceId = state.GetInstanceId();
+            state.SelectionId = "red";
+
+            for (int frame = 0; frame < 60; frame++)
+            {
+                await fixture.Pump();
+                if (
+                    fixture.Client.GameSession.TryGetPlayerStateByPeerId(
+                        1,
+                        out PlayerState? remotePlayer
+                    )
+                    && remotePlayer is ReplicatedTestPlayerState remoteState
+                    && remoteState.SelectionId == "red"
+                )
+                {
+                    break;
+                }
+            }
+
+            PackedScene firstWorld = GD.Load<PackedScene>(
+                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+            );
+            AssertThat(fixture.Server.GameSession.Travel(firstWorld)).IsTrue();
+            await WaitForActive(fixture);
+            PackedScene secondWorld = GD.Load<PackedScene>(
+                "res://addons/game_session/tests/fixtures/WorldB.tscn"
+            );
+            AssertThat(fixture.Server.GameSession.Travel(secondWorld)).IsTrue();
+            await WaitForActive(fixture);
+
+            AssertThat(
+                    fixture.Server.GameSession.TryGetPlayerStateByPeerId(
+                        1,
+                        out PlayerState? afterPlayer
+                    )
+                )
+                .IsTrue();
+            ReplicatedTestPlayerState after = (ReplicatedTestPlayerState)afterPlayer!;
+            AssertThat(after.GetInstanceId()).IsEqual(instanceId);
+            AssertThat(after.SelectionId).IsEqual("red");
+
+            AssertThat(
+                    fixture.Client.GameSession.TryGetPlayerStateByPeerId(
+                        1,
+                        out PlayerState? remoteAfterPlayer
+                    )
+                )
+                .IsTrue();
+            ReplicatedTestPlayerState remoteAfter = (ReplicatedTestPlayerState)remoteAfterPlayer!;
+            AssertThat(remoteAfter.SelectionId).IsEqual("red");
         }
         finally
         {
@@ -174,16 +288,19 @@ public sealed class GameSessionTravelNetworkTest
         {
             long disconnectedPeerId = fixture.ClientApi.GetUniqueId();
             bool disconnectedParticipantBecameReady = false;
+            int hostReadyCount = 0;
             fixture.Server.GameSession.PlayerWorldReady += playerState =>
             {
                 if (playerState.PeerId == disconnectedPeerId)
                 {
                     disconnectedParticipantBecameReady = true;
                 }
+                else if (playerState.PeerId == 1)
+                {
+                    hostReadyCount++;
+                }
             };
-            PackedScene world = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldB.tscn"
-            );
+            PackedScene world = GD.Load<PackedScene>(NestedWorldPath);
 
             AssertThat(fixture.Server.GameSession.Travel(world)).IsTrue();
             fixture.Client.Network.Stop();
@@ -192,6 +309,8 @@ public sealed class GameSessionTravelNetworkTest
             AssertThat(fixture.Server.GameSession.State).IsEqual(GameSessionState.Active);
             AssertThat(fixture.Server.GameSession.PlayerStates.Count).IsEqual(1);
             AssertThat(disconnectedParticipantBecameReady).IsFalse();
+            AssertThat(hostReadyCount).IsEqual(1);
+            AssertThat(fixture.Server.GameSession.WorldContainer!.GetChildCount()).IsEqual(1);
         }
         finally
         {
@@ -291,13 +410,28 @@ public sealed class GameSessionTravelNetworkTest
 
     private static async Task WaitForActive(GameSessionTestFixtures.NetworkFixture fixture)
     {
-        for (int frame = 0; frame < 120; frame++)
+        for (int frame = 0; frame < 240; frame++)
         {
             await fixture.Pump();
             if (fixture.Server.GameSession.State == GameSessionState.Active)
             {
                 break;
             }
+        }
+
+        if (fixture.Server.GameSession.State != GameSessionState.Active)
+        {
+            string diagnostic =
+                $"server state={fixture.Server.GameSession.State}, "
+                + $"ready={fixture.Server.GameSession.IsLocalWorldReady}, "
+                + $"travel={fixture.Server.GameSession.CurrentTravelId}, "
+                + $"players={fixture.Server.GameSession.PlayerStates.Count}; "
+                + $"client state={fixture.Client.GameSession.State}, "
+                + $"ready={fixture.Client.GameSession.IsLocalWorldReady}, "
+                + $"travel={fixture.Client.GameSession.CurrentTravelId}, "
+                + $"world={fixture.Client.GameSession.CurrentWorldPath}, "
+                + $"peers={fixture.ServerApi.GetPeers().Length}";
+            throw new System.InvalidOperationException($"Travel timed out: {diagnostic}");
         }
 
         AssertThat(fixture.Server.GameSession.State).IsEqual(GameSessionState.Active);

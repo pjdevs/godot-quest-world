@@ -1,0 +1,12 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/game_session/tests/fixtures/NestedSpawnerWorld.cs" id="1_world"]
+
+[node name="NestedSpawnerWorld" type="Node3D"]
+script = ExtResource("1_world")
+
+[node name="NestedRoot" type="Node3D" parent="."]
+
+[node name="NestedSpawner" type="MultiplayerSpawner" parent="."]
+_spawnable_scenes = PackedStringArray("res://addons/game_session/tests/fixtures/NestedSpawnedNode.tscn")
+spawn_path = NodePath("../NestedRoot")
