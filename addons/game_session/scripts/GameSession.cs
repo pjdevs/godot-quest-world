@@ -453,8 +453,6 @@ public partial class GameSession : Node
         {
             _pendingLateJoinPeers.Add(peerId);
         }
-
-        EmitSignal(SignalName.PlayerJoined, playerState);
     }
 
     private Node SpawnPlayerState(Variant data)
@@ -826,17 +824,19 @@ public partial class GameSession : Node
         }
 
         playerState.TreeExiting += () => UnregisterPlayerState(playerState);
+        EmitSignal(SignalName.PlayerJoined, playerState);
         return true;
     }
 
-    private void UnregisterPlayerState(PlayerState playerState)
+    private bool UnregisterPlayerState(PlayerState playerState)
     {
         if (!_participants.Remove(playerState))
         {
-            return;
+            return false;
         }
 
         EmitSignal(SignalName.PlayerLeft, playerState.ParticipantId, playerState.PeerId);
+        return true;
     }
 
     private void RemoveParticipant(long peerId)
@@ -846,7 +846,11 @@ public partial class GameSession : Node
             return;
         }
 
-        playerState.QueueFree();
+        UnregisterPlayerState(playerState);
+        if (IsInstanceValid(playerState))
+        {
+            playerState.QueueFree();
+        }
     }
 
     private void UpdateTransportAdmission()

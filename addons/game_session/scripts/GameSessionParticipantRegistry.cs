@@ -31,11 +31,20 @@ internal sealed class GameSessionParticipantRegistry
 
     public bool Remove(PlayerState playerState)
     {
-        if (!_byParticipantId.Remove(playerState.ParticipantId))
+        if (
+            !_byParticipantId.TryGetValue(
+                playerState.ParticipantId,
+                out PlayerState? participantMatch
+            )
+            || !ReferenceEquals(participantMatch, playerState)
+            || !_byPeerId.TryGetValue(playerState.PeerId, out PlayerState? peerMatch)
+            || !ReferenceEquals(peerMatch, playerState)
+        )
         {
             return false;
         }
 
+        _byParticipantId.Remove(playerState.ParticipantId);
         _byPeerId.Remove(playerState.PeerId);
         _players.Remove(playerState);
         return true;

@@ -10,7 +10,7 @@ using static GdUnit4.Assertions;
 [TestSuite]
 [RequireGodotRuntime]
 [TestCategory("Runtime")]
-public sealed class GameSessionParticipantTest
+public sealed partial class GameSessionParticipantTest
 {
     [TestCase]
     public async Task OfflineInitializationCreatesOnePersistentParticipant()
@@ -27,7 +27,8 @@ public sealed class GameSessionParticipantTest
         PlayerState playerState = fixture.GameSession.PlayerStates[0];
         AssertThat(playerState.ParticipantId).IsEqual(1L);
         AssertThat(playerState.PeerId).IsEqual(1L);
-        AssertThat(playerState.IdentityWasInitializedBeforeReady).IsTrue();
+        AssertThat(playerState is ReadyProbePlayerState).IsTrue();
+        AssertThat(((ReadyProbePlayerState)playerState).HadIdentityInReady).IsTrue();
         AssertThat(fixture.GameSession.TryGetPlayerStateByPeerId(1, out PlayerState? byPeer))
             .IsTrue();
         AssertThat(byPeer == playerState).IsTrue();
@@ -41,6 +42,27 @@ public sealed class GameSessionParticipantTest
         AssertThat(byParticipant == playerState).IsTrue();
 
         fixture.Network.Stop();
+    }
+
+    [TestCase]
+    public void StaleReplicaCannotRemoveItsReplacementFromTheRegistry()
+    {
+        GameSessionParticipantRegistry registry = new();
+        PlayerState stale = new();
+        stale.InitializeIdentity(1, 1);
+        PlayerState replacement = new();
+        replacement.InitializeIdentity(1, 1);
+
+        AssertThat(registry.TryAdd(stale)).IsTrue();
+        registry.Clear();
+        AssertThat(registry.TryAdd(replacement)).IsTrue();
+
+        AssertThat(registry.Remove(stale)).IsFalse();
+        AssertThat(registry.TryGetByParticipantId(1, out PlayerState? registered)).IsTrue();
+        AssertThat(ReferenceEquals(registered, replacement)).IsTrue();
+
+        stale.Free();
+        replacement.Free();
     }
 
     private static Fixture CreateFixture()
@@ -79,7 +101,7 @@ public sealed class GameSessionParticipantTest
 
     private static PackedScene CreatePlayerStateScene()
     {
-        PlayerState playerState = new();
+        ReadyProbePlayerState playerState = new();
         PackedScene scene = new();
         scene.Pack(playerState);
         playerState.Free();
@@ -96,4 +118,14 @@ public sealed class GameSessionParticipantTest
             : throw new System.InvalidOperationException(error);
 
     private sealed record Fixture(Node Root, NetworkSession Network, GameSession GameSession);
+
+    private sealed partial class ReadyProbePlayerState : PlayerState
+    {
+        public bool HadIdentityInReady { get; private set; }
+
+        public override void _Ready()
+        {
+            HadIdentityInReady = ParticipantId > 0 && PeerId > 0;
+        }
+    }
 }

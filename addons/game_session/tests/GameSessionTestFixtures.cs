@@ -1,5 +1,6 @@
 namespace QuestWorld.Tests.GameSessionTests;
 
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using GdUnit4;
@@ -17,7 +18,8 @@ internal static partial class GameSessionTestFixtures
     public static async Task<NetworkFixture> Connect(
         bool acceptingPlayers = true,
         bool rejectRemotePlayers = false,
-        bool dedicatedServer = false
+        bool dedicatedServer = false,
+        Action<PeerSession, PeerSession>? beforeStart = null
     )
     {
         int port = _nextPort++;
@@ -46,6 +48,8 @@ internal static partial class GameSessionTestFixtures
             new NetworkSession { Name = "NetworkSession" }
         );
         await runner.SimulateFrames(1);
+
+        beforeStart?.Invoke(server, client);
 
         AssertThat(server.GameSession.Initialize()).IsTrue();
         AssertThat(client.GameSession.Initialize()).IsTrue();

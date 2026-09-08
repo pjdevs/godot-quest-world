@@ -12,6 +12,53 @@ using static GdUnit4.Assertions;
 public sealed class GameSessionNetworkTest
 {
     [TestCase]
+    public async Task PlayerJoinedAndLeftAreLocalReplicaLifecycleSignals()
+    {
+        int serverJoined = 0;
+        int clientJoined = 0;
+        int serverLeft = 0;
+        int clientLeft = 0;
+        GameSessionTestFixtures.NetworkFixture fixture = await GameSessionTestFixtures.Connect(
+            beforeStart: (server, client) =>
+            {
+                server.GameSession.PlayerJoined += _ => serverJoined++;
+                client.GameSession.PlayerJoined += _ => clientJoined++;
+                server.GameSession.PlayerLeft += (_, _) => serverLeft++;
+                client.GameSession.PlayerLeft += (_, _) => clientLeft++;
+            }
+        );
+        try
+        {
+            AssertThat(serverJoined).IsEqual(2);
+            AssertThat(clientJoined).IsEqual(2);
+
+            GameSessionTestFixtures.LatePeer late = await fixture.JoinLate();
+            AssertThat(serverJoined).IsEqual(3);
+            AssertThat(clientJoined).IsEqual(3);
+
+            late.Session.Network.Stop();
+            for (int frame = 0; frame < 120; frame++)
+            {
+                await fixture.Pump();
+                if (
+                    fixture.Server.GameSession.PlayerStates.Count == 2
+                    && fixture.Client.GameSession.PlayerStates.Count == 2
+                )
+                {
+                    break;
+                }
+            }
+
+            AssertThat(serverLeft).IsEqual(1);
+            AssertThat(clientLeft).IsEqual(1);
+        }
+        finally
+        {
+            fixture.Close();
+        }
+    }
+
+    [TestCase]
     public async Task ServerAdmitsRemotePeerAndReplicatesExactlyOnePersistentState()
     {
         GameSessionTestFixtures.NetworkFixture fixture = await GameSessionTestFixtures.Connect();

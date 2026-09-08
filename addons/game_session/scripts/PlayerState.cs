@@ -9,8 +9,6 @@ public partial class PlayerState : Node
 
     public long PeerId { get; private set; }
 
-    public bool IdentityWasInitializedBeforeReady { get; private set; }
-
     public void InitializeIdentity(long participantId, long peerId)
     {
         if (participantId <= 0)
@@ -32,10 +30,5 @@ public partial class PlayerState : Node
 
         ParticipantId = participantId;
         PeerId = peerId;
-    }
-
-    public override void _Ready()
-    {
-        IdentityWasInitializedBeforeReady = ParticipantId > 0 && PeerId > 0;
     }
 }

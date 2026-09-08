@@ -16,7 +16,9 @@ the subsequent `NetworkSession.Connected` signal starts the runtime session and 
 
 `PlayerState` receives a positive `ParticipantId` and current `PeerId` before it enters the scene tree.
 The server allocates participant IDs monotonically. A dedicated participant registry is the single source
-of truth for the ordered list and both identity indexes.
+of truth for the ordered list and both identity indexes. Removal is identity-safe: a delayed callback from
+an old replica cannot unregister a newer instance that happens to reuse the same IDs in a fresh runtime
+session.
 Offline sessions create the local participant; dedicated servers and clients do not author a fake
 participant locally.
 
@@ -25,7 +27,12 @@ peer_id }` through the persistent `PlayerStateSpawner`. The same factory constru
 remote peers, so identity is initialized before `_Ready()` and derived `PlayerStateScene` roots are
 supported. The server keeps both peer and participant indexes, disconnects peers refused by
 `CanJoin`, and mirrors admission intent through `NetworkSession.SetAcceptingConnections`; disconnects
-despawn the state and remove every index.
+remove registry membership synchronously before deferred node cleanup, so travel barriers never release
+with a departed participant still visible.
+
+`PlayerJoined` and `PlayerLeft` describe local replica lifecycle. Every process emits them exactly once
+when its local `PlayerState` enters or leaves the registry; server-only gameplay readiness continues to use
+`PlayerWorldReady`.
 
 World travel and readiness barriers are the next implementation layer. The design contract is recorded
 in [`planned/game-session-design.md`](planned/game-session-design.md).

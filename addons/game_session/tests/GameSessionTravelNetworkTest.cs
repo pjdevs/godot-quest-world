@@ -136,6 +136,15 @@ public sealed class GameSessionTravelNetworkTest
         GameSessionTestFixtures.NetworkFixture fixture = await GameSessionTestFixtures.Connect();
         try
         {
+            long disconnectedPeerId = fixture.ClientApi.GetUniqueId();
+            bool disconnectedParticipantBecameReady = false;
+            fixture.Server.GameSession.PlayerWorldReady += playerState =>
+            {
+                if (playerState.PeerId == disconnectedPeerId)
+                {
+                    disconnectedParticipantBecameReady = true;
+                }
+            };
             PackedScene world = GD.Load<PackedScene>(
                 "res://addons/game_session/tests/fixtures/WorldB.tscn"
             );
@@ -146,6 +155,7 @@ public sealed class GameSessionTravelNetworkTest
 
             AssertThat(fixture.Server.GameSession.State).IsEqual(GameSessionState.Active);
             AssertThat(fixture.Server.GameSession.PlayerStates.Count).IsEqual(1);
+            AssertThat(disconnectedParticipantBecameReady).IsFalse();
         }
         finally
         {
