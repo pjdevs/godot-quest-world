@@ -72,6 +72,11 @@ données persistantes du participant. La glue `QuestWorldNetworkPlayers` attend 
 avant de créer une incarnation autoritaire et résout le contexte `IWorldSpawner` par l'ancêtre du
 Character, sans dépendre de `SceneTree.CurrentScene`.
 
+Le cycle de vie de ces incarnations reste autoritaire serveur. `PlayerLeft` ne détruit un `Character`
+que sur le serveur ; les clients attendent le despawn répliqué. Chaque réplique retire son propre index
+sur `TreeExiting`, avec vérification d'identité pour qu'un callback tardif ne retire pas une incarnation
+de remplacement du même peer.
+
 ```mermaid
 flowchart LR
     Input["PlayerController local"] --> Command["InputCommand<br/>tick, move, yaw, pitch, buttons"]

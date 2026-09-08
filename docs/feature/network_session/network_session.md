@@ -62,4 +62,6 @@ outside this transport boundary.
 The authored `NetworkSession` node uses the generic addon script. A separate persistent `NetworkPlayers`
 node connects `GameSession` to QuestWorld's character and world-spawner concepts without adding those
 concepts to the transport layer. The `Player_<peerId>` node name remains an integration convention used
-by the glue to identify remote spawned copies; it is not interpreted by the Character itself.
+by the glue to identify remote spawned copies; it is not interpreted by the Character itself. Only the
+server reacts to participant departure by destroying a Character; client indexes follow replicated
+Character tree entry and exit.

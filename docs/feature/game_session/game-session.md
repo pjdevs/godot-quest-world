@@ -36,7 +36,9 @@ with a departed participant still visible.
 
 `PlayerJoined` and `PlayerLeft` describe local replica lifecycle. Every process emits them exactly once
 when its local `PlayerState` enters or leaves the registry; server-only gameplay readiness continues to use
-`PlayerWorldReady`.
+`PlayerWorldReady`. Project integrations must not interpret a client-local `PlayerLeft` as authority to
+destroy replicated world actors; QuestWorld performs Character destruction only on the server and lets
+replica tree lifecycle maintain client indexes.
 
 World travel and readiness barriers are the next implementation layer. The design contract is recorded
 in [`planned/game-session-design.md`](planned/game-session-design.md).

@@ -32,7 +32,6 @@ public partial class QuestWorldNetworkPlayers : Node
             return;
         }
 
-        GameSession.PlayerJoined += OnPlayerJoined;
         GameSession.PlayerLeft += OnPlayerLeft;
         GameSession.PlayerWorldReady += OnPlayerWorldReady;
         GameSession.WorldLoaded += OnWorldLoaded;
@@ -93,21 +92,19 @@ public partial class QuestWorldNetworkPlayers : Node
         }
     }
 
-    private void OnPlayerJoined(PlayerState playerState)
-    {
-        // A participant can be admitted while its late-join world is still rebuilding. The
-        // PlayerWorldReady signal is the only safe point for creating its world-local Character.
-    }
-
     private void OnPlayerLeft(long participantId, long peerId)
     {
-        if (_charactersByPeerId.Remove(peerId, out ProjectCharacter? character))
+        if (GameSession?.NetworkSession?.IsServer != true)
         {
-            if (IsInstanceValid(character))
-            {
-                character.QueueFree();
-            }
+            return;
+        }
 
+        if (
+            _charactersByPeerId.TryGetValue(peerId, out ProjectCharacter? character)
+            && IsInstanceValid(character)
+        )
+        {
+            character.QueueFree();
             GD.Print(
                 $"QuestWorldNetworkPlayers: despawned {QuestWorldNetworkIdentity.GetPlayerName((int)peerId)}"
             );
@@ -201,8 +198,7 @@ public partial class QuestWorldNetworkPlayers : Node
             return;
         }
 
-        ConfigurePlayerAuthority(player, peerId);
-        _charactersByPeerId[peerId] = player;
+        OnPlayerSpawned(player);
         GD.Print($"QuestWorldNetworkPlayers: spawned {playerName} at {player.Position}");
     }
 
@@ -223,6 +219,16 @@ public partial class QuestWorldNetworkPlayers : Node
 
         ConfigurePlayerAuthority(character, peerId);
         _charactersByPeerId[peerId] = character;
+        character.TreeExiting += () =>
+        {
+            if (
+                _charactersByPeerId.TryGetValue(peerId, out ProjectCharacter? indexed)
+                && indexed == character
+            )
+            {
+                _charactersByPeerId.Remove(peerId);
+            }
+        };
     }
 
     private static void ConfigurePlayerAuthority(ProjectCharacter character, int peerId)
@@ -235,7 +241,6 @@ public partial class QuestWorldNetworkPlayers : Node
     {
         if (_initialized && GameSession is not null)
         {
-            GameSession.PlayerJoined -= OnPlayerJoined;
             GameSession.PlayerLeft -= OnPlayerLeft;
             GameSession.PlayerWorldReady -= OnPlayerWorldReady;
             GameSession.WorldLoaded -= OnWorldLoaded;
