@@ -172,6 +172,86 @@ public sealed class GameSessionTravelNetworkTest
     }
 
     [TestCase]
+    public async Task GlobalTravelSupersedesPendingLateJoinReadiness()
+    {
+        GameSessionTestFixtures.NetworkFixture fixture = await GameSessionTestFixtures.Connect();
+        try
+        {
+            PackedScene firstWorld = GD.Load<PackedScene>(
+                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+            );
+            PackedScene secondWorld = GD.Load<PackedScene>(
+                "res://addons/game_session/tests/fixtures/WorldB.tscn"
+            );
+            AssertThat(fixture.Server.GameSession.Travel(firstWorld)).IsTrue();
+            await WaitForActive(fixture);
+
+            long latePeerId = 0;
+            int lateReadyCount = 0;
+            bool secondTravelStarted = false;
+            fixture.Server.GameSession.PlayerJoined += playerState =>
+            {
+                if (
+                    playerState.PeerId is not 1
+                    && playerState.PeerId != fixture.ClientApi.GetUniqueId()
+                )
+                {
+                    latePeerId = playerState.PeerId;
+                }
+            };
+            fixture.Server.GameSession.PlayerWorldReady += playerState =>
+            {
+                if (playerState.PeerId == latePeerId)
+                {
+                    lateReadyCount++;
+                }
+            };
+
+            GameSessionTestFixtures.LatePeer late = await fixture.JoinLate(
+                beforeStart: lateSession =>
+                    lateSession.GameSession.WorldLoaded += (_, _) =>
+                    {
+                        if (!secondTravelStarted)
+                        {
+                            secondTravelStarted = fixture.Server.GameSession.Travel(secondWorld);
+                        }
+                    }
+            );
+            for (int frame = 0; frame < 240; frame++)
+            {
+                await fixture.Pump();
+                if (
+                    fixture.Server.GameSession.State == GameSessionState.Active
+                    && late.GameSession.State == GameSessionState.Active
+                    && fixture.Server.GameSession.CurrentTravelId == 2
+                )
+                {
+                    break;
+                }
+            }
+
+            AssertThat(secondTravelStarted).IsTrue();
+            AssertThat(latePeerId).IsGreater(1L);
+            AssertThat(fixture.Server.GameSession.State).IsEqual(GameSessionState.Active);
+            AssertThat(late.GameSession.State).IsEqual(GameSessionState.Active);
+            AssertThat(lateReadyCount).IsEqual(1);
+
+            late.GameSession.RpcId(
+                1,
+                nameof(GameSession.WorldReady),
+                fixture.Server.GameSession.CurrentTravelId
+            );
+            await fixture.Pump(12);
+
+            AssertThat(lateReadyCount).IsEqual(1);
+        }
+        finally
+        {
+            fixture.Close();
+        }
+    }
+
+    [TestCase]
     public async Task DerivedPlayerStatePropertySurvivesTwoWorldTravels()
     {
         PackedScene playerStateScene = GD.Load<PackedScene>(ReplicatedPlayerStatePath);
@@ -413,13 +493,19 @@ public sealed class GameSessionTravelNetworkTest
         for (int frame = 0; frame < 240; frame++)
         {
             await fixture.Pump();
-            if (fixture.Server.GameSession.State == GameSessionState.Active)
+            if (
+                fixture.Server.GameSession.State == GameSessionState.Active
+                && fixture.Client.GameSession.State == GameSessionState.Active
+            )
             {
                 break;
             }
         }
 
-        if (fixture.Server.GameSession.State != GameSessionState.Active)
+        if (
+            fixture.Server.GameSession.State != GameSessionState.Active
+            || fixture.Client.GameSession.State != GameSessionState.Active
+        )
         {
             string diagnostic =
                 $"server state={fixture.Server.GameSession.State}, "

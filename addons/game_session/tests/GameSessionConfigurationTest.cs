@@ -29,36 +29,16 @@ public sealed class GameSessionConfigurationTest
     [TestCase]
     public async Task InitializeRejectsAPlayerStateSceneWithTheWrongRootType()
     {
-        GameSession gameSession = new();
-        Node players = new();
-        MultiplayerSpawner playerStateSpawner = new() { SpawnPath = new NodePath("../Players") };
-        Node worldContainer = new();
-        MultiplayerSpawner worldSpawner = new() { SpawnPath = new NodePath("../WorldContainer") };
-        NetworkSession networkSession = new();
-        gameSession.AddChild(players);
-        gameSession.AddChild(playerStateSpawner);
-        gameSession.AddChild(worldContainer);
-        gameSession.AddChild(worldSpawner);
+        ConfigurationFixture fixture = await CreateValidFixture();
 
         Node wrongRoot = new();
         PackedScene wrongScene = new();
         AssertThat(wrongScene.Pack(wrongRoot)).IsEqual(Error.Ok);
         wrongRoot.Free();
+        fixture.GameSession.PlayerStateScene = wrongScene;
 
-        gameSession.NetworkSession = networkSession;
-        gameSession.Players = players;
-        gameSession.PlayerStateScene = wrongScene;
-        gameSession.PlayerStateSpawner = playerStateSpawner;
-        gameSession.WorldContainer = worldContainer;
-        gameSession.WorldSpawner = worldSpawner;
-
-        Node root = new();
-        root.AddChild(gameSession);
-        ISceneRunner runner = ISceneRunner.Load(root, autoFree: true);
-        await runner.SimulateFrames(1);
-
-        AssertThat(gameSession.Initialize()).IsFalse();
-        AssertThat(gameSession.State).IsEqual(GameSessionState.Failed);
+        AssertThat(fixture.GameSession.Initialize()).IsFalse();
+        AssertThat(fixture.GameSession.State).IsEqual(GameSessionState.Failed);
     }
 
     [TestCase]

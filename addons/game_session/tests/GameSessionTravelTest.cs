@@ -14,6 +14,20 @@ using static GdUnit4.Assertions;
 public sealed class GameSessionTravelTest
 {
     [TestCase]
+    public void ClientCompletionCanArriveBeforeTheMatchingTravelBegins()
+    {
+        GameSessionClientTravelState state = new();
+
+        state.ObserveCompletion(2);
+
+        AssertThat(state.CanBegin(2)).IsTrue();
+        AssertThat(state.CanComplete(2)).IsTrue();
+        AssertThat(state.MarkCompleted(2)).IsTrue();
+        AssertThat(state.CanBegin(2)).IsFalse();
+        AssertThat(state.CanComplete(2)).IsFalse();
+    }
+
+    [TestCase]
     public async Task OfflineTravelLoadsTheWorldAndCompletesAfterWorldReady()
     {
         OfflineFixture fixture = CreateFixture();

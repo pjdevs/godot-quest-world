@@ -51,6 +51,7 @@ public partial class GameSession : Node
     public MultiplayerSpawner? WorldSpawner { get; set; }
 
     private readonly GameSessionParticipantRegistry _participants = new();
+    private readonly GameSessionClientTravelState _clientTravel = new();
     private readonly HashSet<long> _pendingLateJoinPeers = new();
     private bool _initialized;
     private bool _isAcceptingPlayers = true;
@@ -196,6 +197,7 @@ public partial class GameSession : Node
                 .Players.Where(playerState => playerState.PeerId != NetworkSession.LocalPeerId)
                 .Select(playerState => playerState.PeerId)
         );
+        _pendingLateJoinPeers.Clear();
         UpdateTransportAdmission();
         EmitSignal(SignalName.TravelStarted, travelId, resourcePath);
         if (!IsOfflineSession)
@@ -390,6 +392,7 @@ public partial class GameSession : Node
     private void ClearRuntimeSession(GameSessionState nextState)
     {
         _activeTravel = null;
+        _clientTravel.Clear();
         _pendingLateJoinPeers.Clear();
         _nextParticipantId = 1;
         _nextTravelId = 0;
@@ -515,6 +518,7 @@ public partial class GameSession : Node
             NetworkSession?.IsServer == true
             || travelId <= 0
             || string.IsNullOrWhiteSpace(resourcePath)
+            || !_clientTravel.CanBegin(travelId)
             || State != GameSessionState.Active
         )
         {
@@ -530,6 +534,13 @@ public partial class GameSession : Node
             CurrentWorldPath = resourcePath;
             _isCurrentWorldReady = false;
         }
+
+        if (_isCurrentWorldReady && !IsOfflineSession)
+        {
+            RpcId(1, nameof(WorldReady), CurrentTravelId);
+        }
+
+        TryCompleteClientTravel();
     }
 
     private Node SpawnWorld(Variant data)
@@ -619,19 +630,13 @@ public partial class GameSession : Node
     )]
     public void CompleteTravel(long travelId)
     {
-        if (
-            NetworkSession?.IsServer == true
-            || State != GameSessionState.Traveling
-            || travelId != CurrentTravelId
-            || !_isCurrentWorldReady
-            || _currentWorld is null
-        )
+        if (NetworkSession?.IsServer == true || travelId <= 0)
         {
             return;
         }
 
-        State = GameSessionState.Active;
-        EmitSignal(SignalName.TravelCompleted, travelId, _currentWorld);
+        _clientTravel.ObserveCompletion(travelId);
+        TryCompleteClientTravel();
     }
 
     public void ReportWorldLoadFailure(long travelId, string reason)
@@ -768,7 +773,25 @@ public partial class GameSession : Node
         else if (!IsOfflineSession)
         {
             RpcId(1, nameof(WorldReady), CurrentTravelId);
+            TryCompleteClientTravel();
         }
+    }
+
+    private void TryCompleteClientTravel()
+    {
+        if (
+            NetworkSession?.IsServer == true
+            || State != GameSessionState.Traveling
+            || !_isCurrentWorldReady
+            || _currentWorld is null
+            || !_clientTravel.MarkCompleted(CurrentTravelId)
+        )
+        {
+            return;
+        }
+
+        State = GameSessionState.Active;
+        EmitSignal(SignalName.TravelCompleted, CurrentTravelId, _currentWorld);
     }
 
     private bool FailTravel(string reason)
