@@ -202,8 +202,8 @@ public sealed class GameSessionTravelNetworkTest
             await WaitForActive(fixture);
             long travelId = fixture.Client.GameSession.CurrentTravelId;
 
-            fixture.Client.GameSession.RpcId(1, nameof(GameSession.TravelReady), travelId);
-            fixture.Client.GameSession.RpcId(1, nameof(GameSession.TravelReady), travelId - 1);
+            fixture.Client.GameSession.RpcId(1, nameof(GameSession.WorldReady), travelId);
+            fixture.Client.GameSession.RpcId(1, nameof(GameSession.WorldReady), travelId - 1);
             await fixture.Pump(12);
 
             AssertThat(fixture.Server.GameSession.State).IsEqual(GameSessionState.Active);

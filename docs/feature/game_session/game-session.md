@@ -44,18 +44,21 @@ once and completes the local barrier; failed preflight leaves the previous world
 world remains beneath `WorldContainer`, so the session and `PlayerState` nodes survive replacement.
 
 Networked travel uses a reliable `BeginTravel` RPC plus the native `WorldSpawner`. The server snapshots
-remote peers present at travel start, waits for their `TravelReady(CurrentTravelId)` acknowledgements and
+remote peers present at travel start, waits for their `WorldReady(CurrentTravelId)` acknowledgements and
 its own local readiness, then emits `TravelCompleted` once and reliably releases clients with
-`CompleteTravel`. Duplicate or stale acknowledgements are ignored, disconnects release their pending
-entry, and `WorldLoadFailed` removes only the reporting participant. The one active global travel is held
-by an explicit state object containing its ID, resource path, local-ready flag, and pending peer set.
-Admission is refused while that state is active.
+`CompleteTravel`. The same `WorldReady` RPC acknowledges a late join when no global travel is active;
+authoritative pending sets classify the sender, so duplicate, stale, or unexpected acknowledgements are
+no-ops. Disconnects release their pending entry, and `WorldLoadFailed` removes only the reporting
+participant. The one active global travel is held by an explicit state object containing its ID, resource
+path, local-ready flag, and pending peer set. Admission is refused while that state is active.
 
 When a peer joins an active world, the persistent spawners reconstruct both `PlayerState` and the current
-world. The joining process sends `CurrentWorldReady(CurrentTravelId)` after its local `WorldLoaded`
-event; the server then emits `PlayerWorldReady` only for that participant. Existing participants remain
-`Active` throughout late-join reconstruction. The feature test suite covers host/client, dedicated
-server, disconnect release, late join, and isolated client failure paths.
+world. The joining process sends `WorldReady(CurrentTravelId)` after its local `WorldLoaded` event; the
+server then emits `PlayerWorldReady` only for that participant. Existing participants remain `Active`
+throughout late-join reconstruction. World adoption and retirement update `CurrentWorld` synchronously;
+spawn, despawn, and tree-exit callbacks are idempotent, and a second simultaneous managed root is a local
+runtime failure. The feature test suite covers host/client, dedicated server, disconnect release, late
+join, and isolated client failure paths.
 
 QuestWorld now has a persistent `quest_world/game/Game.tscn` root. It owns `NetworkSession`,
 `GameSession`, the derived `QuestWorldPlayerState` scene, the player integration, and the optional local

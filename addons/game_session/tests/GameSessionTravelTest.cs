@@ -44,6 +44,7 @@ public sealed class GameSessionTravelTest
             .IsEqual(
                 new List<string> { $"started:1:{world.ResourcePath}", "loaded:1", "completed:1" }
             );
+        fixture.Close();
     }
 
     [TestCase]
@@ -56,6 +57,7 @@ public sealed class GameSessionTravelTest
         );
 
         AssertThat(fixture.GameSession.Travel(secondScene)).IsTrue();
+        AssertThat(fixture.GameSession.CurrentWorld == firstWorld).IsFalse();
         await fixture.Runner.SimulateFrames(2);
 
         AssertThat(GodotObject.IsInstanceValid(firstWorld)).IsFalse();
@@ -63,6 +65,7 @@ public sealed class GameSessionTravelTest
         AssertThat(fixture.GameSession.CurrentWorld!.Name).IsEqual("World_2");
         AssertThat(fixture.WorldContainer.GetChildCount()).IsEqual(1);
         AssertThat(fixture.GameSession.PlayerStates.Count).IsEqual(1);
+        fixture.Close();
     }
 
     [TestCase]
@@ -82,6 +85,7 @@ public sealed class GameSessionTravelTest
         AssertThat(fixture.GameSession.CurrentWorld == currentWorld).IsTrue();
         AssertThat(completed).IsEqual(0);
         AssertThat(string.IsNullOrWhiteSpace(failure)).IsFalse();
+        fixture.Close();
     }
 
     [TestCase]
@@ -99,6 +103,7 @@ public sealed class GameSessionTravelTest
         AssertThat(fixture.GameSession.Travel(firstScene)).IsTrue();
         AssertThat(fixture.GameSession.State).IsEqual(GameSessionState.Traveling);
         AssertThat(fixture.GameSession.Travel(firstScene)).IsFalse();
+        fixture.Close();
     }
 
     private static async Task<OfflineFixture> StartOfflineFixture()
@@ -174,5 +179,11 @@ public sealed class GameSessionTravelTest
     )
     {
         public ISceneRunner Runner { get; set; } = null!;
+
+        public void Close()
+        {
+            GameSession.Reset();
+            Network.Stop();
+        }
     }
 }
