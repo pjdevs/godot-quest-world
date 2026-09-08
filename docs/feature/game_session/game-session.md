@@ -80,3 +80,35 @@ controller. Its bootstrap order is `GameSession.Initialize()`, project integrati
 world-only content: they retain their project spawners and authority
 initialization but no longer start networking or own player integration. Character carry behavior finds
 its `IWorldSpawner` ancestor, so it no longer depends on `SceneTree.CurrentScene` being the world.
+
+## Architecture decisions
+
+### AD-01 — NetworkSession owns transport; GameSession owns participants
+
+`GameSession` consumes peer/session signals and the narrow `SetAcceptingConnections` and
+`DisconnectPeer` controls. It never accesses the underlying `MultiplayerPeer`; admission policy,
+participant identity, and world flow remain above the transport layer.
+
+### AD-02 — Persistent identity and world-local incarnation are separate lifetimes
+
+Server-issued `ParticipantId` identifies a `PlayerState` for one runtime game session and survives world
+travel. Characters/Pawns are project-owned incarnations recreated under each world. The generic addon
+therefore exposes readiness signals but does not spawn, possess, or define gameplay actors.
+
+### AD-03 — Native persistent spawners own replicated lifecycle
+
+Persistent `PlayerStateSpawner` and `WorldSpawner` nodes provide deterministic paths and native late-join
+history. The world spawner creates exactly one managed root beneath `WorldContainer`; spawners nested in
+that root can then reconstruct their own existing state after the root reaches a joining peer.
+
+### AD-04 — One idempotent readiness protocol classifies authoritative intent
+
+Clients send only `WorldReady(travelId)`. The server classifies it against either the active global-travel
+snapshot or the pending late-join set. Correlation state tolerates native spawn and reliable RPC delivery
+on different frames without adding a second acknowledgement protocol.
+
+### AD-05 — Disconnect ends runtime state, not authored composition
+
+Normal disconnect synchronously clears participants, world, travel state, pending readiness, and runtime
+IDs while leaving subscriptions initialized. `Reset()` additionally removes subscriptions for teardown.
+This lets the same authored `GameSession` node join a later fresh `NetworkSession.Start()` safely.
