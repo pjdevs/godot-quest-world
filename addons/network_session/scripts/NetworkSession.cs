@@ -84,6 +84,7 @@ public partial class NetworkSession : Node
         if (
             !IsServer
             || peerId <= 0
+            || peerId > int.MaxValue
             || peerId == LocalPeerId
             || Multiplayer.MultiplayerPeer is not MultiplayerPeer peer
         )

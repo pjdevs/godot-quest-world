@@ -54,8 +54,9 @@ Without an explicit mode, the session starts offline. Offline and host sessions 
 The addon emits peer and session lifecycle signals instead of spawning gameplay nodes. Integrations
 subscribe to those signals and decide what a peer means in their own domain. Server-side consumers use
 the narrow `SetAcceptingConnections` and `DisconnectPeer` controls; both return `false` when the local
-session lacks server authority or an applicable live peer. Admission policy and participant identity stay
-outside this transport boundary.
+session lacks server authority or an applicable live peer. `DisconnectPeer` also rejects IDs outside
+Godot's positive 32-bit peer-ID range before narrowing the public `long` signal identity. Admission
+policy and participant identity stay outside this transport boundary.
 
 ### QuestWorld keeps player ownership outside the session
 

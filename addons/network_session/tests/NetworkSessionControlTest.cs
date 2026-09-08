@@ -53,6 +53,7 @@ public sealed class NetworkSessionControlTest
         try
         {
             AssertThat(fixture.Server.DisconnectPeer(0)).IsFalse();
+            AssertThat(fixture.Server.DisconnectPeer((long)int.MaxValue + 1)).IsFalse();
             AssertThat(fixture.Server.DisconnectPeer(fixture.Server.LocalPeerId)).IsFalse();
             AssertThat(fixture.Client!.DisconnectPeer(fixture.Server.LocalPeerId)).IsFalse();
         }
