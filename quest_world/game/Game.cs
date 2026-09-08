@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using GameSessionPlugin;
 using Godot;
 using NetworkPlugin;
-using QuestWorld.Network;
 
 namespace QuestWorld.Game;
 
@@ -14,9 +13,6 @@ public partial class Game : Node3D
 
     [Export]
     public GameSession? GameSession { get; set; }
-
-    [Export]
-    public PlayerCharacterSpawnManager? NetworkPlayers { get; set; }
 
     [Export]
     public PackedScene? InitialWorld { get; set; }
@@ -54,8 +50,6 @@ public partial class Game : Node3D
             return false;
         }
 
-        NetworkPlayers!.Initialize();
-
         if (!NetworkSession!.Start(launchOptions!))
         {
             GameSession.Reset();
@@ -63,6 +57,9 @@ public partial class Game : Node3D
         }
 
         _initialized = true;
+
+        GameSession.WorldLoaded += OnWorldLoaded;
+        GameSession.TravelCompleted += OnTravelCompleted;
 
         if (InitialWorld is not null && NetworkSession.IsServer && GameSession.CurrentWorld is null)
         {
@@ -81,6 +78,8 @@ public partial class Game : Node3D
     {
         if (_initialized)
         {
+            GameSession?.WorldLoaded -= OnWorldLoaded;
+            GameSession?.TravelCompleted -= OnTravelCompleted;
             GameSession?.Reset();
             NetworkSession?.Stop();
         }
@@ -100,11 +99,6 @@ public partial class Game : Node3D
             return FailConfiguration("GameSession is required.");
         }
 
-        if (NetworkPlayers is null)
-        {
-            return FailConfiguration("NetworkPlayers is required.");
-        }
-
         return true;
     }
 
@@ -112,5 +106,21 @@ public partial class Game : Node3D
     {
         GD.PushError($"{GetPath()}: {reason}");
         return false;
+    }
+
+    private void OnWorldLoaded(long travelId, Node world)
+    {
+        if (world is World currentWorld)
+        {
+            currentWorld.AttachGameSession(GameSession!);
+        }
+    }
+
+    private void OnTravelCompleted(long travelId, Node world)
+    {
+        if (NetworkSession?.IsServer == true && world is World currentWorld)
+        {
+            currentWorld.InitializeAuthority();
+        }
     }
 }

@@ -10,8 +10,10 @@
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_staterule"]
 [ext_resource type="Script" uid="uid://cd6cl8ol07771" path="res://quest_world/world/Spawner.cs" id="11_w5rq3"]
 [ext_resource type="PackedScene" uid="uid://c615ipxd5fba5" path="res://quest_world/interactibles/battery/Battery.tscn" id="12_53a43"]
+[ext_resource type="Script" uid="uid://j7janlk8f7i5" path="res://quest_world/game/PlayerCharacterSpawnManager.cs" id="13_p6b0u"]
 [ext_resource type="Resource" uid="uid://c0nhwpf8ww1l6" path="res://quest_world/character/PlayerSpawn.tres" id="13_player_spawn"]
 [ext_resource type="Resource" path="res://quest_world/interactibles/battery/BatterySpawn.tres" id="14_battery_spawn"]
+[ext_resource type="Script" uid="uid://b8ujn5i0rr42i" path="res://addons/dummy_character_plugin/runtime/CharacterPlayerController.cs" id="14_ltrjn"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_edcox"]
 ground_color = Color(0.160784, 0.815686, 0.905882, 1)
@@ -179,5 +181,14 @@ script = ExtResource("11_w5rq3")
 Definition = ExtResource("14_battery_spawn")
 Scene = ExtResource("12_53a43")
 AutoSpawn = true
+
+[node name="PlayerCharacterSpawnManager" type="Node" parent="." unique_id=871980340 node_paths=PackedStringArray("World", "LocalPlayerController", "PlayerSpawner")]
+script = ExtResource("13_p6b0u")
+World = NodePath("..")
+LocalPlayerController = NodePath("../PlayerController")
+PlayerSpawner = NodePath("../PlayerSpawner")
+
+[node name="PlayerController" type="Node" parent="." unique_id=324736743]
+script = ExtResource("14_ltrjn")
 
 [editable path="Level/Button"]

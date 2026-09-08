@@ -1,13 +1,19 @@
 using System.Collections.Generic;
+using GameSessionPlugin;
 using Godot;
 
 [GlobalClass]
 public partial class World : Node3D, IWorldSpawner
 {
+    [Signal]
+    public delegate void GameSessionAttachedEventHandler(GameSession gameSession);
+
     [Export]
     public Godot.Collections.Array<Spawner> Spawners { get; set; } = new();
 
     private readonly Dictionary<StringName, Spawner> _spawnersById = new();
+
+    public GameSession? GameSession { get; private set; }
 
     public override void _Ready()
     {
@@ -15,6 +21,18 @@ public partial class World : Node3D, IWorldSpawner
         {
             return;
         }
+    }
+
+    public void AttachGameSession(GameSession gameSession)
+    {
+        if (GameSession is not null)
+        {
+            GD.PushError($"{GetPath()}: GameSession is already attached. World should not attach multiple GameSessions in a single lifecycle.");
+            return;
+        }
+
+        GameSession = gameSession;
+        EmitSignal(SignalName.GameSessionAttached, gameSession);
     }
 
     public void InitializeAuthority()

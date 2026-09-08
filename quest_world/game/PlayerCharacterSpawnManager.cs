@@ -9,58 +9,60 @@ namespace QuestWorld.Network;
 public partial class PlayerCharacterSpawnManager : Node
 {
     [Export]
-    public GameSession? GameSession { get; set; }
+    public World? World { get; set; }
 
     [Export]
     public CharacterPlayerController? LocalPlayerController { get; set; }
 
+    [Export]
+    public Spawner? PlayerSpawner { get; set; }
+
     private readonly Dictionary<long, QuestWorldCharacter> _charactersByPeerId = new();
-    private Spawner? _playerSpawner;
     private bool _initialized;
 
-    public void Initialize()
+    private GameSession? _gameSession;
+
+    public override void _Ready()
     {
-        if (_initialized)
+        if (World is null)
         {
+            GD.PushError($"{GetPath()}: World is required.");
             return;
         }
 
-        if (GameSession is null)
+        if (PlayerSpawner is null)
         {
-            GD.PushError($"{GetPath()}: GameSession is required.");
+            GD.PushError($"{GetPath()}: PlayerSpawner is required.");
             return;
         }
 
-        GameSession.PlayerLeft += OnPlayerLeft;
-        GameSession.PlayerWorldReady += OnPlayerWorldReady;
-        GameSession.WorldLoaded += OnWorldLoaded;
-        GameSession.TravelCompleted += OnTravelCompleted;
-        _initialized = true;
+        World.GameSessionAttached += Initialize;
 
-        RefreshCurrentWorld();
-        SynchronizeCurrentSession();
+        if (World.GameSession is not null)
+        {
+            Initialize(World.GameSession);
+        }
     }
 
     public override void _Process(double delta)
     {
-        if (!_initialized || GameSession is null)
+        if (!_initialized || _gameSession is null)
         {
             return;
         }
 
-        RefreshCurrentWorld();
         if (
-            GameSession.NetworkSession?.State != SessionState.Active
+            _gameSession.NetworkSession?.State != SessionState.Active
             || LocalPlayerController is null
-            || GameSession.NetworkSession.IsDedicatedServer
-            || GameSession.NetworkSession.LocalPeerId <= 0
+            || _gameSession.NetworkSession.IsDedicatedServer
+            || _gameSession.NetworkSession.LocalPeerId <= 0
         )
         {
             return;
         }
 
         QuestWorldCharacter? localPlayer = GetCurrentWorldPlayer(
-            GameSession.NetworkSession.LocalPeerId
+            _gameSession.NetworkSession.LocalPeerId
         );
         if (
             localPlayer is not null
@@ -71,20 +73,45 @@ public partial class PlayerCharacterSpawnManager : Node
             LocalPlayerController.Possess(localPlayer);
             GD.Print($"QuestWorldNetworkPlayers: possessed local {localPlayer.Name}");
             GD.Print(
-                $"QuestWorldNetworkPlayers: visible player count={_playerSpawner?.GetSpawnRoot()?.GetChildCount()}"
+                $"QuestWorldNetworkPlayers: visible player count={PlayerSpawner?.GetSpawnRoot()?.GetChildCount()}"
             );
         }
+    }
+
+    public void Initialize(GameSession gameSession)
+    {
+        if (_initialized)
+        {
+            return;
+        }
+
+        _gameSession = gameSession;
+        _initialized = true;
+
+        PlayerSpawner?.Spawned += OnPlayerSpawned;
+        Node3D? root = PlayerSpawner?.GetSpawnRoot();
+        if (root is not null)
+        {
+            foreach (Node child in root.GetChildren())
+            {
+                OnPlayerSpawned(child);
+            }
+        }
+
+        _gameSession.PlayerLeft += OnPlayerLeft;
+        _gameSession.PlayerWorldReady += OnPlayerWorldReady;
+
+        SynchronizeCurrentSession();
     }
 
     private void SynchronizeCurrentSession()
     {
         if (
-            GameSession?.NetworkSession?.IsServer == true
-            && GameSession.State == GameSessionState.Active
-            && GameSession.CurrentWorld is not null
+            _gameSession?.NetworkSession?.IsServer == true
+            && _gameSession.State == GameSessionState.Active
         )
         {
-            foreach (PlayerState playerState in GameSession.PlayerStates)
+            foreach (PlayerState playerState in _gameSession.PlayerStates)
             {
                 SpawnPlayer(playerState);
             }
@@ -93,7 +120,7 @@ public partial class PlayerCharacterSpawnManager : Node
 
     private void OnPlayerLeft(long participantId, long peerId)
     {
-        if (GameSession?.NetworkSession?.IsServer != true)
+        if (_gameSession?.NetworkSession?.IsServer != true)
         {
             return;
         }
@@ -115,65 +142,17 @@ public partial class PlayerCharacterSpawnManager : Node
         SpawnPlayer(playerState);
     }
 
-    private void OnWorldLoaded(long travelId, Node world)
-    {
-        RefreshCurrentWorld();
-    }
-
-    private void OnTravelCompleted(long travelId, Node world)
-    {
-        if (world is World currentWorld && GameSession?.NetworkSession?.IsServer == true)
-        {
-            currentWorld.InitializeAuthority();
-        }
-
-        RefreshCurrentWorld();
-    }
-
-    private void RefreshCurrentWorld()
-    {
-        Spawner? nextSpawner = GetCurrentWorldSpawner();
-        if (nextSpawner == _playerSpawner)
-        {
-            return;
-        }
-
-        if (_playerSpawner is not null && GodotObject.IsInstanceValid(_playerSpawner))
-        {
-            _playerSpawner.Spawned -= OnPlayerSpawned;
-        }
-
-        _charactersByPeerId.Clear();
-        _playerSpawner = nextSpawner;
-        if (_playerSpawner is not null)
-        {
-            _playerSpawner.Spawned += OnPlayerSpawned;
-            Node3D? spawnRoot = _playerSpawner.GetSpawnRoot();
-            if (spawnRoot is not null)
-            {
-                foreach (Node child in spawnRoot.GetChildren())
-                {
-                    OnPlayerSpawned(child);
-                }
-            }
-        }
-    }
-
-    private Spawner? GetCurrentWorldSpawner() =>
-        GameSession?.CurrentWorld?.GetNodeOrNull<Spawner>("PlayerSpawner");
-
     private QuestWorldCharacter? GetCurrentWorldPlayer(long peerId) =>
-        _playerSpawner
+        PlayerSpawner
             ?.GetSpawnRoot()
             ?.GetNodeOrNull<QuestWorldCharacter>(PlayerNetworkIdentity.GetPlayerName((int)peerId));
 
     private void SpawnPlayer(PlayerState playerState)
     {
         if (
-            GameSession?.NetworkSession?.IsServer != true
-            || GameSession.State != GameSessionState.Active
-            || GameSession.CurrentWorld is null
-            || _playerSpawner is null
+            _gameSession?.NetworkSession?.IsServer != true
+            || _gameSession.State != GameSessionState.Active
+            || PlayerSpawner is null
         )
         {
             return;
@@ -187,7 +166,7 @@ public partial class PlayerCharacterSpawnManager : Node
 
         string playerName = PlayerNetworkIdentity.GetPlayerName(peerId);
         QuestWorldCharacter? player =
-            _playerSpawner.Spawn(
+            PlayerSpawner.Spawn(
                 Transform3D.Identity.Translated(PlayerNetworkIdentity.GetSpawnPosition(peerId)),
                 playerName
             ) as QuestWorldCharacter;
@@ -238,21 +217,17 @@ public partial class PlayerCharacterSpawnManager : Node
 
     public override void _ExitTree()
     {
-        if (_initialized && GameSession is not null)
+        if (_initialized && _gameSession is not null)
         {
-            GameSession.PlayerLeft -= OnPlayerLeft;
-            GameSession.PlayerWorldReady -= OnPlayerWorldReady;
-            GameSession.WorldLoaded -= OnWorldLoaded;
-            GameSession.TravelCompleted -= OnTravelCompleted;
+            _gameSession.PlayerLeft -= OnPlayerLeft;
+            _gameSession.PlayerWorldReady -= OnPlayerWorldReady;
         }
 
-        if (_playerSpawner is not null && GodotObject.IsInstanceValid(_playerSpawner))
-        {
-            _playerSpawner.Spawned -= OnPlayerSpawned;
-        }
+        PlayerSpawner?.Spawned -= OnPlayerSpawned;
+        World?.GameSessionAttached -= Initialize;
 
         _charactersByPeerId.Clear();
-        _playerSpawner = null;
+        _gameSession = null;
         _initialized = false;
     }
 }
