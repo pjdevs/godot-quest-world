@@ -13,6 +13,42 @@ using static GdUnit4.Assertions;
 public sealed class GameSessionTravelNetworkTest
 {
     [TestCase]
+    public async Task ClientDisconnectDuringTravelClearsRuntimeSession()
+    {
+        GameSessionTestFixtures.NetworkFixture fixture = await GameSessionTestFixtures.Connect();
+        try
+        {
+            PackedScene firstWorld = GD.Load<PackedScene>(
+                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+            );
+            AssertThat(fixture.Server.GameSession.Travel(firstWorld)).IsTrue();
+            await WaitForActive(fixture);
+            AssertThat(fixture.Client.GameSession.CurrentWorld).IsNotNull();
+
+            PackedScene secondWorld = GD.Load<PackedScene>(
+                "res://addons/game_session/tests/fixtures/WorldB.tscn"
+            );
+            AssertThat(fixture.Server.GameSession.Travel(secondWorld)).IsTrue();
+            fixture.Client.GameSession.BeginTravel(
+                fixture.Server.GameSession.CurrentTravelId,
+                secondWorld.ResourcePath
+            );
+            AssertThat(fixture.Client.GameSession.State).IsEqual(GameSessionState.Traveling);
+
+            fixture.Client.Network.Stop();
+            await fixture.Pump(4);
+
+            AssertThat(fixture.Client.GameSession.State).IsEqual(GameSessionState.Idle);
+            AssertThat(fixture.Client.GameSession.PlayerStates.Count).IsEqual(0);
+            AssertThat(fixture.Client.GameSession.CurrentWorld).IsNull();
+        }
+        finally
+        {
+            fixture.Close();
+        }
+    }
+
+    [TestCase]
     public async Task TravelWaitsForRemoteReadinessAndCompletesExactlyOnce()
     {
         GameSessionTestFixtures.NetworkFixture fixture = await GameSessionTestFixtures.Connect();

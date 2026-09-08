@@ -12,6 +12,56 @@ using static GdUnit4.Assertions;
 public sealed class GameSessionNetworkTest
 {
     [TestCase]
+    public async Task ClientCanRestartImmediatelyWithTheSameGameSessionNode()
+    {
+        GameSessionTestFixtures.NetworkFixture fixture = await GameSessionTestFixtures.Connect();
+        try
+        {
+            QuestWorld.GameSession.GameSession gameSession = fixture.Client.GameSession;
+            PackedScene world = GD.Load<PackedScene>(
+                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+            );
+            AssertThat(fixture.Server.GameSession.Travel(world)).IsTrue();
+            for (int frame = 0; frame < 120; frame++)
+            {
+                await fixture.Pump();
+                if (
+                    fixture.Server.GameSession.State == GameSessionState.Active
+                    && gameSession.State == GameSessionState.Active
+                )
+                {
+                    break;
+                }
+            }
+
+            AssertThat(gameSession.CurrentWorld).IsNotNull();
+            int joinedAfterRestart = 0;
+            int worldsLoadedAfterRestart = 0;
+            gameSession.PlayerJoined += _ => joinedAfterRestart++;
+            gameSession.WorldLoaded += (_, _) => worldsLoadedAfterRestart++;
+
+            await fixture.RestartClientImmediately(() =>
+            {
+                AssertThat(gameSession.State).IsEqual(GameSessionState.Idle);
+                AssertThat(gameSession.PlayerStates.Count).IsEqual(0);
+                AssertThat(gameSession.CurrentWorld).IsNull();
+            });
+
+            AssertThat(fixture.Client.GameSession == gameSession).IsTrue();
+            AssertThat(gameSession.State).IsEqual(GameSessionState.Active);
+            AssertThat(gameSession.PlayerStates.Count).IsEqual(2);
+            AssertThat(joinedAfterRestart).IsEqual(2);
+            AssertThat(gameSession.CurrentWorldPath).IsEqual(world.ResourcePath);
+            AssertThat(gameSession.WorldContainer!.GetChildCount()).IsEqual(1);
+            AssertThat(worldsLoadedAfterRestart).IsEqual(1);
+        }
+        finally
+        {
+            fixture.Close();
+        }
+    }
+
+    [TestCase]
     public async Task PlayerJoinedAndLeftAreLocalReplicaLifecycleSignals()
     {
         int serverJoined = 0;

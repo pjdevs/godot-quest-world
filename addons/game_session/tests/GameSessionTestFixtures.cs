@@ -206,6 +206,28 @@ internal static partial class GameSessionTestFixtures
             return new LatePeer(late, api);
         }
 
+        public async Task RestartClientImmediately(Action? afterStop = null)
+        {
+            Client.Network.Stop();
+            afterStop?.Invoke();
+            AssertThat(Client.Network.Start(CreateClientOptions(Port))).IsTrue();
+
+            for (int frame = 0; frame < ConnectFrames; frame++)
+            {
+                await Pump();
+                if (
+                    ClientApi.GetUniqueId() > 1
+                    && Server.GameSession.PlayerStates.Count == 2
+                    && Client.GameSession.PlayerStates.Count == 2
+                )
+                {
+                    break;
+                }
+            }
+
+            await Pump(12);
+        }
+
         public void Close()
         {
             foreach (NetworkSession network in _additionalNetworks)

@@ -125,6 +125,8 @@ public partial class GameSession : Node
             return;
         }
 
+        ClearRuntimeSession(GameSessionState.Idle);
+
         if (PlayerStateSpawner is not null)
         {
             PlayerStateSpawner.Spawned -= OnPlayerStateSpawned;
@@ -145,30 +147,7 @@ public partial class GameSession : Node
             NetworkSession.Failed -= OnNetworkFailed;
         }
 
-        foreach (PlayerState playerState in _participants.Players.ToArray())
-        {
-            if (IsInstanceValid(playerState))
-            {
-                playerState.QueueFree();
-            }
-        }
-
-        _participants.Clear();
-        _pendingLateJoinPeers.Clear();
-        if (_currentWorld is not null && IsInstanceValid(_currentWorld))
-        {
-            _currentWorld.QueueFree();
-        }
-
-        _currentWorld = null;
-        CurrentTravelId = 0;
-        CurrentWorldPath = string.Empty;
-        _isCurrentWorldReady = false;
-        _activeTravel = null;
-        _nextParticipantId = 1;
-        _nextTravelId = 0;
         _initialized = false;
-        State = GameSessionState.Idle;
         UpdateTransportAdmission();
     }
 
@@ -348,7 +327,12 @@ public partial class GameSession : Node
 
     private void OnConnected()
     {
-        State = GameSessionState.Active;
+        if (!_initialized)
+        {
+            return;
+        }
+
+        ClearRuntimeSession(GameSessionState.Active);
         UpdateTransportAdmission();
 
         if (
@@ -388,18 +372,51 @@ public partial class GameSession : Node
 
     private void OnDisconnected()
     {
-        if (State == GameSessionState.Active)
+        if (_initialized)
         {
-            State = GameSessionState.Idle;
+            ClearRuntimeSession(GameSessionState.Idle);
         }
-
-        UpdateTransportAdmission();
     }
 
     private void OnNetworkFailed(string reason)
     {
         GD.PushError($"{GetPath()}: NetworkSession failed: {reason}");
-        State = GameSessionState.Failed;
+        if (_initialized)
+        {
+            ClearRuntimeSession(GameSessionState.Failed);
+        }
+    }
+
+    private void ClearRuntimeSession(GameSessionState nextState)
+    {
+        _activeTravel = null;
+        _pendingLateJoinPeers.Clear();
+        _nextParticipantId = 1;
+        _nextTravelId = 0;
+
+        foreach (PlayerState playerState in _participants.Players.ToArray())
+        {
+            UnregisterPlayerState(playerState);
+            if (IsInstanceValid(playerState))
+            {
+                playerState.Free();
+            }
+        }
+
+        _participants.Clear();
+
+        if (_currentWorld is not null && IsInstanceValid(_currentWorld))
+        {
+            Node world = _currentWorld;
+            ClearCurrentWorld(world);
+            world.Free();
+        }
+
+        _currentWorld = null;
+        CurrentTravelId = 0;
+        CurrentWorldPath = string.Empty;
+        _isCurrentWorldReady = false;
+        State = nextState;
     }
 
     private void AdmitParticipant(long peerId)

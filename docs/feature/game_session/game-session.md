@@ -13,6 +13,10 @@ starts. It validates the `NetworkSession`, persistent `Players`, `PlayerStateSce
 `PlayerStateSpawner`, empty `WorldContainer`, and `WorldSpawner` dependencies, including both authored
 spawner paths. Initialization configures callbacks and subscriptions while the session remains `Idle`;
 the subsequent `NetworkSession.Connected` signal starts the runtime session and enters `Active`.
+`Disconnected` clears participants, the current world, travel/readiness state, and runtime ID counters,
+then returns the still-initialized node to `Idle`. A later `NetworkSession.Start()` reuses that same node
+as a fresh runtime session. `Reset()` performs the same runtime clear and additionally removes authored
+subscriptions for node teardown.
 
 `PlayerState` receives a positive `ParticipantId` and current `PeerId` before it enters the scene tree.
 The server allocates participant IDs monotonically. A dedicated participant registry is the single source
