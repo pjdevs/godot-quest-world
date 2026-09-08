@@ -1,5 +1,13 @@
+using System;
+using System.Threading.Tasks;
+using DummyCharacterPlugin;
 using Godot;
 using InventoryPlugin;
+
+public readonly record struct CarryOperation(
+    StringName ItemId,
+    ulong StartedAtServerTimeMsec
+);
 
 [GlobalClass]
 public partial class CarryComponent : Node, ICarrier
@@ -10,9 +18,71 @@ public partial class CarryComponent : Node, ICarrier
     [Export]
     public InventoryComponent? Inventory { get; set; }
 
+    [Export]
+    public CharacterAnimationController? AnimationController { get; set; }
+
     public IWorldSpawner? WorldSpawner { get; set; }
 
     public IOriented? Carrier { get; set; }
+
+    private CarryOperation? _currentCarryOperation;
+
+    [ExportGroup("Replication")]
+    [Export]
+    public Godot.Collections.Dictionary<string, Variant>? CurrentCarryOperationVariant
+    {
+        get =>
+            _currentCarryOperation is CarryOperation op
+                ? new Godot.Collections.Dictionary<string, Variant>()
+                {
+                    { "item_id", op.ItemId },
+                    { "started_at_server_time_msec", op.StartedAtServerTimeMsec },
+                }
+                : null;
+        set
+        {
+            if (value is null)
+            {
+                _currentCarryOperation = null;
+                return;
+            }
+
+            if (
+                !value.TryGetValue("item_id", out Variant itemIdVariant)
+                || !value.TryGetValue(
+                    "started_at_server_time_msec",
+                    out Variant startedAtServerTimeMsecVariant
+                )
+            )
+            {
+                GD.PushWarning($"{GetPath()}: invalid carry operation variant.");
+                _currentCarryOperation = null;
+                return;
+            }
+
+            StringName itemId;
+            ulong startedAtServerTimeMsec;
+            try
+            {
+                itemId = (StringName)itemIdVariant;
+                startedAtServerTimeMsec = (ulong)startedAtServerTimeMsecVariant;
+            }
+            catch (InvalidCastException)
+            {
+                GD.PushWarning($"{GetPath()}: invalid carry operation variant.");
+                _currentCarryOperation = null;
+                return;
+            }
+
+            CarryOperation? lastOperation = _currentCarryOperation;
+            _currentCarryOperation = new CarryOperation(
+                itemId,
+                startedAtServerTimeMsec
+            );
+
+            OnCarryOperationChanged(lastOperation, _currentCarryOperation);
+        }
+    }
 
     [Export]
     public StringName? CarriedItemId
@@ -49,12 +119,43 @@ public partial class CarryComponent : Node, ICarrier
         }
     }
 
+    public async Task<bool> TryTakeAsync(StringName itemId, Node3D carriableObject)
+    {
+        if (
+            !IsAuthoritative
+            || carriableObject is null
+            || !TryGetCarriableDefinition(itemId, out CarriableItemDefinition definition)
+            || Inventory is null
+        )
+        {
+            return false;
+        }
+
+        _currentCarryOperation = new CarryOperation(itemId, Time.GetTicksMsec());
+        CurrentCarryOperationVariant = CurrentCarryOperationVariant; // Replicate to clients
+
+        await Task.Delay(700);
+
+        if (!TryTake(itemId, carriableObject))
+        {
+            return false;
+        }
+
+        // TODO: wait for animation finishg
+        await Task.Delay(700);
+
+        _currentCarryOperation = null;
+        CurrentCarryOperationVariant = null; // Replicate to clients
+
+        return true;
+    }
+
     public bool TryTake(StringName itemId, Node3D carriableObject)
     {
         if (
             !IsAuthoritative
             || carriableObject is null
-            || !TryGetCarriableDefinition(itemId, out _)
+            || !TryGetCarriableDefinition(itemId, out CarriableItemDefinition definition)
             || Inventory is null
         )
         {
@@ -95,6 +196,8 @@ public partial class CarryComponent : Node, ICarrier
         {
             return false;
         }
+
+        AnimationController?.PlayOneShot(definition.CustomDropAnimationName);
 
         if (Inventory.RemoveItem(itemId) != 1)
         {
@@ -186,5 +289,23 @@ public partial class CarryComponent : Node, ICarrier
 
         _itemVisualInstance.QueueFree();
         _itemVisualInstance = null;
+    }
+
+    private void OnCarryOperationChanged(
+        CarryOperation? lastOperation,
+        CarryOperation? currentCarryOperation
+    )
+    {
+        // Started carrying
+        if (
+            currentCarryOperation is not null
+            && TryGetCarriableDefinition(
+                currentCarryOperation.Value.ItemId,
+                out CarriableItemDefinition definition
+            )
+        )
+        {
+            AnimationController?.PlayOneShot(definition.CustomCarryAnimationName);
+        }
     }
 }

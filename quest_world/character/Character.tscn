@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://bh7me5hps2qp6"]
 
-[ext_resource type="PackedScene" path="res://addons/dummy_character_plugin/scenes/Character.tscn" id="1_base"]
+[ext_resource type="PackedScene" uid="uid://blivoww746ggf" path="res://addons/dummy_character_plugin/scenes/Character.tscn" id="1_base"]
 [ext_resource type="Script" uid="uid://bkmnwijy1k8nw" path="res://quest_world/character/QuestWorldCharacter.cs" id="2_project_character"]
 [ext_resource type="Script" uid="uid://yahimljmakge" path="res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" id="3_interactor"]
 [ext_resource type="Script" uid="uid://drgb3r1muwfvx" path="res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" id="4_presenter"]
@@ -22,14 +22,14 @@
 properties/0/path = NodePath(".:CarriedItemId")
 properties/0/spawn = true
 properties/0/replication_mode = 2
+properties/1/path = NodePath(".:CurrentCarryOperationVariant")
+properties/1/spawn = true
+properties/1/replication_mode = 2
 
 [node name="Character" unique_id=493885237 instance=ExtResource("1_base")]
 script = ExtResource("2_project_character")
 
-[node name="UALCharacter" parent="Visual" parent_id_path=PackedInt32Array(1801593725) index="0" unique_id=1190744522]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
-
-[node name="GeneralSkeleton" parent="Visual/UALCharacter/Armature" parent_id_path=PackedInt32Array(1190744522, 1290648370) index="0" unique_id=1989870170]
+[node name="GeneralSkeleton" parent="Visual/UALCharacter/Armature" parent_id_path=PackedInt32Array(1190744522, 643259350) index="0" unique_id=288034341]
 bones/1/position = Vector3(0, 0.9167, -0.05010003)
 bones/1/rotation = Quaternion(0, 0, 0, 1)
 bones/3/rotation = Quaternion(0, 0, 0, 1)
@@ -114,12 +114,6 @@ bone_idx = 1
 [node name="CarriableAnchor" type="Node3D" parent="Visual/UALCharacter/Armature/GeneralSkeleton/CarriableAnchorBone" index="0" unique_id=1440440580]
 transform = Transform3D(1.0000001, 0, 1.4901161e-08, -5.5879354e-09, 0.99999994, 0.00078166276, -2.9802322e-08, -0.0007816553, 0.99999976, 0.12686732, -0.037084937, 0.5143815)
 
-[node name="AnimationTree" parent="." index="2" unique_id=825379154]
-root_node = NodePath("../Visual/UALCharacter")
-parameters/LandOneShot/active = false
-parameters/LandOneShot/internal_active = false
-parameters/LandOneShot/request = 0
-
 [node name="CameraYaw" parent="." index="4" unique_id=902288204]
 ThirdPersonDistance = 2.5
 FirstPersonCameraOffset = Vector3(0, 0, -0.6)
@@ -190,10 +184,11 @@ grow_vertical = 2
 layout_mode = 2
 alignment = 1
 
-[node name="CarryComponent" type="Node" parent="." index="13" unique_id=753076839 node_paths=PackedStringArray("CarriableAnchor", "Inventory")]
+[node name="CarryComponent" type="Node" parent="." index="13" unique_id=753076839 node_paths=PackedStringArray("CarriableAnchor", "Inventory", "AnimationController")]
 script = ExtResource("15_xok31")
 CarriableAnchor = NodePath("../Visual/UALCharacter/Armature/GeneralSkeleton/CarriableAnchorBone/CarriableAnchor")
 Inventory = NodePath("../InventoryComponent")
+AnimationController = NodePath("../AnimationController")
 metadata/_custom_type_script = "uid://daxwfb5jn63w3"
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="CarryComponent" index="0" unique_id=1461336339]

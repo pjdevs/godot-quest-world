@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using GameplayActionPlugin;
 using GameplayActionPlugin.Runtime.Actions;
 using Godot;
@@ -8,6 +9,10 @@ public partial class TakeExecutor : GameplayActionExecutor
     [Export]
     public CarriableItemDefinition? Item { get; set; }
 
+    private ulong _executionId = 0;
+    private GameplayActionComponent? _component = null;
+    private Task<bool>? _currentTakeTask = null;
+
     public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         ICarrier? carrier = context.GetInstigator<ICarrier>();
@@ -17,11 +22,34 @@ public partial class TakeExecutor : GameplayActionExecutor
             return new GameplayActionExecutionFailed("Carriable pickup context is incomplete.");
         }
 
-        if (!carrier.TryTake(Item.Id, carriableObject))
+        _executionId = context.ExecutionId;
+        _component = context.Component;
+        _currentTakeTask = WaitForTakeCompletion(carrier, Item.Id, carriableObject);
+
+        return new GameplayActionExecutionRunning();
+    }
+
+    private async Task<bool> WaitForTakeCompletion(
+        ICarrier carrier,
+        StringName itemId,
+        Node3D carriableObject
+    )
+    {
+        bool result = await carrier.TryTakeAsync(itemId, carriableObject);
+
+        if (result)
         {
-            return new GameplayActionExecutionFailed("Cannot carry item");
+            _component?.CompleteExecution(_executionId);
+        }
+        else
+        {
+            _component?.FailExecution(_executionId, "Could not take carriable object.");
         }
 
-        return new GameplayActionExecutionCompleted();
+        _executionId = 0;
+        _component = null;
+        _currentTakeTask = null;
+
+        return result;
     }
 }

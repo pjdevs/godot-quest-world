@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using DummyCharacterPlugin;
 using GameplayActionPlugin.Runtime.Runner;
 using Godot;
@@ -145,6 +146,11 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
 
     #region ICarrier
     public bool IsCarrying => _carryComponent.IsCarrying;
+
+    public async Task<bool> TryTakeAsync(StringName itemId, Node3D carriableObject)
+    {
+        return await _carryComponent.TryTakeAsync(itemId, carriableObject);
+    }
 
     public bool TryTake(StringName itemId, Node3D carriableObject)
     {

@@ -12,7 +12,8 @@ public partial class CharacterAnimationController : Node
     private const string PlaybackPath = "parameters/StateMachine/playback";
     private const string BlendPositionPath = "parameters/StateMachine/Locomotion/blend_position";
     private const string AnimationTimeScalePath = "parameters/TimeScale/scale";
-    private const string LandingOneShotRequestPath = "parameters/LandOneShot/request";
+    private const string GenericOneShotAnimationNodeName = "GenericOneShotAnimation";
+    private const string GenericOneShotRequestPath = $"parameters/GenericOneShot/request";
 
     private static readonly string[] BaseAnimations =
     {
@@ -60,6 +61,7 @@ public partial class CharacterAnimationController : Node
     private AnimationPlayer _animationPlayer = null!;
     private AnimationTree _animationTree = null!;
     private AnimationNodeStateMachinePlayback _playback = null!;
+    private AnimationNodeAnimation? _genericOneShotAnimation;
     private CharacterFrameState _frame;
     private float _turnYawAccumulator;
     private string _overrideState = string.Empty;
@@ -102,6 +104,18 @@ public partial class CharacterAnimationController : Node
         if (_playback == null)
         {
             GD.PushError($"{Name}: AnimationTree is missing its state-machine playback parameter.");
+            return false;
+        }
+
+        AnimationNodeBlendTree? blendTree = _animationTree.TreeRoot as AnimationNodeBlendTree;
+        _genericOneShotAnimation =
+            blendTree?.GetNode(GenericOneShotAnimationNodeName) as AnimationNodeAnimation;
+
+        if (_genericOneShotAnimation == null)
+        {
+            GD.PushError(
+                $"{Name}: AnimationTree is missing its '{GenericOneShotAnimationNodeName}' node."
+            );
             return false;
         }
 
@@ -180,6 +194,23 @@ public partial class CharacterAnimationController : Node
 
     public bool IsTurnInPlaceActive =>
         _overrideState == TurnLeftState || _overrideState == TurnRightState;
+
+    public bool PlayOneShot(StringName animation)
+    {
+        if (!_initialized || !RequireAnimation(animation))
+        {
+            return false;
+        }
+
+        _genericOneShotAnimation?.Animation = animation;
+
+        _animationTree.Set(
+            GenericOneShotRequestPath,
+            (int)AnimationNodeOneShot.OneShotRequest.Fire
+        );
+
+        return true;
+    }
 
     private bool ValidateAnimations()
     {
@@ -330,7 +361,7 @@ public partial class CharacterAnimationController : Node
     private void BeginLanding()
     {
         _animationTree.Set(
-            LandingOneShotRequestPath,
+            GenericOneShotRequestPath,
             (int)AnimationNodeOneShot.OneShotRequest.Fire
         );
         _landingBlendOutRemaining = Mathf.Max(LandingBlendOutDelay, 0.0f);
@@ -348,7 +379,7 @@ public partial class CharacterAnimationController : Node
         if (_landingBlendOutRemaining <= 0.0f)
         {
             _animationTree.Set(
-                LandingOneShotRequestPath,
+                GenericOneShotRequestPath,
                 (int)AnimationNodeOneShot.OneShotRequest.FadeOut
             );
             _landingBlendOutPending = false;

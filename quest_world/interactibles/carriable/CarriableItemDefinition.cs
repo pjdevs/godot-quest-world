@@ -12,6 +12,12 @@ public partial class CarriableItemDefinition : InventoryItemDefinition
     public GameplayActionBindingConfig? DropBindingConfig { get; set; }
 
     [Export]
+    public StringName CustomCarryAnimationName { get; set; } = "PickUp_Kneeling";
+
+    [Export]
+    public StringName CustomDropAnimationName { get; set; } = "PickUp_Kneeling";
+
+    [Export]
     public PackedScene? ItemVisualScene { get; set; }
 
     public StringName DropActionId => new($"drop_{Id}");
