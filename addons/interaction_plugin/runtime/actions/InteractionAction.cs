@@ -2,6 +2,7 @@ using GameplayActionPlugin;
 using GameplayActionPlugin.Runtime.Actions;
 using Godot;
 using InteractionPlugin.Runtime.Interactive;
+using InteractionPlugin.Runtime.Offers;
 using InteractionPlugin.Runtime.Rules;
 
 namespace InteractionPlugin.Runtime.Actions;
@@ -11,7 +12,8 @@ namespace InteractionPlugin.Runtime.Actions;
 public partial class InteractionAction : InputGameplayAction
 {
     /// <summary>Access-provider ID used by the runner for externally bound interaction actions.</summary>
-    public static readonly StringName InteractionAccessProviderId = new("interaction");
+    public static readonly StringName InteractionAccessProviderId =
+        InteractionOffer.InteractionAccessProviderId;
 
     /// <inheritdoc />
     public override StringName AccessProviderId => InteractionAccessProviderId;

@@ -8,6 +8,7 @@ using Godot;
 using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Detection;
 using InteractionPlugin.Runtime.Interactive;
+using InteractionPlugin.Runtime.Offers;
 
 namespace InteractionPlugin.Runtime.Interactor;
 
@@ -107,7 +108,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             return;
         }
 
-        Runner.RegisterAccessProvider(InteractionAction.InteractionAccessProviderId, this);
+        Runner.RegisterAccessProvider(InteractionOffer.InteractionAccessProviderId, this);
         ConnectRunnerSignals();
     }
 
@@ -149,14 +150,28 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         return null;
     }
 
-    public bool CanRequest(in GameplayActionAccessContext context) =>
-        HasInteractionAccess(context.Action);
+    public bool CanRequest(in GameplayActionAccessContext context) => HasInteractionAccess(context);
 
-    private bool HasInteractionAccess(GameplayAction action)
+    private bool HasInteractionAccess(in GameplayActionAccessContext context)
     {
-        return action is InteractionAction interactionAction
-            && interactionAction.Interactive is InteractiveComponent interactive
-            && Detector?.Detect(interactive) == InteractionDetectionKind.Interactible;
+        if (
+            context.Target is InteractiveComponent interactive
+            && interactive.TryResolveOfferForEndpoint(
+                this,
+                context.Component,
+                context.Action,
+                out InteractionOffer? offer
+            )
+            && offer is not null
+            && Detector?.Detect(interactive) == InteractionDetectionKind.Interactible
+        )
+        {
+            return interactive.EvaluateAvailability(this, offer) is GameplayActionAllowed;
+        }
+
+        return context.Action is InteractionAction interactionAction
+            && interactionAction.Interactive is InteractiveComponent legacyInteractive
+            && Detector?.Detect(legacyInteractive) == InteractionDetectionKind.Interactible;
     }
 
     internal void NotifyInteractiveRemoved(InteractiveComponent interactive)
@@ -271,7 +286,41 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
     private void BindFocusedActions(InteractiveComponent interactive)
     {
-        if (Runner is null || interactive.ActionComponent is null)
+        if (Runner is null)
+        {
+            return;
+        }
+
+        if (interactive.Offers.Count > 0)
+        {
+            foreach (InteractionOffer offer in interactive.Offers)
+            {
+                if (
+                    offer?.BindingConfig is not GameplayActionBindingConfig config
+                    || !interactive.TryResolveOffer(
+                        this,
+                        offer,
+                        out InteractionOfferResolution resolution
+                    )
+                )
+                {
+                    continue;
+                }
+
+                Runner.BindAction(
+                    resolution.Component,
+                    resolution.Action.Definition?.Id ?? offer.ActionId,
+                    interactive,
+                    config,
+                    Variant.From(interactive),
+                    interactive
+                );
+            }
+
+            return;
+        }
+
+        if (interactive.ActionComponent is null)
         {
             return;
         }
@@ -439,10 +488,29 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
     /// back to interactives. A host carrying generic actions beside the interaction ones therefore
     /// resolves only the latter, which is exactly what the interaction signals describe.
     /// </remarks>
-    private static InteractiveComponent? ResolveInteractive(Node? component, StringName actionId) =>
-        (component as GameplayActionComponent)?.ResolveAction(actionId) is InteractionAction action
+    private InteractiveComponent? ResolveInteractive(Node? component, StringName actionId)
+    {
+        foreach (
+            GameplayActionBinding binding in Runner?.GetBindings()
+                ?? System.Array.Empty<GameplayActionBinding>()
+        )
+        {
+            if (
+                binding.Component == component
+                && binding.ActionId == actionId
+                && binding.Target is InteractiveComponent interactive
+            )
+            {
+                return interactive;
+            }
+        }
+
+        return
+            (component as GameplayActionComponent)?.ResolveAction(actionId)
+                is InteractionAction action
             ? action.Interactive
             : null;
+    }
 
     private void OnGameplayActionRequested(Node component, StringName actionId)
     {
@@ -523,7 +591,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             {
                 Runner.UnbindSource(_focusedInteractive);
             }
-            Runner.UnregisterAccessProvider(InteractionAction.InteractionAccessProviderId, this);
+            Runner.UnregisterAccessProvider(InteractionOffer.InteractionAccessProviderId, this);
             DisconnectRunnerSignals();
         }
 

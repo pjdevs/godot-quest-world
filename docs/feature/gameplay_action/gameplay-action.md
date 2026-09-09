@@ -112,12 +112,14 @@ edge; `TryGetBindingHoldProgress()` exposes progress for that captured binding o
 execution is a separate lifecycle owned by `TimedGameplayActionExecutor` or compositional
 `TimedExecution`.
 
-Request access is resolved independently from action ownership. An action with no `AccessProviderId` is
-accessible only when it belongs to the runner's `OwnedActionComponent`; an action with an
-`AccessProviderId` always asks the runner's matching `IGameplayActionAccessProvider`, whether the action
-is owned or external. A missing provider rejects the request. The provider receives the optional
-invocation target. The authoritative runner validates the RPC sender and access, then lets the host
-re-run rules/reservations. Client bindings and access claims never cross the network as proof.
+Request access is resolved independently from action ownership. `ConfiguredAccessProviderId` is
+authorable on every `GameplayAction` and feeds its effective `AccessProviderId`: an action with no
+provider is accessible only when it belongs to the runner's `OwnedActionComponent`; an action with an
+`AccessProviderId` always asks the runner's matching
+`IGameplayActionAccessProvider`, whether the action is owned or external. A missing provider rejects the
+request. The provider receives the optional invocation target. The authoritative runner validates the
+RPC sender and access, then lets the host re-run rules/reservations. Client bindings and access claims
+never cross the network as proof.
 
 Executors require requester presence by default. An executor may opt out through
 `RequiresRequesterPresence == false` when accepted work becomes world-owned and should survive

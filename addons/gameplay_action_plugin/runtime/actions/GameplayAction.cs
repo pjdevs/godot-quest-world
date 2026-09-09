@@ -31,8 +31,16 @@ public partial class GameplayAction : Node
     public GameplayActionExecutionVisibility ExecutionVisibility { get; set; } =
         GameplayActionExecutionVisibility.RequesterOnly;
 
-    /// <summary>Gets the named access provider required when this action is bound externally.</summary>
-    public virtual StringName AccessProviderId => new();
+    /// <summary>Gets or sets the provider ID authored for runner requests.</summary>
+    [Export]
+    public StringName ConfiguredAccessProviderId { get; set; } = new();
+
+    /// <summary>Gets the named access provider required when a runner requests this action.</summary>
+    /// <remarks>
+    /// An empty value keeps the default owned-action access policy. A non-empty value always routes
+    /// the request through the runner's provider with that ID, regardless of action ownership.
+    /// </remarks>
+    public virtual StringName AccessProviderId => ConfiguredAccessProviderId;
 
     /// <summary>Gets the component currently owning this occurrence, or null before registration.</summary>
     public GameplayActionComponent? Component { get; internal set; }

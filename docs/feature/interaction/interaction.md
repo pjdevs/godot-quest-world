@@ -21,21 +21,25 @@ A target authors one generic action host next to its Interaction adapter:
 
 ```text
 Interactive object
-├── GameplayActions                    # GameplayActionComponent
-│   ├── OpenAction                     # InteractionAction
+├── GameplayActions                    # optional target-owned GameplayActionComponent
+│   ├── OpenAction                     # ordinary GameplayAction
 │   │   └── Executor
 │   └── CloseAction
 │       └── Executor
 ├── GameplayActionExecutionSynchronizer # optional, only for Replicated executions
-├── InteractiveComponent               # ActionComponent -> GameplayActions
+├── InteractiveComponent               # ActionComponent + ordered Offers
+│   ├── TargetRules
+│   └── Offers                         # Target- or Instigator-sourced invocations
 ├── InteractionArea / anchor
 └── StatefulComponent                  # optional world truth
 ```
 
 Authored actions are direct children of the `GameplayActionComponent` and are listed in its `Actions`
-collection. `InteractiveComponent.Actions` is only a filtered read-only projection of the
-`InteractionAction` occurrences owned by that host. Generic actions hosted beside them are not
-implicitly interaction offers.
+collection. `InteractiveComponent.Offers` is the ordered interaction-facing contract. Each offer
+resolves an `ActionId` either from the target's `ActionComponent` (`Target`) or from the requesting
+runner's `OwnedActionComponent` (`Instigator`). The offer supplies the local binding and invocation
+target; it never transfers action ownership. The older `InteractionAction` projection remains only as
+a migration bridge for existing scenes and tests.
 
 The requester side composes the same generic runner with Interaction:
 
@@ -55,23 +59,29 @@ before a press.
 
 ## Actions, rules and availability
 
-`InteractionAction : InputGameplayAction` is the target-specific specialization. It reuses
-`GameplayActionDefinition`, `GameplayActionBindingConfig`, generic execution visibility and the generic
-`Allowed | Blocked(reason) | Hidden` availability vocabulary.
+`InteractionOffer : Resource` is the target-specific authoring unit. It contains an action source,
+stable `ActionId`, optional `BindingConfig`, ordered offer rules, and the future target-reservation
+presentation fields. It resolves to an ordinary `GameplayAction`, so a player-owned `Take` and a
+door-owned `Open` use the same adapter.
 
 Availability is evaluated in this order:
 
 ```text
-configuration
-→ target rules
-→ action rules
-→ concurrency
+offer configuration and endpoint resolution
+→ spatial access
+→ Interactive.TargetRules
+→ InteractionOffer.Rules
+→ resolved GameplayAction rules
+→ action-owner concurrency
 ```
 
-`TargetRules` are inserted into the generic rule pass through one adapter, before the action's authored
-rules. Rules are synchronous queries: they read gameplay state but do not mutate it. The first result
-that is not `Allowed` wins, so a rule returning `Hidden` cannot be made visible again by a later busy
-check.
+Offer and target rules receive an `InteractionContext` containing the interactor, Interactive target,
+offer, resolved action and resolved action component. They are evaluated directly and are never copied
+into or injected into a player-owned action's `Rules` collection. Rules are synchronous queries: they
+read gameplay state but do not mutate it. The first result that is not `Allowed` wins.
+
+`InteractionAction` and its target-rule adapter remain a compatibility path for target-owned content
+that has not migrated to `Offers`; new code must author the offer path.
 
 A programmatic `GameplayActionComponent.ExecuteAction()` deliberately bypasses spatial access because it
 is not a player request, but still runs the same target/action rules and host reservations.
@@ -137,9 +147,12 @@ not happened yet.
 
 ## Request access and sustained interactions
 
-Focus creates generic bindings whose cleanup source is the focused target. Focus loss removes them.
-The runner registers Interaction as an `IGameplayActionAccessProvider`; the authoritative peer resolves
-its own target/action and re-validates spatial access before execution.
+Focus resolves every visible offer and creates a generic binding whose cleanup source and invocation
+target are both the focused Interactive. Focus loss removes those bindings without touching the real
+action occurrence. The runner registers Interaction as an `IGameplayActionAccessProvider`; the
+authoritative peer resolves its own target, finds the exact offer that maps to the requested endpoint,
+re-validates spatial access and evaluates target/offer rules before execution. A client-supplied target
+or action endpoint is never accepted as proof of access.
 
 `InteractionActionExecutor` adapts `GameplayActionContext` into `InteractionExecutionContext`. An
 interaction executor requires both an `InteractionAction` hosted by an `InteractiveComponent` and an
@@ -187,18 +200,20 @@ to the generic execution slot. They are different phases and are never added tog
 
 For a normal interactive object:
 
-1. Add a `GameplayActionComponent` and author each `InteractionAction` as a direct child with a stable
-   definition, binding config, executor and optional rules.
-2. Add `InteractiveComponent`, assign its `ActionComponent`, interaction area/anchor and optional
-   indication area, then put shared conditions in `TargetRules`.
-3. Use a Stateful component only when the object owns durable world truth. State-dependent availability
+1. Add ordinary `GameplayAction` occurrences as direct children of a target-owned
+   `GameplayActionComponent` only for capabilities intrinsically owned by the object.
+2. Add `InteractiveComponent`, assign its optional target `ActionComponent`, interaction area/anchor
+   and optional indication area, then author ordered `Offers`. Use `Source = Target` for target-owned
+   actions and `Source = Instigator` for actions on the requesting runner.
+3. Put shared target conditions in `TargetRules` and offer-specific conditions in `Offer.Rules`.
+4. Use a Stateful component only when the object owns durable world truth. State-dependent availability
    belongs in `StatefulStateInteractionRule`; state mutations belong in an executor.
-4. Choose `ExecutionVisibility.RequesterOnly` by default. Use `Replicated` only when other peers must see
+5. Choose `ExecutionVisibility.RequesterOnly` by default. Use `Replicated` only when other peers must see
    the transient execution and wire a `GameplayActionExecutionSynchronizer`; persistent state still
    belongs to Stateful.
-5. On the actor, wire one `GameplayActionRunner`, one `InteractionInteractor` and one detector. Feed
+6. On the actor, wire one `GameplayActionRunner`, one `InteractionInteractor` and one detector. Feed
    relevant inputs to the runner; refresh focused Interaction bindings before the press edge.
-6. Add `InteractionPresenter` only when target UI is wanted. Presentation is optional to the runtime.
+7. Add `InteractionPresenter` only when target UI is wanted. Presentation is optional to the runtime.
 
 The current topology is deliberately explicit. The remaining
 [`planned/interaction-authoring-polish.md`](planned/interaction-authoring-polish.md) explores making direct
@@ -269,8 +284,9 @@ target-level allowed/blocked state.
 
 ### AD-10 — Target rules precede action rules, concurrency comes last
 
-Common target policy participates in the same generic ordered rule pass through one adapter. Busy state
-is applied only after the rules, so concurrency never makes a deliberately hidden action resurface.
+Common target and offer policy is evaluated directly before the resolved generic action rules. The
+legacy target-rule adapter remains only for `InteractionAction` migration. Busy state is applied only
+after the rules, so concurrency never makes a deliberately hidden action resurface.
 
 ### AD-11 — Hold selects; execution runs
 
@@ -303,6 +319,18 @@ Interaction resolves an `InteractionInteractor` from the generic gameplay instig
 internal resolution seam. The current descendant traversal is an implementation choice and may later be
 replaced by caching/registration without changing rules or executors. The scene invariant is at most one
 interactor per gameplay instigator.
+
+### AD-16 — Offers describe invocations, not ownership
+
+`InteractiveComponent.Offers` resolves either a target-owned or instigator-owned `GameplayAction`
+occurrence. The offer owns contextual input binding, target-side rules and invocation target data;
+focus never grants, clones or transfers the action.
+
+### AD-17 — Authority reconstructs the offer endpoint
+
+Interaction access validation compares the requested component/action/target against the authoritative
+offer that maps to it, then repeats spatial, target and offer rules. Local bindings and client target
+paths express intent only.
 
 ## Remaining planned work
 

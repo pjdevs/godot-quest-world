@@ -10,12 +10,13 @@ using Godot;
 using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Detection;
 using InteractionPlugin.Runtime.Interactor;
+using InteractionPlugin.Runtime.Offers;
 using InteractionPlugin.Runtime.Rules;
 
 namespace InteractionPlugin.Runtime.Interactive;
 
 /// <summary>
-/// Defines an interactable target, evaluates its rules, and owns the execution of its actions.
+/// Defines an interactable target, evaluates its rules, and projects authored offers onto gameplay actions.
 /// </summary>
 /// <remarks>
 /// Add this node beside its gameplay node and assign explicit scene references in the Inspector.
@@ -165,7 +166,7 @@ public partial class InteractiveComponent : Node
     public PackedScene? IndicationScene { get; set; }
 
     /// <summary>
-    /// Gets or sets the host owning every action this target offers, assigned before tree entry.
+    /// Gets or sets the optional host owning target-sourced actions, assigned before tree entry.
     /// </summary>
     /// <remarks>
     /// Author it beside this node so the relative paths its rules and executors spell out keep the
@@ -175,6 +176,16 @@ public partial class InteractiveComponent : Node
     [ExportGroup("Actions")]
     [Export]
     public GameplayActionComponent? ActionComponent { get; set; }
+
+    /// <summary>
+    /// Gets or sets the ordered invocations this target offers to an interactor.
+    /// </summary>
+    /// <remarks>
+    /// An offer is not an action occurrence. It resolves either the target's host or the requesting
+    /// runner's owned host and supplies the invocation target to the generic action pipeline.
+    /// </remarks>
+    [Export]
+    public Godot.Collections.Array<InteractionOffer> Offers { get; set; } = new();
 
     /// <summary>
     /// Gets the actions this target offers, in the order its host declares them.
@@ -309,9 +320,11 @@ public partial class InteractiveComponent : Node
             GD.PushError($"{GetPath()}: InteractiveComponent requires an InteractionAnchor.");
         }
 
-        if (ActionComponent is null)
+        if (ActionComponent is null && RequiresTargetActionComponent())
         {
-            GD.PushError($"{GetPath()}: InteractiveComponent requires a GameplayActionComponent.");
+            GD.PushError(
+                $"{GetPath()}: InteractiveComponent requires a GameplayActionComponent for target offers."
+            );
         }
 
         bool hasAction = false;
@@ -321,11 +334,10 @@ public partial class InteractiveComponent : Node
             hasAction = true;
         }
 
-        if (ActionComponent is not null && !hasAction)
+        if (!hasAction && Offers.Count == 0)
         {
             GD.PushError(
-                $"{GetPath()}: InteractiveComponent requires its GameplayActionComponent to declare "
-                    + "at least one InteractionAction."
+                $"{GetPath()}: InteractiveComponent requires at least one InteractionAction or InteractionOffer."
             );
         }
 
@@ -474,6 +486,162 @@ public partial class InteractiveComponent : Node
         return startedByInteractor ? AlreadyRunningReason : SomeoneElseReason;
     }
 
+    /// <summary>Resolves one authored offer to the action endpoint it invokes.</summary>
+    /// <param name="interactor">Interactor supplying the instigator-owned action host.</param>
+    /// <param name="offer">Offer to resolve.</param>
+    /// <param name="resolution">Resolved component and action when the offer is valid.</param>
+    /// <returns>Whether the offer names a live, configured action endpoint.</returns>
+    public bool TryResolveOffer(
+        InteractionInteractor interactor,
+        InteractionOffer? offer,
+        out InteractionOfferResolution resolution
+    )
+    {
+        resolution = default;
+        if (interactor is null || offer is null || offer.ActionId is null || offer.ActionId.IsEmpty)
+        {
+            return false;
+        }
+
+        GameplayActionComponent? component = offer.ActionSource switch
+        {
+            InteractionOfferSource.Target => ActionComponent,
+            InteractionOfferSource.Instigator => interactor.Runner?.OwnedActionComponent,
+            _ => null,
+        };
+        GameplayAction? action = component?.ResolveAction(offer.ActionId);
+        if (component is null || action is null)
+        {
+            return false;
+        }
+
+        resolution = new InteractionOfferResolution(component, action);
+        return true;
+    }
+
+    /// <summary>Finds the authored offer that resolves to one requested action endpoint.</summary>
+    internal bool TryResolveOfferForEndpoint(
+        InteractionInteractor interactor,
+        GameplayActionComponent component,
+        GameplayAction action,
+        out InteractionOffer? offer
+    )
+    {
+        foreach (InteractionOffer candidate in Offers)
+        {
+            if (
+                candidate is not null
+                && TryResolveOffer(interactor, candidate, out InteractionOfferResolution resolution)
+                && resolution.Component == component
+                && resolution.Action == action
+            )
+            {
+                offer = candidate;
+                return true;
+            }
+        }
+
+        offer = null;
+        return false;
+    }
+
+    /// <summary>Evaluates one authored offer without mutating the resolved action's rules.</summary>
+    public GameplayActionAvailability EvaluateAvailability(
+        InteractionInteractor interactor,
+        InteractionOffer offer
+    )
+    {
+        if (
+            interactor is null
+            || InteractionArea is null
+            || InteractionAnchor is null
+            || offer is null
+            || !Offers.Contains(offer)
+            || !TryResolveOffer(interactor, offer, out InteractionOfferResolution resolution)
+            || resolution.Action.Definition is null
+            || resolution.Action.Executor is null
+        )
+        {
+            return new GameplayActionBlocked(NotConfiguredReason);
+        }
+
+        Node interactionInstigator = interactor.Runner?.ResolveInstigator() ?? interactor;
+        InteractionContext context = new(
+            interactor,
+            this,
+            resolution.Action,
+            offer,
+            resolution.Component
+        );
+        GameplayActionAvailability targetAvailability = EvaluateRules(TargetRules, context);
+        if (targetAvailability is not GameplayActionAllowed)
+        {
+            return targetAvailability;
+        }
+
+        GameplayActionAvailability offerAvailability = EvaluateRules(offer.Rules, context);
+        if (offerAvailability is not GameplayActionAllowed)
+        {
+            return offerAvailability;
+        }
+
+        GameplayActionAvailability actionAvailability = resolution.Component.EvaluateAction(
+            resolution.Action.Definition.Id,
+            interactionInstigator,
+            interactor.Runner,
+            this
+        );
+        if (actionAvailability is not GameplayActionAllowed)
+        {
+            return actionAvailability;
+        }
+
+        StringName concurrencyGroup = resolution.Action.GetHostConcurrencyGroup();
+        bool concurrencyActive;
+        bool startedByInteractor;
+        if (resolution.Component.IsAuthoritative)
+        {
+            concurrencyActive =
+                resolution.Component.IsActionExecuting(resolution.Action.Definition.Id)
+                || resolution.Component.IsConcurrencyGroupExecuting(concurrencyGroup);
+            startedByInteractor =
+                concurrencyActive
+                && resolution.Component.IsConcurrencyGroupExecutingFor(
+                    concurrencyGroup,
+                    interactionInstigator
+                );
+        }
+        else
+        {
+            concurrencyActive = resolution.Component.TryGetExecutionPresentationInGroup(
+                concurrencyGroup,
+                out GameplayActionExecutionPresentation execution
+            );
+            startedByInteractor =
+                concurrencyActive
+                && execution.Relation == GameplayActionExecutionRelation.RequestedLocally;
+        }
+
+        return concurrencyActive
+            ? new GameplayActionBlocked(
+                startedByInteractor ? AlreadyRunningReason : SomeoneElseReason
+            )
+            : new GameplayActionAllowed();
+    }
+
+    private bool RequiresTargetActionComponent()
+    {
+        foreach (InteractionOffer offer in Offers)
+        {
+            if (offer?.ActionSource == InteractionOfferSource.Target)
+            {
+                return true;
+            }
+        }
+
+        return Offers.Count == 0;
+    }
+
     private void OnExecutionPresentationChanged(StringName actionId) =>
         EmitSignal(SignalName.ExecutionPresentationChanged, actionId);
 
@@ -574,6 +742,31 @@ public partial class InteractiveComponent : Node
     /// <returns>Allowed when one action is allowed, the first blocked result, or hidden.</returns>
     public GameplayActionAvailability EvaluateAvailability(InteractionInteractor interactor)
     {
+        if (Offers.Count > 0)
+        {
+            GameplayActionAvailability offerAggregate = new GameplayActionHidden();
+            foreach (InteractionOffer offer in Offers)
+            {
+                if (offer is null)
+                {
+                    continue;
+                }
+
+                GameplayActionAvailability availability = EvaluateAvailability(interactor, offer);
+                if (availability is GameplayActionAllowed)
+                {
+                    return availability;
+                }
+
+                if (availability is GameplayActionBlocked && offerAggregate is GameplayActionHidden)
+                {
+                    offerAggregate = availability;
+                }
+            }
+
+            return offerAggregate;
+        }
+
         GameplayActionAvailability aggregate = new GameplayActionHidden();
         foreach (InteractionAction action in Actions)
         {
@@ -658,6 +851,11 @@ public partial class InteractiveComponent : Node
         bool isFocused
     )
     {
+        if (Offers.Count > 0)
+        {
+            return GetOfferPresentation(interactor, isFocused);
+        }
+
         List<GameplayActionPresentation> presentedActions = new();
         foreach (InteractionAction action in Actions)
         {
@@ -692,6 +890,19 @@ public partial class InteractiveComponent : Node
     /// <returns><see langword="true"/> when one action is allowed or blocked.</returns>
     public bool HasVisibleAction(InteractionInteractor interactor)
     {
+        if (Offers.Count > 0)
+        {
+            foreach (InteractionOffer offer in Offers)
+            {
+                if (offer is not null && TryGetOfferPresentation(interactor, offer, out _))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         foreach (InteractionAction action in Actions)
         {
             if (TryGetActionPresentation(interactor, action, out _))
@@ -760,6 +971,93 @@ public partial class InteractiveComponent : Node
         return true;
     }
 
+    private InteractionTargetPresentation GetOfferPresentation(
+        InteractionInteractor interactor,
+        bool isFocused
+    )
+    {
+        List<GameplayActionPresentation> presentedActions = new();
+        List<InteractionOffer?> presentedOffers = new();
+        foreach (InteractionOffer offer in Offers)
+        {
+            if (
+                offer is not null
+                && TryGetOfferPresentation(interactor, offer, out var presentation)
+            )
+            {
+                presentedActions.Add(presentation);
+                presentedOffers.Add(offer);
+            }
+        }
+
+        return new InteractionTargetPresentation(
+            this,
+            DisplayName,
+            Description,
+            presentedActions,
+            isFocused,
+            interactor.Detector?.GetInteractionDistance(this) ?? 0.0f,
+            presentedOffers
+        );
+    }
+
+    private bool TryGetOfferPresentation(
+        InteractionInteractor interactor,
+        InteractionOffer offer,
+        out GameplayActionPresentation presentation
+    )
+    {
+        presentation = default;
+        if (
+            offer.BindingConfig is not GameplayActionBindingConfig config
+            || !TryResolveOffer(interactor, offer, out InteractionOfferResolution resolution)
+            || resolution.Action.Definition is null
+        )
+        {
+            return false;
+        }
+
+        GameplayActionAvailability availability = EvaluateAvailability(interactor, offer);
+        if (availability is GameplayActionHidden)
+        {
+            return false;
+        }
+
+        float? holdProgress = null;
+        float? holdElapsed = null;
+        if (
+            interactor.Runner is not null
+            && interactor.Runner.TryGetBinding(
+                resolution.Component,
+                resolution.Action.Definition.Id,
+                this,
+                out GameplayActionBinding? binding
+            )
+            && binding is not null
+            && interactor.Runner.TryGetBindingHoldProgress(
+                binding.Id,
+                out float currentProgress,
+                out float currentElapsed
+            )
+        )
+        {
+            holdProgress = currentProgress;
+            holdElapsed = currentElapsed;
+        }
+
+        presentation = new GameplayActionPresentation(
+            resolution.Action.Definition.Id,
+            resolution.Action.Definition.Label,
+            resolution.Action.Definition.Description,
+            config.InputActionName,
+            availability,
+            config.ActivationMode,
+            holdProgress,
+            holdElapsed
+        );
+        return true;
+    }
+
     /// <summary>Gets the execution presentations visible on this peer.</summary>
     /// <remarks>
     /// The returned snapshot is ordered by <see cref="Actions"/>, not by execution start time. Progress
@@ -795,6 +1093,22 @@ public partial class InteractiveComponent : Node
 
         presentation = current;
         return true;
+    }
+
+    /// <summary>Looks up an execution presentation through the action owner of an authored offer.</summary>
+    public bool TryGetExecutionPresentation(
+        InteractionInteractor interactor,
+        InteractionOffer offer,
+        out GameplayActionExecutionPresentation presentation
+    )
+    {
+        presentation = default;
+        return TryResolveOffer(interactor, offer, out InteractionOfferResolution resolution)
+            && resolution.Component.TryGetExecutionPresentation(
+                resolution.Action.Definition?.Id ?? new StringName(),
+                out presentation
+            )
+            && presentation.Target == this;
     }
 
     internal void NotifyStatusChanged()

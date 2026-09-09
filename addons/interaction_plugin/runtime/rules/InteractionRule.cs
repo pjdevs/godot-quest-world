@@ -8,7 +8,7 @@ using InteractionPlugin.Runtime.Interactor;
 namespace InteractionPlugin.Runtime.Rules;
 
 /// <summary>
-/// Base resource for reusable gameplay conditions such as inventory, quest, or progression checks.
+/// Base resource for reusable target and offer conditions such as inventory, quest, or progression checks.
 /// </summary>
 /// <remarks>
 /// Rules run during local client prevalidation and authoritative server validation, once per
@@ -22,7 +22,7 @@ public abstract partial class InteractionRule : GameplayActionRule
     /// Evaluates one synchronous, side-effect-free gameplay condition for one action.
     /// Runtime state belongs to nodes or services reached through the context, not to this resource.
     /// </summary>
-    /// <param name="context">Interactor, interactive, and action data used by the condition.</param>
+    /// <param name="context">Interactor, interactive, offer, and resolved action data used by the condition.</param>
     /// <returns>
     /// An allowed availability, or the hidden or blocked result that stops the rule pipeline.
     /// </returns>
@@ -42,6 +42,8 @@ public abstract partial class InteractionRule : GameplayActionRule
             );
         }
 
-        return Evaluate(new InteractionContext(interactor, action.Interactive, action));
+        return Evaluate(
+            new InteractionContext(interactor, action.Interactive, action, null, action.Component)
+        );
     }
 }

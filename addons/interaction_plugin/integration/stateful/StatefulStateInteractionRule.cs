@@ -14,10 +14,10 @@ namespace InteractionPlugin.Integration.Stateful;
 /// completely, for example a first rule hiding <c>Open</c> outside the closed and opening phases, and
 /// a second one blocking it with a reason while the door is still opening.
 /// <para>
-/// <see cref="StatefulPath"/> is resolved relative to the <c>InteractionAction</c> owning the rule,
-/// so a rule may also read the state of another object. Because rules are shareable resources, a
-/// path crossing scene boundaries belongs to the level that wires both objects together, exactly
-/// like the node reference of an executor.
+/// <see cref="StatefulPath"/> is resolved relative to the Interactive target for authored offers.
+/// Legacy InteractionAction rules continue to resolve relative to their owning action. Because rules
+/// are shareable resources, a path crossing scene boundaries belongs to the level that wires both
+/// objects together, exactly like the node reference of an executor.
 /// </para>
 /// </remarks>
 [GlobalClass]
@@ -25,7 +25,7 @@ public partial class StatefulStateInteractionRule : InteractionRule
 {
     private const string NotConfiguredReason = "Interaction is not configured.";
 
-    /// <summary>Gets or sets the path to the observed component, relative to the owning action.</summary>
+    /// <summary>Gets or sets the path to the observed component, relative to the interaction target.</summary>
     [Export]
     public NodePath StatefulPath { get; set; } = new();
 
@@ -79,6 +79,7 @@ public partial class StatefulStateInteractionRule : InteractionRule
             return null;
         }
 
-        return context.Action.GetNodeOrNull<StatefulComponent>(StatefulPath);
+        Node root = context.Offer is null ? context.Action : context.Interactive;
+        return root.GetNodeOrNull<StatefulComponent>(StatefulPath);
     }
 }

@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using Godot;
 using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
+using InteractionPlugin.Runtime.Offers;
 
 namespace InteractionPlugin;
 
@@ -28,12 +30,16 @@ public enum InteractionDetectionKind
 
 /// <summary>Read-only inputs supplied to every gameplay interaction rule.</summary>
 /// <param name="Interactor">Interactor requesting the availability evaluation.</param>
-/// <param name="Interactive">Interactive component owning the evaluated action.</param>
-/// <param name="Action">Action being evaluated, including for target-level rules.</param>
+/// <param name="Interactive">Interactive component offering the evaluated invocation.</param>
+/// <param name="Action">Resolved gameplay action being evaluated.</param>
+/// <param name="Offer">Authored offer being evaluated, or null for legacy action rules.</param>
+/// <param name="Component">Resolved action owner, or the action's component when omitted.</param>
 public readonly record struct InteractionContext(
     InteractionInteractor Interactor,
     InteractiveComponent Interactive,
-    InteractionAction Action
+    GameplayAction Action,
+    InteractionOffer? Offer = null,
+    GameplayActionComponent? Component = null
 );
 
 /// <summary>Read-only inputs supplied to the executor of an authoritative action.</summary>
@@ -72,13 +78,15 @@ public readonly record struct InteractionExecutionContext(
 /// <param name="Distance">
 /// World units between the interactor's interaction origin and this target's anchor.
 /// </param>
+/// <param name="Offers">Offer aligned with each action for targeted execution presentation lookup.</param>
 public readonly record struct InteractionTargetPresentation(
     InteractiveComponent Interactive,
     string DisplayName,
     string Description,
     IReadOnlyList<GameplayActionPresentation> Actions,
     bool IsFocused,
-    float Distance = 0.0f
+    float Distance = 0.0f,
+    IReadOnlyList<InteractionOffer?>? Offers = null
 )
 {
     /// <summary>Gets whether at least one presented action can currently be requested.</summary>

@@ -13,6 +13,7 @@ using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Detection;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
+using InteractionPlugin.Runtime.Offers;
 
 namespace InteractionPlugin.Editor;
 
@@ -27,6 +28,7 @@ public static class InteractionValidator
         AreaInteractionDetector,
         InteractionPresenter,
         InteractionAction,
+        InteractionOffer,
         StatefulStateInteractionRule,
     }
 
@@ -48,6 +50,8 @@ public static class InteractionValidator
                 return ValidatePresenter(obj);
             case InspectableType.InteractionAction:
                 return ValidateAction(obj);
+            case InspectableType.InteractionOffer:
+                return ValidateOffer(obj);
             case InspectableType.StatefulStateInteractionRule:
                 return ValidateStatefulRule(obj);
             default:
@@ -62,6 +66,17 @@ public static class InteractionValidator
 
         if (GetObject(obj, "InteractionAnchor") is null)
             yield return "InteractionAnchor must be assigned.";
+
+        Godot.Collections.Array authoredOffers = GetArray(obj, "Offers");
+        if (authoredOffers.Count > 0)
+        {
+            foreach (string warning in ValidateOffers(obj, authoredOffers))
+            {
+                yield return warning;
+            }
+
+            yield break;
+        }
 
         // The action set belongs to the host, so this reads the host's declared array and keeps only
         // the interaction offers: a generic action hosted beside them is not this target's business.
@@ -166,6 +181,126 @@ public static class InteractionValidator
             {
                 yield return $"Actions[{index}]: {warning}";
             }
+        }
+    }
+
+    private static IEnumerable<string> ValidateOffers(
+        GodotObject interactive,
+        Godot.Collections.Array offers
+    )
+    {
+        GodotObject? actionComponent = GetObject(interactive, "ActionComponent");
+        bool needsTargetComponent = false;
+        HashSet<string> ids = new();
+        Dictionary<string, string> inputs = new();
+
+        for (int index = 0; index < offers.Count; index++)
+        {
+            if (offers[index].AsGodotObject() is not GodotObject offer)
+            {
+                yield return $"Offers[{index}] must not be null.";
+                continue;
+            }
+
+            string prefix = $"Offers[{index}]";
+            string id = GetName(offer, "ActionId");
+            int source = GetInt(offer, "ActionSource");
+            if (id.Length == 0)
+            {
+                yield return $"{prefix} uses an empty ActionId.";
+            }
+            else if (!ids.Add($"{source}:{id}"))
+            {
+                yield return $"Offers declare the action '{id}' more than once for the same source.";
+            }
+
+            if (source == (int)InteractionOfferSource.Target)
+            {
+                needsTargetComponent = true;
+                if (actionComponent is null)
+                {
+                    yield return $"{prefix} uses Target but ActionComponent is not assigned.";
+                }
+                else if (!HasAction(actionComponent, id))
+                {
+                    yield return $"{prefix} ('{id}') does not resolve on ActionComponent.";
+                }
+            }
+
+            GodotObject? binding = GetObject(offer, "BindingConfig");
+            if (binding is null)
+            {
+                yield return $"{prefix} ('{id}') has no BindingConfig.";
+            }
+            else if (
+                GetInt(binding, "ActivationMode") != (int)GameplayActionActivationMode.Automatic
+            )
+            {
+                string input = GetName(binding, "InputActionName");
+                if (input.Length == 0)
+                {
+                    yield return $"{prefix} ('{id}') is not automatic but declares no input.";
+                }
+                else
+                {
+                    string trigger =
+                        $"{input}|{GetFloat(binding, "HoldDuration")}|{GetInt(binding, "Priority")}";
+                    if (inputs.TryGetValue(trigger, out string? other))
+                    {
+                        yield return $"Offers '{other}' and '{id}' share the input '{input}', the same hold "
+                            + "threshold and the same priority: whenever both are available, the identifier "
+                            + "order decides. Give one a higher Priority, or a rule that hides it.";
+                    }
+                    else
+                    {
+                        inputs[trigger] = id;
+                    }
+                }
+            }
+
+            foreach (string warning in ValidateRules(offer, interactive, "Rules"))
+            {
+                yield return $"{prefix}: {warning}";
+            }
+        }
+
+        if (needsTargetComponent && actionComponent is null)
+        {
+            yield return "ActionComponent must be assigned when an offer uses Target.";
+        }
+    }
+
+    private static bool HasAction(GodotObject component, string id)
+    {
+        foreach (Variant entry in GetArray(component, "Actions"))
+        {
+            if (
+                entry.AsGodotObject() is GodotObject action
+                && GetObject(action, "Definition") is GodotObject definition
+                && GetName(definition, "Id") == id
+            )
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<string> ValidateOffer(GodotObject obj)
+    {
+        string id = GetName(obj, "ActionId");
+        if (id.Length == 0)
+            yield return "ActionId must be assigned.";
+
+        if (GetObject(obj, "BindingConfig") is not GodotObject binding)
+        {
+            yield return "BindingConfig must be assigned.";
+        }
+        else
+        {
+            foreach (string warning in GameplayActionValidator.Validate(binding))
+                yield return $"BindingConfig: {warning}";
         }
     }
 
@@ -365,6 +500,7 @@ public static class InteractionValidator
             InteractionDetector => InspectableType.InteractionDetector,
             InteractionPresenter => InspectableType.InteractionPresenter,
             InteractionAction => InspectableType.InteractionAction,
+            InteractionOffer => InspectableType.InteractionOffer,
             StatefulStateInteractionRule => InspectableType.StatefulStateInteractionRule,
             _ => InspectableType.None,
         };
@@ -385,6 +521,7 @@ public static class InteractionValidator
             nameof(InteractionDetector) => InspectableType.InteractionDetector,
             nameof(InteractionPresenter) => InspectableType.InteractionPresenter,
             nameof(InteractionAction) => InspectableType.InteractionAction,
+            nameof(InteractionOffer) => InspectableType.InteractionOffer,
             nameof(StatefulStateInteractionRule) => InspectableType.StatefulStateInteractionRule,
             _ => ResolveTypeFromPath(script?.ResourcePath),
         };
@@ -410,6 +547,8 @@ public static class InteractionValidator
                 InspectableType.InteractionPresenter,
             "res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" =>
                 InspectableType.InteractionAction,
+            "res://addons/interaction_plugin/runtime/offers/InteractionOffer.cs" =>
+                InspectableType.InteractionOffer,
             "res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" =>
                 InspectableType.StatefulStateInteractionRule,
             _ => InspectableType.None,

@@ -45,6 +45,7 @@ public partial class InteractionPresenter : CanvasLayer
     private string _promptActionKey = string.Empty;
     private readonly List<Control> _promptActions = new();
     private readonly List<GameplayActionPresentation> _promptedActions = new();
+    private readonly List<int> _promptedActionIndexes = new();
     private readonly Dictionary<InteractiveComponent, Control> _indications = new();
     private readonly List<InteractiveComponent> _staleIndications = new();
     private readonly HashSet<InteractiveComponent> _indicatedInteractives = new();
@@ -213,13 +214,35 @@ public partial class InteractionPresenter : CanvasLayer
         for (int index = 0; index < _promptActions.Count; index++)
         {
             GameplayActionPresentation action = _promptedActions[index];
-            GameplayActionExecutionPresentation? execution =
+            int presentationIndex = _promptedActionIndexes[index];
+            GameplayActionExecutionPresentation? execution = null;
+            if (
+                presentation.Offers is not null
+                && presentationIndex < presentation.Offers.Count
+                && presentation.Offers[presentationIndex] is { } offer
+            )
+            {
+                if (
+                    Interactor is not null
+                    && presentation.Interactive.TryGetExecutionPresentation(
+                        Interactor,
+                        offer,
+                        out GameplayActionExecutionPresentation currentExecution
+                    )
+                )
+                {
+                    execution = currentExecution;
+                }
+            }
+            else if (
                 presentation.Interactive.TryGetExecutionPresentation(
                     action.ActionId,
                     out GameplayActionExecutionPresentation currentExecution
                 )
-                    ? currentExecution
-                    : null;
+            )
+            {
+                execution = currentExecution;
+            }
             (_promptActions[index] as IGameplayActionWidget)?.Bind(action, execution);
         }
     }
@@ -227,16 +250,19 @@ public partial class InteractionPresenter : CanvasLayer
     private void CollectPromptedActions(in InteractionTargetPresentation presentation)
     {
         _promptedActions.Clear();
+        _promptedActionIndexes.Clear();
         if (presentation.Actions is null)
         {
             return;
         }
 
-        foreach (GameplayActionPresentation action in presentation.Actions)
+        for (int index = 0; index < presentation.Actions.Count; index++)
         {
+            GameplayActionPresentation action = presentation.Actions[index];
             if (!action.IsAutomatic)
             {
                 _promptedActions.Add(action);
+                _promptedActionIndexes.Add(index);
             }
         }
     }

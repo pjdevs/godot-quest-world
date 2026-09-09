@@ -65,16 +65,23 @@ Door
 ├── IndicationArea           optional wider Area3D
 │   └── CollisionShape3D
 ├── InteractionAnchor        Marker3D
-├── GameplayActions          GameplayActionComponent; hosts every action
-│   └── OpenAction           InteractionAction
-│       └── OpenExecutor     InteractionActionExecutor
+├── GameplayActions          optional target-owned GameplayActionComponent
+│   └── OpenAction           GameplayAction
+│       └── OpenExecutor     GameplayActionExecutor
 ├── Interactive              InteractiveComponent
+│   └── Offers               ordered Target/Instigator invocations
 └── StatefulComponent        optional world state
 ```
 
 Execution is owned by the generic `gameplay_action_plugin` add-on: the host is a `GameplayActionComponent` and every action is one of its **direct children**. The host is authored as a **sibling** of `InteractiveComponent`, not below it, so a `NodePath` written from an action or its executor keeps the depth it would have had under the interactive.
 
-On `InteractiveComponent`, assign `InteractionArea`, `InteractionAnchor`, and `ActionComponent`. The target declares no action of its own: its `Actions` are the `InteractionAction` entries the host declares, read in that order, so the host's list is the only one to author. Nothing is discovered by node name or tree search. The host must be assigned before the target enters the tree, because the interactive subscribes to it on `_Ready`; authoring it as an exported `NodePath` does that. A replicated action also needs a `GameplayActionExecutionSynchronizer` beside the host, pointing at it.
+On `InteractiveComponent`, assign `InteractionArea`, `InteractionAnchor`, and, for target-owned offers,
+`ActionComponent`. Author ordered `Offers` with an `ActionId`, `ActionSource` (`Target` or
+`Instigator`), and a `BindingConfig`. Target offers resolve on the interactive's host; Instigator offers
+resolve on the requesting runner's `OwnedActionComponent`. Every focused binding carries the
+Interactive as its invocation target and cleanup source. Nothing is discovered by node name or tree
+search. A replicated action also needs a `GameplayActionExecutionSynchronizer` beside the host,
+pointing at it. Existing `InteractionAction` scenes remain supported as a migration bridge.
 
 `InteractionAnchor` is the single world point used for distance, focus, LOS, and UI projection. `InteractionArea` is currently required for every target: the area detector consumes its body overlaps, the aim detector casts against its collision shape, and the proximity detector ignores its geometry. Configure collision layers/masks accordingly.
 
@@ -85,10 +92,11 @@ Do not subclass `InteractiveComponent` for gameplay. It has no gameplay hook: co
 An action has two layers:
 
 - `GameplayActionDefinition` is reusable static data: stable `Id`, label, and description.
-- `InteractionAction` is one occurrence on one target: executor, rules, and an optional
-  `DefaultBindingConfig` containing input, activation mode, hold duration, input requirement, and
-  priority. `InteractionAction` inherits `InputGameplayAction`; there is no Interaction-only
-  definition or binding-config subtype.
+- `GameplayAction` is one occurrence on one action host: executor, action rules, concurrency and
+  execution policy.
+- `InteractionOffer` is one target-facing invocation: source, `ActionId`, Interaction rules and an
+  optional `BindingConfig` containing input, activation mode, hold duration, input requirement, and
+  priority. The offer is not an ownership or grant mechanism.
 
 Keep `Id` stable across builds because it crosses the network. For a non-automatic binding, declare
 `InputActionName` in the project Input Map. `HoldDuration` only selects between actions sharing an
@@ -113,7 +121,10 @@ public partial class HasKeyRule : InteractionRule
 }
 ```
 
-Add shared rules to `InteractiveComponent.TargetRules`; add action-specific rules to `InteractionAction.Rules`. Target rules run first, then action rules, stopping at the first non-allowed result.
+Add shared rules to `InteractiveComponent.TargetRules`; add offer-specific rules to
+`InteractionOffer.Rules`; keep capability rules on the resolved `GameplayAction.Rules`. Target and
+offer rules run before the owned action rules, stopping at the first non-allowed result. The legacy
+`InteractionAction.Rules` path remains available while existing scenes migrate.
 
 | Member | Comes from | Called on | Rhythm / constraint |
 | --- | --- | --- | --- |
