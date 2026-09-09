@@ -9,6 +9,39 @@ Prototyping project for gameplay system.
 Port personal custom gameplay system from Unreal (Interaction, Quest, Dialog and Inventory coming from [this repository](https://github.com/pjdevs/QuestWorld))
 and build a demo game that use this systems in reel conditions.
 
+## Workflow
+
+The global workflow relies on Superpowers skills.
+However, some adjustement must be done.
+
+### General
+
+- Always use `using-superpowers`
+- Use `brainstorming` as usual
+
+### Overides
+
+These overrides must always be applied over Superpowers skills rules.
+
+#### Planning
+
+- Never use `writing-plans` without explicit being specifically asked by the user. Write at most the spec asked from `brainstorming`.
+
+#### Implementing
+
+- Don't default to full TDD implementation automatically. For very small task and adjustement it may not be needed. Always check if it impact existing tests and always ask to user if you should go full TDD or not.
+- Especially when doing small spikes, test may not be enforced.
+- A spec is enough for implementing, state your assumptions and clarification before implementing by asking the user and stopping, but next you must make an internal plan and implement like that.
+- You may use a form of `brainstorming` for clarifying a task, but no other spec is needed as stated before.
+
+Typical workflow:
+
+- Repo has a big plan for a key feature / framework split into big tasks.
+- User asks implementing a task.
+- Take all needed inputs, read code, clarify everything, ask.
+- At the same time reason about TDD and propose the user an approach, waiting for its decision.
+- Once user answered every point after potentially N round you can implement directly with your internal plan/TODO.
+
 ## Technical Environment
 
 ### Architecture
