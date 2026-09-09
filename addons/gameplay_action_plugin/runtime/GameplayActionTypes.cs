@@ -209,4 +209,17 @@ public readonly record struct GameplayActionContext(
     /// </remarks>
     public bool ReleaseRequesterDependency() =>
         ExecutionId > 0ul && Component.ReleaseRequesterDependency(ExecutionId);
+
+    /// <summary>
+    /// Completes the execution and releases its action reservation.
+    /// </summary>
+    public bool CompleteExecution() =>
+        ExecutionId > 0ul && Component.CompleteExecution(ExecutionId);
+
+    /// <summary>
+    /// Fails the execution and releases its action reservation.
+    /// </summary>
+    /// <param name="reason">Fail reason.</param>
+    public bool FailExecution(string reason) =>
+        ExecutionId > 0ul && Component.FailExecution(ExecutionId, reason);
 }

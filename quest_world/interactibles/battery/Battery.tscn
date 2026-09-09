@@ -2,23 +2,29 @@
 
 [ext_resource type="PackedScene" uid="uid://7osg2ttwtxmc" path="res://quest_world/interactibles/battery/BatteryMesh.tscn" id="1_mvphd"]
 [ext_resource type="Script" uid="uid://dwmqsp6eyk4gd" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="1_t2p7y"]
-[ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="2_p1x0o"]
-[ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="3_p1x0o"]
 [ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="3_tj8cv"]
-[ext_resource type="Script" uid="uid://cvyflkw40bcp7" path="res://quest_world/interactibles/carriable/TakeExecutor.cs" id="4_sdpir"]
+[ext_resource type="Script" uid="uid://qypd61i3o2qs" path="res://addons/interaction_plugin/runtime/interactive/InteractionTargetReservationSynchronizer.cs" id="5_4t8iy"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="5_sj1vt"]
+[ext_resource type="Script" uid="uid://dskma4ncsvn1h" path="res://addons/interaction_plugin/runtime/offers/InteractionOffer.cs" id="5_tj8cv"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="6_4t8iy"]
-[ext_resource type="Resource" uid="uid://dh5md4bnp2o3x" path="res://quest_world/interactibles/battery/BatteryItem.tres" id="7_item"]
+[ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="6_tj8cv"]
 
-[sub_resource type="Resource" id="Resource_4t8iy"]
+[sub_resource type="Resource" id="Resource_tj8cv"]
 script = ExtResource("3_tj8cv")
 InputActionName = &"interact"
 metadata/_custom_type_script = "uid://clv6g48bftyhm"
 
-[sub_resource type="Resource" id="Resource_sdpir"]
-script = ExtResource("3_p1x0o")
-Id = &"take"
-Label = "Take"
+[sub_resource type="Resource" id="Resource_42h85"]
+script = ExtResource("5_tj8cv")
+ActionSource = 1
+ActionId = &"take"
+BindingConfig = SubResource("Resource_tj8cv")
+TargetConcurrencyGroup = &"default"
+WhenReservedBySelf = 0
+WhenReservedByOther = 0
+metadata/_custom_type_script = "uid://dskma4ncsvn1h"
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_42h85"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_vq8ek"]
 size = Vector3(5, 5, 5)
@@ -36,36 +42,33 @@ properties/1/replication_mode = 2
 [node name="BatteryMesh" parent="." unique_id=1822535720 instance=ExtResource("1_mvphd")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
 
-[node name="ActionComponent" type="Node" parent="." unique_id=1703770989 node_paths=PackedStringArray("Actions")]
+[node name="ActionComponent" type="Node" parent="." unique_id=1703770989]
 script = ExtResource("1_t2p7y")
-Actions = [NodePath("TakeAction")]
 metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
 
-[node name="TakeAction" type="Node" parent="ActionComponent" unique_id=1076240554 node_paths=PackedStringArray("Executor")]
-script = ExtResource("2_p1x0o")
-DefaultBindingConfig = SubResource("Resource_4t8iy")
-Definition = SubResource("Resource_sdpir")
-Executor = NodePath("TakeExecutor")
-ExecutionVisibility = 2
-metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
-
-[node name="TakeExecutor" type="Node" parent="ActionComponent/TakeAction" unique_id=2073787997]
-script = ExtResource("4_sdpir")
-Item = ExtResource("7_item")
-
-[node name="InteractiveComponent" type="Node" parent="." unique_id=75349340 node_paths=PackedStringArray("InteractionArea", "InteractionAnchor", "ActionComponent")]
+[node name="InteractiveComponent" type="Node" parent="." unique_id=75349340 node_paths=PackedStringArray("InteractionArea", "InteractionAnchor", "InvocationTarget", "ActionComponent", "TargetReservationSynchronizer")]
 script = ExtResource("5_sj1vt")
 InteractionArea = NodePath("../InteractionArea")
 InteractionAnchor = NodePath("../BatteryMesh")
+InvocationTarget = NodePath("..")
 DisplayName = "Battery"
 ActionPromptScene = ExtResource("6_4t8iy")
 ActionComponent = NodePath("../ActionComponent")
+TargetReservationSynchronizer = NodePath("InteractionTargetReservationSynchronizer")
+Offers = Array[ExtResource("5_tj8cv")]([SubResource("Resource_42h85")])
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
+
+[node name="InteractionTargetReservationSynchronizer" type="MultiplayerSynchronizer" parent="InteractiveComponent" unique_id=1863647393 node_paths=PackedStringArray("Interactive")]
+root_path = NodePath("../..")
+replication_config = SubResource("SceneReplicationConfig_42h85")
+script = ExtResource("5_4t8iy")
+Interactive = NodePath("..")
+metadata/_custom_type_script = "uid://qypd61i3o2qs"
 
 [node name="InteractionArea" type="Area3D" parent="." unique_id=726796671]
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractionArea" unique_id=1649151467]
 shape = SubResource("BoxShape3D_vq8ek")
 
-[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=908298488]
+[node name="BatteryMultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=908298488]
 replication_config = SubResource("SceneReplicationConfig_tj8cv")
