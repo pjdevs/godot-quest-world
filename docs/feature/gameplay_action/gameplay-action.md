@@ -124,8 +124,11 @@ every synchronous rollback, terminal result, cancellation, requester disconnect 
 Client bindings and access claims never cross the network as proof.
 
 Executors require requester presence by default. An executor may opt out through
-`RequiresRequesterPresence == false` when accepted work becomes world-owned and should survive
-requester/access loss.
+`RequiresRequesterPresence == false` when accepted work is world-owned from its start. An execution
+that becomes world-owned at an authoritative gameplay commit keeps the default pre-commit policy and
+calls `GameplayActionContext.ReleaseRequesterDependency()` from its commit path. This transition only
+stops sustained requester-access and requester-teardown cancellation; it does not complete the
+execution, release its action reservation, or make a missing target valid before the commit.
 
 ## Execution presentation and networking
 
@@ -256,6 +259,14 @@ target UX.
 Access checks stay pure so local availability can be evaluated repeatedly. A provider may acquire an
 optional authority-side lease only after that check succeeds; the runner owns the lease lifecycle and
 does not turn domain-specific access into a second execution engine.
+
+### AD-14 — Commit releases requester dependency explicitly
+
+A requested execution remains subject to sustained requester access until its authoritative gameplay
+commit succeeds. The executor then calls `GameplayActionContext.ReleaseRequesterDependency()` to let
+post-commit recovery survive target disappearance, requester departure, or access loss while the
+generic execution reservation remains active until its normal terminal lifecycle. Interaction does not
+special-case destroyed targets as valid access.
 
 ## Deliberately deferred
 

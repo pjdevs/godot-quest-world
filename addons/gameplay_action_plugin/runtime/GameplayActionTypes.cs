@@ -198,4 +198,15 @@ public readonly record struct GameplayActionContext(
     /// <summary>Returns the invocation target as the requested type, or null when incompatible.</summary>
     public T? GetTarget<T>()
         where T : class => Target as T;
+
+    /// <summary>
+    /// Releases requester-presence validation after the invocation's authoritative commit point.
+    /// </summary>
+    /// <remarks>
+    /// This changes only the sustained requester dependency of this requested execution. It does
+    /// not complete the execution, release its action reservation, or make a target valid again.
+    /// Executors should call it only after their irreversible gameplay commit succeeds.
+    /// </remarks>
+    public bool ReleaseRequesterDependency() =>
+        ExecutionId > 0ul && Component.ReleaseRequesterDependency(ExecutionId);
 }

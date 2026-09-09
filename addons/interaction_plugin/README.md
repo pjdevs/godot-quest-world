@@ -80,7 +80,9 @@ On `InteractiveComponent`, assign `InteractionArea`, `InteractionAnchor`, and, f
 `Instigator`), and a `BindingConfig`. Target offers resolve on the interactive's host; Instigator offers
 resolve on the requesting runner's `OwnedActionComponent`. Every focused binding carries the
 Interactive as its invocation target and cleanup source. Nothing is discovered by node name or tree
-search. A replicated action also needs a `GameplayActionExecutionSynchronizer` beside the host,
+search. Do not author two offers on one target that resolve to the same `(component, action)` endpoint
+for one interactor: the editor reports same-source duplicates and runtime resolution rejects any
+remaining ambiguity. A replicated action also needs a `GameplayActionExecutionSynchronizer` beside the host,
 pointing at it. Existing `InteractionAction` scenes remain supported as a migration bridge.
 
 `InteractionAnchor` is the single world point used for distance, focus, LOS, and UI projection. `InteractionArea` is currently required for every target: the area detector consumes its body overlaps, the aim detector casts against its collision shape, and the proximity detector ignores its geometry. Configure collision layers/masks accordingly.
@@ -194,7 +196,7 @@ Use `InteractionActionExecutor` (or `TransitionStateGameplayActionExecutor`) for
 clock uses monotonic real time on authority and presentation peers, so pausing one node's processing
 does not give the lifecycle and its extrapolated bar different time semantics.
 
-A timed running action delegates its clock to a composed `TimedExecution`, which publishes sparse linear samples and completes the generic execution on the authority. A presence-bound running action is also revalidated once per server process frame through its detector. Set `RequiresInteractorPresence = false` for work handed to the world; `InputRequirement.Pressed` always keeps it presence-bound.
+A timed running action delegates its clock to a composed `TimedExecution`, which publishes sparse linear samples and completes the generic execution on the authority. A presence-bound running action is also revalidated once per server process frame through its detector. Set `RequiresInteractorPresence = false` for work handed to the world from its start; an executor that commits during a running interaction can call `GameplayActionContext.ReleaseRequesterDependency()` at that commit to release the sustained dependency. Before that call, `InputRequirement.Pressed` keeps the request presence-bound.
 
 ### Provided executors
 

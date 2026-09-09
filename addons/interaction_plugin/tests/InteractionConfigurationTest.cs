@@ -20,7 +20,9 @@ using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Detection;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
+using InteractionPlugin.Runtime.Offers;
 using InteractionPlugin.Runtime.Rules;
+using QuestWorld.Tests.GameplayActions;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
 
@@ -456,6 +458,58 @@ public sealed partial class InteractionConfigurationTest
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
         AssertThat(warnings.Contains("Actions declare the action id 'open' more than once."))
+            .IsTrue();
+    }
+
+    [TestCase]
+    public void InteractiveReportsDuplicateOfferEndpointsForOneSource()
+    {
+        GameplayActionComponent component = new();
+        GameplayAction action = new()
+        {
+            Definition = new GameplayActionDefinition { Id = "use" },
+            Executor = new TestGameplayActionExecutor(),
+        };
+        action.AddChild(action.Executor!);
+        component.AddAction(action);
+        InteractionOffer first = new()
+        {
+            ActionSource = InteractionOfferSource.Target,
+            ActionId = new StringName("use"),
+            BindingConfig = new GameplayActionBindingConfig
+            {
+                InputActionName = new StringName("interact"),
+                ActivationMode = GameplayActionActivationMode.Press,
+            },
+        };
+        InteractionOffer second = new()
+        {
+            ActionSource = InteractionOfferSource.Target,
+            ActionId = new StringName("use"),
+            BindingConfig = new GameplayActionBindingConfig
+            {
+                InputActionName = new StringName("alternate"),
+                ActivationMode = GameplayActionActivationMode.Press,
+            },
+        };
+        InteractiveComponent interactive = AutoFree(
+            new InteractiveComponent
+            {
+                InteractionArea = new Area3D(),
+                InteractionAnchor = new Node3D(),
+                ActionComponent = component,
+                Offers = { first, second },
+            }
+        );
+        interactive.AddChild(component);
+
+        string[] warnings = InteractionValidator.Validate(interactive).ToArray();
+
+        AssertThat(
+                warnings.Contains(
+                    "Offers resolve the action endpoint 'use' more than once for the same source."
+                )
+            )
             .IsTrue();
     }
 

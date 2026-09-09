@@ -67,16 +67,39 @@ internal sealed class GameplayActionRequestPipeline(
                 continue;
             }
 
-            _requestedExecutions.RemoveAt(index);
+            // Keep the record until CancelExecution dispatches its terminal notification: that
+            // callback removes the entry and releases a running request reservation.
             bool cancelled = execution.Component.CancelExecution(
                 execution.ExecutionId,
                 AccessLostReason
             );
             if (!cancelled)
             {
+                _requestedExecutions.RemoveAt(index);
                 execution.Reservation?.Release();
             }
         }
+    }
+
+    internal bool ReleaseRequesterDependency(GameplayActionComponent component, ulong executionId)
+    {
+        for (int index = _requestedExecutions.Count - 1; index >= 0; index--)
+        {
+            GameplayActionRequestedExecution execution = _requestedExecutions[index];
+            if (execution.Component != component || execution.ExecutionId != executionId)
+            {
+                continue;
+            }
+
+            if (execution.RequiresRequesterPresence)
+            {
+                _requestedExecutions[index] = execution with { RequiresRequesterPresence = false };
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     public bool TryRequestBinding(GameplayActionBinding binding)
@@ -186,10 +209,12 @@ internal sealed class GameplayActionRequestPipeline(
                 continue;
             }
 
-            _requestedExecutions.RemoveAt(index);
+            // Keep the record until CancelExecution dispatches its terminal notification: that
+            // callback removes the entry and releases a running request reservation.
             bool cancelled = component.CancelExecution(execution.ExecutionId, ReleasedReason);
             if (!cancelled)
             {
+                _requestedExecutions.RemoveAt(index);
                 execution.Reservation?.Release();
             }
 
@@ -230,10 +255,12 @@ internal sealed class GameplayActionRequestPipeline(
                 continue;
             }
 
-            _requestedExecutions.RemoveAt(index);
+            // Keep the record until CancelExecution dispatches its terminal notification: that
+            // callback removes the entry and releases a running request reservation.
             bool cancelled = execution.Component.CancelExecution(execution.ExecutionId, reason);
             if (!cancelled)
             {
+                _requestedExecutions.RemoveAt(index);
                 execution.Reservation?.Release();
             }
         }

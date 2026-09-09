@@ -377,6 +377,14 @@ public partial class GameplayActionRunner : Node
     /// <summary>On authority, cancels requested executions whose sustained access has been lost.</summary>
     public void ValidateSustainedExecutions() => _requests.ValidateSustainedExecutions();
 
+    /// <summary>
+    /// Marks a running requested execution as committed so requester presence is no longer required.
+    /// </summary>
+    internal bool ReleaseRequesterDependency(
+        GameplayActionComponent component,
+        ulong executionId
+    ) => _requests.ReleaseRequesterDependency(component, executionId);
+
     /// <summary>Advances local gestures and authority-side sustained access validation.</summary>
     public override void _Process(double delta)
     {

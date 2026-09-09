@@ -160,6 +160,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         reservation = null;
         if (
             context.Target is InteractiveComponent interactive
+            && GodotObject.IsInstanceValid(interactive)
             && interactive.TryResolveOfferForEndpoint(
                 this,
                 context.Component,
@@ -201,6 +202,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
         return context.Action is InteractionAction interactionAction
             && interactionAction.Interactive is InteractiveComponent legacyInteractive
+            && GodotObject.IsInstanceValid(legacyInteractive)
             && Detector?.Detect(legacyInteractive) == InteractionDetectionKind.Interactible;
     }
 

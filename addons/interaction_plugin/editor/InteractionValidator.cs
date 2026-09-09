@@ -211,7 +211,7 @@ public static class InteractionValidator
             }
             else if (!ids.Add($"{source}:{id}"))
             {
-                yield return $"Offers declare the action '{id}' more than once for the same source.";
+                yield return $"Offers resolve the action endpoint '{id}' more than once for the same source.";
             }
 
             if (source == (int)InteractionOfferSource.Target)

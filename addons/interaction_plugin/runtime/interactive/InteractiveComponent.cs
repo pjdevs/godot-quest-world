@@ -507,8 +507,50 @@ public partial class InteractiveComponent : Node
     /// <param name="interactor">Interactor supplying the instigator-owned action host.</param>
     /// <param name="offer">Offer to resolve.</param>
     /// <param name="resolution">Resolved component and action when the offer is valid.</param>
-    /// <returns>Whether the offer names a live, configured action endpoint.</returns>
+    /// <returns>
+    /// Whether the offer names a live, configured action endpoint that is unambiguous for this
+    /// interactor.
+    /// </returns>
     public bool TryResolveOffer(
+        InteractionInteractor interactor,
+        InteractionOffer? offer,
+        out InteractionOfferResolution resolution
+    )
+    {
+        resolution = default;
+        if (!TryResolveOfferEndpoint(interactor, offer, out resolution))
+        {
+            return false;
+        }
+
+        foreach (InteractionOffer candidate in Offers)
+        {
+            if (
+                ReferenceEquals(candidate, offer)
+                || !TryResolveOfferEndpoint(
+                    interactor,
+                    candidate,
+                    out InteractionOfferResolution candidateResolution
+                )
+            )
+            {
+                continue;
+            }
+
+            if (
+                candidateResolution.Component == resolution.Component
+                && candidateResolution.Action == resolution.Action
+            )
+            {
+                resolution = default;
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool TryResolveOfferEndpoint(
         InteractionInteractor interactor,
         InteractionOffer? offer,
         out InteractionOfferResolution resolution

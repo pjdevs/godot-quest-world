@@ -7,6 +7,7 @@ using GameplayActionPlugin;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Runner;
 using GdUnit4;
 using Godot;
 using InteractionPlugin;
@@ -61,6 +62,35 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
             .IsTrue();
         AssertThat(instigatorResolution.Component == ownedActions).IsTrue();
         AssertThat(instigatorResolution.Action == ownedAction).IsTrue();
+    }
+
+    [TestCase]
+    public void OffersResolvingToTheSameEndpointAreRejectedAsAmbiguous()
+    {
+        InteractiveComponent interactive = AutoFree(new InteractiveComponent());
+        GameplayActionComponent actions = AutoFree(new GameplayActionComponent());
+        GameplayAction action = NewGenericAction("use");
+        actions.AddAction(action);
+        interactive.ActionComponent = actions;
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = actions }
+        );
+        InteractionInteractor interactor = AutoFree(new InteractionInteractor { Runner = runner });
+        InteractionOffer targetOffer = new()
+        {
+            ActionSource = InteractionOfferSource.Target,
+            ActionId = new StringName("use"),
+        };
+        InteractionOffer instigatorOffer = new()
+        {
+            ActionSource = InteractionOfferSource.Instigator,
+            ActionId = new StringName("use"),
+        };
+        interactive.Offers.Add(targetOffer);
+        interactive.Offers.Add(instigatorOffer);
+
+        AssertThat(interactive.TryResolveOffer(interactor, targetOffer, out _)).IsFalse();
+        AssertThat(interactive.TryResolveOffer(interactor, instigatorOffer, out _)).IsFalse();
     }
 
     [TestCase]

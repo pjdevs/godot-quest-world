@@ -64,6 +64,10 @@ before a press.
 stable `ActionId`, optional `BindingConfig`, ordered offer rules, and an optional
 `TargetConcurrencyGroup` with self/other presentation outcomes. It resolves to an ordinary
 `GameplayAction`, so a player-owned `Take` and a door-owned `Open` use the same adapter.
+For one interactor, authored offers on the same Interactive must resolve to distinct
+`(GameplayActionComponent, GameplayAction)` endpoints. The editor reports duplicate endpoints within
+one authored source, while runtime resolution rejects any remaining ambiguity (including a Target and
+Instigator offer that happen to resolve to the same component and action).
 
 Availability is evaluated in this order:
 
@@ -172,7 +176,9 @@ not an interaction, and is refused by this adapter rather than silently inventin
 `RequiresInteractorPresence` defaults to `true`. It feeds the generic
 `RequiresRequesterPresence` policy, together with a binding whose `InputRequirement` is `Pressed`.
 Channel-like work is therefore cancelled when the player releases/leaves; world-owned work can opt out
-and continue after the requester has gone.
+and continue after the requester has gone. An executor that becomes world-owned at a gameplay commit
+calls `GameplayActionContext.ReleaseRequesterDependency()` at that commit; target disappearance is not
+treated as valid access before that transition.
 
 Timed completion is generic Gameplay Action policy. Interaction executors that need a timer compose or
 specialize the generic timed execution primitives; hold duration remains only the local gesture used to
@@ -348,6 +354,13 @@ paths express intent only.
 `TargetConcurrencyGroup` coordinates offers on one Interactive independently from the resolved action
 owner's host concurrency. The claim is an authority-side request lease, projected through an optional
 versioned snapshot for self/other availability and late join; it is not persistent world state.
+
+### AD-19 — Offer endpoint resolution is unambiguous per interactor
+
+An Interactive cannot rely on first-match ordering to distinguish two offers that resolve to the same
+action endpoint for one interactor. Authored duplicates within one source are reported by editor
+validation, and the runtime resolver rejects any dynamic duplicate endpoint before focus or authority
+request validation can use it. The requester protocol remains unchanged and carries no OfferId.
 
 ## Remaining planned work
 

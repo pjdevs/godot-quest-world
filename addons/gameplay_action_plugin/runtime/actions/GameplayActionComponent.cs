@@ -317,6 +317,28 @@ public partial class GameplayActionComponent : Node
     /// <summary>Gets whether the supplied execution ID is still actively reserved.</summary>
     public bool IsExecutionActive(ulong executionId) => _executionsById.ContainsKey(executionId);
 
+    /// <summary>
+    /// Stops sustained requester-presence validation for one running requested execution.
+    /// </summary>
+    /// <remarks>
+    /// This is the generic commit transition for actions whose accepted gameplay can outlive their
+    /// requester or invocation target. It is intentionally separate from completion: the action
+    /// reservation and execution remain active until the executor reaches its terminal lifecycle.
+    /// Calls for non-requested, inactive, or already-finalized executions return false.
+    /// </remarks>
+    public bool ReleaseRequesterDependency(ulong executionId)
+    {
+        if (
+            !_executionsById.TryGetValue(executionId, out ActiveExecution execution)
+            || execution.Requester is not GameplayActionRunner requester
+        )
+        {
+            return false;
+        }
+
+        return requester.ReleaseRequesterDependency(this, executionId);
+    }
+
     internal bool TryGetFirstActiveExecution(
         out GameplayAction? action,
         out Node? instigator,

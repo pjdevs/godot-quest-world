@@ -457,6 +457,97 @@ public sealed partial class GameplayActionRunnerTest
     }
 
     [TestCase]
+    public void SustainedAccessLossBeforeCommitCancelsTheRequestedExecution()
+    {
+        CommitAwareExecutor executor = new();
+        GameplayActionComponent component = AutoFree(new GameplayActionComponent());
+        AccessControlledAction action = AutoFree(
+            new AccessControlledAction
+            {
+                Definition = new GameplayActionDefinition { Id = "take" },
+                Executor = executor,
+            }
+        );
+        action.AddChild(executor);
+        component.AddAction(action);
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = component }
+        );
+        TargetValidityAccessProvider provider = new();
+        TrackingReservation reservation = new();
+        provider.Reservation = reservation;
+        runner.RegisterAccessProvider(AccessControlledAction.ProviderId, provider);
+        Node target = AutoFree(new Node { Name = "Target" });
+        runner.BindAction(
+            component,
+            "take",
+            AutoFree(new Node()),
+            Config(
+                "use",
+                GameplayActionActivationMode.Press,
+                inputRequirement: GameplayActionInputRequirement.Pressed
+            ),
+            target: target
+        );
+
+        AssertThat(runner.TryStartActionInput("use")).IsTrue();
+        target.Free();
+        runner.ValidateSustainedExecutions();
+
+        AssertThat(executor.CancelledCount).IsEqual(1);
+        AssertThat(component.IsActionExecuting("take")).IsFalse();
+        AssertThat(reservation.ReleaseCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public void CommitReleasesSustainedAccessBeforeTheTargetDisappears()
+    {
+        CommitAwareExecutor executor = new();
+        GameplayActionComponent component = AutoFree(new GameplayActionComponent());
+        AccessControlledAction action = AutoFree(
+            new AccessControlledAction
+            {
+                Definition = new GameplayActionDefinition { Id = "take" },
+                Executor = executor,
+            }
+        );
+        action.AddChild(executor);
+        component.AddAction(action);
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = component }
+        );
+        TargetValidityAccessProvider provider = new();
+        TrackingReservation reservation = new();
+        provider.Reservation = reservation;
+        runner.RegisterAccessProvider(AccessControlledAction.ProviderId, provider);
+        Node target = AutoFree(new Node { Name = "Target" });
+        runner.BindAction(
+            component,
+            "take",
+            AutoFree(new Node()),
+            Config(
+                "use",
+                GameplayActionActivationMode.Press,
+                inputRequirement: GameplayActionInputRequirement.Pressed
+            ),
+            target: target
+        );
+
+        AssertThat(runner.TryStartActionInput("use")).IsTrue();
+        AssertThat(reservation.BindCount).IsEqual(1);
+        AssertThat(reservation.ReleaseCount).IsEqual(0);
+        AssertThat(executor.Commit()).IsTrue();
+        target.Free();
+        runner.ValidateSustainedExecutions();
+
+        AssertThat(executor.CancelledCount).IsEqual(0);
+        AssertThat(component.IsActionExecuting("take")).IsTrue();
+        AssertThat(reservation.ReleaseCount).IsEqual(0);
+        AssertThat(component.CompleteExecution(1)).IsTrue();
+        AssertThat(reservation.ReleaseCount).IsEqual(1);
+    }
+
+    [TestCase]
     public void RequestReservationLeaseLivesThroughRunningExecutionAndReleasesOnTerminal()
     {
         TestGameplayActionExecutor executor = new()
@@ -743,6 +834,23 @@ public sealed partial class GameplayActionRunnerTest
         }
     }
 
+    private sealed class TargetValidityAccessProvider : IGameplayActionAccessProvider
+    {
+        public IGameplayActionRequestReservation? Reservation { get; set; }
+
+        public bool CanRequest(in GameplayActionAccessContext context) =>
+            context.Target is not null && GodotObject.IsInstanceValid(context.Target);
+
+        public bool TryAcquireRequestReservation(
+            in GameplayActionAccessContext context,
+            out IGameplayActionRequestReservation? reservation
+        )
+        {
+            reservation = Reservation;
+            return CanRequest(context);
+        }
+    }
+
     private sealed class TrackingReservation : IGameplayActionRequestReservation
     {
         public int BindCount { get; private set; }
@@ -763,6 +871,27 @@ public sealed partial class GameplayActionRunnerTest
 
         public override GameplayActionExecutionResult Execute(in GameplayActionContext context) =>
             new GameplayActionExecutionRunning();
+
+        protected internal override void OnExecutionCancelled(
+            in GameplayActionContext context,
+            string reason
+        ) => CancelledCount++;
+    }
+
+    private sealed partial class CommitAwareExecutor : GameplayActionExecutor
+    {
+        private GameplayActionContext? _context;
+
+        public int CancelledCount { get; private set; }
+
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
+        {
+            _context = context;
+            return new GameplayActionExecutionRunning();
+        }
+
+        public bool Commit() =>
+            _context is GameplayActionContext context && context.ReleaseRequesterDependency();
 
         protected internal override void OnExecutionCancelled(
             in GameplayActionContext context,
