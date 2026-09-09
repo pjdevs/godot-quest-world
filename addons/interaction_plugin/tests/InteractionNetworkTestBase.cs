@@ -185,6 +185,7 @@ public abstract partial class InteractionNetworkTestBase
             root,
             first.Interactive,
             first.ExecutionSynchronizer,
+            first.ReservationSynchronizer,
             second.Interactive,
             stateful,
             activate,
@@ -238,10 +239,16 @@ public abstract partial class InteractionNetworkTestBase
             Name = "GameplayActionExecutionSynchronizer",
             Component = interactive.ActionComponent,
         };
+        InteractionTargetReservationSynchronizer reservationSynchronizer = new()
+        {
+            Name = "InteractionTargetReservationSynchronizer",
+            Interactive = interactive,
+        };
         actor.AddChild(executionSynchronizer);
+        actor.AddChild(reservationSynchronizer);
         actor.AddChild(interactive);
         root.AddChild(actor);
-        return new Target(actor, interactive, executionSynchronizer);
+        return new Target(actor, interactive, executionSynchronizer, reservationSynchronizer);
     }
 
     protected static TestScriptedExecutor AddScriptedAction(
@@ -331,7 +338,8 @@ public abstract partial class InteractionNetworkTestBase
     protected sealed record Target(
         Node3D Actor,
         InteractiveComponent Interactive,
-        GameplayActionExecutionSynchronizer ExecutionSynchronizer
+        GameplayActionExecutionSynchronizer ExecutionSynchronizer,
+        InteractionTargetReservationSynchronizer ReservationSynchronizer
     );
 
     protected sealed record LatePeer(PeerScene Scene, StateLog Log);
@@ -384,6 +392,7 @@ public abstract partial class InteractionNetworkTestBase
         Node3D Root,
         InteractiveComponent Interactive,
         GameplayActionExecutionSynchronizer ExecutionSynchronizer,
+        InteractionTargetReservationSynchronizer ReservationSynchronizer,
         InteractiveComponent SecondInteractive,
         StatefulComponent Stateful,
         TestScriptedExecutor Executor,

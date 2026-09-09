@@ -457,6 +457,92 @@ public sealed partial class GameplayActionRunnerTest
     }
 
     [TestCase]
+    public void RequestReservationLeaseLivesThroughRunningExecutionAndReleasesOnTerminal()
+    {
+        TestGameplayActionExecutor executor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayActionComponent owned = AutoFree(new GameplayActionComponent());
+        GameplayActionComponent external = AutoFree(new GameplayActionComponent());
+        AccessControlledAction action = AutoFree(
+            new AccessControlledAction
+            {
+                Definition = new GameplayActionDefinition { Id = "channel" },
+                Executor = executor,
+            }
+        );
+        action.AddChild(executor);
+        external.AddAction(action);
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = owned }
+        );
+        TrackingReservation reservation = new();
+        TestAccessProvider provider = new() { Allowed = true, Reservation = reservation };
+        runner.RegisterAccessProvider(AccessControlledAction.ProviderId, provider);
+        runner.BindAction(
+            external,
+            "channel",
+            AutoFree(new Node()),
+            Config("use", GameplayActionActivationMode.Press)
+        );
+
+        AssertThat(runner.TryStartActionInput("use")).IsTrue();
+        AssertThat(reservation.BindCount).IsEqual(1);
+        AssertThat(reservation.ReleaseCount).IsEqual(0);
+
+        AssertThat(external.CompleteExecution(1)).IsTrue();
+        AssertThat(reservation.ReleaseCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public void SynchronousRequestReservationLeaseReleasesForEveryTerminalOutcome()
+    {
+        TestGameplayActionExecutor executor = new();
+        GameplayActionComponent owned = AutoFree(new GameplayActionComponent());
+        GameplayActionComponent external = AutoFree(new GameplayActionComponent());
+        AccessControlledAction action = AutoFree(
+            new AccessControlledAction
+            {
+                Definition = new GameplayActionDefinition { Id = "open" },
+                Executor = executor,
+            }
+        );
+        action.AddChild(executor);
+        external.AddAction(action);
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = owned }
+        );
+        TestAccessProvider provider = new() { Allowed = true };
+        runner.RegisterAccessProvider(AccessControlledAction.ProviderId, provider);
+        runner.BindAction(
+            external,
+            "open",
+            AutoFree(new Node()),
+            Config("use", GameplayActionActivationMode.Press)
+        );
+
+        TrackingReservation completed = new();
+        provider.Reservation = completed;
+        executor.Result = new GameplayActionExecutionCompleted();
+        AssertThat(runner.TryStartActionInput("use")).IsTrue();
+        AssertThat(completed.ReleaseCount).IsEqual(1);
+        AssertThat(runner.TryEndActionInput("use")).IsTrue();
+
+        TrackingReservation failed = new();
+        provider.Reservation = failed;
+        executor.Result = new GameplayActionExecutionFailed("not now");
+        AssertThat(runner.TryStartActionInput("use")).IsFalse();
+        AssertThat(failed.ReleaseCount).IsEqual(1);
+
+        TrackingReservation rejected = new();
+        provider.Reservation = rejected;
+        executor.Result = new GameplayActionExecutionRejected("not now");
+        AssertThat(runner.TryStartActionInput("use")).IsFalse();
+        AssertThat(rejected.ReleaseCount).IsEqual(1);
+    }
+
+    [TestCase]
     public async System.Threading.Tasks.Task StaleTerminalAcknowledgementCannotEndAgain()
     {
         Node world = new() { Name = "World" };
@@ -634,6 +720,8 @@ public sealed partial class GameplayActionRunnerTest
     {
         public bool Allowed { get; set; }
 
+        public IGameplayActionRequestReservation? Reservation { get; set; }
+
         public int RequestChecks { get; private set; }
 
         public Node? LastTarget { get; private set; }
@@ -644,6 +732,26 @@ public sealed partial class GameplayActionRunnerTest
             LastTarget = context.Target;
             return Allowed;
         }
+
+        public bool TryAcquireRequestReservation(
+            in GameplayActionAccessContext context,
+            out IGameplayActionRequestReservation? reservation
+        )
+        {
+            reservation = Reservation;
+            return Allowed;
+        }
+    }
+
+    private sealed class TrackingReservation : IGameplayActionRequestReservation
+    {
+        public int BindCount { get; private set; }
+
+        public int ReleaseCount { get; private set; }
+
+        public void BindExecution(ulong executionId) => BindCount++;
+
+        public void Release() => ReleaseCount++;
     }
 
     private sealed partial class PresencePolicyExecutor(bool requiresRequesterPresence)

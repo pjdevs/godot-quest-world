@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using GameplayActionPlugin.Runtime.Access;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Execution;
@@ -21,6 +22,10 @@ internal sealed class GameplayActionRequestPipeline(
         new();
     private readonly List<GameplayActionRequestedExecution> _requestedExecutions = new();
     private readonly HashSet<GameplayActionRequestKey> _pendingRequests = new();
+    private readonly Dictionary<
+        GameplayActionRequestKey,
+        IGameplayActionRequestReservation
+    > _pendingReservations = new();
     private readonly Dictionary<GameplayActionRequestKey, ulong> _acknowledgedExecutions = new();
     private MultiplayerApi? _watchedMultiplayer;
     private bool _ownerPeerLost;
@@ -37,6 +42,12 @@ internal sealed class GameplayActionRequestPipeline(
         {
             CancelRequesterOwnedExecutions(RequesterLostReason);
         }
+
+        foreach (IGameplayActionRequestReservation reservation in _pendingReservations.Values)
+        {
+            reservation.Release();
+        }
+        _pendingReservations.Clear();
     }
 
     public void ValidateSustainedExecutions()
@@ -47,6 +58,7 @@ internal sealed class GameplayActionRequestPipeline(
             if (!execution.Component.IsExecutionActive(execution.ExecutionId))
             {
                 _requestedExecutions.RemoveAt(index);
+                execution.Reservation?.Release();
                 continue;
             }
 
@@ -56,7 +68,14 @@ internal sealed class GameplayActionRequestPipeline(
             }
 
             _requestedExecutions.RemoveAt(index);
-            execution.Component.CancelExecution(execution.ExecutionId, AccessLostReason);
+            bool cancelled = execution.Component.CancelExecution(
+                execution.ExecutionId,
+                AccessLostReason
+            );
+            if (!cancelled)
+            {
+                execution.Reservation?.Release();
+            }
         }
     }
 
@@ -168,7 +187,13 @@ internal sealed class GameplayActionRequestPipeline(
             }
 
             _requestedExecutions.RemoveAt(index);
-            return component.CancelExecution(execution.ExecutionId, ReleasedReason);
+            bool cancelled = component.CancelExecution(execution.ExecutionId, ReleasedReason);
+            if (!cancelled)
+            {
+                execution.Reservation?.Release();
+            }
+
+            return cancelled;
         }
 
         return false;
@@ -206,7 +231,11 @@ internal sealed class GameplayActionRequestPipeline(
             }
 
             _requestedExecutions.RemoveAt(index);
-            execution.Component.CancelExecution(execution.ExecutionId, reason);
+            bool cancelled = execution.Component.CancelExecution(execution.ExecutionId, reason);
+            if (!cancelled)
+            {
+                execution.Reservation?.Release();
+            }
         }
     }
 
@@ -508,6 +537,7 @@ internal sealed class GameplayActionRequestPipeline(
         ulong executionId
     )
     {
+        BindPendingReservation(component, action, executionId);
         if (!TryBuildAcknowledgement(component, action, out NodePath path, out StringName actionId))
         {
             return;
@@ -620,6 +650,7 @@ internal sealed class GameplayActionRequestPipeline(
         string reason
     )
     {
+        ReleasePendingReservation(new GameplayActionRequestKey(component, action.Definition!.Id));
         if (TryBuildAcknowledgement(component, action, out NodePath path, out StringName actionId))
         {
             RejectRequest(_owner.OwnerPeerId, path, actionId, reason);
@@ -657,24 +688,63 @@ internal sealed class GameplayActionRequestPipeline(
             return new GameplayActionExecutionRejected();
         }
 
-        GameplayActionExecutionResult result = component.ExecuteRequestedAction(
-            actionId,
-            out ulong executionId,
-            resolveInstigator(),
-            _owner,
-            target
-        );
+        GameplayActionRequestKey request = new(component, actionId);
+        if (!_owner.TryAcquireRequestReservation(component, action, target, out var reservation))
+        {
+            RejectRequest(
+                senderPeerId,
+                componentPath,
+                actionId,
+                GameplayActionAvailabilityExtensions.UnavailableReason
+            );
+            return new GameplayActionExecutionRejected();
+        }
+
+        if (reservation is not null)
+        {
+            _pendingReservations[request] = reservation;
+        }
+
+        GameplayActionExecutionResult result;
+        ulong executionId;
+        try
+        {
+            result = component.ExecuteRequestedAction(
+                actionId,
+                out executionId,
+                resolveInstigator(),
+                _owner,
+                target
+            );
+        }
+        catch
+        {
+            ReleasePendingReservation(request);
+            throw;
+        }
+
         if (result is GameplayActionExecutionRunning)
         {
+            IGameplayActionRequestReservation? runningReservation = null;
+            if (_pendingReservations.Remove(request, out IGameplayActionRequestReservation? lease))
+            {
+                runningReservation = lease;
+            }
+
             _requestedExecutions.Add(
                 new GameplayActionRequestedExecution(
                     component,
                     actionId,
                     executionId,
                     action.Executor?.RequiresRequesterPresence != false,
-                    target
+                    target,
+                    runningReservation
                 )
             );
+        }
+        else
+        {
+            ReleasePendingReservation(request);
         }
 
         return result;
@@ -688,7 +758,7 @@ internal sealed class GameplayActionRequestPipeline(
         string reason
     )
     {
-        RemoveRequestedExecution(component, executionId);
+        RemoveRequestedExecution(component, action, executionId);
         if (!TryBuildAcknowledgement(component, action, out NodePath path, out StringName actionId))
         {
             return;
@@ -847,11 +917,52 @@ internal sealed class GameplayActionRequestPipeline(
         && _owner.Multiplayer is not null
         && _owner.Multiplayer.MultiplayerPeer is not null;
 
-    private void RemoveRequestedExecution(GameplayActionComponent component, ulong executionId)
+    private void RemoveRequestedExecution(
+        GameplayActionComponent component,
+        GameplayAction action,
+        ulong executionId
+    )
     {
-        _requestedExecutions.RemoveAll(execution =>
-            execution.Component == component && execution.ExecutionId == executionId
-        );
+        for (int index = _requestedExecutions.Count - 1; index >= 0; index--)
+        {
+            GameplayActionRequestedExecution execution = _requestedExecutions[index];
+            if (execution.Component != component || execution.ExecutionId != executionId)
+            {
+                continue;
+            }
+
+            _requestedExecutions.RemoveAt(index);
+            execution.Reservation?.Release();
+            return;
+        }
+
+        if (action.Definition is not null)
+        {
+            ReleasePendingReservation(
+                new GameplayActionRequestKey(component, action.Definition.Id)
+            );
+        }
+    }
+
+    private void BindPendingReservation(
+        GameplayActionComponent component,
+        GameplayAction action,
+        ulong executionId
+    )
+    {
+        GameplayActionRequestKey request = new(component, action.Definition!.Id);
+        if (_pendingReservations.TryGetValue(request, out IGameplayActionRequestReservation? lease))
+        {
+            lease.BindExecution(executionId);
+        }
+    }
+
+    private void ReleasePendingReservation(GameplayActionRequestKey request)
+    {
+        if (_pendingReservations.Remove(request, out IGameplayActionRequestReservation? lease))
+        {
+            lease.Release();
+        }
     }
 
     private void RemoveSustainedRequest(GameplayActionComponent component, StringName actionId)
@@ -956,7 +1067,8 @@ internal sealed class GameplayActionRequestPipeline(
         StringName ActionId,
         ulong ExecutionId,
         bool RequiresRequesterPresence,
-        Node? Target
+        Node? Target,
+        IGameplayActionRequestReservation? Reservation
     );
 
     private enum ClientEndKind

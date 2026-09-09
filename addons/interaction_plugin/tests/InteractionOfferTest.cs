@@ -167,6 +167,146 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
     }
 
     [TestCase]
+    public async Task TargetReservationBlocksOtherInteractorsUntilTheExecutionEnds()
+    {
+        Node3D world = new();
+        TestInteractiveActor owner = new() { Name = "Door", Position = new Vector3(0, 0, -2) };
+        Area3D area = new() { Name = "InteractionArea" };
+        GameplayActionComponent targetActions = new() { Name = "GameplayActions" };
+        CompletingExecutor executor = new()
+        {
+            Name = "OpenExecutor",
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayAction action = new()
+        {
+            Name = "OpenAction",
+            ConfiguredAccessProviderId = InteractionOffer.InteractionAccessProviderId,
+            Definition = new GameplayActionDefinition { Id = "open", Label = "Open" },
+            Executor = executor,
+        };
+        action.AddChild(executor);
+        targetActions.AddAction(action);
+
+        InteractiveComponent interactive = new()
+        {
+            Name = "Interactive",
+            InteractionArea = area,
+            InteractionAnchor = owner,
+            ActionComponent = targetActions,
+            Offers =
+            {
+                new InteractionOffer
+                {
+                    ActionSource = InteractionOfferSource.Target,
+                    ActionId = new StringName("open"),
+                    BindingConfig = Press("interact"),
+                    TargetConcurrencyGroup = new StringName("door_operation"),
+                },
+            },
+        };
+        owner.AddChild(area);
+        owner.AddChild(targetActions);
+        owner.AddChild(interactive);
+
+        InteractionInteractor first = new() { Name = "FirstInteractor" };
+        Node3D firstView = new() { Name = "ViewOrigin" };
+        first.AddChild(firstView);
+        TestInteractionDetector firstDetector = AttachDetector(first, firstView);
+        InteractionInteractor second = new() { Name = "SecondInteractor" };
+        Node3D secondView = new() { Name = "ViewOrigin" };
+        second.AddChild(secondView);
+        TestInteractionDetector secondDetector = AttachDetector(second, secondView);
+        world.AddChild(owner);
+        world.AddChild(first);
+        world.AddChild(second);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
+        await runner.SimulateFrames(1);
+
+        firstDetector.SetDetection(interactive, InteractionDetectionKind.Interactible);
+        secondDetector.SetDetection(interactive, InteractionDetectionKind.Interactible);
+        first.RecalculateFocus();
+        GameplayActionBinding firstBinding = first.Runner!.GetBindings().Single();
+
+        ulong executionId = 0;
+        first.Runner.GameplayActionStarted += (_, _, startedId) => executionId = (ulong)startedId;
+        AssertThat(first.Runner.TryStartActionInput("interact")).IsTrue();
+        AssertThat(executor.ExecuteCount).IsEqual(1);
+
+        GameplayAction forceAction = NewGenericAction("force");
+        second.Runner!.OwnedActionComponent!.AddAction(forceAction);
+        InteractionOffer forceOffer = new()
+        {
+            ActionSource = InteractionOfferSource.Instigator,
+            ActionId = new StringName("force"),
+            BindingConfig = Press("force"),
+            TargetConcurrencyGroup = new StringName("door_operation"),
+        };
+        interactive.Offers.Add(forceOffer);
+        GameplayActionAvailability otherAvailability = interactive.EvaluateAvailability(
+            second,
+            interactive.Offers[0]
+        );
+        GameplayActionAvailability selfAvailability = interactive.EvaluateAvailability(
+            first,
+            interactive.Offers[0]
+        );
+        AssertThat(otherAvailability is GameplayActionBlocked).IsTrue();
+        AssertThat(selfAvailability is GameplayActionBlocked).IsTrue();
+        string otherReason = otherAvailability is GameplayActionBlocked otherBlocked
+            ? otherBlocked.Reason
+            : string.Empty;
+        string selfReason = selfAvailability is GameplayActionBlocked selfBlocked
+            ? selfBlocked.Reason
+            : string.Empty;
+        AssertThat(otherReason).IsEqual("Someone else is using this target.");
+        AssertThat(selfReason).IsEqual("This target is already in use.");
+        AssertThat(
+                interactive.EvaluateAvailability(second, forceOffer)
+                    is GameplayActionBlocked blockedForce
+                    && blockedForce.Reason == "Someone else is using this target."
+            )
+            .IsTrue();
+
+        GameplayAction independentAction = NewGenericAction("inspect");
+        second.Runner.OwnedActionComponent!.AddAction(independentAction);
+        InteractionOffer independentOffer = new()
+        {
+            ActionSource = InteractionOfferSource.Instigator,
+            ActionId = new StringName("inspect"),
+            TargetConcurrencyGroup = new StringName("inspection"),
+        };
+        interactive.Offers.Add(independentOffer);
+        AssertThat(
+                interactive.EvaluateAvailability(second, independentOffer) is GameplayActionAllowed
+            )
+            .IsTrue();
+
+        AssertThat(targetActions.CompleteExecution(executionId)).IsTrue();
+        AssertThat(
+                interactive.EvaluateAvailability(second, interactive.Offers[0])
+                    is GameplayActionAllowed
+            )
+            .IsTrue();
+        AssertThat(interactive.EvaluateAvailability(second, forceOffer) is GameplayActionAllowed)
+            .IsTrue();
+        AssertThat(firstBinding.Target).IsEqual(interactive);
+
+        AssertThat(first.Runner.TryEndActionInput("interact")).IsTrue();
+        executor.Result = new GameplayActionExecutionRunning();
+        ulong destroyedTargetExecutionId = 0;
+        first.Runner.GameplayActionStarted += (_, _, startedId) =>
+            destroyedTargetExecutionId = (ulong)startedId;
+        AssertThat(first.Runner.TryStartActionInput("interact")).IsTrue();
+        AssertThat(destroyedTargetExecutionId > 0).IsTrue();
+
+        interactive.QueueFree();
+        await runner.SimulateFrames(1);
+        AssertThat(targetActions.IsActionExecuting("open")).IsFalse();
+        AssertThat(targetActions.CompleteExecution(destroyedTargetExecutionId)).IsFalse();
+    }
+
+    [TestCase]
     public async Task TargetAndOfferRulesSeeTheOfferWithoutMutatingTheOwnedAction()
     {
         Node3D world = new();
@@ -240,13 +380,16 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
     {
         public int ExecuteCount { get; private set; }
 
-        public override GameplayActionExecutionResult Execute(in GameplayActionContext context) =>
-            ExecuteAndComplete();
+        public GameplayActionExecutionResult Result { get; set; } =
+            new GameplayActionExecutionCompleted();
 
-        private GameplayActionExecutionResult ExecuteAndComplete()
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context) =>
+            ExecuteAndReturnResult();
+
+        private GameplayActionExecutionResult ExecuteAndReturnResult()
         {
             ExecuteCount++;
-            return new GameplayActionExecutionCompleted();
+            return Result;
         }
     }
 

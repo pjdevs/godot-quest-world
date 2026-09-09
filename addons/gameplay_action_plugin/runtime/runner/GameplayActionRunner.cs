@@ -430,8 +430,31 @@ public partial class GameplayActionRunner : Node
             return false;
         }
 
-        GameplayActionAccessContext context = new(this, component, action, target);
+        GameplayActionAccessContext context = new(this, component, action, target, sustained);
         return provider.CanRequest(context);
+    }
+
+    internal bool TryAcquireRequestReservation(
+        GameplayActionComponent component,
+        GameplayAction action,
+        Node? target,
+        out IGameplayActionRequestReservation? reservation
+    )
+    {
+        reservation = null;
+        StringName providerId = action.AccessProviderId;
+        if (providerId is null || providerId.IsEmpty)
+        {
+            return true;
+        }
+
+        if (!_accessProviders.TryGetValue(providerId, out IGameplayActionAccessProvider? provider))
+        {
+            return false;
+        }
+
+        GameplayActionAccessContext context = new(this, component, action, target);
+        return provider.TryAcquireRequestReservation(context, out reservation);
     }
 
     private void RequestAutomaticEdges(IReadOnlyList<GameplayActionBindingCandidate> automaticEdges)

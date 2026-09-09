@@ -15,6 +15,7 @@ using InteractionPlugin.Integration.Stateful;
 using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
+using InteractionPlugin.Runtime.Offers;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
 
@@ -402,4 +403,106 @@ public sealed partial class InteractionNetworkTest : InteractionNetworkTestBase
             session.Close();
         }
     }
+
+    [TestCase]
+    public async Task TargetReservationReplicatesSelfOtherReleaseAndLateJoin()
+    {
+        Session session = await Connect();
+        LatePeer? late = null;
+        try
+        {
+            foreach (PeerScene scene in new[] { session.Server, session.ClientA, session.ClientB })
+            {
+                scene.Interactive.Offers.Add(CreateReservationOffer());
+            }
+
+            session.Arm(new GameplayActionExecutionRunning(), duration: 3600.0f);
+            session.FocusA(session.Server.Interactive, session.ClientA.Interactive);
+            AssertThat(session.ClientA.InteractorA.TryStartInteractionInput(InteractInput))
+                .IsTrue();
+            await session.Pump(RoundTripFrames);
+
+            GameplayActionAvailability requesterAvailability =
+                session.ClientA.Interactive.EvaluateAvailability(
+                    session.ClientA.InteractorA,
+                    session.ClientA.Interactive.Offers[0]
+                );
+            GameplayActionAvailability observerAvailability =
+                session.ClientB.Interactive.EvaluateAvailability(
+                    session.ClientB.InteractorB,
+                    session.ClientB.Interactive.Offers[0]
+                );
+            AssertThat(requesterAvailability is GameplayActionBlocked).IsTrue();
+            AssertThat(observerAvailability is GameplayActionBlocked).IsTrue();
+            AssertThat(
+                    requesterAvailability is GameplayActionBlocked selfBlocked
+                        && selfBlocked.Reason == "This target is already in use."
+                )
+                .IsTrue();
+            AssertThat(
+                    observerAvailability is GameplayActionBlocked otherBlocked
+                        && otherBlocked.Reason == "Someone else is using this target."
+                )
+                .IsTrue();
+            AssertThat(session.Server.Executor.LastExecutionId).IsGreater(0ul);
+            AssertThat(
+                    session.Server.Interactive.ActionComponent!.IsActionExecuting(ActivateAction)
+                )
+                .IsTrue();
+
+            late = await session.JoinLate("LateReservationPeer");
+            late.Scene.Interactive.Offers.Add(CreateReservationOffer());
+            GameplayActionAvailability lateAvailability =
+                late.Scene.Interactive.EvaluateAvailability(
+                    late.Scene.InteractorA,
+                    late.Scene.Interactive.Offers[0]
+                );
+            AssertThat(
+                    lateAvailability is GameplayActionBlocked lateBlocked
+                        && lateBlocked.Reason == "Someone else is using this target."
+                )
+                .IsTrue();
+            AssertThat(
+                    session.Server.Interactive.ActionComponent!.IsActionExecuting(ActivateAction)
+                )
+                .IsTrue();
+
+            AssertThat(
+                    session.Server.Interactive.CompleteExecution(
+                        session.Server.Executor.LastExecutionId
+                    )
+                )
+                .IsTrue();
+            await session.Pump(RoundTripFrames);
+            AssertThat(
+                    session.ClientB.Interactive.EvaluateAvailability(
+                        session.ClientB.InteractorB,
+                        session.ClientB.Interactive.Offers[0]
+                    ) is GameplayActionAllowed
+                )
+                .IsTrue();
+        }
+        finally
+        {
+            if (late is { } latePeer && GodotObject.IsInstanceValid(latePeer.Scene.Root))
+            {
+                latePeer.Scene.Root.Free();
+            }
+
+            session.Close();
+        }
+    }
+
+    private static InteractionOffer CreateReservationOffer() =>
+        new()
+        {
+            ActionSource = InteractionOfferSource.Target,
+            ActionId = ActivateAction,
+            BindingConfig = new GameplayActionBindingConfig
+            {
+                InputActionName = InteractInput,
+                ActivationMode = GameplayActionActivationMode.Press,
+            },
+            TargetConcurrencyGroup = new StringName("target_operation"),
+        };
 }

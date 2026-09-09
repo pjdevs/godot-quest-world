@@ -152,6 +152,35 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
     public bool CanRequest(in GameplayActionAccessContext context) => HasInteractionAccess(context);
 
+    public bool TryAcquireRequestReservation(
+        in GameplayActionAccessContext context,
+        out IGameplayActionRequestReservation? reservation
+    )
+    {
+        reservation = null;
+        if (
+            context.Target is InteractiveComponent interactive
+            && interactive.TryResolveOfferForEndpoint(
+                this,
+                context.Component,
+                context.Action,
+                out InteractionOffer? offer
+            )
+            && offer is not null
+        )
+        {
+            return interactive.TryAcquireTargetReservation(
+                this,
+                offer,
+                context.Component,
+                context.Action,
+                out reservation
+            );
+        }
+
+        return true;
+    }
+
     private bool HasInteractionAccess(in GameplayActionAccessContext context)
     {
         if (
@@ -166,7 +195,8 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             && Detector?.Detect(interactive) == InteractionDetectionKind.Interactible
         )
         {
-            return interactive.EvaluateAvailability(this, offer) is GameplayActionAllowed;
+            return interactive.EvaluateAccess(this, offer, context.Sustained)
+                is GameplayActionAllowed;
         }
 
         return context.Action is InteractionAction interactionAction

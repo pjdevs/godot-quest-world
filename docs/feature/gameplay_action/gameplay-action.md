@@ -117,9 +117,11 @@ authorable on every `GameplayAction` and feeds its effective `AccessProviderId`:
 provider is accessible only when it belongs to the runner's `OwnedActionComponent`; an action with an
 `AccessProviderId` always asks the runner's matching
 `IGameplayActionAccessProvider`, whether the action is owned or external. A missing provider rejects the
-request. The provider receives the optional invocation target. The authoritative runner validates the
-RPC sender and access, then lets the host re-run rules/reservations. Client bindings and access claims
-never cross the network as proof.
+request. The provider receives the optional invocation target and may expose a transient
+`IGameplayActionRequestReservation` after `CanRequest()` succeeds. The authoritative runner holds that
+lease while the request enters the executor, binds it to a running `ExecutionId`, and releases it on
+every synchronous rollback, terminal result, cancellation, requester disconnect or runner cleanup.
+Client bindings and access claims never cross the network as proof.
 
 Executors require requester presence by default. An executor may opt out through
 `RequiresRequesterPresence == false` when accepted work becomes world-owned and should survive
@@ -248,6 +250,12 @@ Action availability, gesture state, execution presentation and the default actio
 Gameplay Action. Interaction owns only target-specific detection/focus/projection. This is what lets an
 inventory-granted action and an interaction share the same runner without pretending they are the same
 target UX.
+
+### AD-13 — Access reservations belong to the request lifecycle
+
+Access checks stay pure so local availability can be evaluated repeatedly. A provider may acquire an
+optional authority-side lease only after that check succeeds; the runner owns the lease lifecycle and
+does not turn domain-specific access into a second execution engine.
 
 ## Deliberately deferred
 

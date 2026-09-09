@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Access;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Execution;
@@ -105,6 +106,10 @@ public partial class InteractiveComponent : Node
     [Signal]
     public delegate void ExecutionPresentationChangedEventHandler(StringName actionId);
 
+    /// <summary>Emitted when the transient target-side reservation snapshot changes.</summary>
+    [Signal]
+    public delegate void TargetReservationChangedEventHandler();
+
     /// <summary>Gets or sets the required area that registers interactors in interaction range.</summary>
     [ExportGroup("Interaction")]
     [Export]
@@ -177,6 +182,10 @@ public partial class InteractiveComponent : Node
     [Export]
     public GameplayActionComponent? ActionComponent { get; set; }
 
+    /// <summary>Gets or sets the optional code-owned synchronizer for target reservation state.</summary>
+    [Export]
+    public InteractionTargetReservationSynchronizer? TargetReservationSynchronizer { get; set; }
+
     /// <summary>
     /// Gets or sets the ordered invocations this target offers to an interactor.
     /// </summary>
@@ -226,6 +235,8 @@ public partial class InteractiveComponent : Node
     private const string NotConfiguredReason = "Interaction is not configured.";
     private const string AlreadyRunningReason = "This is already in use.";
     private const string SomeoneElseReason = "Someone else is using this.";
+    private const string TargetAlreadyReservedReason = "This target is already in use.";
+    private const string TargetReservedByOtherReason = "Someone else is using this target.";
 
     // Every target currently in the tree, for the detectors whose source is not an overlap event. A
     // plain list rather than a Godot group: GetNodesInGroup allocates on every call, and a detector
@@ -244,7 +255,13 @@ public partial class InteractiveComponent : Node
     private readonly HashSet<InteractionInteractor> _interactionOverlaps = new();
     private readonly HashSet<InteractionInteractor> _indicationOverlaps = new();
     private readonly List<InteractionInteractor> _overlapBuffer = new();
+    private readonly Dictionary<StringName, TargetReservation> _targetReservations = new();
     private Area3D? _interactionArea;
+
+    private readonly Dictionary<
+        StringName,
+        TargetReservationSnapshot
+    > _replicatedTargetReservations = new();
 
     internal bool HasActiveExecution =>
         ActionComponent?.TryGetFirstActiveExecution(out _, out _, out _) == true;
@@ -519,6 +536,161 @@ public partial class InteractiveComponent : Node
         return true;
     }
 
+    /// <summary>
+    /// Acquires the optional target-side reservation declared by one resolved offer.
+    /// </summary>
+    /// <remarks>
+    /// The lease is intentionally acquired by the Gameplay Action request pipeline, after access
+    /// validation and immediately before the action owner starts execution. Empty groups do not
+    /// claim the target and return a successful null lease.
+    /// </remarks>
+    internal bool TryAcquireTargetReservation(
+        InteractionInteractor interactor,
+        InteractionOffer offer,
+        GameplayActionComponent component,
+        GameplayAction action,
+        out IGameplayActionRequestReservation? reservation
+    )
+    {
+        reservation = null;
+        StringName group = offer.TargetConcurrencyGroup;
+        if (group is null || group.IsEmpty)
+        {
+            return true;
+        }
+
+        if (!IsAuthoritative)
+        {
+            return false;
+        }
+
+        if (_targetReservations.ContainsKey(group))
+        {
+            return false;
+        }
+
+        TargetReservation claim = new(
+            this,
+            group,
+            component,
+            action,
+            interactor,
+            interactor.Runner?.OwnerPeerId ?? 1
+        );
+        _targetReservations.Add(group, claim);
+        reservation = claim.Lease;
+        NotifyTargetReservationChanged();
+        return true;
+    }
+
+    internal GameplayActionAvailability EvaluateTargetReservation(
+        InteractionInteractor interactor,
+        InteractionOffer offer
+    )
+    {
+        StringName group = offer.TargetConcurrencyGroup;
+        if (group is null || group.IsEmpty)
+        {
+            return new GameplayActionAllowed();
+        }
+
+        TargetReservationRelation relation = GetTargetReservationRelation(interactor, group);
+        return relation switch
+        {
+            TargetReservationRelation.ReservedBySelf => offer.WhenReservedBySelf.ToAvailability(
+                TargetAlreadyReservedReason
+            ),
+            TargetReservationRelation.ReservedByOther => offer.WhenReservedByOther.ToAvailability(
+                TargetReservedByOtherReason
+            ),
+            _ => new GameplayActionAllowed(),
+        };
+    }
+
+    internal Godot.Collections.Array<Godot.Collections.Dictionary<
+        string,
+        Variant
+    >> BuildTargetReservationEntries()
+    {
+        Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>> entries = new();
+        foreach (TargetReservation claim in _targetReservations.Values)
+        {
+            entries.Add(claim.ToEntry());
+        }
+
+        return entries;
+    }
+
+    internal void ApplyTargetReservationEntries(
+        Godot.Collections.Array<Godot.Collections.Dictionary<string, Variant>> entries
+    )
+    {
+        _replicatedTargetReservations.Clear();
+        foreach (Godot.Collections.Dictionary<string, Variant> entry in entries)
+        {
+            if (!TargetReservationSnapshot.TryRead(entry, out TargetReservationSnapshot snapshot))
+            {
+                continue;
+            }
+
+            _replicatedTargetReservations[snapshot.Group] = snapshot;
+        }
+
+        NotifyStatusChanged();
+        EmitSignal(SignalName.TargetReservationChanged);
+    }
+
+    private TargetReservationRelation GetTargetReservationRelation(
+        InteractionInteractor interactor,
+        StringName group
+    )
+    {
+        if (IsAuthoritative)
+        {
+            return _targetReservations.TryGetValue(group, out TargetReservation? claim)
+                ? claim.IsOwnedBy(interactor)
+                    ? TargetReservationRelation.ReservedBySelf
+                    : TargetReservationRelation.ReservedByOther
+                : TargetReservationRelation.Unclaimed;
+        }
+
+        return _replicatedTargetReservations.TryGetValue(
+            group,
+            out TargetReservationSnapshot snapshot
+        )
+            ? snapshot.IsOwnedBy(interactor)
+                ? TargetReservationRelation.ReservedBySelf
+                : TargetReservationRelation.ReservedByOther
+            : TargetReservationRelation.Unclaimed;
+    }
+
+    private bool IsAuthoritative =>
+        Multiplayer is null || Multiplayer.MultiplayerPeer is null || Multiplayer.IsServer();
+
+    private void ReleaseTargetReservation(TargetReservation claim)
+    {
+        if (claim.Released)
+        {
+            return;
+        }
+
+        claim.Released = true;
+        if (
+            _targetReservations.TryGetValue(claim.Group, out TargetReservation? current)
+            && ReferenceEquals(current, claim)
+        )
+        {
+            _targetReservations.Remove(claim.Group);
+            NotifyTargetReservationChanged();
+        }
+    }
+
+    private void NotifyTargetReservationChanged()
+    {
+        EmitSignal(SignalName.TargetReservationChanged);
+        NotifyStatusChanged();
+    }
+
     /// <summary>Finds the authored offer that resolves to one requested action endpoint.</summary>
     internal bool TryResolveOfferForEndpoint(
         InteractionInteractor interactor,
@@ -585,6 +757,15 @@ public partial class InteractiveComponent : Node
             return offerAvailability;
         }
 
+        GameplayActionAvailability targetReservationAvailability = EvaluateTargetReservation(
+            interactor,
+            offer
+        );
+        if (targetReservationAvailability is not GameplayActionAllowed)
+        {
+            return targetReservationAvailability;
+        }
+
         GameplayActionAvailability actionAvailability = resolution.Component.EvaluateAction(
             resolution.Action.Definition.Id,
             interactionInstigator,
@@ -627,6 +808,82 @@ public partial class InteractiveComponent : Node
                 startedByInteractor ? AlreadyRunningReason : SomeoneElseReason
             )
             : new GameplayActionAllowed();
+    }
+
+    /// <summary>Re-validates an already-running offer without treating its own reservations as lost access.</summary>
+    /// <remarks>
+    /// Sustained access still re-runs spatial, target, offer, and action rules. It deliberately skips
+    /// the target and action-owner busy presentation checks: both reservations belong to the request
+    /// currently being validated and must remain held until its terminal lifecycle.
+    /// </remarks>
+    internal GameplayActionAvailability EvaluateAccess(
+        InteractionInteractor interactor,
+        InteractionOffer offer,
+        bool sustained
+    )
+    {
+        if (!sustained)
+        {
+            return EvaluateAvailability(interactor, offer);
+        }
+
+        if (
+            interactor is null
+            || InteractionArea is null
+            || InteractionAnchor is null
+            || offer is null
+            || !Offers.Contains(offer)
+            || !TryResolveOffer(interactor, offer, out InteractionOfferResolution resolution)
+            || resolution.Action.Definition is null
+            || resolution.Action.Executor is null
+        )
+        {
+            return new GameplayActionBlocked(NotConfiguredReason);
+        }
+
+        Node interactionInstigator = interactor.Runner?.ResolveInstigator() ?? interactor;
+        InteractionContext context = new(
+            interactor,
+            this,
+            resolution.Action,
+            offer,
+            resolution.Component
+        );
+        GameplayActionAvailability targetAvailability = EvaluateRules(TargetRules, context);
+        if (targetAvailability is not GameplayActionAllowed)
+        {
+            return targetAvailability;
+        }
+
+        GameplayActionAvailability offerAvailability = EvaluateRules(offer.Rules, context);
+        if (offerAvailability is not GameplayActionAllowed)
+        {
+            return offerAvailability;
+        }
+
+        GameplayActionAvailability actionAvailability = resolution.Component.EvaluateAction(
+            resolution.Action.Definition.Id,
+            interactionInstigator,
+            interactor.Runner,
+            this
+        );
+        if (actionAvailability is not GameplayActionAllowed)
+        {
+            return actionAvailability;
+        }
+
+        StringName group = offer.TargetConcurrencyGroup;
+        if (
+            group is not null
+            && !group.IsEmpty
+            && GetTargetReservationRelation(interactor, group)
+                != TargetReservationRelation.ReservedBySelf
+        )
+        {
+            return new GameplayActionBlocked(TargetReservedByOtherReason);
+        }
+
+        return new GameplayActionAllowed();
     }
 
     private bool RequiresTargetActionComponent()
@@ -1211,6 +1468,12 @@ public partial class InteractiveComponent : Node
         _presentInteractors.Clear();
         _interactionOverlaps.Clear();
         _indicationOverlaps.Clear();
+        _targetReservations.Clear();
+        _replicatedTargetReservations.Clear();
+        if (IsAuthoritative)
+        {
+            EmitSignal(SignalName.TargetReservationChanged);
+        }
     }
 
     private void OnInteractionAreaBodyEntered(Node3D body) =>
@@ -1281,5 +1544,134 @@ public partial class InteractiveComponent : Node
         _presentInteractors.RemoveWhere(interactor => !IsInstanceValid(interactor));
         _interactionOverlaps.RemoveWhere(interactor => !IsInstanceValid(interactor));
         _indicationOverlaps.RemoveWhere(interactor => !IsInstanceValid(interactor));
+    }
+
+    private enum TargetReservationRelation
+    {
+        Unclaimed,
+        ReservedBySelf,
+        ReservedByOther,
+    }
+
+    private sealed class TargetReservation
+    {
+        public TargetReservation(
+            InteractiveComponent owner,
+            StringName group,
+            GameplayActionComponent component,
+            GameplayAction action,
+            InteractionInteractor interactor,
+            int requesterPeerId
+        )
+        {
+            Owner = owner;
+            Group = group;
+            Component = component;
+            Action = action;
+            Interactor = interactor;
+            RequesterPeerId = requesterPeerId;
+            Lease = new TargetReservationLease(owner);
+            Lease.Attach(this);
+        }
+
+        public InteractiveComponent Owner { get; }
+        public StringName Group { get; }
+        public GameplayActionComponent Component { get; }
+        public GameplayAction Action { get; }
+        public InteractionInteractor Interactor { get; }
+        public int RequesterPeerId { get; }
+        public ulong ExecutionId { get; private set; }
+        public bool Released { get; set; }
+        public TargetReservationLease Lease { get; }
+
+        public bool IsOwnedBy(InteractionInteractor interactor)
+        {
+            return Owner.IsAuthoritative
+                ? Interactor == interactor
+                : interactor.Runner?.OwnerPeerId == RequesterPeerId;
+        }
+
+        public Godot.Collections.Dictionary<string, Variant> ToEntry() =>
+            new()
+            {
+                ["group"] = Group,
+                ["action_id"] = Action.Definition?.Id ?? new StringName(),
+                ["execution_id"] = checked((long)ExecutionId),
+                ["requester_peer_id"] = RequesterPeerId,
+            };
+
+        public void BindExecution(ulong executionId) => ExecutionId = executionId;
+    }
+
+    private sealed class TargetReservationLease(InteractiveComponent owner)
+        : IGameplayActionRequestReservation
+    {
+        private readonly InteractiveComponent _owner = owner;
+        private TargetReservation? _claim;
+
+        public void Attach(TargetReservation claim) => _claim = claim;
+
+        public void BindExecution(ulong executionId)
+        {
+            if (_claim is not null && !_claim.Released)
+            {
+                _claim.BindExecution(executionId);
+            }
+        }
+
+        public void Release()
+        {
+            if (_claim is not null)
+            {
+                _owner.ReleaseTargetReservation(_claim);
+            }
+        }
+    }
+
+    private readonly record struct TargetReservationSnapshot(
+        StringName Group,
+        StringName ActionId,
+        ulong ExecutionId,
+        int RequesterPeerId
+    )
+    {
+        public bool IsOwnedBy(InteractionInteractor interactor) =>
+            interactor.Runner?.OwnerPeerId == RequesterPeerId;
+
+        public static bool TryRead(
+            Godot.Collections.Dictionary<string, Variant> entry,
+            out TargetReservationSnapshot snapshot
+        )
+        {
+            snapshot = default;
+            if (
+                !entry.TryGetValue("group", out Variant groupValue)
+                || !entry.TryGetValue("action_id", out Variant actionValue)
+                || !entry.TryGetValue("execution_id", out Variant executionValue)
+                || !entry.TryGetValue("requester_peer_id", out Variant requesterValue)
+                || groupValue.VariantType != Variant.Type.StringName
+                || actionValue.VariantType != Variant.Type.StringName
+                || executionValue.VariantType != Variant.Type.Int
+                || requesterValue.VariantType != Variant.Type.Int
+            )
+            {
+                return false;
+            }
+
+            long executionId = executionValue.AsInt64();
+            long requesterPeerId = requesterValue.AsInt64();
+            if (executionId < 0 || requesterPeerId <= 0)
+            {
+                return false;
+            }
+
+            snapshot = new TargetReservationSnapshot(
+                groupValue.AsStringName(),
+                actionValue.AsStringName(),
+                (ulong)executionId,
+                checked((int)requesterPeerId)
+            );
+            return !snapshot.Group.IsEmpty;
+        }
     }
 }

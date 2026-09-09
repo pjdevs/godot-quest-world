@@ -422,6 +422,15 @@ public sealed partial class GameplayActionRunnerNetworkTest
             Targets.Add(context.Target);
             return Allowed;
         }
+
+        public bool TryAcquireRequestReservation(
+            in GameplayActionAccessContext context,
+            out IGameplayActionRequestReservation? reservation
+        )
+        {
+            reservation = null;
+            return Allowed;
+        }
     }
 
     private sealed partial class NetworkRecordingExecutor : GameplayActionExecutor

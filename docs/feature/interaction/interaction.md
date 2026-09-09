@@ -30,6 +30,7 @@ Interactive object
 ├── InteractiveComponent               # ActionComponent + ordered Offers
 │   ├── TargetRules
 │   └── Offers                         # Target- or Instigator-sourced invocations
+├── InteractionTargetReservationSynchronizer # optional, for target claims
 ├── InteractionArea / anchor
 └── StatefulComponent                  # optional world truth
 ```
@@ -60,9 +61,9 @@ before a press.
 ## Actions, rules and availability
 
 `InteractionOffer : Resource` is the target-specific authoring unit. It contains an action source,
-stable `ActionId`, optional `BindingConfig`, ordered offer rules, and the future target-reservation
-presentation fields. It resolves to an ordinary `GameplayAction`, so a player-owned `Take` and a
-door-owned `Open` use the same adapter.
+stable `ActionId`, optional `BindingConfig`, ordered offer rules, and an optional
+`TargetConcurrencyGroup` with self/other presentation outcomes. It resolves to an ordinary
+`GameplayAction`, so a player-owned `Take` and a door-owned `Open` use the same adapter.
 
 Availability is evaluated in this order:
 
@@ -71,6 +72,7 @@ offer configuration and endpoint resolution
 → spatial access
 → Interactive.TargetRules
 → InteractionOffer.Rules
+→ target reservation group
 → resolved GameplayAction rules
 → action-owner concurrency
 ```
@@ -106,6 +108,12 @@ Hack        self Blocked / other Blocked
 Dialogue    self Hidden  / other Blocked
 Silent      self Hidden  / other Hidden
 ```
+
+Target reservation is a separate scope from action-host concurrency. Offers sharing a
+`TargetConcurrencyGroup` claim the same Interactive even when their actions belong to different
+`GameplayActionComponent` instances, such as a door-owned `Open` and a player-owned `Force`. A claim
+is acquired only after request access validation and remains held through the generic request lease
+until the execution reaches a terminal state.
 
 On the authority, “self” is attributed through the execution instigator. On a client,
 `RequestedLocally` means self and `Observed` means other. The query applies to the whole host concurrency
@@ -151,8 +159,10 @@ Focus resolves every visible offer and creates a generic binding whose cleanup s
 target are both the focused Interactive. Focus loss removes those bindings without touching the real
 action occurrence. The runner registers Interaction as an `IGameplayActionAccessProvider`; the
 authoritative peer resolves its own target, finds the exact offer that maps to the requested endpoint,
-re-validates spatial access and evaluates target/offer rules before execution. A client-supplied target
-or action endpoint is never accepted as proof of access.
+re-validates spatial access and evaluates target/offer rules before execution. After that pure check,
+the Interaction provider acquires the optional target reservation through the generic runner request
+lease; failed, cancelled and completed requests release it. A client-supplied target or action endpoint
+is never accepted as proof of access.
 
 `InteractionActionExecutor` adapts `GameplayActionContext` into `InteractionExecutionContext`. An
 interaction executor requires both an `InteractionAction` hosted by an `InteractiveComponent` and an
@@ -210,7 +220,8 @@ For a normal interactive object:
    belongs in `StatefulStateInteractionRule`; state mutations belong in an executor.
 5. Choose `ExecutionVisibility.RequesterOnly` by default. Use `Replicated` only when other peers must see
    the transient execution and wire a `GameplayActionExecutionSynchronizer`; persistent state still
-   belongs to Stateful.
+   belongs to Stateful. Add an `InteractionTargetReservationSynchronizer` when a non-empty
+   `TargetConcurrencyGroup` must be visible to other peers or late joiners.
 6. On the actor, wire one `GameplayActionRunner`, one `InteractionInteractor` and one detector. Feed
    relevant inputs to the runner; refresh focused Interaction bindings before the press edge.
 7. Add `InteractionPresenter` only when target UI is wanted. Presentation is optional to the runtime.
@@ -331,6 +342,12 @@ focus never grants, clones or transfers the action.
 Interaction access validation compares the requested component/action/target against the authoritative
 offer that maps to it, then repeats spatial, target and offer rules. Local bindings and client target
 paths express intent only.
+
+### AD-18 — Target claims are offer-scoped and transient
+
+`TargetConcurrencyGroup` coordinates offers on one Interactive independently from the resolved action
+owner's host concurrency. The claim is an authority-side request lease, projected through an optional
+versioned snapshot for self/other availability and late join; it is not persistent world state.
 
 ## Remaining planned work
 
