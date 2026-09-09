@@ -66,6 +66,14 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
     }
 
     [TestCase]
+    public void InvocationTargetFallsBackToTheInteractiveComponent()
+    {
+        InteractiveComponent interactive = AutoFree(new InteractiveComponent());
+
+        AssertThat(interactive.ResolveInvocationTarget()).IsEqual(interactive);
+    }
+
+    [TestCase]
     public void OffersResolvingToTheSameEndpointAreRejectedAsAmbiguous()
     {
         InteractiveComponent interactive = AutoFree(new InteractiveComponent());
@@ -105,7 +113,13 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
             new GameplayActionRunner { OwnedActionComponent = actions }
         );
         InteractionInteractor interactor = AutoFree(new InteractionInteractor { Runner = runner });
-        GameplayActionAccessContext context = new(runner, actions, action, interactive);
+        GameplayActionAccessContext context = new(
+            runner,
+            actions,
+            action,
+            AccessSource: interactive,
+            Target: interactive
+        );
 
         AssertThat(interactor.TryAcquireRequestReservation(context, out _)).IsFalse();
     }
@@ -121,6 +135,7 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
             Name = "Interactive",
             InteractionArea = area,
             InteractionAnchor = owner,
+            InvocationTarget = owner,
             Offers =
             {
                 new InteractionOffer
@@ -152,7 +167,74 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
         AssertThat(binding.Component == interactor.Runner.OwnedActionComponent).IsTrue();
         AssertThat(binding.ActionId == new StringName("take")).IsTrue();
         AssertThat(binding.Source == interactive).IsTrue();
-        AssertThat(binding.Target == interactive).IsTrue();
+        AssertThat(binding.AccessSource == interactive).IsTrue();
+        AssertThat(binding.Target == owner).IsTrue();
+    }
+
+    [TestCase]
+    public async Task InteractionAccessRejectsOneInteractiveWithADifferentInvocationTarget()
+    {
+        Node3D world = new();
+        TestInteractiveActor owner = new() { Name = "BatteryA", Position = new Vector3(0, 0, -2) };
+        Node3D spoofedTarget = new() { Name = "BatteryB" };
+        Area3D area = new() { Name = "InteractionArea" };
+        InteractiveComponent interactive = new()
+        {
+            Name = "InteractiveA",
+            InteractionArea = area,
+            InteractionAnchor = owner,
+            InvocationTarget = owner,
+            Offers =
+            {
+                new InteractionOffer
+                {
+                    ActionSource = InteractionOfferSource.Instigator,
+                    ActionId = new StringName("take"),
+                    BindingConfig = Press("interact"),
+                    TargetConcurrencyGroup = new StringName("battery_operation"),
+                },
+            },
+        };
+        owner.AddChild(area);
+        world.AddChild(interactive);
+
+        InteractionInteractor interactor = new() { Name = "Interactor" };
+        Node3D view = new() { Name = "ViewOrigin" };
+        interactor.AddChild(view);
+        TestInteractionDetector detector = AttachDetector(interactor, view);
+        world.AddChild(owner);
+        world.AddChild(spoofedTarget);
+        world.AddChild(interactor);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
+        await runner.SimulateFrames(1);
+
+        GameplayAction action = NewGenericAction("take");
+        action.ConfiguredAccessProviderId = InteractionOffer.InteractionAccessProviderId;
+        interactor.Runner!.OwnedActionComponent!.AddAction(action);
+        detector.SetDetection(interactive, InteractionDetectionKind.Interactible);
+
+        GameplayActionAccessContext accepted = new(
+            interactor.Runner,
+            interactor.Runner.OwnedActionComponent!,
+            action,
+            interactive,
+            owner
+        );
+        GameplayActionAccessContext spoofed = accepted with { Target = spoofedTarget };
+
+        AssertThat(interactor.CanRequest(accepted)).IsTrue();
+        AssertThat(interactor.CanRequest(spoofed)).IsFalse();
+        AssertThat(interactor.TryAcquireRequestReservation(accepted, out var reservation)).IsTrue();
+        reservation!.Release();
+        AssertThat(interactor.TryAcquireRequestReservation(spoofed, out _)).IsFalse();
+
+        owner.Free();
+        await runner.SimulateFrames(1);
+        AssertThat(interactor.CanRequest(accepted)).IsFalse();
+
+        interactive.QueueFree();
+        await runner.SimulateFrames(1);
+        AssertThat(interactor.CanRequest(accepted)).IsFalse();
     }
 
     [TestCase]

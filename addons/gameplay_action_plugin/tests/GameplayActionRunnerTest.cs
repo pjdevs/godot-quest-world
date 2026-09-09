@@ -440,20 +440,34 @@ public sealed partial class GameplayActionRunnerTest
         TestAccessProvider provider = new() { Allowed = true };
         runner.RegisterAccessProvider(AccessControlledAction.ProviderId, provider);
         Node source = AutoFree(new Node());
+        Node accessSource = AutoFree(new Node { Name = "AccessSource" });
+        Node target = AutoFree(new Node { Name = "Target" });
         runner.BindAction(
             external,
             "channel",
             source,
-            Config("use", GameplayActionActivationMode.Press)
+            Config(
+                "use",
+                GameplayActionActivationMode.Press,
+                inputRequirement: GameplayActionInputRequirement.Pressed
+            ),
+            target: target,
+            accessSource: accessSource
         );
 
         runner.TryStartActionInput("use");
+        AssertThat(provider.LastAccessSource).IsEqual(accessSource);
+        AssertThat(provider.LastTarget).IsEqual(target);
+        AssertThat(provider.LastReservationAccessSource).IsEqual(accessSource);
+        AssertThat(provider.LastReservationTarget).IsEqual(target);
         provider.Allowed = false;
         runner.ValidateSustainedExecutions();
 
         AssertThat(executor.CancelledCount).IsEqual(1);
         AssertThat(external.IsActionExecuting("channel")).IsFalse();
         AssertThat(provider.RequestChecks).IsEqual(3);
+        AssertThat(provider.LastSustainedAccessSource).IsEqual(accessSource);
+        AssertThat(provider.LastSustainedTarget).IsEqual(target);
     }
 
     [TestCase]
@@ -817,10 +831,26 @@ public sealed partial class GameplayActionRunnerTest
 
         public Node? LastTarget { get; private set; }
 
+        public Node? LastAccessSource { get; private set; }
+
+        public Node? LastSustainedTarget { get; private set; }
+
+        public Node? LastSustainedAccessSource { get; private set; }
+
+        public Node? LastReservationTarget { get; private set; }
+
+        public Node? LastReservationAccessSource { get; private set; }
+
         public bool CanRequest(in GameplayActionAccessContext context)
         {
             RequestChecks++;
+            LastAccessSource = context.AccessSource;
             LastTarget = context.Target;
+            if (context.Sustained)
+            {
+                LastSustainedAccessSource = context.AccessSource;
+                LastSustainedTarget = context.Target;
+            }
             return Allowed;
         }
 
@@ -829,6 +859,8 @@ public sealed partial class GameplayActionRunnerTest
             out IGameplayActionRequestReservation? reservation
         )
         {
+            LastReservationAccessSource = context.AccessSource;
+            LastReservationTarget = context.Target;
             reservation = Reservation;
             return Allowed;
         }

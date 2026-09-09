@@ -8,12 +8,14 @@ namespace GameplayActionPlugin.Runtime.Access;
 /// <param name="Runner">Runner requesting or sustaining access.</param>
 /// <param name="Component">Component owning the requested action.</param>
 /// <param name="Action">Action whose domain-specific access is being checked.</param>
+/// <param name="AccessSource">Object used by the access provider to justify the request.</param>
 /// <param name="Target">Optional invocation target carried by the request.</param>
 /// <param name="Sustained">Whether an already-running request is re-validating its access.</param>
 public readonly record struct GameplayActionAccessContext(
     GameplayActionRunner Runner,
     GameplayActionComponent Component,
     GameplayAction Action,
+    Node? AccessSource = null,
     Node? Target = null,
     bool Sustained = false
 );

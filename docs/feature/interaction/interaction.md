@@ -159,15 +159,17 @@ not happened yet.
 
 ## Request access and sustained interactions
 
-Focus resolves every visible offer and creates a generic binding whose cleanup source and invocation
-target are both the focused Interactive. Focus loss removes those bindings without touching the real
+Focus resolves every visible offer and creates a generic binding whose cleanup `Source` and
+`AccessSource` are the focused Interactive. Its `Target` is `InteractiveComponent.InvocationTarget`,
+falling back to the Interactive itself. Focus loss removes those bindings without touching the real
 action occurrence. The runner registers Interaction as an `IGameplayActionAccessProvider`; the
-authoritative peer resolves its own target, finds the exact offer that maps to the requested endpoint,
-re-validates spatial access and evaluates target/offer rules before execution. After that pure check,
-the Interaction provider acquires the optional target reservation through the generic runner request
-lease; failed, cancelled and completed requests release it. A client-supplied target or action endpoint
-is never accepted as proof of access. Reservation acquisition fails closed when the authoritative peer
-can no longer resolve the target and its unique offer endpoint.
+authoritative peer resolves the access source and target independently, verifies that the Interactive
+owns that exact target, finds the exact offer that maps to the requested endpoint, re-validates spatial
+access and evaluates target/offer rules before execution. After that pure check, the Interaction
+provider acquires the optional target reservation through the generic runner request lease; failed,
+cancelled and completed requests release it. A client-supplied target or action endpoint is never
+accepted as proof of access. Reservation acquisition fails closed when the authoritative peer can no
+longer resolve the access source, its invocation target, or its unique offer endpoint.
 
 `InteractionActionExecutor` adapts `GameplayActionContext` into `InteractionExecutionContext`. An
 interaction executor requires both an `InteractionAction` hosted by an `InteractiveComponent` and an
@@ -219,9 +221,10 @@ For a normal interactive object:
 
 1. Add ordinary `GameplayAction` occurrences as direct children of a target-owned
    `GameplayActionComponent` only for capabilities intrinsically owned by the object.
-2. Add `InteractiveComponent`, assign its optional target `ActionComponent`, interaction area/anchor
-   and optional indication area, then author ordered `Offers`. Use `Source = Target` for target-owned
-   actions and `Source = Instigator` for actions on the requesting runner.
+2. Add `InteractiveComponent`, assign its optional target `ActionComponent`, interaction area/anchor,
+   optional `InvocationTarget` and optional indication area, then author ordered `Offers`. Use
+   `Source = Target` for target-owned actions and `Source = Instigator` for actions on the requesting
+   runner. When `InvocationTarget` is unset, the Interactive itself remains the target for compatibility.
 3. Put shared target conditions in `TargetRules` and offer-specific conditions in `Offer.Rules`.
 4. Use a Stateful component only when the object owns durable world truth. State-dependent availability
    belongs in `StatefulStateInteractionRule`; state mutations belong in an executor.
@@ -342,13 +345,16 @@ interactor per gameplay instigator.
 
 `InteractiveComponent.Offers` resolves either a target-owned or instigator-owned `GameplayAction`
 occurrence. The offer owns contextual input binding, target-side rules and invocation target data;
-focus never grants, clones or transfers the action.
+focus never grants, clones or transfers the action. A focused binding keeps the Interactive as its
+cleanup `Source` and access-validation `AccessSource`, while its `Target` is resolved explicitly from
+`InvocationTarget`.
 
 ### AD-17 — Authority reconstructs the offer endpoint
 
-Interaction access validation compares the requested component/action/target against the authoritative
-offer that maps to it, then repeats spatial, target and offer rules. Local bindings and client target
-paths express intent only.
+Interaction access validation compares the requested access source and target relationship, then the
+component/action against the authoritative offer that maps to it, and repeats spatial, target and offer
+rules. Local bindings and client paths express intent only; an Interactive cannot authorize a target
+different from its resolved `InvocationTarget`.
 
 ### AD-18 — Target claims are offer-scoped and transient
 

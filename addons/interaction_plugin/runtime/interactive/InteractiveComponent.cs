@@ -135,6 +135,13 @@ public partial class InteractiveComponent : Node
     [Export]
     public Node3D? InteractionAnchor { get; set; }
 
+    /// <summary>Gets or sets the gameplay node receiving actions offered by this component.</summary>
+    [Export]
+    public Node? InvocationTarget { get; set; }
+
+    /// <summary>Resolves the explicit gameplay target, falling back to this component.</summary>
+    public Node ResolveInvocationTarget() => InvocationTarget ?? this;
+
     /// <summary>Gets or sets the distance at which this target may be interacted with, or zero.</summary>
     /// <remarks>
     /// Only a detector that decides range per target reads this — the proximity one. Zero means "use
@@ -812,7 +819,7 @@ public partial class InteractiveComponent : Node
             resolution.Action.Definition.Id,
             interactionInstigator,
             interactor.Runner,
-            this
+            ResolveInvocationTarget()
         );
         if (actionAvailability is not GameplayActionAllowed)
         {
@@ -907,7 +914,7 @@ public partial class InteractiveComponent : Node
             resolution.Action.Definition.Id,
             interactionInstigator,
             interactor.Runner,
-            this
+            ResolveInvocationTarget()
         );
         if (actionAvailability is not GameplayActionAllowed)
         {
@@ -979,7 +986,8 @@ public partial class InteractiveComponent : Node
         GameplayActionAvailability actionAvailability = ActionComponent.EvaluateAction(
             action.Definition.Id,
             interactionInstigator,
-            interactor.Runner
+            interactor.Runner,
+            ResolveInvocationTarget()
         );
         if (actionAvailability is not GameplayActionAllowed)
         {

@@ -159,15 +159,20 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
     {
         reservation = null;
         if (
-            context.Target is InteractiveComponent interactive
-            && GodotObject.IsInstanceValid(interactive)
-            && interactive.TryResolveOfferForEndpoint(
+            !TryResolveInteractionAccess(context, out InteractiveComponent? interactive)
+            || interactive is null
+        )
+        {
+            return false;
+        }
+
+        if (
+            interactive.TryResolveOfferForEndpoint(
                 this,
                 context.Component,
                 context.Action,
                 out InteractionOffer? offer
-            )
-            && offer is not null
+            ) && offer is not null
         )
         {
             return interactive.TryAcquireTargetReservation(
@@ -179,14 +184,22 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             );
         }
 
-        return false;
+        return context.Action is InteractionAction legacyAction
+            && legacyAction.Interactive == interactive;
     }
 
     private bool HasInteractionAccess(in GameplayActionAccessContext context)
     {
         if (
-            context.Target is InteractiveComponent interactive
-            && interactive.TryResolveOfferForEndpoint(
+            !TryResolveInteractionAccess(context, out InteractiveComponent? interactive)
+            || interactive is null
+        )
+        {
+            return false;
+        }
+
+        if (
+            interactive.TryResolveOfferForEndpoint(
                 this,
                 context.Component,
                 context.Action,
@@ -201,9 +214,26 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         }
 
         return context.Action is InteractionAction interactionAction
-            && interactionAction.Interactive is InteractiveComponent legacyInteractive
-            && GodotObject.IsInstanceValid(legacyInteractive)
-            && Detector?.Detect(legacyInteractive) == InteractionDetectionKind.Interactible;
+            && interactionAction.Interactive == interactive
+            && Detector?.Detect(interactive) == InteractionDetectionKind.Interactible;
+    }
+
+    private static bool TryResolveInteractionAccess(
+        in GameplayActionAccessContext context,
+        out InteractiveComponent? interactive
+    )
+    {
+        interactive = context.AccessSource as InteractiveComponent;
+        if (interactive is null || !GodotObject.IsInstanceValid(interactive))
+        {
+            return false;
+        }
+
+        Node invocationTarget = interactive.ResolveInvocationTarget();
+        return GodotObject.IsInstanceValid(invocationTarget)
+            && context.Target is Node target
+            && GodotObject.IsInstanceValid(target)
+            && target == invocationTarget;
     }
 
     internal void NotifyInteractiveRemoved(InteractiveComponent interactive)
@@ -344,8 +374,9 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
                     resolution.Action.Definition?.Id ?? offer.ActionId,
                     interactive,
                     config,
-                    Variant.From(interactive),
-                    interactive
+                    presentationContext: Variant.From(interactive),
+                    target: interactive.ResolveInvocationTarget(),
+                    accessSource: interactive
                 );
             }
 
@@ -372,7 +403,9 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
                 action.Definition.Id,
                 interactive,
                 config,
-                Variant.From(interactive)
+                presentationContext: Variant.From(interactive),
+                target: interactive.ResolveInvocationTarget(),
+                accessSource: interactive
             );
         }
     }
@@ -530,7 +563,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             if (
                 binding.Component == component
                 && binding.ActionId == actionId
-                && binding.Target is InteractiveComponent interactive
+                && binding.AccessSource is InteractiveComponent interactive
             )
             {
                 return interactive;

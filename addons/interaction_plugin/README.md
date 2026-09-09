@@ -78,9 +78,11 @@ Execution is owned by the generic `gameplay_action_plugin` add-on: the host is a
 On `InteractiveComponent`, assign `InteractionArea`, `InteractionAnchor`, and, for target-owned offers,
 `ActionComponent`. Author ordered `Offers` with an `ActionId`, `ActionSource` (`Target` or
 `Instigator`), and a `BindingConfig`. Target offers resolve on the interactive's host; Instigator offers
-resolve on the requesting runner's `OwnedActionComponent`. Every focused binding carries the
-Interactive as its invocation target and cleanup source. Nothing is discovered by node name or tree
-search. Do not author two offers on one target that resolve to the same `(component, action)` endpoint
+resolve on the requesting runner's `OwnedActionComponent`. Set `InvocationTarget` when the gameplay
+node receiving the action is different from the Interactive; otherwise it falls back to the Interactive.
+Every focused binding carries the Interactive as its access source and cleanup source, plus the resolved
+invocation target. Nothing is discovered by node name or tree search. Do not author two offers on one
+target that resolve to the same `(component, action)` endpoint
 for one interactor: the editor reports same-source duplicates and runtime resolution rejects any
 remaining ambiguity. A replicated action also needs a `GameplayActionExecutionSynchronizer` beside the host,
 pointing at it. Existing `InteractionAction` scenes remain supported as a migration bridge.
@@ -291,7 +293,10 @@ hacking,” normally use a zero selection duration, a running executor with a du
 `InputRequirement.Pressed`. Combining a hold duration with execution duration creates two consecutive
 waits.
 
-The reliable client RPC carries only `targetPath + actionId`. The server checks the owning peer, resolves the target and action from its scene, validates `Detect`, evaluates rules, and only then executes. Do not call the RPC methods directly; use the runner's `TryStartActionInput` and `TryEndActionInput`.
+The reliable client RPC carries `accessSourcePath + targetPath + actionId`. The server checks the owning
+peer, resolves both nodes and the action from its scene, verifies that the access source authorizes the
+target, validates `Detect`, evaluates rules, and only then executes. Do not call the RPC methods
+directly; use the runner's `TryStartActionInput` and `TryEndActionInput`.
 
 ## Build presentation
 

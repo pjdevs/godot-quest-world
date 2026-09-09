@@ -200,6 +200,7 @@ public partial class GameplayActionRunner : Node
 
     /// <summary>Creates one runner-local binding to an action still owned by its component.</summary>
     /// <param name="target">Optional node this binding invokes the action against.</param>
+    /// <param name="accessSource">Optional node used by the access provider to validate the request.</param>
     /// <returns>The created binding, or null when the binding configuration is invalid.</returns>
     public GameplayActionBinding? BindAction(
         GameplayActionComponent component,
@@ -207,13 +208,15 @@ public partial class GameplayActionRunner : Node
         GodotObject source,
         GameplayActionBindingConfig config,
         Variant presentationContext = default,
-        Node? target = null
+        Node? target = null,
+        Node? accessSource = null
     )
     {
         GameplayActionBinding? binding = _bindings.Add(
             component,
             actionId,
             target,
+            accessSource,
             source,
             config,
             presentationContext,
@@ -406,7 +409,13 @@ public partial class GameplayActionRunner : Node
         GameplayAction? action = binding.Component.ResolveAction(binding.ActionId);
         if (
             action is null
-            || !CanAccess(binding.Component, action, binding.Target, sustained: false)
+            || !CanAccess(
+                binding.Component,
+                action,
+                binding.AccessSource,
+                binding.Target,
+                sustained: false
+            )
         )
         {
             return new GameplayActionHidden();
@@ -423,6 +432,7 @@ public partial class GameplayActionRunner : Node
     private bool CanAccess(
         GameplayActionComponent component,
         GameplayAction action,
+        Node? accessSource,
         Node? target,
         bool sustained
     )
@@ -438,13 +448,21 @@ public partial class GameplayActionRunner : Node
             return false;
         }
 
-        GameplayActionAccessContext context = new(this, component, action, target, sustained);
+        GameplayActionAccessContext context = new(
+            this,
+            component,
+            action,
+            accessSource,
+            target,
+            sustained
+        );
         return provider.CanRequest(context);
     }
 
     internal bool TryAcquireRequestReservation(
         GameplayActionComponent component,
         GameplayAction action,
+        Node? accessSource,
         Node? target,
         out IGameplayActionRequestReservation? reservation
     )
@@ -461,7 +479,7 @@ public partial class GameplayActionRunner : Node
             return false;
         }
 
-        GameplayActionAccessContext context = new(this, component, action, target);
+        GameplayActionAccessContext context = new(this, component, action, accessSource, target);
         return provider.TryAcquireRequestReservation(context, out reservation);
     }
 
@@ -529,6 +547,7 @@ public partial class GameplayActionRunner : Node
     }
 
     /// <summary>Reliable server RPC endpoint used by local request transport to start an action.</summary>
+    /// <param name="accessSourcePath">Optional network-relative path of the access validation source.</param>
     /// <param name="targetPath">Optional network-relative path of the invocation target.</param>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,
@@ -538,12 +557,20 @@ public partial class GameplayActionRunner : Node
     public void ServerTryStartAction(
         NodePath componentPath,
         StringName actionId,
+        NodePath accessSourcePath,
         NodePath targetPath
-    ) => _requests.ServerTryStartAction(componentPath, actionId, targetPath);
+    ) => _requests.ServerTryStartAction(componentPath, actionId, accessSourcePath, targetPath);
+
+    /// <summary>Compatibility overload for requests that only carried a target path.</summary>
+    public void ServerTryStartAction(
+        NodePath componentPath,
+        StringName actionId,
+        NodePath targetPath
+    ) => ServerTryStartAction(componentPath, actionId, new NodePath(), targetPath);
 
     /// <summary>Compatibility overload for non-targeted requests.</summary>
     public void ServerTryStartAction(NodePath componentPath, StringName actionId) =>
-        ServerTryStartAction(componentPath, actionId, new NodePath());
+        ServerTryStartAction(componentPath, actionId, new NodePath(), new NodePath());
 
     /// <summary>Reliable server RPC endpoint used by requester input release/cancellation.</summary>
     [Rpc(

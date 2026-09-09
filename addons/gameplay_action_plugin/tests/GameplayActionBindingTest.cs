@@ -266,6 +266,7 @@ public sealed partial class GameplayActionBindingTest
             new GameplayActionRunner { OwnedActionComponent = component }
         );
         Node source = AutoFree(new Node { Name = "Interactive" });
+        Node accessSource = AutoFree(new Node { Name = "AccessSource" });
         Node target = AutoFree(new Node { Name = "Battery" });
 
         GameplayActionBinding binding = runner.BindAction(
@@ -273,11 +274,14 @@ public sealed partial class GameplayActionBindingTest
             "take",
             source,
             Press("take"),
-            target: target
+            target: target,
+            accessSource: accessSource
         )!;
 
         AssertThat(binding.Source).IsEqual(source);
+        AssertThat(binding.AccessSource).IsEqual(accessSource);
         AssertThat(binding.Target).IsEqual(target);
+        AssertThat(binding.Source == binding.AccessSource).IsFalse();
         AssertThat(binding.Source == binding.Target).IsFalse();
         AssertThat(runner.TryStartActionInput("take")).IsTrue();
         AssertThat(executor.LastContext.Target).IsEqual(target);

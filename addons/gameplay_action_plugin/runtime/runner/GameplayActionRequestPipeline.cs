@@ -10,7 +10,7 @@ namespace GameplayActionPlugin.Runtime.Runner;
 
 internal sealed class GameplayActionRequestPipeline(
     GameplayActionRunner owner,
-    Func<GameplayActionComponent, GameplayAction, Node?, bool, bool> canAccess,
+    Func<GameplayActionComponent, GameplayAction, Node?, Node?, bool, bool> canAccess,
     Func<Node?> resolveInstigator
 )
 {
@@ -146,6 +146,7 @@ internal sealed class GameplayActionRequestPipeline(
                 nameof(ServerTryStartAction),
                 GetNetworkPath(binding.Component),
                 binding.ActionId,
+                GetNetworkPath(binding.AccessSource),
                 GetNetworkPath(binding.Target)
             );
             return true;
@@ -156,6 +157,7 @@ internal sealed class GameplayActionRequestPipeline(
             binding.ActionId,
             _owner.OwnerPeerId,
             GetNetworkPath(binding.Component),
+            binding.AccessSource,
             binding.Target
         );
         if (
@@ -242,7 +244,14 @@ internal sealed class GameplayActionRequestPipeline(
     private bool HasSustainedAccess(in GameplayActionRequestedExecution execution)
     {
         GameplayAction? action = execution.Component.ResolveAction(execution.ActionId);
-        return action is not null && canAccess(execution.Component, action, execution.Target, true);
+        return action is not null
+            && canAccess(
+                execution.Component,
+                action,
+                execution.AccessSource,
+                execution.Target,
+                true
+            );
     }
 
     private void CancelRequesterOwnedExecutions(string reason)
@@ -361,6 +370,7 @@ internal sealed class GameplayActionRequestPipeline(
     public void ServerTryStartAction(
         NodePath componentPath,
         StringName actionId,
+        NodePath accessSourcePath,
         NodePath targetPath
     )
     {
@@ -389,6 +399,18 @@ internal sealed class GameplayActionRequestPipeline(
             return;
         }
 
+        Node? accessSource = ResolveNetworkPath(accessSourcePath);
+        if (!accessSourcePath.IsEmpty && accessSource is null)
+        {
+            RejectRequest(
+                senderPeerId,
+                componentPath,
+                actionId,
+                GameplayActionAvailabilityExtensions.UnavailableReason
+            );
+            return;
+        }
+
         Node? target = ResolveNetworkPath(targetPath);
         if (!targetPath.IsEmpty && target is null)
         {
@@ -401,7 +423,14 @@ internal sealed class GameplayActionRequestPipeline(
             return;
         }
 
-        TryStartAuthoritatively(component, actionId, senderPeerId, componentPath, target);
+        TryStartAuthoritatively(
+            component,
+            actionId,
+            senderPeerId,
+            componentPath,
+            accessSource,
+            target
+        );
     }
 
     public void ServerTryCancelAction(NodePath componentPath, StringName actionId)
@@ -689,6 +718,7 @@ internal sealed class GameplayActionRequestPipeline(
         StringName actionId,
         int senderPeerId,
         NodePath componentPath,
+        Node? accessSource = null,
         Node? target = null
     )
     {
@@ -704,7 +734,7 @@ internal sealed class GameplayActionRequestPipeline(
         }
 
         GameplayAction? action = component.ResolveAction(actionId);
-        if (action is null || !canAccess(component, action, target, false))
+        if (action is null || !canAccess(component, action, accessSource, target, false))
         {
             RejectRequest(
                 senderPeerId,
@@ -716,7 +746,15 @@ internal sealed class GameplayActionRequestPipeline(
         }
 
         GameplayActionRequestKey request = new(component, actionId);
-        if (!_owner.TryAcquireRequestReservation(component, action, target, out var reservation))
+        if (
+            !_owner.TryAcquireRequestReservation(
+                component,
+                action,
+                accessSource,
+                target,
+                out var reservation
+            )
+        )
         {
             RejectRequest(
                 senderPeerId,
@@ -764,6 +802,7 @@ internal sealed class GameplayActionRequestPipeline(
                     actionId,
                     executionId,
                     action.Executor?.RequiresRequesterPresence != false,
+                    accessSource,
                     target,
                     runningReservation
                 )
@@ -1094,6 +1133,7 @@ internal sealed class GameplayActionRequestPipeline(
         StringName ActionId,
         ulong ExecutionId,
         bool RequiresRequesterPresence,
+        Node? AccessSource,
         Node? Target,
         IGameplayActionRequestReservation? Reservation
     );

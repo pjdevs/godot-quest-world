@@ -95,8 +95,9 @@ binding:
 - optional hold threshold;
 - `None` or `Pressed` input requirement;
 - priority;
-- cleanup source and opaque presentation context;
-- optional invocation `Target`, deliberately distinct from the cleanup `Source`.
+- cleanup `Source` and opaque presentation context;
+- optional `AccessSource` used by an access provider to justify a request;
+- optional invocation `Target`, deliberately distinct from both `Source` and `AccessSource`.
 
 `GameplayActionRunner` owns the input/request boundary. When `OwnedActionComponent` contains an
 `InputGameplayAction` with a `DefaultBindingConfig`, the runner creates/removes that binding with the
@@ -117,7 +118,7 @@ authorable on every `GameplayAction` and feeds its effective `AccessProviderId`:
 provider is accessible only when it belongs to the runner's `OwnedActionComponent`; an action with an
 `AccessProviderId` always asks the runner's matching
 `IGameplayActionAccessProvider`, whether the action is owned or external. A missing provider rejects the
-request. The provider receives the optional invocation target and may expose a transient
+request. The provider receives the optional access source and invocation target independently and may expose a transient
 `IGameplayActionRequestReservation` after `CanRequest()` succeeds. The authoritative runner holds that
 lease while the request enters the executor, binds it to a running `ExecutionId`, and releases it on
 every synchronous rollback, terminal result, cancellation, requester disconnect or runner cleanup.
@@ -159,12 +160,12 @@ transient execution presentation and never executes actions or replicates dynami
 It is not a network field. If the requester later receives the replicated copy of the same execution,
 its more informative `RequestedLocally` relation is preserved.
 
-The request payload is intentionally small: component path + stable `ActionId` + optional target path.
-The authority resolves the target path in its own scene tree and never trusts a client-provided object.
-It returns started/progress/terminal acknowledgements. Terminal reconciliation includes the
-`ExecutionId`, so an old acknowledgement cannot close a newer execution of the same action. Target
-remains invocation data rather than execution identity: request/concurrency keys stay
-`(Component, ActionId)`, while sustained validation and local requester presentation retain the target
+The request payload is intentionally small: component path + stable `ActionId` + optional access-source
+path + optional target path. The authority resolves both paths independently in its own scene tree and
+never trusts client-provided objects. It returns started/progress/terminal acknowledgements. Terminal
+reconciliation includes the `ExecutionId`, so an old acknowledgement cannot close a newer execution
+of the same action. Access source and target remain request data rather than execution identity:
+request/concurrency keys stay `(Component, ActionId)`, while sustained validation retains both values
 accepted for the execution.
 
 ## Generic action presentation
@@ -226,8 +227,9 @@ the same execution model serve interaction, inventory-granted actions and non-in
 ### AD-08 — The runner owns request networking
 
 `GameplayActionRunner` is the single requester/RPC boundary. The server resolves its own component,
-target path, action and access provider rather than trusting client-side binding data. Interaction
-therefore adds spatial access and bindings without owning a second network execution protocol.
+access-source path, target path, action and access provider rather than trusting client-side binding
+data. Interaction therefore adds spatial access and bindings without owning a second network execution
+protocol.
 
 ### AD-09 — Progress is presentation, completion is gameplay
 

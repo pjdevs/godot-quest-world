@@ -68,6 +68,8 @@ public sealed partial class GameplayActionRunnerNetworkTest
             AssertThat(confirmed.ExecutionId).IsEqual(session.Server.Executor.ExecutionId);
             AssertThat(confirmed.Target).IsEqual(session.Client.Target);
             AssertThat(session.Server.Executor.LastTarget).IsEqual(session.Server.Target);
+            AssertThat(session.Server.AccessProvider.LastAccessSource)
+                .IsEqual(session.Server.AccessSource);
             AssertThat(session.Server.AccessProvider.LastTarget).IsEqual(session.Server.Target);
             AssertThat(
                     session.Observer.ExternalActions.TryGetExecutionPresentation(OpenAction, out _)
@@ -174,7 +176,9 @@ public sealed partial class GameplayActionRunnerNetworkTest
                 1,
                 nameof(GameplayActionRunner.ServerTryStartAction),
                 new NodePath("Door/Actions"),
-                OpenAction
+                OpenAction,
+                new NodePath(),
+                new NodePath()
             );
             await session.Pump(RoundTripFrames);
 
@@ -205,6 +209,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
                 nameof(GameplayActionRunner.ServerTryStartAction),
                 new NodePath("Door/Actions"),
                 OpenAction,
+                new NodePath("Door/AccessSource"),
                 new NodePath("Door/UnknownTarget")
             );
             await session.Pump(RoundTripFrames);
@@ -337,7 +342,8 @@ public sealed partial class GameplayActionRunnerNetworkTest
             OpenAction,
             client.ExternalActions,
             config,
-            target: targeted ? client.Target : null
+            target: targeted ? client.Target : null,
+            accessSource: targeted ? client.AccessSource : null
         );
 
         AssertThat(serverApi.IsServer()).IsTrue();
@@ -380,6 +386,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
         root.AddChild(actor);
 
         Node door = new() { Name = "Door" };
+        Node accessSource = new() { Name = "AccessSource" };
         Node target = new() { Name = "Target" };
         GameplayActionComponent externalActions = new() { Name = "Actions" };
         NetworkRecordingExecutor executor = new() { Name = "OpenExecutor" };
@@ -392,13 +399,21 @@ public sealed partial class GameplayActionRunnerNetworkTest
         };
         action.AddChild(executor);
         externalActions.AddAction(action);
+        door.AddChild(accessSource);
         door.AddChild(target);
         door.AddChild(externalActions);
         root.AddChild(door);
 
         NetworkAccessProvider accessProvider = new() { Allowed = allowsAccess };
         runner.RegisterAccessProvider(NetworkAccessAction.ProviderId, accessProvider);
-        return new PeerScene(runner, externalActions, executor, target, accessProvider);
+        return new PeerScene(
+            runner,
+            externalActions,
+            executor,
+            accessSource,
+            target,
+            accessProvider
+        );
     }
 
     private sealed partial class NetworkAccessAction : GameplayAction
@@ -412,12 +427,15 @@ public sealed partial class GameplayActionRunnerNetworkTest
     {
         public bool Allowed { get; set; }
 
+        public Node? LastAccessSource { get; private set; }
+
         public Node? LastTarget { get; private set; }
 
         public List<Node?> Targets { get; } = new();
 
         public bool CanRequest(in GameplayActionAccessContext context)
         {
+            LastAccessSource = context.AccessSource;
             LastTarget = context.Target;
             Targets.Add(context.Target);
             return Allowed;
@@ -465,6 +483,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
         GameplayActionRunner Runner,
         GameplayActionComponent ExternalActions,
         NetworkRecordingExecutor Executor,
+        Node AccessSource,
         Node Target,
         NetworkAccessProvider AccessProvider
     );
