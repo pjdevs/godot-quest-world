@@ -1,5 +1,3 @@
-Oui. Je le placerais dans `docs/feature/interaction/planned/interaction-offers-and-targeted-actions.md`. J’ai gardé le contrat actuel comme point de départ : Interaction reste l’adapter spatial au-dessus de Gameplay Action, tandis que le runner garde input/request/networking et que `GameplayActionComponent` garde ownership/execution/concurrency.  Le gros changement est bien de casser l’égalité actuelle `Interactive offers == InteractionAction children of target ActionComponent`. 
-
 # Interaction Offers and Targeted Owned Actions
 
 ## Status
