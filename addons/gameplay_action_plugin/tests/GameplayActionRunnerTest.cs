@@ -344,6 +344,79 @@ public sealed partial class GameplayActionRunnerTest
     }
 
     [TestCase]
+    public void OwnedActionWithAnAccessProviderStillAsksThatProvider()
+    {
+        TestGameplayActionExecutor executor = new();
+        GameplayActionComponent owned = AutoFree(new GameplayActionComponent());
+        AccessControlledAction action = AutoFree(
+            new AccessControlledAction
+            {
+                Definition = new GameplayActionDefinition { Id = "open" },
+                Executor = executor,
+            }
+        );
+        action.AddChild(executor);
+        owned.AddAction(action);
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = owned }
+        );
+        TestAccessProvider provider = new() { Allowed = false };
+        runner.RegisterAccessProvider(AccessControlledAction.ProviderId, provider);
+        Node source = AutoFree(new Node());
+        Node target = AutoFree(new Node { Name = "Target" });
+        GameplayActionBinding binding = runner.BindAction(
+            owned,
+            "open",
+            source,
+            Config("use", GameplayActionActivationMode.Press),
+            target: target
+        )!;
+
+        AssertThat(runner.GetBindingAvailability(binding.Id) is GameplayActionHidden).IsTrue();
+        AssertThat(runner.TryStartActionInput("use")).IsFalse();
+        AssertThat(provider.RequestChecks).IsEqual(1);
+        AssertThat(provider.LastTarget).IsEqual(target);
+
+        provider.Allowed = true;
+        runner.InvalidateBinding(binding.Id);
+
+        AssertThat(runner.TryStartActionInput("use")).IsTrue();
+        AssertThat(executor.ExecuteCount).IsEqual(1);
+        AssertThat(provider.RequestChecks).IsEqual(3);
+    }
+
+    [TestCase]
+    public void ExternalActionWithoutAnAccessProviderIsNotAccessible()
+    {
+        TestGameplayActionExecutor executor = new();
+        GameplayActionComponent owned = AutoFree(new GameplayActionComponent());
+        GameplayActionComponent external = AutoFree(new GameplayActionComponent());
+        GameplayAction action = AutoFree(
+            new GameplayAction
+            {
+                Definition = new GameplayActionDefinition { Id = "open" },
+                Executor = executor,
+            }
+        );
+        action.AddChild(executor);
+        external.AddAction(action);
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = owned }
+        );
+
+        GameplayActionBinding binding = runner.BindAction(
+            external,
+            "open",
+            AutoFree(new Node()),
+            Config("use", GameplayActionActivationMode.Press)
+        )!;
+
+        AssertThat(runner.GetBindingAvailability(binding.Id) is GameplayActionHidden).IsTrue();
+        AssertThat(runner.TryStartActionInput("use")).IsFalse();
+        AssertThat(executor.ExecuteCount).IsEqual(0);
+    }
+
+    [TestCase]
     public void SustainedExternalAccessIsCheckedByTheAuthorityWhileTheExecutionRuns()
     {
         TestGameplayActionExecutor executor = new()
@@ -563,9 +636,12 @@ public sealed partial class GameplayActionRunnerTest
 
         public int RequestChecks { get; private set; }
 
+        public Node? LastTarget { get; private set; }
+
         public bool CanRequest(in GameplayActionAccessContext context)
         {
             RequestChecks++;
+            LastTarget = context.Target;
             return Allowed;
         }
     }

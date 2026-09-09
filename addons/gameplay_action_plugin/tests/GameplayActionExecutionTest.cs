@@ -125,6 +125,42 @@ public sealed partial class GameplayActionExecutionTest
     }
 
     [TestCase]
+    public void TargetReachesRulesExecutorAndTerminalCallback()
+    {
+        Node target = AutoFree(new Node { Name = "Battery" });
+        CapturingRule rule = new();
+        TestGameplayActionExecutor executor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayActionComponent component = CreateComponentWithAction("take", executor);
+        component.ResolveAction("take")!.Rules.Add(rule);
+
+        component.ExecuteAction("take", out ulong executionId, target: target);
+
+        AssertThat(rule.Target).IsEqual(target);
+        AssertThat(executor.LastContext.Target).IsEqual(target);
+        AssertThat(executor.LastContext.GetTarget<Node>()).IsEqual(target);
+        AssertThat(component.IsExecutionActive(executionId)).IsTrue();
+
+        AssertThat(component.CompleteExecution(executionId)).IsTrue();
+        AssertThat(executor.LastCompletedContext.Target).IsEqual(target);
+    }
+
+    [TestCase]
+    public void UntargetedProgrammaticExecutionKeepsAStableNullTarget()
+    {
+        TestGameplayActionExecutor executor = new();
+        GameplayActionComponent component = CreateComponentWithAction("heal", executor);
+
+        GameplayActionExecutionResult result = component.ExecuteAction("heal", out _, target: null);
+
+        AssertThat(result is GameplayActionExecutionCompleted).IsTrue();
+        AssertThat(executor.LastContext.Target).IsNull();
+        AssertThat(executor.LastCompletedContext.Target).IsNull();
+    }
+
+    [TestCase]
     public void FailedAndRejectedResultsKeepTheirDistinctLifecycle()
     {
         List<string> failedCalls = new();
@@ -677,6 +713,17 @@ public sealed partial class GameplayActionExecutionTest
     {
         public override GameplayActionAvailability Evaluate(in GameplayActionContext context) =>
             result;
+    }
+
+    private sealed partial class CapturingRule : GameplayActionRule
+    {
+        public Node? Target { get; private set; }
+
+        public override GameplayActionAvailability Evaluate(in GameplayActionContext context)
+        {
+            Target = context.Target;
+            return new GameplayActionAllowed();
+        }
     }
 
     private sealed partial class RecordingExecutor(List<string> calls) : GameplayActionExecutor

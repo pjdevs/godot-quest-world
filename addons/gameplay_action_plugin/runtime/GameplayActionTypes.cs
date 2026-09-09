@@ -121,11 +121,13 @@ public enum GameplayActionInputRequirement
 /// <param name="ActionId">Stable action identifier.</param>
 /// <param name="Progress">Optional normalized execution progress.</param>
 /// <param name="Relation">This peer's local relationship to the execution.</param>
+/// <param name="Target">Optional invocation target preserved by the local presentation.</param>
 public readonly record struct GameplayActionExecutionPresentation(
     ulong ExecutionId,
     StringName ActionId,
     float? Progress = null,
-    GameplayActionExecutionRelation Relation = GameplayActionExecutionRelation.Observed
+    GameplayActionExecutionRelation Relation = GameplayActionExecutionRelation.Observed,
+    Node? Target = null
 );
 
 /// <summary>Execution result indicating synchronous successful completion.</summary>
@@ -169,6 +171,7 @@ public readonly union GameplayActionExecutionResult(
 /// <param name="Action">Action being evaluated or executed.</param>
 /// <param name="Host">Gameplay object hosting the action, or null when it has no host.</param>
 /// <param name="World">Gameplay world containing the execution, or null when unavailable.</param>
+/// <param name="Target">Optional node this invocation acts on.</param>
 public readonly record struct GameplayActionContext(
     ulong ExecutionId,
     Node? Instigator,
@@ -176,7 +179,8 @@ public readonly record struct GameplayActionContext(
     GameplayActionComponent Component,
     GameplayAction Action,
     Node? Host = null,
-    Node? World = null
+    Node? World = null,
+    Node? Target = null
 )
 {
     /// <summary>Returns the instigator as the requested type, or null when incompatible.</summary>
@@ -190,4 +194,8 @@ public readonly record struct GameplayActionContext(
     /// <summary>Returns the gameplay world as the requested type, or null when incompatible.</summary>
     public T? GetWorld<T>()
         where T : class => World as T;
+
+    /// <summary>Returns the invocation target as the requested type, or null when incompatible.</summary>
+    public T? GetTarget<T>()
+        where T : class => Target as T;
 }

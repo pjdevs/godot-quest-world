@@ -20,6 +20,7 @@ internal sealed class GameplayActionBindingStore(
     public GameplayActionBinding? Add(
         GameplayActionComponent component,
         StringName actionId,
+        Node? target,
         GodotObject source,
         GameplayActionBindingConfig config,
         Variant presentationContext,
@@ -36,6 +37,7 @@ internal sealed class GameplayActionBindingStore(
             _nextBindingId++,
             component,
             actionId,
+            target,
             source,
             config.InputActionName,
             config.ActivationMode,

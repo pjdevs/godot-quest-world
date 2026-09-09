@@ -23,6 +23,12 @@ public sealed partial class TestGameplayActionExecutor : GameplayActionExecutor
 
     public GameplayActionContext LastContext { get; private set; }
 
+    public GameplayActionContext LastCompletedContext { get; private set; }
+
+    public GameplayActionContext LastCancelledContext { get; private set; }
+
+    public GameplayActionContext LastFailedContext { get; private set; }
+
     public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         LastContext = context;
@@ -38,16 +44,27 @@ public sealed partial class TestGameplayActionExecutor : GameplayActionExecutor
         return Result;
     }
 
-    protected internal override void OnExecutionCompleted(in GameplayActionContext context) =>
+    protected internal override void OnExecutionCompleted(in GameplayActionContext context)
+    {
+        LastCompletedContext = context;
         CompletedCount++;
+    }
 
     protected internal override void OnExecutionCancelled(
         in GameplayActionContext context,
         string reason
-    ) => CancelledCount++;
+    )
+    {
+        LastCancelledContext = context;
+        CancelledCount++;
+    }
 
     protected internal override void OnExecutionFailed(
         in GameplayActionContext context,
         string reason
-    ) => FailedCount++;
+    )
+    {
+        LastFailedContext = context;
+        FailedCount++;
+    }
 }

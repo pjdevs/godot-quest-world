@@ -79,10 +79,11 @@ Rules and executors receive one `GameplayActionContext` containing:
 - optional `Requester`, present only when a runner requested the action and expects acknowledgements;
 - the owning `Component` and current `Action`;
 - `Host`, defaulting to the component parent unless explicitly overridden;
-- `World`, defaulting to `SceneTree.CurrentScene` unless explicitly overridden.
+- `World`, defaulting to `SceneTree.CurrentScene` unless explicitly overridden;
+- optional `Target`, the node this invocation acts on.
 
-`GetInstigator<T>()`, `GetHost<T>()` and `GetWorld<T>()` are the integration seam for typed game
-context. The framework deliberately does not replace them with a global game manager.
+`GetInstigator<T>()`, `GetHost<T>()`, `GetWorld<T>()` and `GetTarget<T>()` are the integration seam for
+typed game context. The framework deliberately does not replace them with a global game manager.
 
 ## Input and requester pipeline
 
@@ -94,7 +95,8 @@ binding:
 - optional hold threshold;
 - `None` or `Pressed` input requirement;
 - priority;
-- cleanup source and opaque presentation context.
+- cleanup source and opaque presentation context;
+- optional invocation `Target`, deliberately distinct from the cleanup `Source`.
 
 `GameplayActionRunner` owns the input/request boundary. When `OwnedActionComponent` contains an
 `InputGameplayAction` with a `DefaultBindingConfig`, the runner creates/removes that binding with the
@@ -110,10 +112,12 @@ edge; `TryGetBindingHoldProgress()` exposes progress for that captured binding o
 execution is a separate lifecycle owned by `TimedGameplayActionExecutor` or compositional
 `TimedExecution`.
 
-Owned actions are always accessible through their runner. An external action names an
-`AccessProviderId`; the authoritative runner resolves its own `IGameplayActionAccessProvider`, validates
-the RPC sender and access, then lets the host re-run rules/reservations. Client bindings and access
-claims never cross the network as proof.
+Request access is resolved independently from action ownership. An action with no `AccessProviderId` is
+accessible only when it belongs to the runner's `OwnedActionComponent`; an action with an
+`AccessProviderId` always asks the runner's matching `IGameplayActionAccessProvider`, whether the action
+is owned or external. A missing provider rejects the request. The provider receives the optional
+invocation target. The authoritative runner validates the RPC sender and access, then lets the host
+re-run rules/reservations. Client bindings and access claims never cross the network as proof.
 
 Executors require requester presence by default. An executor may opt out through
 `RequiresRequesterPresence == false` when accepted work becomes world-owned and should survive
@@ -148,9 +152,13 @@ transient execution presentation and never executes actions or replicates dynami
 It is not a network field. If the requester later receives the replicated copy of the same execution,
 its more informative `RequestedLocally` relation is preserved.
 
-The request payload is intentionally small: component path + stable `ActionId`. The authority returns
-started/progress/terminal acknowledgements. Terminal reconciliation includes the `ExecutionId`, so an
-old acknowledgement cannot close a newer execution of the same action.
+The request payload is intentionally small: component path + stable `ActionId` + optional target path.
+The authority resolves the target path in its own scene tree and never trusts a client-provided object.
+It returns started/progress/terminal acknowledgements. Terminal reconciliation includes the
+`ExecutionId`, so an old acknowledgement cannot close a newer execution of the same action. Target
+remains invocation data rather than execution identity: request/concurrency keys stay
+`(Component, ActionId)`, while sustained validation and local requester presentation retain the target
+accepted for the execution.
 
 ## Generic action presentation
 
@@ -211,8 +219,8 @@ the same execution model serve interaction, inventory-granted actions and non-in
 ### AD-08 — The runner owns request networking
 
 `GameplayActionRunner` is the single requester/RPC boundary. The server resolves its own component,
-action and access provider rather than trusting client-side binding data. Interaction therefore adds
-spatial access and bindings without owning a second network execution protocol.
+target path, action and access provider rather than trusting client-side binding data. Interaction
+therefore adds spatial access and bindings without owning a second network execution protocol.
 
 ### AD-09 — Progress is presentation, completion is gameplay
 

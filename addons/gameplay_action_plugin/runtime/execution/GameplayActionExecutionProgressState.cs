@@ -37,6 +37,8 @@ internal sealed class GameplayActionExecutionPresentationSlot(
 
     public StringName ActionId { get; } = actionId;
 
+    public Node? Target { get; set; }
+
     public GameplayActionExecutionRelation Relation { get; set; } =
         GameplayActionExecutionRelation.Observed;
 

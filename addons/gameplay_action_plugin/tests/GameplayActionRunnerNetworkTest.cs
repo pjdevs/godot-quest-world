@@ -49,6 +49,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
                 )
                 .IsTrue();
             AssertThat(prediction.ExecutionId).IsEqual(0UL);
+            AssertThat(prediction.Target).IsEqual(session.Client.Target);
 
             await session.Pump(RoundTripFrames);
 
@@ -65,6 +66,9 @@ public sealed partial class GameplayActionRunnerNetworkTest
                 )
                 .IsTrue();
             AssertThat(confirmed.ExecutionId).IsEqual(session.Server.Executor.ExecutionId);
+            AssertThat(confirmed.Target).IsEqual(session.Client.Target);
+            AssertThat(session.Server.Executor.LastTarget).IsEqual(session.Server.Target);
+            AssertThat(session.Server.AccessProvider.LastTarget).IsEqual(session.Server.Target);
             AssertThat(
                     session.Observer.ExternalActions.TryGetExecutionPresentation(OpenAction, out _)
                 )
@@ -130,6 +134,11 @@ public sealed partial class GameplayActionRunnerNetworkTest
             };
             session.Client.Runner.TryStartActionInput("use");
             await session.Pump(RoundTripFrames);
+            AssertThat(session.Server.AccessProvider.Targets).IsNotEmpty();
+            foreach (Node? target in session.Server.AccessProvider.Targets)
+            {
+                AssertThat(target).IsEqual(session.Server.Target);
+            }
 
             AssertThat(session.Client.Runner.TryEndActionInput("use")).IsTrue();
             await session.Pump(RoundTripFrames);
@@ -179,6 +188,37 @@ public sealed partial class GameplayActionRunnerNetworkTest
     }
 
     [TestCase]
+    public async Task InvalidTargetPathIsRejectedByTheAuthority()
+    {
+        Session session = await Connect(serverAllowsAccess: true);
+        try
+        {
+            int rejections = 0;
+            session.Client.Runner.GameplayActionRejected += (_, actionId, _) =>
+            {
+                AssertThat(actionId).IsEqual(OpenAction);
+                rejections++;
+            };
+
+            session.Client.Runner.RpcId(
+                1,
+                nameof(GameplayActionRunner.ServerTryStartAction),
+                new NodePath("Door/Actions"),
+                OpenAction,
+                new NodePath("Door/UnknownTarget")
+            );
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(session.Server.Executor.ExecuteCount).IsEqual(0);
+            AssertThat(rejections).IsEqual(1);
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
     public async Task RequesterDisconnectCancelsPresenceOwnedAuthoritativeExecution()
     {
         Session session = await Connect(serverAllowsAccess: true);
@@ -205,7 +245,8 @@ public sealed partial class GameplayActionRunnerNetworkTest
     {
         Session session = await Connect(
             serverAllowsAccess: true,
-            visibility: GameplayActionExecutionVisibility.AuthorityOnly
+            visibility: GameplayActionExecutionVisibility.AuthorityOnly,
+            targeted: false
         );
         try
         {
@@ -235,7 +276,8 @@ public sealed partial class GameplayActionRunnerNetworkTest
         bool serverAllowsAccess,
         bool sustainedInput = false,
         GameplayActionExecutionVisibility visibility =
-            GameplayActionExecutionVisibility.RequesterOnly
+            GameplayActionExecutionVisibility.RequesterOnly,
+        bool targeted = true
     )
     {
         int port = _nextPort++;
@@ -294,7 +336,8 @@ public sealed partial class GameplayActionRunnerNetworkTest
             client.ExternalActions,
             OpenAction,
             client.ExternalActions,
-            config
+            config,
+            target: targeted ? client.Target : null
         );
 
         AssertThat(serverApi.IsServer()).IsTrue();
@@ -337,6 +380,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
         root.AddChild(actor);
 
         Node door = new() { Name = "Door" };
+        Node target = new() { Name = "Target" };
         GameplayActionComponent externalActions = new() { Name = "Actions" };
         NetworkRecordingExecutor executor = new() { Name = "OpenExecutor" };
         NetworkAccessAction action = new()
@@ -348,14 +392,13 @@ public sealed partial class GameplayActionRunnerNetworkTest
         };
         action.AddChild(executor);
         externalActions.AddAction(action);
+        door.AddChild(target);
         door.AddChild(externalActions);
         root.AddChild(door);
 
-        runner.RegisterAccessProvider(
-            NetworkAccessAction.ProviderId,
-            new NetworkAccessProvider { Allowed = allowsAccess }
-        );
-        return new PeerScene(runner, externalActions, executor);
+        NetworkAccessProvider accessProvider = new() { Allowed = allowsAccess };
+        runner.RegisterAccessProvider(NetworkAccessAction.ProviderId, accessProvider);
+        return new PeerScene(runner, externalActions, executor, target, accessProvider);
     }
 
     private sealed partial class NetworkAccessAction : GameplayAction
@@ -369,7 +412,16 @@ public sealed partial class GameplayActionRunnerNetworkTest
     {
         public bool Allowed { get; set; }
 
-        public bool CanRequest(in GameplayActionAccessContext context) => Allowed;
+        public Node? LastTarget { get; private set; }
+
+        public List<Node?> Targets { get; } = new();
+
+        public bool CanRequest(in GameplayActionAccessContext context)
+        {
+            LastTarget = context.Target;
+            Targets.Add(context.Target);
+            return Allowed;
+        }
     }
 
     private sealed partial class NetworkRecordingExecutor : GameplayActionExecutor
@@ -380,10 +432,13 @@ public sealed partial class GameplayActionRunnerNetworkTest
 
         public ulong ExecutionId { get; private set; }
 
+        public Node? LastTarget { get; private set; }
+
         public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
         {
             ExecuteCount++;
             ExecutionId = context.ExecutionId;
+            LastTarget = context.Target;
             return new GameplayActionExecutionRunning();
         }
 
@@ -400,7 +455,9 @@ public sealed partial class GameplayActionRunnerNetworkTest
     private sealed record PeerScene(
         GameplayActionRunner Runner,
         GameplayActionComponent ExternalActions,
-        NetworkRecordingExecutor Executor
+        NetworkRecordingExecutor Executor,
+        Node Target,
+        NetworkAccessProvider AccessProvider
     );
 
     private sealed record Session(

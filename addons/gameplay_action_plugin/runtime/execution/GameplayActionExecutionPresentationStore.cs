@@ -7,7 +7,8 @@ namespace GameplayActionPlugin.Runtime.Execution;
 
 internal readonly record struct GameplayActionExecutionPresentationSource(
     ulong ExecutionId,
-    GameplayAction Action
+    GameplayAction Action,
+    Node? Target = null
 );
 
 internal sealed class GameplayActionExecutionPresentationStore(
@@ -59,7 +60,11 @@ internal sealed class GameplayActionExecutionPresentationStore(
         return true;
     }
 
-    public bool AddPrediction(StringName actionId, GameplayActionProgressSample sample)
+    public bool AddPrediction(
+        StringName actionId,
+        GameplayActionProgressSample sample,
+        Node? target = null
+    )
     {
         if (actionId is null || actionId.IsEmpty || _visible.ContainsKey(actionId))
         {
@@ -67,6 +72,7 @@ internal sealed class GameplayActionExecutionPresentationStore(
         }
 
         GameplayActionExecutionPresentationSlot slot = new(0ul, actionId);
+        slot.Target = target;
         slot.Relation = GameplayActionExecutionRelation.RequestedLocally;
         slot.Progress.Predict(sample, CurrentTimeSeconds());
         _visible.Add(actionId, slot);
@@ -194,7 +200,7 @@ internal sealed class GameplayActionExecutionPresentationStore(
         return false;
     }
 
-    public void AddExecution(ulong executionId, GameplayAction action)
+    public void AddExecution(ulong executionId, GameplayAction action, Node? target = null)
     {
         if (action.Definition is null)
         {
@@ -213,6 +219,7 @@ internal sealed class GameplayActionExecutionPresentationStore(
         }
 
         slot.ExecutionId = executionId;
+        slot.Target ??= target;
         bool structuralChange =
             !_visible.TryGetValue(actionId, out GameplayActionExecutionPresentationSlot? previous)
             || previous.ExecutionId != executionId;
@@ -388,6 +395,7 @@ internal sealed class GameplayActionExecutionPresentationStore(
                 execution.ExecutionId,
                 action
             );
+            slot.Target ??= execution.Target;
             slot.Progress.TryGetSample(
                 out bool hasProgress,
                 out GameplayActionProgressSample sample
@@ -472,7 +480,8 @@ internal sealed class GameplayActionExecutionPresentationStore(
             slot.ExecutionId,
             slot.ActionId,
             slot.Progress.Resolve(owner, slot.ActionId, CurrentTimeSeconds()),
-            slot.Relation
+            slot.Relation,
+            slot.Target
         );
 
     private bool TryGetProgressSlot(

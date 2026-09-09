@@ -9,7 +9,7 @@ namespace GameplayActionPlugin.Runtime.Runner;
 
 internal sealed class GameplayActionRequestPipeline(
     GameplayActionRunner owner,
-    Func<GameplayActionComponent, GameplayAction, bool, bool> canAccess,
+    Func<GameplayActionComponent, GameplayAction, Node?, bool, bool> canAccess,
     Func<Node?> resolveInstigator
 )
 {
@@ -103,7 +103,8 @@ internal sealed class GameplayActionRequestPipeline(
                 _owner.ServerPeerId,
                 nameof(ServerTryStartAction),
                 GetNetworkPath(binding.Component),
-                binding.ActionId
+                binding.ActionId,
+                GetNetworkPath(binding.Target)
             );
             return true;
         }
@@ -112,7 +113,8 @@ internal sealed class GameplayActionRequestPipeline(
             binding.Component,
             binding.ActionId,
             _owner.OwnerPeerId,
-            GetNetworkPath(binding.Component)
+            GetNetworkPath(binding.Component),
+            binding.Target
         );
         if (
             result is GameplayActionExecutionRunning
@@ -190,7 +192,7 @@ internal sealed class GameplayActionRequestPipeline(
     private bool HasSustainedAccess(in GameplayActionRequestedExecution execution)
     {
         GameplayAction? action = execution.Component.ResolveAction(execution.ActionId);
-        return action is not null && canAccess(execution.Component, action, true);
+        return action is not null && canAccess(execution.Component, action, execution.Target, true);
     }
 
     private void CancelRequesterOwnedExecutions(string reason)
@@ -211,11 +213,21 @@ internal sealed class GameplayActionRequestPipeline(
     private void PredictExecution(GameplayActionBinding binding, GameplayAction action)
     {
         GameplayActionProgressSample? sample = action.Executor?.GetPredictionSample(
-            binding.Component.CreateContext(0ul, resolveInstigator(), _owner, action)
+            binding.Component.CreateContext(
+                0ul,
+                resolveInstigator(),
+                _owner,
+                action,
+                binding.Target
+            )
         );
         if (sample is GameplayActionProgressSample prediction)
         {
-            binding.Component.AddPendingExecutionPresentation(binding.ActionId, prediction);
+            binding.Component.AddPendingExecutionPresentation(
+                binding.ActionId,
+                prediction,
+                binding.Target
+            );
         }
     }
 
@@ -290,7 +302,11 @@ internal sealed class GameplayActionRequestPipeline(
         }
     }
 
-    public void ServerTryStartAction(NodePath componentPath, StringName actionId)
+    public void ServerTryStartAction(
+        NodePath componentPath,
+        StringName actionId,
+        NodePath targetPath
+    )
     {
         int senderPeerId = GetRemoteSenderOrOwner();
         if (!ValidateSender(senderPeerId))
@@ -317,7 +333,19 @@ internal sealed class GameplayActionRequestPipeline(
             return;
         }
 
-        TryStartAuthoritatively(component, actionId, senderPeerId, componentPath);
+        Node? target = ResolveNetworkPath(targetPath);
+        if (!targetPath.IsEmpty && target is null)
+        {
+            RejectRequest(
+                senderPeerId,
+                componentPath,
+                actionId,
+                GameplayActionAvailabilityExtensions.UnavailableReason
+            );
+            return;
+        }
+
+        TryStartAuthoritatively(component, actionId, senderPeerId, componentPath, target);
     }
 
     public void ServerTryCancelAction(NodePath componentPath, StringName actionId)
@@ -602,7 +630,8 @@ internal sealed class GameplayActionRequestPipeline(
         GameplayActionComponent component,
         StringName actionId,
         int senderPeerId,
-        NodePath componentPath
+        NodePath componentPath,
+        Node? target = null
     )
     {
         if (!ValidateSender(senderPeerId))
@@ -617,7 +646,7 @@ internal sealed class GameplayActionRequestPipeline(
         }
 
         GameplayAction? action = component.ResolveAction(actionId);
-        if (action is null || !canAccess(component, action, false))
+        if (action is null || !canAccess(component, action, target, false))
         {
             RejectRequest(
                 senderPeerId,
@@ -632,7 +661,8 @@ internal sealed class GameplayActionRequestPipeline(
             actionId,
             out ulong executionId,
             resolveInstigator(),
-            _owner
+            _owner,
+            target
         );
         if (result is GameplayActionExecutionRunning)
         {
@@ -641,7 +671,8 @@ internal sealed class GameplayActionRequestPipeline(
                     component,
                     actionId,
                     executionId,
-                    action.Executor?.RequiresRequesterPresence != false
+                    action.Executor?.RequiresRequesterPresence != false,
+                    target
                 )
             );
         }
@@ -891,8 +922,13 @@ internal sealed class GameplayActionRequestPipeline(
 
     private static Variant ToVariant(Node? node) => node is null ? default : Variant.From(node);
 
-    public NodePath GetNetworkPath(Node node)
+    public NodePath GetNetworkPath(Node? node)
     {
+        if (node is null)
+        {
+            return new NodePath();
+        }
+
         Node? root = GetNetworkRoot();
         return root is null ? node.GetPath() : root.GetPathTo(node);
     }
@@ -919,7 +955,8 @@ internal sealed class GameplayActionRequestPipeline(
         GameplayActionComponent Component,
         StringName ActionId,
         ulong ExecutionId,
-        bool RequiresRequesterPresence
+        bool RequiresRequesterPresence,
+        Node? Target
     );
 
     private enum ClientEndKind

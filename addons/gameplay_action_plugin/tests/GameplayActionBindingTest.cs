@@ -257,6 +257,32 @@ public sealed partial class GameplayActionBindingTest
         AssertThat(notifications).IsEqual(4);
     }
 
+    [TestCase]
+    public void BindingKeepsCleanupSourceSeparateFromInvocationTarget()
+    {
+        TestGameplayActionExecutor executor = new();
+        GameplayActionComponent component = CreateComponentWithAction("take", executor);
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = component }
+        );
+        Node source = AutoFree(new Node { Name = "Interactive" });
+        Node target = AutoFree(new Node { Name = "Battery" });
+
+        GameplayActionBinding binding = runner.BindAction(
+            component,
+            "take",
+            source,
+            Press("take"),
+            target: target
+        )!;
+
+        AssertThat(binding.Source).IsEqual(source);
+        AssertThat(binding.Target).IsEqual(target);
+        AssertThat(binding.Source == binding.Target).IsFalse();
+        AssertThat(runner.TryStartActionInput("take")).IsTrue();
+        AssertThat(executor.LastContext.Target).IsEqual(target);
+    }
+
     private static GameplayActionBindingConfig Press(string input) =>
         new()
         {

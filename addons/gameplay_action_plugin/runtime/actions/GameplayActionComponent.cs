@@ -178,7 +178,8 @@ public partial class GameplayActionComponent : Node
     public GameplayActionAvailability EvaluateAction(
         StringName actionId,
         Node? instigator = null,
-        Node? requester = null
+        Node? requester = null,
+        Node? target = null
     )
     {
         GameplayAction? action = ResolveAction(actionId);
@@ -187,7 +188,7 @@ public partial class GameplayActionComponent : Node
             return new GameplayActionBlocked(NotConfiguredReason);
         }
 
-        GameplayActionContext context = CreateContext(0ul, instigator, requester, action);
+        GameplayActionContext context = CreateContext(0ul, instigator, requester, action, target);
         return EvaluateRules(action.Rules, context);
     }
 
@@ -202,10 +203,11 @@ public partial class GameplayActionComponent : Node
     public GameplayActionExecutionResult ExecuteAction(
         StringName actionId,
         out ulong executionId,
-        Node? instigator = null
+        Node? instigator = null,
+        Node? target = null
     )
     {
-        return ExecuteCore(actionId, out executionId, instigator, null);
+        return ExecuteCore(actionId, out executionId, instigator, null, target);
     }
 
     /// <summary>Runs one action on behalf of the runner that requested it.</summary>
@@ -217,17 +219,19 @@ public partial class GameplayActionComponent : Node
         StringName actionId,
         out ulong executionId,
         Node? instigator,
-        GameplayActionRunner requester
+        GameplayActionRunner requester,
+        Node? target = null
     )
     {
-        return ExecuteCore(actionId, out executionId, instigator, requester);
+        return ExecuteCore(actionId, out executionId, instigator, requester, target);
     }
 
     private GameplayActionExecutionResult ExecuteCore(
         StringName actionId,
         out ulong executionId,
         Node? instigator,
-        Node? requester
+        Node? requester,
+        Node? target
     )
     {
         executionId = 0;
@@ -244,7 +248,12 @@ public partial class GameplayActionComponent : Node
             return new GameplayActionExecutionRejected(NotConfiguredReason);
         }
 
-        GameplayActionAvailability availability = EvaluateAction(actionId, instigator, requester);
+        GameplayActionAvailability availability = EvaluateAction(
+            actionId,
+            instigator,
+            requester,
+            target
+        );
         if (availability is not GameplayActionAllowed)
         {
             string reason = availability.DescribeRefusal();
@@ -252,7 +261,7 @@ public partial class GameplayActionComponent : Node
             return new GameplayActionExecutionRejected(reason);
         }
 
-        ActiveExecution? reservation = ReserveExecutionCore(action, instigator, requester);
+        ActiveExecution? reservation = ReserveExecutionCore(action, instigator, requester, target);
         if (reservation is null)
         {
             DispatchRejected(0ul, action, instigator, requester, AlreadyRunningReason);
@@ -366,8 +375,9 @@ public partial class GameplayActionComponent : Node
 
     internal bool AddPendingExecutionPresentation(
         StringName actionId,
-        GameplayActionProgressSample sample
-    ) => _presentation.AddPrediction(actionId, sample);
+        GameplayActionProgressSample sample,
+        Node? target = null
+    ) => _presentation.AddPrediction(actionId, sample, target);
 
     internal bool ConfirmRequesterExecution(
         StringName actionId,
@@ -474,7 +484,11 @@ public partial class GameplayActionComponent : Node
         foreach (ActiveExecution execution in _executionsById.Values)
         {
             executions.Add(
-                new GameplayActionExecutionPresentationSource(execution.Id, execution.Action)
+                new GameplayActionExecutionPresentationSource(
+                    execution.Id,
+                    execution.Action,
+                    execution.Target
+                )
             );
         }
 
@@ -623,7 +637,8 @@ public partial class GameplayActionComponent : Node
     private ActiveExecution? ReserveExecutionCore(
         GameplayAction action,
         Node? instigator,
-        Node? requester
+        Node? requester,
+        Node? target
     )
     {
         StringName actionId = action.Definition!.Id;
@@ -642,7 +657,14 @@ public partial class GameplayActionComponent : Node
             return null;
         }
 
-        ActiveExecution execution = new(_nextExecutionId++, action, group, instigator, requester);
+        ActiveExecution execution = new(
+            _nextExecutionId++,
+            action,
+            group,
+            instigator,
+            requester,
+            target
+        );
         _executionsById.Add(execution.Id, execution);
         return execution;
     }
@@ -717,7 +739,7 @@ public partial class GameplayActionComponent : Node
             return;
         }
 
-        _presentation.AddExecution(execution.Id, execution.Action);
+        _presentation.AddExecution(execution.Id, execution.Action, execution.Target);
     }
 
     private void EmitStarted(in ActiveExecution execution)
@@ -818,7 +840,8 @@ public partial class GameplayActionComponent : Node
         ulong executionId,
         Node? instigator,
         Node? requester,
-        GameplayAction action
+        GameplayAction action,
+        Node? target = null
     ) =>
         new(
             executionId,
@@ -827,11 +850,18 @@ public partial class GameplayActionComponent : Node
             this,
             action,
             Host ?? GetParent(),
-            World ?? (IsInsideTree() ? GetTree().CurrentScene : null)
+            World ?? (IsInsideTree() ? GetTree().CurrentScene : null),
+            target
         );
 
     private GameplayActionContext BuildExecutionContext(in ActiveExecution execution) =>
-        CreateContext(execution.Id, execution.Instigator, execution.Requester, execution.Action);
+        CreateContext(
+            execution.Id,
+            execution.Instigator,
+            execution.Requester,
+            execution.Action,
+            execution.Target
+        );
 
     private void FinalizeRetiredAction(GameplayAction action)
     {
@@ -852,6 +882,7 @@ public partial class GameplayActionComponent : Node
         GameplayAction Action,
         StringName ConcurrencyGroup,
         Node? Instigator,
-        Node? Requester
+        Node? Requester,
+        Node? Target
     );
 }

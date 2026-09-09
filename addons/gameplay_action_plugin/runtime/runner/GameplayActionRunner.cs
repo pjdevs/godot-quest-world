@@ -199,18 +199,21 @@ public partial class GameplayActionRunner : Node
     }
 
     /// <summary>Creates one runner-local binding to an action still owned by its component.</summary>
+    /// <param name="target">Optional node this binding invokes the action against.</param>
     /// <returns>The created binding, or null when the binding configuration is invalid.</returns>
     public GameplayActionBinding? BindAction(
         GameplayActionComponent component,
         StringName actionId,
         GodotObject source,
         GameplayActionBindingConfig config,
-        Variant presentationContext = default
+        Variant presentationContext = default,
+        Node? target = null
     )
     {
         GameplayActionBinding? binding = _bindings.Add(
             component,
             actionId,
+            target,
             source,
             config,
             presentationContext,
@@ -225,6 +228,15 @@ public partial class GameplayActionRunner : Node
 
         return binding;
     }
+
+    /// <summary>Creates a binding with a target while leaving its presentation context empty.</summary>
+    public GameplayActionBinding? BindAction(
+        GameplayActionComponent component,
+        StringName actionId,
+        GodotObject source,
+        GameplayActionBindingConfig config,
+        Node? target
+    ) => BindAction(component, actionId, source, config, default, target);
 
     /// <summary>Removes one local binding by its runner-local identifier.</summary>
     public bool UnbindAction(ulong bindingId) => _bindings.Remove(bindingId);
@@ -325,7 +337,7 @@ public partial class GameplayActionRunner : Node
         RequestAutomaticEdges(automaticEdges);
     }
 
-    /// <summary>Registers the domain adapter used to validate externally owned actions with this ID.</summary>
+    /// <summary>Registers the domain adapter used to validate requests with this ID.</summary>
     public void RegisterAccessProvider(
         StringName providerId,
         IGameplayActionAccessProvider provider
@@ -384,35 +396,41 @@ public partial class GameplayActionRunner : Node
     private GameplayActionAvailability EvaluateBinding(GameplayActionBinding binding)
     {
         GameplayAction? action = binding.Component.ResolveAction(binding.ActionId);
-        if (action is null || !CanAccess(binding.Component, action, sustained: false))
+        if (
+            action is null
+            || !CanAccess(binding.Component, action, binding.Target, sustained: false)
+        )
         {
             return new GameplayActionHidden();
         }
 
-        return binding.Component.EvaluateAction(binding.ActionId, ResolveInstigator(), this);
+        return binding.Component.EvaluateAction(
+            binding.ActionId,
+            ResolveInstigator(),
+            this,
+            binding.Target
+        );
     }
 
-    private bool CanAccess(GameplayActionComponent component, GameplayAction action, bool sustained)
+    private bool CanAccess(
+        GameplayActionComponent component,
+        GameplayAction action,
+        Node? target,
+        bool sustained
+    )
     {
-        if (component == OwnedActionComponent)
+        StringName providerId = action.AccessProviderId;
+        if (providerId is null || providerId.IsEmpty)
         {
-            return true;
+            return component == OwnedActionComponent;
         }
 
-        StringName providerId = action.AccessProviderId;
-        if (
-            providerId is null
-            || providerId.IsEmpty
-            || !_accessProviders.TryGetValue(
-                providerId,
-                out IGameplayActionAccessProvider? provider
-            )
-        )
+        if (!_accessProviders.TryGetValue(providerId, out IGameplayActionAccessProvider? provider))
         {
             return false;
         }
 
-        GameplayActionAccessContext context = new(this, component, action);
+        GameplayActionAccessContext context = new(this, component, action, target);
         return provider.CanRequest(context);
     }
 
@@ -480,13 +498,21 @@ public partial class GameplayActionRunner : Node
     }
 
     /// <summary>Reliable server RPC endpoint used by local request transport to start an action.</summary>
+    /// <param name="targetPath">Optional network-relative path of the invocation target.</param>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,
         CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
     )]
+    public void ServerTryStartAction(
+        NodePath componentPath,
+        StringName actionId,
+        NodePath targetPath
+    ) => _requests.ServerTryStartAction(componentPath, actionId, targetPath);
+
+    /// <summary>Compatibility overload for non-targeted requests.</summary>
     public void ServerTryStartAction(NodePath componentPath, StringName actionId) =>
-        _requests.ServerTryStartAction(componentPath, actionId);
+        ServerTryStartAction(componentPath, actionId, new NodePath());
 
     /// <summary>Reliable server RPC endpoint used by requester input release/cancellation.</summary>
     [Rpc(

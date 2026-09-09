@@ -7,6 +7,7 @@ namespace GameplayActionPlugin.Runtime.Bindings;
 /// <param name="Id">Runner-local stable binding identifier.</param>
 /// <param name="Component">Component owning the referenced action.</param>
 /// <param name="ActionId">Stable action identity resolved through the component.</param>
+/// <param name="Target">Optional node this binding invokes the action against.</param>
 /// <param name="Source">Object whose lifecycle/invalidation owns this binding.</param>
 /// <param name="InputActionName">Input Map action used by the binding.</param>
 /// <param name="ActivationMode">Gesture that selects the binding.</param>
@@ -18,6 +19,7 @@ public sealed record GameplayActionBinding(
     ulong Id,
     GameplayActionComponent Component,
     StringName ActionId,
+    Node? Target,
     GodotObject Source,
     StringName InputActionName,
     GameplayActionActivationMode ActivationMode,
