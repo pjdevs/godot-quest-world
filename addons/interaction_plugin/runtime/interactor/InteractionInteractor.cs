@@ -179,7 +179,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             );
         }
 
-        return true;
+        return false;
     }
 
     private bool HasInteractionAccess(in GameplayActionAccessContext context)

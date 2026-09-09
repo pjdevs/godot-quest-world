@@ -166,7 +166,8 @@ authoritative peer resolves its own target, finds the exact offer that maps to t
 re-validates spatial access and evaluates target/offer rules before execution. After that pure check,
 the Interaction provider acquires the optional target reservation through the generic runner request
 lease; failed, cancelled and completed requests release it. A client-supplied target or action endpoint
-is never accepted as proof of access.
+is never accepted as proof of access. Reservation acquisition fails closed when the authoritative peer
+can no longer resolve the target and its unique offer endpoint.
 
 `InteractionActionExecutor` adapts `GameplayActionContext` into `InteractionExecutionContext`. An
 interaction executor requires both an `InteractionAction` hosted by an `InteractiveComponent` and an

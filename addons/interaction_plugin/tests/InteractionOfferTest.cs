@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Access;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Execution;
@@ -91,6 +92,22 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
 
         AssertThat(interactive.TryResolveOffer(interactor, targetOffer, out _)).IsFalse();
         AssertThat(interactive.TryResolveOffer(interactor, instigatorOffer, out _)).IsFalse();
+    }
+
+    [TestCase]
+    public void ReservationAcquisitionFailsClosedWhenTheOfferCannotBeResolved()
+    {
+        InteractiveComponent interactive = AutoFree(new InteractiveComponent());
+        GameplayActionComponent actions = AutoFree(new GameplayActionComponent());
+        GameplayAction action = NewGenericAction("use");
+        actions.AddAction(action);
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = actions }
+        );
+        InteractionInteractor interactor = AutoFree(new InteractionInteractor { Runner = runner });
+        GameplayActionAccessContext context = new(runner, actions, action, interactive);
+
+        AssertThat(interactor.TryAcquireRequestReservation(context, out _)).IsFalse();
     }
 
     [TestCase]
