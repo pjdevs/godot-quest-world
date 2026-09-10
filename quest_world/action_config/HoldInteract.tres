@@ -1,8 +1,10 @@
-[gd_resource type="Resource" script_class="GameplayActionBindingConfig" format=3 uid="uid://c2dhha7s8no4p"]
+[gd_resource type="Resource" script_class="GameplayActionBindingConfig" format=3 uid="uid://4cpdhswpn8be"]
 
-[ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="1_422ge"]
+[ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="1_j8m7c"]
 
 [resource]
-script = ExtResource("1_422ge")
+script = ExtResource("1_j8m7c")
 InputActionName = &"interact"
+ActivationMode = 1
+HoldDuration = 1.0
 metadata/_custom_type_script = "uid://clv6g48bftyhm"
