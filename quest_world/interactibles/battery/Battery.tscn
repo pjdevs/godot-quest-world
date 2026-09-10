@@ -2,23 +2,19 @@
 
 [ext_resource type="PackedScene" uid="uid://7osg2ttwtxmc" path="res://quest_world/interactibles/battery/BatteryMesh.tscn" id="1_mvphd"]
 [ext_resource type="Script" uid="uid://dwmqsp6eyk4gd" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="1_t2p7y"]
-[ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="3_tj8cv"]
 [ext_resource type="Script" uid="uid://qypd61i3o2qs" path="res://addons/interaction_plugin/runtime/interactive/InteractionTargetReservationSynchronizer.cs" id="5_4t8iy"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="5_sj1vt"]
 [ext_resource type="Script" uid="uid://dskma4ncsvn1h" path="res://addons/interaction_plugin/runtime/offers/InteractionOffer.cs" id="5_tj8cv"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="6_4t8iy"]
+[ext_resource type="Resource" uid="uid://bf4ybcwnlux2r" path="res://quest_world/action_config/Interact.tres" id="6_42h85"]
 [ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="6_tj8cv"]
 
-[sub_resource type="Resource" id="Resource_tj8cv"]
-script = ExtResource("3_tj8cv")
-InputActionName = &"interact"
-metadata/_custom_type_script = "uid://clv6g48bftyhm"
-
 [sub_resource type="Resource" id="Resource_42h85"]
+resource_name = "Take"
 script = ExtResource("5_tj8cv")
 ActionSource = 1
 ActionId = &"take"
-BindingConfig = SubResource("Resource_tj8cv")
+BindingConfig = ExtResource("6_42h85")
 TargetConcurrencyGroup = &"default"
 WhenReservedBySelf = 0
 WhenReservedByOther = 0
@@ -42,8 +38,9 @@ properties/1/replication_mode = 2
 [node name="BatteryMesh" parent="." unique_id=1822535720 instance=ExtResource("1_mvphd")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
 
-[node name="ActionComponent" type="Node" parent="." unique_id=1703770989]
+[node name="ActionComponent" type="Node" parent="." unique_id=1703770989 node_paths=PackedStringArray("Host")]
 script = ExtResource("1_t2p7y")
+Host = NodePath("..")
 metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
 
 [node name="InteractiveComponent" type="Node" parent="." unique_id=75349340 node_paths=PackedStringArray("InteractionArea", "InteractionAnchor", "InvocationTarget", "ActionComponent", "TargetReservationSynchronizer")]

@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="GameplayActionBindingConfig" format=3 uid="uid://c2dhha7s8no4p"]
+
+[ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="1_422ge"]
+
+[resource]
+script = ExtResource("1_422ge")
+InputActionName = &"interact"
+metadata/_custom_type_script = "uid://clv6g48bftyhm"

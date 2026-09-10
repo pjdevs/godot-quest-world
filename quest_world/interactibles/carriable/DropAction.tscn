@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://ddiesb1vylb3n"]
+
+[ext_resource type="Script" uid="uid://bpl2q4bryqvmj" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayAction.cs" id="1_8e6vj"]
+[ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="2_sdfjo"]
+[ext_resource type="Script" uid="uid://byp5kmv0uc5ia" path="res://quest_world/interactibles/carriable/DropExecutor.cs" id="3_utfep"]
+[ext_resource type="Resource" uid="uid://dh5md4bnp2o3x" path="res://quest_world/interactibles/battery/BatteryItem.tres" id="4_l0fv2"]
+
+[sub_resource type="Resource" id="Resource_xgwmf"]
+script = ExtResource("2_sdfjo")
+Id = &"drop"
+Label = "Drop"
+metadata/_custom_type_script = "uid://nyac2n1klfrk"
+
+[node name="DropAction" type="Node" unique_id=1688939992 node_paths=PackedStringArray("Executor")]
+script = ExtResource("1_8e6vj")
+Definition = SubResource("Resource_xgwmf")
+Executor = NodePath("DropExecutor")
+ExecutionVisibility = 2
+metadata/_custom_type_script = "uid://bpl2q4bryqvmj"
+
+[node name="DropExecutor" type="Node" parent="." unique_id=1025974616]
+script = ExtResource("3_utfep")
+Item = ExtResource("4_l0fv2")
+metadata/_custom_type_script = "uid://byp5kmv0uc5ia"

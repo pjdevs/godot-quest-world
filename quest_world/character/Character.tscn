@@ -3,28 +3,20 @@
 [ext_resource type="PackedScene" uid="uid://blivoww746ggf" path="res://addons/dummy_character_plugin/scenes/Character.tscn" id="1_base"]
 [ext_resource type="Script" uid="uid://bkmnwijy1k8nw" path="res://quest_world/character/QuestWorldCharacter.cs" id="2_project_character"]
 [ext_resource type="Script" uid="uid://yahimljmakge" path="res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" id="3_interactor"]
-[ext_resource type="Script" uid="uid://bpl2q4bryqvmj" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayAction.cs" id="4_o4r6d"]
+[ext_resource type="PackedScene" uid="uid://ciiirlsdinxrm" path="res://quest_world/interactibles/carriable/TakeAction.tscn" id="4_cv4cp"]
 [ext_resource type="Script" uid="uid://drgb3r1muwfvx" path="res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" id="4_presenter"]
 [ext_resource type="PackedScene" uid="uid://m4nr18qimc1s" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="5_prompt_container"]
+[ext_resource type="PackedScene" uid="uid://ddiesb1vylb3n" path="res://quest_world/interactibles/carriable/DropAction.tscn" id="5_xgwmf"]
 [ext_resource type="Script" uid="uid://gr7tji6jpsi4" path="res://addons/interaction_plugin/runtime/detection/AreaInteractionDetector.cs" id="6_detector"]
-[ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="6_gl8e6"]
 [ext_resource type="Script" uid="uid://dwmqsp6eyk4gd" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="7_actions"]
-[ext_resource type="Script" uid="uid://cvyflkw40bcp7" path="res://quest_world/interactibles/carriable/TakeExecutor.cs" id="7_o4r6d"]
 [ext_resource type="Script" uid="uid://cq7x5laa2qc4c" path="res://addons/gameplay_action_plugin/runtime/runner/GameplayActionRunner.cs" id="8_runner"]
-[ext_resource type="Resource" uid="uid://dh5md4bnp2o3x" path="res://quest_world/interactibles/battery/BatteryItem.tres" id="8_x52ph"]
 [ext_resource type="Script" uid="uid://v72ge0wsrrkf" path="res://addons/inventory_plugin/runtime/InventoryComponent.cs" id="9_kksnx"]
 [ext_resource type="Script" uid="uid://b6bybu005qipw" path="res://addons/inventory_plugin/runtime/InventoryReplicationSynchronizer.cs" id="10_8y4fs"]
 [ext_resource type="Resource" uid="uid://vqd34pcyut5r" path="res://quest_world/inventory/InventoryCatalog.tres" id="10_xok31"]
 [ext_resource type="Script" uid="uid://b3dfxqn40hwot" path="res://quest_world/interactibles/battery/ItemActionGrant.cs" id="14_wu3k4"]
-[ext_resource type="Script" uid="uid://daxwfb5jn63w3" path="res://quest_world/character/CarryComponent.cs" id="15_xok31"]
+[ext_resource type="Script" uid="uid://daxwfb5jn63w3" path="res://quest_world/interactibles/carriable/CarryComponent.cs" id="15_xok31"]
 [ext_resource type="Script" uid="uid://u7x7xha33xn" path="res://addons/gameplay_action_plugin/presentation/ui/GameplayActionPresenter.cs" id="16_cv4cp"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="17_xgwmf"]
-
-[sub_resource type="Resource" id="Resource_xgwmf"]
-script = ExtResource("6_gl8e6")
-Id = &"take"
-Label = "Take"
-metadata/_custom_type_script = "uid://nyac2n1klfrk"
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_mxxis"]
 
@@ -39,7 +31,7 @@ properties/1/replication_mode = 2
 [node name="Character" unique_id=493885237 instance=ExtResource("1_base")]
 script = ExtResource("2_project_character")
 
-[node name="GeneralSkeleton" parent="Visual/UALCharacter/Armature" parent_id_path=PackedInt32Array(1190744522, 643259350) index="0" unique_id=288034341]
+[node name="GeneralSkeleton" parent="Visual/UALCharacter/Armature" parent_id_path=PackedInt32Array(1190744522, 1290648370) index="0" unique_id=1989870170]
 bones/1/position = Vector3(0, 0.9167, -0.05010003)
 bones/1/rotation = Quaternion(0, 0, 0, 1)
 bones/3/rotation = Quaternion(0, 0, 0, 1)
@@ -128,22 +120,15 @@ transform = Transform3D(1.0000001, 0, 1.4901161e-08, -5.5879354e-09, 0.99999994,
 ThirdPersonDistance = 2.5
 FirstPersonCameraOffset = Vector3(0, 0, -0.6)
 
-[node name="GameplayActions" type="Node" parent="." index="6" unique_id=1688919234 node_paths=PackedStringArray("Actions")]
+[node name="GameplayActions" type="Node" parent="." index="6" unique_id=1688919234 node_paths=PackedStringArray("Actions", "Host")]
 script = ExtResource("7_actions")
-Actions = [NodePath("TakeAction")]
+Actions = [NodePath("TakeAction"), NodePath("DropAction")]
+Host = NodePath("..")
 metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
 
-[node name="TakeAction" type="Node" parent="GameplayActions" index="0" unique_id=373071975 node_paths=PackedStringArray("Executor")]
-script = ExtResource("4_o4r6d")
-Definition = SubResource("Resource_xgwmf")
-Executor = NodePath("TakeExecutor")
-ConfiguredAccessProviderId = &"interaction"
-metadata/_custom_type_script = "uid://bpl2q4bryqvmj"
+[node name="TakeAction" parent="GameplayActions" index="0" unique_id=1688939992 instance=ExtResource("4_cv4cp")]
 
-[node name="TakeExecutor" type="Node" parent="GameplayActions/TakeAction" index="0" unique_id=869175070]
-script = ExtResource("7_o4r6d")
-Item = ExtResource("8_x52ph")
-metadata/_custom_type_script = "uid://cvyflkw40bcp7"
+[node name="DropAction" parent="GameplayActions" index="1" unique_id=788985157 instance=ExtResource("5_xgwmf")]
 
 [node name="GameplayActionRunner" type="Node" parent="." index="7" unique_id=1688919235 node_paths=PackedStringArray("OwnedActionComponent")]
 script = ExtResource("8_runner")
