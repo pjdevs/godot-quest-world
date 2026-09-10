@@ -1,9 +1,11 @@
 [gd_scene format=3 uid="uid://ddiesb1vylb3n"]
 
-[ext_resource type="Script" uid="uid://bpl2q4bryqvmj" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayAction.cs" id="1_8e6vj"]
+[ext_resource type="Script" uid="uid://bym6om5u0xap2" path="res://addons/gameplay_action_plugin/runtime/actions/InputGameplayAction.cs" id="1_on250"]
+[ext_resource type="Resource" uid="uid://bf4ybcwnlux2r" path="res://quest_world/action_config/Interact.tres" id="2_l0fv2"]
 [ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="2_sdfjo"]
+[ext_resource type="Script" uid="uid://canmvbkunu40a" path="res://addons/gameplay_action_plugin/runtime/rules/GameplayActionRule.cs" id="3_sdfjo"]
 [ext_resource type="Script" uid="uid://byp5kmv0uc5ia" path="res://quest_world/interactibles/carriable/DropExecutor.cs" id="3_utfep"]
-[ext_resource type="Resource" uid="uid://dh5md4bnp2o3x" path="res://quest_world/interactibles/battery/BatteryItem.tres" id="4_l0fv2"]
+[ext_resource type="Script" uid="uid://nlsvtnx1djfa" path="res://quest_world/interactibles/carriable/CarryItemRule.cs" id="4_on250"]
 
 [sub_resource type="Resource" id="Resource_xgwmf"]
 script = ExtResource("2_sdfjo")
@@ -11,14 +13,19 @@ Id = &"drop"
 Label = "Drop"
 metadata/_custom_type_script = "uid://nyac2n1klfrk"
 
-[node name="DropAction" type="Node" unique_id=1688939992 node_paths=PackedStringArray("Executor")]
-script = ExtResource("1_8e6vj")
+[sub_resource type="Resource" id="Resource_sdfjo"]
+script = ExtResource("4_on250")
+metadata/_custom_type_script = "uid://nlsvtnx1djfa"
+
+[node name="DropAction" type="Node" unique_id=478588832 node_paths=PackedStringArray("Executor")]
+script = ExtResource("1_on250")
+DefaultBindingConfig = ExtResource("2_l0fv2")
 Definition = SubResource("Resource_xgwmf")
 Executor = NodePath("DropExecutor")
+Rules = Array[ExtResource("3_sdfjo")]([SubResource("Resource_sdfjo")])
 ExecutionVisibility = 2
-metadata/_custom_type_script = "uid://bpl2q4bryqvmj"
+metadata/_custom_type_script = "uid://bym6om5u0xap2"
 
 [node name="DropExecutor" type="Node" parent="." unique_id=1025974616]
 script = ExtResource("3_utfep")
-Item = ExtResource("4_l0fv2")
 metadata/_custom_type_script = "uid://byp5kmv0uc5ia"

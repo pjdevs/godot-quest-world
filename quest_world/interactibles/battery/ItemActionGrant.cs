@@ -14,6 +14,8 @@ public partial class ItemActionGrant : Node
     [Export]
     public GameplayActionComponent? ActionComponent { get; set; } = null;
 
+    // TODO Make a packed scene association to grant anything
+
     private Dictionary<StringName, GameplayAction> _grantedActionsByItemId = new();
 
     public override void _Ready()
@@ -49,29 +51,8 @@ public partial class ItemActionGrant : Node
 
         if (oldQuantity <= 0 && newQuantity > 0)
         {
-            DropExecutor executor = new() { Name = "DropExecutor", Item = item };
-            InputGameplayAction action = new()
-            {
-                Name = item.DropActionId.ToString(),
-                Definition = new GameplayActionDefinition
-                {
-                    Id = item.DropActionId,
-                    Label = item.DropActionLabel,
-                },
-                DefaultBindingConfig = item.DropBindingConfig,
-                Executor = executor,
-                ExecutionVisibility = GameplayActionExecutionVisibility.AuthorityOnly,
-            };
-            action.AddChild(executor);
-
-            if (ActionComponent?.AddAction(action) == true)
-            {
-                _grantedActionsByItemId[itemId] = action;
-            }
-            else
-            {
-                action.Free();
-            }
+            // TODO grant with packed scene
+            return;
         }
         else if (oldQuantity > 0 && newQuantity <= 0)
         {

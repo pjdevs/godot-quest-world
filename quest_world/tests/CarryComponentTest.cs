@@ -75,12 +75,12 @@ public sealed class CarryComponentTest
             .IsEqual(new Vector3(2.0f, 3.0f, 2.5f));
 
         worldSpawner.ShouldSucceed = false;
-        AssertThat(carry.TryDrop(cellId)).IsFalse();
+        AssertThat(carry.TryDrop()).IsFalse();
         AssertThat(inventory.GetItemCount(cellId)).IsEqual(1);
         AssertThat(carry.CarriedItemId == cellId).IsTrue();
 
         worldSpawner.ShouldSucceed = true;
-        AssertThat(carry.TryDrop(cellId)).IsTrue();
+        AssertThat(carry.TryDrop()).IsTrue();
         AssertThat(inventory.GetItemCount(cellId)).IsEqual(0);
         AssertThat(carry.CarriedItemId is null).IsTrue();
 

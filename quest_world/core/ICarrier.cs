@@ -4,6 +4,7 @@ using Godot;
 
 public interface ICarrier
 {
+    public StringName? CarriedItemId { get; }
     public bool IsCarrying { get; }
     public Task<bool> TryTakeAsync(
         StringName itemId,
@@ -11,5 +12,5 @@ public interface ICarrier
         Action? onCommited = null
     );
     public bool TryTake(StringName itemId, Node3D carriableObject);
-    public bool TryDrop(StringName itemId);
+    public bool TryDrop();
 }

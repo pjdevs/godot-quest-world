@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using DummyCharacterPlugin;
+using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Runner;
 using Godot;
 using InteractionPlugin.Runtime.Interactor;
@@ -8,15 +9,20 @@ using InventoryPlugin;
 
 public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner, ICarrier
 {
-    private InteractionInteractor _interactionInteractor = null!;
-    private GameplayActionRunner _gameplayActionRunner = null!;
-    private InventoryComponent _inventory = null!;
-    private CarryComponent _carryComponent = null!;
+    [ExportGroup("Carry")]
+    [Export]
+    public StringName TakeAction { get; set; } = new StringName("take");
+
+    [Export]
+    public StringName DropAction { get; set; } = new StringName("drop");
+
+    private InteractionInteractor? _interactionInteractor = null;
+    private GameplayActionRunner? _gameplayActionRunner = null;
+    private InventoryComponent? _inventory = null;
+    private CarryComponent? _carryComponent = null;
     private bool _wasPossessed;
 
-    public InteractionInteractor InteractionInteractor => _interactionInteractor;
-
-    public InventoryComponent Inventory => _inventory;
+    public InventoryComponent Inventory => _inventory!;
 
     public new int OwnerPeerId
     {
@@ -31,10 +37,11 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
         }
     }
 
-    public override void _Ready()
+    public override void _EnterTree()
     {
-        base._Ready();
-        _interactionInteractor = GetNodeOrNull<InteractionInteractor>("InteractionInteractor")!;
+        base._EnterTree();
+
+        _interactionInteractor = GetNodeOrNull<InteractionInteractor>("InteractionInteractor");
         if (_interactionInteractor == null)
         {
             GD.PushError(
@@ -43,30 +50,37 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
             return;
         }
 
-        _gameplayActionRunner = GetNodeOrNull<GameplayActionRunner>("GameplayActionRunner")!;
+        _gameplayActionRunner = GetNodeOrNull<GameplayActionRunner>("GameplayActionRunner");
         if (_gameplayActionRunner == null)
         {
             GD.PushError($"{GetPath()}: project Character requires a GameplayActionRunner child.");
             return;
         }
 
-        _inventory = GetNodeOrNull<InventoryComponent>("InventoryComponent")!;
+        _inventory = GetNodeOrNull<InventoryComponent>("InventoryComponent");
         if (_inventory == null)
         {
             GD.PushError($"{GetPath()}: project Character requires an InventoryComponent child.");
             return;
         }
 
-        _carryComponent = GetNodeOrNull<CarryComponent>("CarryComponent")!;
+        _carryComponent = GetNodeOrNull<CarryComponent>("CarryComponent");
         if (_carryComponent == null)
         {
             GD.PushError($"{GetPath()}: project Character requires a CarryComponent child.");
             return;
         }
+    }
 
-        _carryComponent.Carrier = this;
-        _carryComponent.WorldSpawner = FindWorldSpawner();
-        _gameplayActionRunner.OwnerPeerId = OwnerPeerId;
+    public override void _Ready()
+    {
+        base._Ready();
+
+        _carryComponent?.Carrier = this;
+        _carryComponent?.WorldSpawner = FindWorldSpawner();
+        _carryComponent?.CarriedItemChanged += OnCarriedItemChanged;
+
+        _gameplayActionRunner?.OwnerPeerId = OwnerPeerId;
     }
 
     public override void _PhysicsProcess(double delta)
@@ -92,6 +106,11 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
 
         _wasPossessed = true;
 
+        if (_gameplayActionRunner is null)
+        {
+            return;
+        }
+
         // The focused target decides which inputs matter, so binding an action to another key in a
         // scene needs no change here. What the interactor reports is information, not a command:
         // arbitrating between interacting and anything else sharing a key stays this class's job.
@@ -111,6 +130,11 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
 
     private void ReleaseInteractionInputs()
     {
+        if (_gameplayActionRunner is null)
+        {
+            return;
+        }
+
         foreach (StringName inputActionName in _gameplayActionRunner.GetRelevantInputs())
         {
             _gameplayActionRunner.TryEndActionInput(inputActionName);
@@ -146,7 +170,8 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
     }
 
     #region ICarrier
-    public bool IsCarrying => _carryComponent.IsCarrying;
+    public StringName? CarriedItemId => _carryComponent?.CarriedItemId;
+    public bool IsCarrying => _carryComponent?.IsCarrying ?? false;
 
     public async Task<bool> TryTakeAsync(
         StringName itemId,
@@ -154,17 +179,30 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
         Action? onCommited = null
     )
     {
-        return await _carryComponent.TryTakeAsync(itemId, carriableObject, onCommited);
+        return _carryComponent is not null
+            ? await _carryComponent.TryTakeAsync(itemId, carriableObject, onCommited)
+            : false;
     }
 
     public bool TryTake(StringName itemId, Node3D carriableObject)
     {
-        return _carryComponent.TryTake(itemId, carriableObject);
+        return _carryComponent is not null
+            ? _carryComponent.TryTake(itemId, carriableObject)
+            : false;
     }
 
-    public bool TryDrop(StringName itemId)
+    public bool TryDrop()
     {
-        return _carryComponent.TryDrop(itemId);
+        return _carryComponent is not null ? _carryComponent.TryDrop() : false;
     }
     #endregion ICarrier
+
+    private void OnCarriedItemChanged()
+    {
+        if (_gameplayActionRunner?.OwnedActionComponent is GameplayActionComponent gac)
+        {
+            _gameplayActionRunner.InvalidateAction(gac, TakeAction);
+            _gameplayActionRunner.InvalidateAction(gac, DropAction);
+        }
+    }
 }

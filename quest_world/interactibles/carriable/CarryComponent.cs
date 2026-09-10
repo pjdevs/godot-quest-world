@@ -9,6 +9,9 @@ public readonly record struct CarryOperation(StringName ItemId, ulong StartedAtS
 [GlobalClass]
 public partial class CarryComponent : Node, ICarrier
 {
+    [Signal]
+    public delegate void CarriedItemChangedEventHandler();
+
     [Export]
     public Node3D? CarriableAnchor { get; set; }
 
@@ -107,9 +110,11 @@ public partial class CarryComponent : Node, ICarrier
 
     public override void _ExitTree()
     {
-        if (IsAuthoritative && CarriedItemId is StringName itemId && !TryDrop(itemId))
+        if (IsAuthoritative && IsCarrying && !TryDrop())
         {
-            GD.PushWarning($"{GetPath()}: carried item '{itemId}' could not be dropped on exit.");
+            GD.PushWarning(
+                $"{GetPath()}: carried item '{CarriedItemId}' could not be dropped on exit."
+            );
         }
     }
 
@@ -166,7 +171,7 @@ public partial class CarryComponent : Node, ICarrier
             return false;
         }
 
-        if (CarriedItemId is StringName carriedItemId && !TryDrop(carriedItemId))
+        if (IsCarrying && !TryDrop())
         {
             if (Inventory.RemoveItem(itemId) != 1)
             {
@@ -181,16 +186,15 @@ public partial class CarryComponent : Node, ICarrier
         return true;
     }
 
-    public bool TryDrop(StringName itemId)
+    public bool TryDrop()
     {
         if (
             !IsAuthoritative
             || CarriedItemId is null
-            || CarriedItemId != itemId
             || Inventory is null
             || WorldSpawner is null
             || Carrier is null
-            || !TryGetCarriableDefinition(itemId, out CarriableItemDefinition definition)
+            || !TryGetCarriableDefinition(CarriedItemId, out CarriableItemDefinition definition)
         )
         {
             return false;
@@ -198,7 +202,7 @@ public partial class CarryComponent : Node, ICarrier
 
         AnimationController?.PlayOneShot(definition.CustomDropAnimationName);
 
-        if (Inventory.RemoveItem(itemId) != 1)
+        if (Inventory.RemoveItem(CarriedItemId) != 1)
         {
             return false;
         }
@@ -208,9 +212,11 @@ public partial class CarryComponent : Node, ICarrier
         );
         if (!WorldSpawner.TrySpawn(definition.SpawnDefinition!.Id, request, out _))
         {
-            if (!Inventory.AddItem(itemId))
+            if (!Inventory.AddItem(CarriedItemId))
             {
-                GD.PushError($"{GetPath()}: failed to restore '{itemId}' after a failed drop.");
+                GD.PushError(
+                    $"{GetPath()}: failed to restore '{CarriedItemId}' after a failed drop."
+                );
             }
 
             return false;
@@ -247,6 +253,8 @@ public partial class CarryComponent : Node, ICarrier
     {
         RemoveItemVisual();
         ApplyItemVisual();
+
+        EmitSignal(SignalName.CarriedItemChanged);
     }
 
     private void ApplyItemVisual()
