@@ -561,17 +561,6 @@ public partial class GameplayActionRunner : Node
         NodePath targetPath
     ) => _requests.ServerTryStartAction(componentPath, actionId, accessSourcePath, targetPath);
 
-    /// <summary>Compatibility overload for requests that only carried a target path.</summary>
-    public void ServerTryStartAction(
-        NodePath componentPath,
-        StringName actionId,
-        NodePath targetPath
-    ) => ServerTryStartAction(componentPath, actionId, new NodePath(), targetPath);
-
-    /// <summary>Compatibility overload for non-targeted requests.</summary>
-    public void ServerTryStartAction(NodePath componentPath, StringName actionId) =>
-        ServerTryStartAction(componentPath, actionId, new NodePath(), new NodePath());
-
     /// <summary>Reliable server RPC endpoint used by requester input release/cancellation.</summary>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,

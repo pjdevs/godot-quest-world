@@ -199,10 +199,18 @@ internal static class InteractionTestActionHostExtensions
     )
     {
         GameplayActionComponent? component = ResolveActionComponent(interactor, targetPath);
-        if (interactor.Runner is null || component is null)
+        InteractiveComponent? interactive = interactor.GetNodeOrNull<InteractiveComponent>(
+            targetPath
+        );
+        if (interactor.Runner is null || component is null || interactive is null)
             return;
 
-        interactor.Runner.ServerTryStartAction(component.GetPath(), actionId);
+        interactor.Runner.ServerTryStartAction(
+            component.GetPath(),
+            actionId,
+            interactive.GetPath(),
+            interactive.ResolveInvocationTarget().GetPath()
+        );
     }
 
     public static void ServerTryEndInteraction(
