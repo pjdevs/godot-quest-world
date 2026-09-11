@@ -90,6 +90,8 @@ Until the upstream Godot/GdUnit issue is resolved, keep the complete `GameplayAc
 
 The guard must cover the whole suite. A runtime `OperatingSystem.IsWindows()` early return, or guarding only the malformed-RPC method, is too late because the bridge can crash while loading/discovering the assembly. Keep malformed RPC coverage in a separate file guarded with `#if !GODOT_WINDOWS`; retain normal authority and interaction coverage through the production paths on platforms where the suites are enabled.
 
+This is not currently reduced to a blank-project upstream repro: a standalone Godot/GdUnit project with one malformed `NodePath` RPC passes on the same Windows toolchain. The failure is reproducible through this repository's runtime type graph and the GdUnit bridge, while direct headless editor startup may still exit `0`.
+
 ## Which scope to run
 
 | Change | First command | Add this when relevant |
