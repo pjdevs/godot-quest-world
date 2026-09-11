@@ -1,4 +1,3 @@
-using GameplayActionPlugin.Runtime.Bindings;
 using Godot;
 using InventoryPlugin;
 
@@ -9,9 +8,6 @@ public partial class CarriableItemDefinition : InventoryItemDefinition
     public SpawnDefinition? SpawnDefinition { get; set; }
 
     [Export]
-    public GameplayActionBindingConfig? DropBindingConfig { get; set; }
-
-    [Export]
     public StringName CustomCarryAnimationName { get; set; } = "PickUp_Kneeling";
 
     [Export]
@@ -19,8 +15,4 @@ public partial class CarriableItemDefinition : InventoryItemDefinition
 
     [Export]
     public PackedScene? ItemVisualScene { get; set; }
-
-    public StringName DropActionId => new($"drop_{Id}");
-
-    public string DropActionLabel => $"Drop {DisplayName}";
 }
