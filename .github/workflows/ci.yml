@@ -12,7 +12,7 @@ permissions:
 jobs:
   ci:
     name: Format, build, and test
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: 'true'
@@ -31,6 +31,14 @@ jobs:
         with:
           version: 4.7.2
           use-dotnet: true
+
+      - name: Verify Godot setup
+        shell: pwsh
+        run: |
+          Write-Host "GODOT=$env:GODOT"
+          Write-Host "GODOT4=$env:GODOT4"
+          Get-Command godot | Format-List Source, CommandType
+          godot --version
 
       - name: Setup Task
         uses: go-task/setup-task@v2
