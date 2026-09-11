@@ -1,10 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using GameplayActionPlugin;
-using GameplayActionPlugin.Runtime.Actions;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
-using InteractionPlugin.Runtime.Interactor;
 using InteractionPlugin.Runtime.Offers;
 
 namespace InteractionPlugin;
@@ -27,37 +24,6 @@ public enum InteractionDetectionKind
     /// <summary>The target is eligible for focus, for a command, and for continued validation.</summary>
     Interactible
 }
-
-/// <summary>Read-only inputs supplied to every gameplay interaction rule.</summary>
-/// <param name="Interactor">Interactor requesting the availability evaluation.</param>
-/// <param name="Interactive">Interactive component offering the evaluated invocation.</param>
-/// <param name="Action">Resolved gameplay action being evaluated.</param>
-/// <param name="Offer">Authored offer being evaluated, or null for legacy action rules.</param>
-/// <param name="Component">Resolved action owner, or the action's component when omitted.</param>
-public readonly record struct InteractionContext(
-    InteractionInteractor Interactor,
-    InteractiveComponent Interactive,
-    GameplayAction Action,
-    InteractionOffer? Offer = null,
-    GameplayActionComponent? Component = null
-);
-
-/// <summary>Read-only inputs supplied to the executor of an authoritative action.</summary>
-/// <remarks>
-/// This is deliberately distinct from <see cref="InteractionContext"/>: a rule answers "may this
-/// happen", while an executor performs it. The target is fully reserved and coherent before this
-/// context is built, so an executor may freely call back into gameplay.
-/// </remarks>
-/// <param name="ExecutionId">Identifier of the reservation, allocated before the executor runs.</param>
-/// <param name="Interactor">Interactor that requested the action.</param>
-/// <param name="Interactive">Interactive component owning the executed action.</param>
-/// <param name="Action">Action being executed.</param>
-public readonly record struct InteractionExecutionContext(
-    ulong ExecutionId,
-    InteractionInteractor Interactor,
-    InteractiveComponent Interactive,
-    InteractionAction Action
-);
 
 /// <summary>Snapshot consumed by local prompt and indication presentation.</summary>
 /// <remarks>

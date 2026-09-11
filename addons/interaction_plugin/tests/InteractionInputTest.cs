@@ -13,10 +13,8 @@ using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Examples.Rules;
 using InteractionPlugin.Integration.Stateful;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
-using InteractionPlugin.Runtime.Rules;
 using QuestWorld.Tests.GameplayActions;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
@@ -81,7 +79,7 @@ public sealed partial class InteractionInputTest : InteractionTestBase
         await door.Runner.SimulateFrames(1);
         door.Detect(door.Interactive);
         List<string> startedActions = new();
-        door.Interactive.InteractionActionStarted += (_, action) =>
+        door.Interactive.ActionComponent!.GameplayActionStarted += (_, action, _, _) =>
             startedActions.Add(action.Definition!.Id.ToString());
 
         AssertThat(door.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
@@ -98,9 +96,9 @@ public sealed partial class InteractionInputTest : InteractionTestBase
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
         door.State.SetState(new StringName("locked"));
-        InteractionAction zulu = CreateAction("zulu");
-        InteractionAction alpha = CreateAction("alpha");
-        InteractionAction blocked = CreateAction(
+        InputGameplayAction zulu = CreateAction("zulu");
+        InputGameplayAction alpha = CreateAction("alpha");
+        InputGameplayAction blocked = CreateAction(
             "blocked",
             new AlwaysBlockedInteractionRule { Reason = "Locked" }
         );
@@ -167,7 +165,7 @@ public sealed partial class InteractionInputTest : InteractionTestBase
         await door.Runner.SimulateFrames(1);
         door.Detect(door.Interactive);
         int startedCount = 0;
-        door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
+        door.Interactive.ActionComponent!.GameplayActionStarted += (_, _, _, _) => startedCount++;
 
         AssertThat(door.Interactor.TryStartInteractionInput(new StringName("inspect"))).IsFalse();
         AssertThat(startedCount).IsEqual(0);
@@ -196,7 +194,7 @@ public sealed partial class InteractionInputTest : InteractionTestBase
     public async Task ReleaseEndsTheStartedExecutionWithoutReResolvingTheInput()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionAction alternative = CreateAction("alternative");
+        GameplayAction alternative = CreateAction("alternative");
         // A group of its own, so the running execution leaves it available and a fresh resolution
         // really would pick it. Sharing the default group would block it like everything else.
         alternative.HostConcurrencyGroup = new StringName("inspection");
@@ -245,7 +243,7 @@ public sealed partial class InteractionInputTest : InteractionTestBase
     public async Task AutomaticActionDoesNotAnswerAPlayerInput()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionAction automatic = CreateAction("automatic");
+        InputGameplayAction automatic = CreateAction("automatic");
         automatic.DefaultBindingConfig!.ActivationMode = GameplayActionActivationMode.Automatic;
         testWorld.Interactive.AddAction(automatic);
         await testWorld.Runner.SimulateFrames(1);
@@ -259,10 +257,10 @@ public sealed partial class InteractionInputTest : InteractionTestBase
     public async Task TheInteractorReportsWhichInputsAreWorthSampling()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionAction inspect = CreateAction("inspect");
+        InputGameplayAction inspect = CreateAction("inspect");
         inspect.DefaultBindingConfig!.InputActionName = new StringName("inspect");
         inspect.HostConcurrencyGroup = new StringName("inspection");
-        InteractionAction pickup = CreateAction("pickup");
+        InputGameplayAction pickup = CreateAction("pickup");
         pickup.DefaultBindingConfig!.ActivationMode = GameplayActionActivationMode.Automatic;
         testWorld.Interactive.AddAction(inspect);
         testWorld.Interactive.AddAction(pickup);
@@ -325,7 +323,7 @@ public sealed partial class InteractionInputTest : InteractionTestBase
     public async Task HoldingOneInputSelectsTheActionThatAsksForTheHold()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionAction force = CreateAction("force");
+        InputGameplayAction force = CreateAction("force");
         force.DefaultBindingConfig!.ActivationMode = GameplayActionActivationMode.Hold;
         force.DefaultBindingConfig!.HoldDuration = 0.05f;
         testWorld.Interactive.AddAction(force);
@@ -365,7 +363,7 @@ public sealed partial class InteractionInputTest : InteractionTestBase
     {
         DoorWorld door = BuildDoorWorld();
         AssertThat(door.State.SetState(new StringName("locked"))).IsTrue();
-        InteractionAction unlock = CreateAction("unlock", DoorStateRule("locked"));
+        InputGameplayAction unlock = CreateAction("unlock", DoorStateRule("locked"));
         unlock.DefaultBindingConfig!.ActivationMode = GameplayActionActivationMode.Hold;
         unlock.DefaultBindingConfig!.HoldDuration = 0.001f;
         BindSetStateExecutor(unlock, door.State, "closed");
@@ -402,7 +400,7 @@ public sealed partial class InteractionInputTest : InteractionTestBase
     public async Task ReleasingBeforeTheThresholdSelectsTheActionThatAsksForNoHold()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionAction force = CreateAction("force");
+        InputGameplayAction force = CreateAction("force");
         force.DefaultBindingConfig!.ActivationMode = GameplayActionActivationMode.Hold;
         force.DefaultBindingConfig!.HoldDuration = 3600.0f;
         testWorld.Interactive.AddAction(force);
@@ -421,10 +419,10 @@ public sealed partial class InteractionInputTest : InteractionTestBase
     public async Task EveryHeldActionFillsOnItsOwnThreshold()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionAction force = CreateAction("force");
+        InputGameplayAction force = CreateAction("force");
         force.DefaultBindingConfig!.ActivationMode = GameplayActionActivationMode.Hold;
         force.DefaultBindingConfig!.HoldDuration = 3600.0f;
-        InteractionAction pry = CreateAction("pry");
+        InputGameplayAction pry = CreateAction("pry");
         pry.DefaultBindingConfig!.ActivationMode = GameplayActionActivationMode.Hold;
         pry.DefaultBindingConfig!.HoldDuration = 0.001f;
         testWorld.Interactive.AddAction(force);

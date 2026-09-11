@@ -346,7 +346,7 @@ Mais il comprendra moins bien *ce qu’il a réellement manipulé*.
 # FRAMEWORK → GAME DESIGN
 
 **Interaction** → manipuler physiquement le système.\
-**InteractionRule** → rendre les dépendances cohérentes et data-driven.\
+**GameplayActionRule** → rendre les dépendances cohérentes et data-driven.\
 **Stateful** → mémoriser les conséquences dans le monde.\
 **Inventory** → transporter des exceptions aux contraintes.\
 **Dialog** → informations contradictoires et réactions aux états réels.\

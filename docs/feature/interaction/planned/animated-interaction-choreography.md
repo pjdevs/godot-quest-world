@@ -61,8 +61,9 @@ domain executor
 ```
 
 `docs/feature/interaction/interaction.md` explicitly states that Interaction owns no second execution
-engine. `GameplayActionComponent` is the authoritative owner of reservations and lifecycle, and
-`InteractionActionExecutor` only adapts generic execution context to target-oriented interaction context.
+engine. `GameplayActionComponent` is the authoritative owner of reservations and lifecycle. A
+choreography executor receives the generic execution context directly; it does not need an
+Interaction-specific executor adapter or context.
 
 That remains the core invariant.
 
@@ -492,7 +493,7 @@ A concrete target shape could remain entirely within current Interaction topolog
 ```text
 SearchableContainer
 ├── GameplayActions
-│   └── Search : InteractionAction
+│   └── Search : GameplayAction
 │       └── SearchExecutor : choreographed executor
 ├── GameplayActionExecutionSynchronizer?   # only if generic execution UI needs it
 ├── InteractiveComponent
@@ -586,7 +587,7 @@ Gameplay Action:
 
 Interaction:
 
-- `InteractionActionExecutor` remains the target-context adapter;
+- choreography executors consume the generic Gameplay Action execution context directly;
 - no new Interaction execution component or network synchronizer;
 - `InteractionAnchor` may feed explicit alignment context;
 - presence/access behavior remains as documented.

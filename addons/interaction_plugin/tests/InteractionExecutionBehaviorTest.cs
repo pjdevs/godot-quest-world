@@ -13,10 +13,8 @@ using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Examples.Rules;
 using InteractionPlugin.Integration.Stateful;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
-using InteractionPlugin.Runtime.Rules;
 using QuestWorld.Tests.GameplayActions;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
@@ -100,10 +98,9 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
             InteractionArea = area,
             InteractionAnchor = owner,
         };
-        InteractionAction action = CreateAction("activate");
+        GameplayAction action = CreateAction("activate");
         GameplayActionComponent actionComponent = new();
         interactive.ActionComponent = actionComponent;
-        action.PrepareForInteractive(interactive, interactive.TargetRules);
         actionComponent.AddAction(action);
         InteractionInteractor interactor = new();
 
@@ -174,10 +171,12 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
         int completedCount = 0;
         for (int observer = 0; observer < 3; observer++)
         {
-            door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
-            door.Interactive.InteractionActionCompleted += (_, _) => completedCount++;
-            door.Interactive.InteractionActionCancelled += (_, _, _) => { };
-            door.Interactive.InteractionActionRejected += (_, _, _) => { };
+            door.Interactive.ActionComponent!.GameplayActionStarted += (_, _, _, _) =>
+                startedCount++;
+            door.Interactive.ActionComponent!.GameplayActionCompleted += (_, _, _, _) =>
+                completedCount++;
+            door.Interactive.ActionComponent!.GameplayActionCancelled += (_, _, _, _, _) => { };
+            door.Interactive.ActionComponent!.GameplayActionRejected += (_, _, _, _, _) => { };
         }
 
         GameplayActionExecutionResult result = door.Interactive.ExecuteAction(
@@ -211,10 +210,10 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
         testWorld.Interactive.ExecuteAction(testWorld.Interactor, testWorld.Action);
-        InteractionAction inspect = CreateAction("inspect");
+        GameplayAction inspect = CreateAction("inspect");
         testWorld.Interactive.AddAction(inspect);
         string rejectedReason = string.Empty;
-        testWorld.Interactive.InteractionActionRejected += (_, _, reason) =>
+        testWorld.Interactive.ActionComponent!.GameplayActionRejected += (_, _, _, _, reason) =>
             rejectedReason = reason;
 
         GameplayActionExecutionResult result = testWorld.Interactive.ExecuteAction(
@@ -223,7 +222,7 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
         );
 
         AssertThat(result is GameplayActionExecutionRejected).IsTrue();
-        AssertThat(rejectedReason).IsEqual("This is already in use.");
+        AssertThat(rejectedReason).IsEqual("Action is already running.");
         AssertThat(ExecutorOf(inspect).ExecuteCount).IsEqual(0);
         AssertThat(testWorld.Owner.StartCount).IsEqual(1);
     }
@@ -249,10 +248,13 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
         ExecutorOf(door.Open).Result = new GameplayActionExecutionRejected("The hinges are stuck.");
         List<string> notifications = new();
         string rejectedReason = string.Empty;
-        door.Interactive.InteractionActionStarted += (_, _) => notifications.Add("started");
-        door.Interactive.InteractionActionCompleted += (_, _) => notifications.Add("completed");
-        door.Interactive.InteractionActionCancelled += (_, _, _) => notifications.Add("cancelled");
-        door.Interactive.InteractionActionRejected += (_, _, reason) =>
+        door.Interactive.ActionComponent!.GameplayActionStarted += (_, _, _, _) =>
+            notifications.Add("started");
+        door.Interactive.ActionComponent!.GameplayActionCompleted += (_, _, _, _) =>
+            notifications.Add("completed");
+        door.Interactive.ActionComponent!.GameplayActionCancelled += (_, _, _, _, _) =>
+            notifications.Add("cancelled");
+        door.Interactive.ActionComponent!.GameplayActionRejected += (_, _, _, _, reason) =>
         {
             notifications.Add("rejected");
             rejectedReason = reason;
@@ -277,10 +279,13 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
         ExecutorOf(door.Open).Result = new GameplayActionExecutionFailed("The door came off.");
         List<string> notifications = new();
         string failedReason = string.Empty;
-        door.Interactive.InteractionActionStarted += (_, _) => notifications.Add("started");
-        door.Interactive.InteractionActionCompleted += (_, _) => notifications.Add("completed");
-        door.Interactive.InteractionActionRejected += (_, _, _) => notifications.Add("rejected");
-        door.Interactive.InteractionActionFailed += (_, _, reason) =>
+        door.Interactive.ActionComponent!.GameplayActionStarted += (_, _, _, _) =>
+            notifications.Add("started");
+        door.Interactive.ActionComponent!.GameplayActionCompleted += (_, _, _, _) =>
+            notifications.Add("completed");
+        door.Interactive.ActionComponent!.GameplayActionRejected += (_, _, _, _, _) =>
+            notifications.Add("rejected");
+        door.Interactive.ActionComponent!.GameplayActionFailed += (_, _, _, _, reason) =>
         {
             notifications.Add("failed");
             failedReason = reason;
@@ -306,8 +311,9 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
         door.Open.Executor = null;
         int rejectedCount = 0;
         int startedCount = 0;
-        door.Interactive.InteractionActionRejected += (_, _, _) => rejectedCount++;
-        door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
+        door.Interactive.ActionComponent!.GameplayActionRejected += (_, _, _, _, _) =>
+            rejectedCount++;
+        door.Interactive.ActionComponent!.GameplayActionStarted += (_, _, _, _) => startedCount++;
 
         GameplayActionAvailability availability = door.Interactive.EvaluateAvailability(
             door.Interactor,
@@ -342,7 +348,7 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
             out ulong executionId
         );
         string cancelledReason = string.Empty;
-        testWorld.Interactive.InteractionActionCancelled += (_, _, reason) =>
+        testWorld.Interactive.ActionComponent!.GameplayActionCancelled += (_, _, _, _, reason) =>
             cancelledReason = reason;
 
         AssertThat(testWorld.Interactive.CancelExecution(executionId, "Interrupted.")).IsTrue();
@@ -369,7 +375,7 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
             InteractionArea = area,
             InteractionAnchor = owner,
         };
-        InteractionAction action = CreateActivationAction("activate", owner);
+        GameplayAction action = CreateActivationAction("activate", owner);
         owner.AddChild(area);
         owner.AddChild(interactive);
         interactive.AddAction(action);
@@ -415,8 +421,8 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
     {
         TestWorld testWorld = BuildWorld();
         await testWorld.Runner.SimulateFrames(1);
-        InteractionAction hack = CreateAction("hack");
-        InteractionAction inspect = CreateAction("inspect");
+        GameplayAction hack = CreateAction("hack");
+        GameplayAction inspect = CreateAction("inspect");
         hack.HostConcurrencyGroup = new StringName("controls");
         inspect.HostConcurrencyGroup = new StringName("inspection");
         testWorld.Interactive.AddAction(hack);
@@ -516,7 +522,7 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
             testWorld.Action,
             out ulong controls
         );
-        InteractionAction inspect = CreateAction("inspect");
+        GameplayAction inspect = CreateAction("inspect");
         inspect.HostConcurrencyGroup = new StringName("inspection");
         testWorld.Interactive.AddAction(inspect);
         ExecutorOf(inspect).Result = new GameplayActionExecutionRunning();

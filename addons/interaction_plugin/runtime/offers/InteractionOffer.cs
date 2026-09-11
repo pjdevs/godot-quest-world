@@ -1,8 +1,8 @@
 using GameplayActionPlugin;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
+using GameplayActionPlugin.Runtime.Rules;
 using Godot;
-using InteractionPlugin.Runtime.Rules;
 
 namespace InteractionPlugin.Runtime.Offers;
 
@@ -37,7 +37,7 @@ public partial class InteractionOffer : Resource
 
     /// <summary>Gets or sets target-side rules specific to this offer.</summary>
     [Export]
-    public Godot.Collections.Array<InteractionRule> Rules { get; set; } = new();
+    public Godot.Collections.Array<GameplayActionRule> Rules { get; set; } = new();
 
     /// <summary>Gets or sets the optional target reservation group for this offer.</summary>
     [Export]

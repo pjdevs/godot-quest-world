@@ -12,9 +12,9 @@ using GdUnit4;
 using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Integration.Stateful;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
+using InteractionPlugin.Runtime.Offers;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
 
@@ -259,7 +259,7 @@ public abstract partial class InteractionNetworkTestBase
         bool sustained
     )
     {
-        InteractionAction action = NewAction(id, input, concurrencyGroup, sustained);
+        GameplayAction action = NewAction(id, input, concurrencyGroup, sustained);
         TestScriptedExecutor executor = new() { Name = $"{id}Executor" };
         action.AddChild(executor);
         action.Executor = executor;
@@ -273,7 +273,7 @@ public abstract partial class InteractionNetworkTestBase
         StatefulComponent stateful
     )
     {
-        InteractionAction action = NewAction(
+        GameplayAction action = NewAction(
             new StringName("switch"),
             SwitchInput,
             new StringName("switching"),
@@ -284,7 +284,7 @@ public abstract partial class InteractionNetworkTestBase
         action.Rules.Add(
             new StatefulStateInteractionRule
             {
-                StatefulPath = new NodePath("../../StatefulComponent"),
+                StatefulPath = new NodePath("../StatefulComponent"),
                 ExpectedStates = new Godot.Collections.Array<StringName> { IdleState },
                 MismatchAvailability = GameplayActionUnavailableKind.Blocked,
                 BlockReason = "Somebody is already using this.",
@@ -301,15 +301,16 @@ public abstract partial class InteractionNetworkTestBase
         interactive.AddAction(action);
     }
 
-    protected static InteractionAction NewAction(
+    protected static InputGameplayAction NewAction(
         StringName id,
         StringName input,
         StringName concurrencyGroup,
         bool sustained
     ) =>
-        new()
+        new InputGameplayAction
         {
             Name = $"{id}Action",
+            ConfiguredAccessProviderId = InteractionOffer.InteractionAccessProviderId,
             HostConcurrencyGroup = concurrencyGroup,
             Definition = new GameplayActionDefinition { Id = id, Label = id.ToString() },
             DefaultBindingConfig = new GameplayActionBindingConfig
@@ -534,7 +535,8 @@ public abstract partial class InteractionNetworkTestBase
             GameplayActionExecutionVisibility visibility
         )
         {
-            scene.Interactive.ResolveAction(ActivateAction)!.ExecutionVisibility = visibility;
+            scene.Interactive.ActionComponent!.ResolveAction(ActivateAction)!.ExecutionVisibility =
+                visibility;
         }
 
         public async Task Pump(int frames) => await Runner.SimulateFrames((uint)frames);

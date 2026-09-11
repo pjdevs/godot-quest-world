@@ -26,6 +26,17 @@ public partial class GameplayAction : Node
     [Export]
     public StringName HostConcurrencyGroup { get; set; } = DefaultHostConcurrencyGroup;
 
+    /// <summary>Gets or sets the availability while this action's host group runs for the requester.</summary>
+    [ExportGroup("Execution Availability")]
+    [Export]
+    public GameplayActionUnavailableKind WhenExecutingBySelf { get; set; } =
+        GameplayActionUnavailableKind.Blocked;
+
+    /// <summary>Gets or sets the availability while this action's host group runs for another actor.</summary>
+    [Export]
+    public GameplayActionUnavailableKind WhenExecutingByOther { get; set; } =
+        GameplayActionUnavailableKind.Blocked;
+
     /// <summary>Gets or sets how transient execution presentation is exposed to remote peers.</summary>
     [Export]
     public GameplayActionExecutionVisibility ExecutionVisibility { get; set; } =

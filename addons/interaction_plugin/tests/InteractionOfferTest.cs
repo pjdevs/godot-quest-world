@@ -1,13 +1,12 @@
 namespace QuestWorld.Tests;
 
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using GameplayActionPlugin;
 using GameplayActionPlugin.Runtime.Access;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
-using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Rules;
 using GameplayActionPlugin.Runtime.Runner;
 using GdUnit4;
 using Godot;
@@ -15,7 +14,6 @@ using InteractionPlugin;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
 using InteractionPlugin.Runtime.Offers;
-using InteractionPlugin.Runtime.Rules;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -436,7 +434,7 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
     }
 
     [TestCase]
-    public async Task TargetAndOfferRulesSeeTheOfferWithoutMutatingTheOwnedAction()
+    public async Task TargetAndOfferRulesSeeGenericActionContextWithoutMutatingTheOwnedAction()
     {
         Node3D world = new();
         TestInteractiveActor owner = new() { Name = "Battery", Position = new Vector3(0, 0, -2) };
@@ -480,8 +478,10 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
             interactive.Offers[0]
         );
         AssertThat(availability is GameplayActionAllowed).IsTrue();
-        AssertThat(targetRule.LastOffer == interactive.Offers[0]).IsTrue();
-        AssertThat(offerRule.LastOffer == interactive.Offers[0]).IsTrue();
+        AssertThat(targetRule.LastAction == ownedAction).IsTrue();
+        AssertThat(offerRule.LastAction == ownedAction).IsTrue();
+        AssertThat(targetRule.LastTarget == interactive).IsTrue();
+        AssertThat(offerRule.LastTarget == interactive).IsTrue();
         AssertThat(ownedAction.Rules.Count).IsEqual(0);
     }
 
@@ -522,13 +522,16 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
         }
     }
 
-    private sealed partial class RecordingInteractionRule : InteractionRule
+    private sealed partial class RecordingInteractionRule : GameplayActionRule
     {
-        public InteractionOffer? LastOffer { get; private set; }
+        public GameplayAction? LastAction { get; private set; }
 
-        public override GameplayActionAvailability Evaluate(in InteractionContext context)
+        public Node? LastTarget { get; private set; }
+
+        public override GameplayActionAvailability Evaluate(in GameplayActionContext context)
         {
-            LastOffer = context.Offer;
+            LastAction = context.Action;
+            LastTarget = context.Target;
             return new GameplayActionAllowed();
         }
     }

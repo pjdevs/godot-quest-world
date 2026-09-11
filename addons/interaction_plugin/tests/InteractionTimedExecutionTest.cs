@@ -8,15 +8,14 @@ using GameplayActionPlugin.Integration.Stateful;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Rules;
 using GdUnit4;
 using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Examples.Rules;
 using InteractionPlugin.Integration.Stateful;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
-using InteractionPlugin.Runtime.Rules;
 using QuestWorld.Tests.GameplayActions;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
@@ -33,7 +32,8 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
         ActivationExecutorOf(testWorld.Action).Duration = 0.05f;
         await testWorld.Runner.SimulateFrames(1);
         int completedCount = 0;
-        testWorld.Interactive.InteractionActionCompleted += (_, _) => completedCount++;
+        testWorld.Interactive.ActionComponent!.GameplayActionCompleted += (_, _, _, _) =>
+            completedCount++;
 
         testWorld.Interactive.ExecuteAction(
             testWorld.Interactor,
@@ -97,7 +97,7 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
     public async Task TimedExecutionCanBeComposedByAGenericExecutor()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionAction action = NewAction("composed", Array.Empty<InteractionRule>());
+        GameplayAction action = NewAction("composed", Array.Empty<GameplayActionRule>());
         ComposedTimedExecutor executor = new() { Name = "ComposedExecutor", Duration = 0.05f };
         action.AddChild(executor);
         action.Executor = executor;
@@ -129,7 +129,7 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
         TestWorld testWorld = BuildWorld();
         TestActivationExecutor executor = ActivationExecutorOf(testWorld.Action);
         executor.Duration = 0.05f;
-        InteractionAction second = NewAction("second", Array.Empty<InteractionRule>());
+        GameplayAction second = NewAction("second", Array.Empty<GameplayActionRule>());
         second.HostConcurrencyGroup = new StringName("other");
         second.Executor = executor;
         testWorld.Interactive.AddAction(second);
@@ -212,7 +212,7 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
     public async Task ARunningExecutionPublishesDiscreteProgressThroughItsGenericPresentation()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionAction action = CreateAction("hack");
+        GameplayAction action = CreateAction("hack");
         testWorld.Interactive.AddAction(action);
         ExecutorOf(action).Result = new GameplayActionExecutionRunning();
         await testWorld.Runner.SimulateFrames(1);
@@ -274,7 +274,7 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
     public async Task SharedGameplaySessionDrivesAWorldConsumerWithoutOwningItsParticipants()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionAction repair = CreateAction("repair");
+        GameplayAction repair = CreateAction("repair");
         testWorld.Interactive.AddAction(repair);
         ExecutorOf(repair).Result = new GameplayActionExecutionRunning();
         Node participantA = new() { Name = "ParticipantA" };
@@ -305,13 +305,13 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
     public async Task ARunningExecutionCanFailOnceAndNotCompleteAfterwards()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionAction action = CreateAction("fail");
+        GameplayAction action = CreateAction("fail");
         testWorld.Interactive.AddAction(action);
         RecordingInteractionExecutor executor = ExecutorOf(action);
         executor.Result = new GameplayActionExecutionRunning();
         await testWorld.Runner.SimulateFrames(1);
         List<string> notifications = new();
-        testWorld.Interactive.InteractionActionFailed += (_, _, reason) =>
+        testWorld.Interactive.ActionComponent!.GameplayActionFailed += (_, _, _, _, reason) =>
         {
             notifications.Add(reason);
         };

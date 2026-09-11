@@ -8,15 +8,15 @@ using GameplayActionPlugin.Integration.Stateful;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Rules;
 using GdUnit4;
 using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Examples.Rules;
 using InteractionPlugin.Integration.Stateful;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
-using InteractionPlugin.Runtime.Rules;
+using InteractionPlugin.Runtime.Offers;
 using QuestWorld.Tests.GameplayActions;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
@@ -65,7 +65,7 @@ public abstract partial class InteractionTestBase
         };
 
         CarriesKeyInteractionRule key = new();
-        InteractionAction activate = CoreAction(
+        GameplayAction activate = CoreAction(
             "activate",
             0.05f,
             "charging",
@@ -74,7 +74,7 @@ public abstract partial class InteractionTestBase
             state,
             DoorStateRule("dormant")
         );
-        InteractionAction reactivate = CoreAction(
+        GameplayAction reactivate = CoreAction(
             "reactivate",
             0.05f,
             "recharging",
@@ -111,17 +111,17 @@ public abstract partial class InteractionTestBase
         );
     }
 
-    protected static InteractionAction CoreAction(
+    protected static InputGameplayAction CoreAction(
         string id,
         float duration,
         string runningState,
         string completedState,
         string cancelledState,
         StatefulComponent stateful,
-        params InteractionRule[] rules
+        params GameplayActionRule[] rules
     )
     {
-        InteractionAction action = NewAction(id, rules);
+        InputGameplayAction action = NewAction(id, rules);
         TimedTransitionStateGameplayActionExecutor executor = new()
         {
             Name = $"{id}Executor",
@@ -161,7 +161,7 @@ public abstract partial class InteractionTestBase
             InteractionArea = area,
             InteractionAnchor = owner,
         };
-        InteractionAction action = CreateActivationAction(
+        InputGameplayAction action = CreateActivationAction(
             "activate",
             owner,
             ActorStateRule("This is already activated.", IdleState, ActivatingState),
@@ -171,7 +171,7 @@ public abstract partial class InteractionTestBase
         owner.AddChild(stateful);
         owner.AddChild(interactive);
         interactive.AddAction(action);
-        interactive.InteractionActionCancelled += owner.OnInteractionActionCancelled;
+        interactive.ActionComponent!.GameplayActionCancelled += owner.OnGameplayActionCancelled;
         stateful.StateChangedAuthority += owner.OnStateChangedAuthority;
         stateful.StateChangedPresentation += owner.OnStateChangedPresentation;
         owner.Interactive = interactive;
@@ -228,7 +228,7 @@ public abstract partial class InteractionTestBase
             InteractionArea = area,
             InteractionAnchor = actor,
         };
-        InteractionAction action = CreateAction(actionId.ToString());
+        GameplayAction action = CreateAction(actionId.ToString());
         action.ExecutionVisibility = visibility;
         actor.AddChild(area);
         actor.AddChild(interactive);
@@ -237,16 +237,18 @@ public abstract partial class InteractionTestBase
         return interactive;
     }
 
-    protected static InteractionAction CreateActivationAction(
+    protected static InputGameplayAction CreateActivationAction(
         string id,
         TestInteractiveActor owner,
-        params InteractionRule[] rules
+        params GameplayActionRule[] rules
     )
     {
-        InteractionAction action = NewAction(id, rules);
+        InputGameplayAction action = NewAction(id, rules);
         // The activation is the sustained action of these worlds: the player stays engaged and
         // releasing the input ends it, which is exactly what the definition now declares.
-        action.DefaultBindingConfig!.InputRequirement = GameplayActionInputRequirement.Pressed;
+        ((InputGameplayAction)action)
+            .DefaultBindingConfig!
+            .InputRequirement = GameplayActionInputRequirement.Pressed;
         TestActivationExecutor executor = new() { Name = $"{id}Executor", Actor = owner };
         action.AddChild(executor);
         action.Executor = executor;
@@ -269,9 +271,9 @@ public abstract partial class InteractionTestBase
         throw new InvalidOperationException($"{actionId} is not presented.");
     }
 
-    protected static InteractionAction CreateAction(string id, params InteractionRule[] rules)
+    protected static InputGameplayAction CreateAction(string id, params GameplayActionRule[] rules)
     {
-        InteractionAction action = NewAction(id, rules);
+        InputGameplayAction action = NewAction(id, rules);
         RecordingInteractionExecutor executor = new() { Name = $"{id}Executor" };
         action.AddChild(executor);
         action.Executor = executor;
@@ -288,11 +290,12 @@ public abstract partial class InteractionTestBase
         return other;
     }
 
-    protected static InteractionAction NewAction(string id, InteractionRule[] rules)
+    protected static InputGameplayAction NewAction(string id, GameplayActionRule[] rules)
     {
-        InteractionAction action = new()
+        InputGameplayAction action = new()
         {
             Name = $"{id}Action",
+            ConfiguredAccessProviderId = InteractionOffer.InteractionAccessProviderId,
             Definition = new GameplayActionDefinition { Id = new StringName(id), Label = id },
             DefaultBindingConfig = new GameplayActionBindingConfig
             {
@@ -300,7 +303,7 @@ public abstract partial class InteractionTestBase
                 ActivationMode = GameplayActionActivationMode.Press,
             },
         };
-        foreach (InteractionRule rule in rules)
+        foreach (GameplayActionRule rule in rules)
         {
             action.Rules.Add(rule);
         }
@@ -320,16 +323,16 @@ public abstract partial class InteractionTestBase
     }
 
     protected static GameplayActionContext DoorContext(DoorWorld door) =>
-        new(
+        door.Interactive.ActionComponent!.CreateContext(
             1,
             door.Interactor,
             door.Interactor.Runner,
-            door.Interactive.ActionComponent!,
-            door.Open
+            door.Open,
+            door.Interactive
         );
 
     protected static void BindSetStateExecutor(
-        InteractionAction action,
+        GameplayAction action,
         StatefulComponent stateful,
         string targetState
     )
@@ -351,7 +354,7 @@ public abstract partial class InteractionTestBase
     {
         StatefulStateInteractionRule rule = new()
         {
-            StatefulPath = new NodePath("../../StatefulComponent"),
+            StatefulPath = new NodePath("../StatefulComponent"),
             MismatchAvailability = GameplayActionUnavailableKind.Blocked,
             BlockReason = blockReason,
         };
@@ -366,14 +369,14 @@ public abstract partial class InteractionTestBase
     protected static StatefulStateInteractionRule DoorStateRule(string expectedState) =>
         new()
         {
-            StatefulPath = new NodePath("../../StatefulComponent"),
+            StatefulPath = new NodePath("../StatefulComponent"),
             ExpectedStates = { new StringName(expectedState) },
         };
 
-    protected static RecordingInteractionExecutor ExecutorOf(InteractionAction action) =>
+    protected static RecordingInteractionExecutor ExecutorOf(GameplayAction action) =>
         (RecordingInteractionExecutor)action.Executor!;
 
-    protected static TestActivationExecutor ActivationExecutorOf(InteractionAction action) =>
+    protected static TestActivationExecutor ActivationExecutorOf(GameplayAction action) =>
         (TestActivationExecutor)action.Executor!;
 
     protected static DoorWorld BuildDoorWorld()
@@ -394,8 +397,8 @@ public abstract partial class InteractionTestBase
             InteractionAnchor = door,
             DisplayName = "Door",
         };
-        InteractionAction open = CreateAction("open", DoorStateRule("closed"));
-        InteractionAction close = CreateAction("close", DoorStateRule("open"));
+        GameplayAction open = CreateAction("open", DoorStateRule("closed"));
+        GameplayAction close = CreateAction("close", DoorStateRule("open"));
         door.AddChild(area);
         door.AddChild(state);
         door.AddChild(interactive);
@@ -418,8 +421,8 @@ public abstract partial class InteractionTestBase
         ISceneRunner Runner,
         StatefulComponent State,
         InteractiveComponent Interactive,
-        InteractionAction Open,
-        InteractionAction Close,
+        GameplayAction Open,
+        GameplayAction Close,
         InteractionInteractor Interactor,
         TestInteractionDetector Detector
     )
@@ -437,18 +440,18 @@ public abstract partial class InteractionTestBase
         ISceneRunner Runner,
         StatefulComponent State,
         InteractiveComponent Interactive,
-        InteractionAction Activate,
-        InteractionAction Reactivate,
+        GameplayAction Activate,
+        GameplayAction Reactivate,
         CarriesKeyInteractionRule Key,
         InteractionInteractor Interactor,
         TestInteractionDetector Detector
     );
 
-    protected sealed partial class CarriesKeyInteractionRule : InteractionRule
+    protected sealed partial class CarriesKeyInteractionRule : GameplayActionRule
     {
         public bool HasKey { get; set; }
 
-        public override GameplayActionAvailability Evaluate(in InteractionContext context) =>
+        public override GameplayActionAvailability Evaluate(in GameplayActionContext context) =>
             HasKey
                 ? new GameplayActionAllowed()
                 : new GameplayActionBlocked("You need the resonator.");
@@ -462,7 +465,7 @@ public abstract partial class InteractionTestBase
         InteractiveComponent Interactive,
         InteractionInteractor Interactor,
         TestInteractionDetector Detector,
-        InteractionAction Action
+        InputGameplayAction Action
     )
     {
         /// <summary>Detects one target as interactible and runs the pipeline once, like a frame would.</summary>
@@ -505,9 +508,11 @@ public abstract partial class InteractionTestBase
             return new GameplayActionExecutionRunning();
         }
 
-        public void OnInteractionActionCancelled(
-            InteractionInteractor interactor,
-            InteractionAction action,
+        public void OnGameplayActionCancelled(
+            long executionId,
+            GameplayAction action,
+            Node? instigator,
+            Node? requester,
             string reason
         ) => EndCount++;
 
@@ -530,7 +535,7 @@ public abstract partial class InteractionTestBase
         }
     }
 
-    protected sealed partial class TestActivationExecutor : InteractionActionExecutor
+    protected sealed partial class TestActivationExecutor : GameplayActionExecutor
     {
         private readonly TimedExecution _timedExecution = new();
 
@@ -540,11 +545,9 @@ public abstract partial class InteractionTestBase
 
         public bool RequiresPresence { get; set; } = true;
 
-        public override bool RequiresInteractorPresence => RequiresPresence;
+        public override bool RequiresRequesterPresence => RequiresPresence;
 
-        public override GameplayActionExecutionResult Execute(
-            in InteractionExecutionContext context
-        )
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
         {
             if (Actor is null)
             {
@@ -558,53 +561,47 @@ public abstract partial class InteractionTestBase
             }
 
             return
-                _timedExecution.Start(
-                    context.Interactive.ActionComponent!,
-                    context.ExecutionId,
-                    Duration.Value
-                ) == TimedExecutionStartResult.Started
-                ? Running()
+                _timedExecution.Start(context.Component, context.ExecutionId, Duration.Value)
+                == TimedExecutionStartResult.Started
+                ? new GameplayActionExecutionRunning()
                 : new GameplayActionExecutionFailed("The activation timer could not start.");
         }
 
-        internal override GameplayActionProgressSample? GetInteractionPredictionSample(
-            in InteractionContext context
+        internal override GameplayActionProgressSample? GetPredictionSample(
+            in GameplayActionContext context
         ) => Duration.HasValue ? TimedExecution.BuildPredictionSample(Duration.Value) : null;
 
-        protected internal override void OnExecutionCompleted(
-            in InteractionExecutionContext context
-        ) => _timedExecution.Stop(context.ExecutionId);
+        protected internal override void OnExecutionCompleted(in GameplayActionContext context) =>
+            _timedExecution.Stop(context.ExecutionId);
 
         protected internal override void OnExecutionCancelled(
-            in InteractionExecutionContext context,
+            in GameplayActionContext context,
             string reason
         ) => _timedExecution.Stop(context.ExecutionId);
 
         protected internal override void OnExecutionFailed(
-            in InteractionExecutionContext context,
+            in GameplayActionContext context,
             string reason
         ) => _timedExecution.Stop(context.ExecutionId);
     }
 
-    protected sealed partial class ComposedTimedExecutor : InteractionActionExecutor
+    protected sealed partial class ComposedTimedExecutor : GameplayActionExecutor
     {
         public float Duration { get; set; }
 
         public TimedExecution Timer { get; } = new();
 
-        public override GameplayActionExecutionResult Execute(
-            in InteractionExecutionContext context
-        )
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
         {
             return
-                Timer.Start(context.Interactive.ActionComponent!, context.ExecutionId, Duration)
+                Timer.Start(context.Component, context.ExecutionId, Duration)
                 == TimedExecutionStartResult.Started
-                ? Running()
+                ? new GameplayActionExecutionRunning()
                 : new GameplayActionExecutionFailed("The timer could not start.");
         }
     }
 
-    protected sealed partial class RecordingInteractionExecutor : InteractionActionExecutor
+    protected sealed partial class RecordingInteractionExecutor : GameplayActionExecutor
     {
         public GameplayActionExecutionResult Result { get; set; } =
             new GameplayActionExecutionCompleted();
@@ -613,7 +610,7 @@ public abstract partial class InteractionTestBase
 
         public InteractionInteractor? LastInteractor { get; private set; }
 
-        public InteractionAction? LastAction { get; private set; }
+        public GameplayAction? LastAction { get; private set; }
 
         public InteractionInteractor? ReservedInteractorDuringExecute { get; private set; }
 
@@ -629,21 +626,19 @@ public abstract partial class InteractionTestBase
 
         public string LastFailureReason { get; private set; } = string.Empty;
 
-        public override GameplayActionExecutionResult Execute(
-            in InteractionExecutionContext context
-        )
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
         {
             ExecuteCount++;
-            LastInteractor = context.Interactor;
+            LastInteractor = InteractionInteractor.ResolveForInstigator(context.Instigator);
             LastAction = context.Action;
             LastExecutionId = context.ExecutionId;
-            ReservedInteractorDuringExecute = context.Interactive.ActiveInteractor;
+            ReservedInteractorDuringExecute = context
+                .GetTarget<InteractiveComponent>()
+                ?.ActiveInteractor;
             return Result;
         }
 
-        protected internal override void OnExecutionCompleted(
-            in InteractionExecutionContext context
-        )
+        protected internal override void OnExecutionCompleted(in GameplayActionContext context)
         {
             base.OnExecutionCompleted(context);
             CompletedCount++;
@@ -651,7 +646,7 @@ public abstract partial class InteractionTestBase
         }
 
         protected internal override void OnExecutionCancelled(
-            in InteractionExecutionContext context,
+            in GameplayActionContext context,
             string reason
         )
         {
@@ -662,7 +657,7 @@ public abstract partial class InteractionTestBase
         }
 
         protected internal override void OnExecutionFailed(
-            in InteractionExecutionContext context,
+            in GameplayActionContext context,
             string reason
         )
         {
@@ -711,11 +706,13 @@ public abstract partial class InteractionTestBase
                 : 0.0f;
     }
 
-    protected sealed partial class InteractiveParentGameplayRule : InteractionRule
+    protected sealed partial class InteractiveParentGameplayRule : GameplayActionRule
     {
-        public override GameplayActionAvailability Evaluate(in InteractionContext context)
+        public override GameplayActionAvailability Evaluate(in GameplayActionContext context)
         {
-            return context.Interactive.GetParent() is TestInteractiveActor { GameplayBlocked: true }
+            return
+                context.GetTarget<InteractiveComponent>()?.GetParent()
+                    is TestInteractiveActor { GameplayBlocked: true }
                 ? new GameplayActionBlocked("Gameplay condition is blocked.")
                 : new GameplayActionAllowed();
         }

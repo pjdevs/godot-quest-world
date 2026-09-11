@@ -13,10 +13,8 @@ using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Examples.Rules;
 using InteractionPlugin.Integration.Stateful;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
-using InteractionPlugin.Runtime.Rules;
 using QuestWorld.Tests.GameplayActions;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
@@ -107,7 +105,7 @@ public sealed partial class InteractionConcurrencyTest : InteractionTestBase
     public async Task ConcurrencyPolicyUsesTheRunningSiblingGroup()
     {
         TestWorld testWorld = BuildWorld();
-        InteractionAction sibling = CreateAction("sibling");
+        GameplayAction sibling = CreateAction("sibling");
         sibling.HostConcurrencyGroup = testWorld.Action.GetHostConcurrencyGroup();
         sibling.WhenExecutingBySelf = GameplayActionUnavailableKind.Hidden;
         sibling.WhenExecutingByOther = GameplayActionUnavailableKind.Blocked;

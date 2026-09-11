@@ -7,7 +7,6 @@
 [ext_resource type="Script" uid="uid://dskma4ncsvn1h" path="res://addons/interaction_plugin/runtime/offers/InteractionOffer.cs" id="5_tj8cv"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="6_4t8iy"]
 [ext_resource type="Resource" uid="uid://bf4ybcwnlux2r" path="res://quest_world/action_config/Interact.tres" id="6_42h85"]
-[ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="6_tj8cv"]
 
 [sub_resource type="Resource" id="Resource_42h85"]
 resource_name = "Take"

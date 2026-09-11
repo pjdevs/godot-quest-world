@@ -13,10 +13,8 @@ using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Examples.Rules;
 using InteractionPlugin.Integration.Stateful;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
-using InteractionPlugin.Runtime.Rules;
 using QuestWorld.Tests.GameplayActions;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
@@ -94,7 +92,7 @@ public sealed partial class InteractionNetworkBehaviorTest : InteractionTestBase
         testWorld.Interactor.QueueFree();
         await testWorld.Runner.SimulateFrames(1);
 
-        AssertThat(testWorld.Interactive.ActiveInteractor != null).IsTrue();
+        AssertThat(testWorld.Interactive.HasActiveExecution).IsTrue();
         AssertThat(testWorld.Owner.EndCount).IsEqual(0);
     }
 
@@ -119,7 +117,7 @@ public sealed partial class InteractionNetworkBehaviorTest : InteractionTestBase
             new AlwaysBlockedInteractionRule { Reason = "Requires a keycard." }
         );
         int startedCount = 0;
-        door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
+        door.Interactive.ActionComponent!.GameplayActionStarted += (_, _, _, _) => startedCount++;
         string rejectedActionId = string.Empty;
         string rejectedReason = string.Empty;
         door.Interactor.InteractionRejected += (_, actionId, reason) =>
@@ -146,7 +144,7 @@ public sealed partial class InteractionNetworkBehaviorTest : InteractionTestBase
         await door.Runner.SimulateFrames(1);
         door.Detect(door.Interactive);
         int startedCount = 0;
-        door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
+        door.Interactive.ActionComponent!.GameplayActionStarted += (_, _, _, _) => startedCount++;
         string rejectedReason = string.Empty;
         door.Interactor.InteractionRejected += (_, _, reason) => rejectedReason = reason;
 
@@ -168,7 +166,7 @@ public sealed partial class InteractionNetworkBehaviorTest : InteractionTestBase
         door.Detect(door.Interactive);
         int startedCount = 0;
         int rejectedCount = 0;
-        door.Interactive.InteractionActionStarted += (_, _) => startedCount++;
+        door.Interactive.ActionComponent!.GameplayActionStarted += (_, _, _, _) => startedCount++;
         door.Interactor.InteractionRejected += (_, _, _) => rejectedCount++;
 
         door.Interactor.ServerTryStartInteraction(

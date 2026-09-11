@@ -1,15 +1,15 @@
 #if TOOLS
 
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using GameplayActionPlugin;
-using GameplayActionPlugin.Editor;
 using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Editor;
 using GameplayActionPlugin.Runtime.Execution;
 using InteractionPlugin;
 using InteractionPlugin.Integration.Stateful;
 using InteractionPlugin.Presentation.UI;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Detection;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
@@ -27,7 +27,6 @@ public static class InteractionValidator
         InteractionDetector,
         AreaInteractionDetector,
         InteractionPresenter,
-        InteractionAction,
         InteractionOffer,
         StatefulStateInteractionRule,
     }
@@ -48,8 +47,6 @@ public static class InteractionValidator
                 return ValidateAreaDetector(obj);
             case InspectableType.InteractionPresenter:
                 return ValidatePresenter(obj);
-            case InspectableType.InteractionAction:
-                return ValidateAction(obj);
             case InspectableType.InteractionOffer:
                 return ValidateOffer(obj);
             case InspectableType.StatefulStateInteractionRule:
@@ -68,119 +65,60 @@ public static class InteractionValidator
             yield return "InteractionAnchor must be assigned.";
 
         Godot.Collections.Array authoredOffers = GetArray(obj, "Offers");
-        if (authoredOffers.Count > 0)
+        if (authoredOffers.Count == 0)
         {
-            foreach (string warning in ValidateOffers(obj, authoredOffers))
-            {
-                yield return warning;
-            }
-
-            yield break;
+            yield return "InteractiveComponent requires at least one InteractionOffer.";
         }
 
-        // The action set belongs to the host, so this reads the host's declared array and keeps only
-        // the interaction offers: a generic action hosted beside them is not this target's business.
-        GodotObject? actionComponent = GetObject(obj, "ActionComponent");
-        List<GodotObject> actions = new();
-        if (actionComponent is null)
+        foreach (string warning in ValidateOffers(obj, authoredOffers))
         {
-            yield return "ActionComponent must be assigned.";
+            yield return warning;
         }
-        else
+
+        if (GetObject(obj, "ActionComponent") is GameplayActionComponent actionComponent)
         {
-            foreach (Variant entry in GetArray(actionComponent, "Actions"))
+            for (int index = 0; index < actionComponent.Actions.Count; index++)
             {
-                if (
-                    entry.AsGodotObject() is GodotObject hosted
-                    && ResolveType(hosted) == InspectableType.InteractionAction
-                )
+                GameplayAction? action = actionComponent.Actions[index];
+                if (action is null)
                 {
-                    actions.Add(hosted);
+                    yield return $"Actions[{index}] must not be null.";
+                    continue;
+                }
+
+                foreach (string warning in GameplayActionValidator.Validate(action))
+                {
+                    yield return $"Actions[{index}]: {warning}";
                 }
             }
 
-            if (actions.Count == 0)
-                yield return "The assigned ActionComponent must declare at least one InteractionAction.";
-        }
-
-        HashSet<string> ids = new();
-        Dictionary<string, string> inputs = new();
-        bool hasReplicatedAction = false;
-
-        for (int index = 0; index < actions.Count; index++)
-        {
-            GodotObject action = actions[index];
-            GodotObject? definition = GetObject(action, "Definition");
-            if (definition is null)
+            if (
+                actionComponent.Actions.Any(action =>
+                    action?.ExecutionVisibility == GameplayActionExecutionVisibility.Replicated
+                ) && !HasMatchingExecutionSynchronizer(obj)
+            )
             {
-                yield return $"Actions[{index}] has no Definition.";
-                continue;
+                yield return "Replicated actions require a GameplayActionExecutionSynchronizer targeting the assigned ActionComponent.";
             }
 
-            GodotObject? binding = GetObject(action, "DefaultBindingConfig");
-            if (binding is null)
+            for (int index = 0; index < actionComponent.Actions.Count; index++)
             {
-                yield return $"Actions[{index}] ('{GetName(definition, "Id")}') has no DefaultBindingConfig.";
-                continue;
+                GameplayAction? action = actionComponent.Actions[index];
+                if (action is null)
+                {
+                    continue;
+                }
+
+                foreach (string warning in ValidateRules(action, obj, "Rules"))
+                {
+                    yield return $"Actions[{index}]: {warning}";
+                }
             }
-
-            if (GetObject(action, "Executor") is null)
-                yield return $"Actions[{index}] has no Executor.";
-
-            hasReplicatedAction |=
-                GetInt(action, "ExecutionVisibility")
-                == (int)GameplayActionExecutionVisibility.Replicated;
-
-            string id = GetName(definition, "Id");
-            if (id.Length == 0)
-                yield return $"Actions[{index}] uses a Definition with an empty Id.";
-            else if (!ids.Add(id))
-                yield return $"Actions declare the action id '{id}' more than once.";
-
-            if (GetInt(binding, "ActivationMode") == (int)GameplayActionActivationMode.Automatic)
-                continue;
-
-            string input = GetName(binding, "InputActionName");
-            if (input.Length == 0)
-            {
-                yield return $"Actions[{index}] ('{id}') is not automatic but declares no input.";
-                continue;
-            }
-
-            // Sharing an input and a threshold is legitimate: the resolver separates such actions by
-            // availability first, and a rule is what makes "open" and "unlock" alternate on one key.
-            // Priority is the last discriminator an author can express, so it belongs to the key —
-            // below it the resolver falls back on identifier order, which nobody authored on purpose.
-            string trigger =
-                $"{input}|{GetFloat(binding, "HoldDuration")}|{GetInt(binding, "Priority")}";
-            if (inputs.TryGetValue(trigger, out string? other))
-            {
-                yield return $"Actions '{other}' and '{id}' share the input '{input}', the same hold "
-                    + "threshold and the same priority: whenever both are available, the identifier "
-                    + "order decides. Give one a higher Priority, or a rule that hides it.";
-            }
-            else
-            {
-                inputs[trigger] = id;
-            }
-        }
-
-        if (hasReplicatedAction && !HasMatchingExecutionSynchronizer(obj))
-        {
-            yield return "Replicated actions require a GameplayActionExecutionSynchronizer targeting the assigned ActionComponent.";
         }
 
         foreach (string warning in ValidateRules(obj, obj, "TargetRules"))
         {
             yield return warning;
-        }
-
-        for (int index = 0; index < actions.Count; index++)
-        {
-            foreach (string warning in ValidateRules(actions[index], actions[index], "Rules"))
-            {
-                yield return $"Actions[{index}]: {warning}";
-            }
         }
     }
 
@@ -347,37 +285,6 @@ public static class InteractionValidator
             yield return "Camera must be assigned.";
     }
 
-    private static IEnumerable<string> ValidateAction(GodotObject obj)
-    {
-        if (GetObject(obj, "Definition") is null)
-            yield return "Definition must be assigned.";
-
-        if (GetObject(obj, "Executor") is null)
-            yield return "Executor must be assigned.";
-
-        if (GetName(obj, "HostConcurrencyGroup").Length == 0)
-            yield return "HostConcurrencyGroup must not be empty.";
-
-        if (GetObject(obj, "DefaultBindingConfig") is not GodotObject binding)
-        {
-            yield return "DefaultBindingConfig must be assigned.";
-        }
-        else
-        {
-            foreach (string warning in GameplayActionValidator.Validate(binding))
-                yield return $"DefaultBindingConfig: {warning}";
-        }
-
-        if (obj is InteractionAction action && action.Interactive is null)
-            yield return "InteractionAction must be hosted by a matching InteractiveComponent.";
-
-        // The rule paths are relative to the owning action, which only that one can resolve.
-        foreach (string warning in ValidateRules(obj, null, "Rules"))
-        {
-            yield return warning;
-        }
-    }
-
     private static bool HasMatchingExecutionSynchronizer(GodotObject interactive)
     {
         if (
@@ -499,7 +406,6 @@ public static class InteractionValidator
             AimInteractionDetector => InspectableType.InteractionDetector,
             InteractionDetector => InspectableType.InteractionDetector,
             InteractionPresenter => InspectableType.InteractionPresenter,
-            InteractionAction => InspectableType.InteractionAction,
             InteractionOffer => InspectableType.InteractionOffer,
             StatefulStateInteractionRule => InspectableType.StatefulStateInteractionRule,
             _ => InspectableType.None,
@@ -520,7 +426,6 @@ public static class InteractionValidator
             nameof(AimInteractionDetector) => InspectableType.InteractionDetector,
             nameof(InteractionDetector) => InspectableType.InteractionDetector,
             nameof(InteractionPresenter) => InspectableType.InteractionPresenter,
-            nameof(InteractionAction) => InspectableType.InteractionAction,
             nameof(InteractionOffer) => InspectableType.InteractionOffer,
             nameof(StatefulStateInteractionRule) => InspectableType.StatefulStateInteractionRule,
             _ => ResolveTypeFromPath(script?.ResourcePath),
@@ -545,8 +450,6 @@ public static class InteractionValidator
                 InspectableType.InteractionDetector,
             "res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" =>
                 InspectableType.InteractionPresenter,
-            "res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" =>
-                InspectableType.InteractionAction,
             "res://addons/interaction_plugin/runtime/offers/InteractionOffer.cs" =>
                 InspectableType.InteractionOffer,
             "res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" =>

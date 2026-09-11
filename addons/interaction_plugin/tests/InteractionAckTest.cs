@@ -9,7 +9,6 @@ using GameplayActionPlugin.Runtime.Execution;
 using GdUnit4;
 using Godot;
 using InteractionPlugin;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
 using static GdUnit4.Assertions;
@@ -467,7 +466,7 @@ public sealed partial class InteractionAckTest
             Id = new StringName("activate"),
             Label = "Activate",
         };
-        InteractionAction action = new()
+        InputGameplayAction action = new()
         {
             Name = "ActivateAction",
             Definition = definition,
@@ -523,7 +522,7 @@ public sealed partial class InteractionAckTest
         InteractionInteractor Interactor,
         TestInteractionDetector Detector,
         GameplayActionDefinition Definition,
-        InteractionAction Action,
+        InputGameplayAction Action,
         TestScriptedExecutor Executor,
         List<Ack> Acks
     )

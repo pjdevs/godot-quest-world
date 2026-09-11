@@ -1,18 +1,13 @@
-using System;
 using System.Collections.Generic;
 using GameplayActionPlugin;
 using GameplayActionPlugin.Runtime.Access;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
-using GameplayActionPlugin.Runtime.Execution;
 using GameplayActionPlugin.Runtime.Rules;
-using GameplayActionPlugin.Runtime.Runner;
 using Godot;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Detection;
 using InteractionPlugin.Runtime.Interactor;
 using InteractionPlugin.Runtime.Offers;
-using InteractionPlugin.Runtime.Rules;
 
 namespace InteractionPlugin.Runtime.Interactive;
 
@@ -27,70 +22,6 @@ namespace InteractionPlugin.Runtime.Interactive;
 [GlobalClass]
 public partial class InteractiveComponent : Node
 {
-    /// <summary>Emitted on the authoritative instance once an executor has accepted an action.</summary>
-    /// <remarks>
-    /// Every notification of this component reports something that already happened. None of them is
-    /// a command: the gameplay mutation belongs to <see cref="InteractionAction.Executor"/>, so
-    /// connecting any number of observers never runs the action more than once. A started action is
-    /// always followed by exactly one completion, cancellation, or failure.
-    /// </remarks>
-    /// <param name="interactor">Interactor that requested the action.</param>
-    /// <param name="action">Action whose executor accepted the command.</param>
-    [Signal]
-    public delegate void InteractionActionStartedEventHandler(
-        InteractionInteractor interactor,
-        InteractionAction action
-    );
-
-    /// <summary>Emitted on the authoritative instance when a started action reaches its end.</summary>
-    /// <param name="interactor">Interactor that requested the action.</param>
-    /// <param name="action">Action that completed.</param>
-    [Signal]
-    public delegate void InteractionActionCompletedEventHandler(
-        InteractionInteractor interactor,
-        InteractionAction action
-    );
-
-    /// <summary>Emitted on the authoritative instance when a started action ends without completing.</summary>
-    /// <remarks>
-    /// This covers a released input, an interactor leaving range, and an explicit gameplay cancellation.
-    /// </remarks>
-    /// <param name="interactor">Interactor that requested the action.</param>
-    /// <param name="action">Action that was cancelled.</param>
-    /// <param name="reason">Reason describing why the action did not complete.</param>
-    [Signal]
-    public delegate void InteractionActionCancelledEventHandler(
-        InteractionInteractor interactor,
-        InteractionAction action,
-        string reason
-    );
-
-    /// <summary>Emitted on the authoritative instance when a started action fails.</summary>
-    /// <param name="interactor">Interactor that requested the action.</param>
-    /// <param name="action">Action that failed after it was accepted.</param>
-    /// <param name="reason">Reason describing the failure.</param>
-    [Signal]
-    public delegate void InteractionActionFailedEventHandler(
-        InteractionInteractor interactor,
-        InteractionAction action,
-        string reason
-    );
-
-    /// <summary>Emitted on the authoritative instance when an action was refused before starting.</summary>
-    /// <remarks>
-    /// A refused action never runs its executor, so this notification is never preceded by
-    /// <see cref="InteractionActionStarted"/>.
-    /// </remarks>
-    /// <param name="interactor">Interactor that requested the action.</param>
-    /// <param name="action">Action that was refused.</param>
-    /// <param name="reason">Reason describing the refusal.</param>
-    [Signal]
-    public delegate void InteractionActionRejectedEventHandler(
-        InteractionInteractor interactor,
-        InteractionAction action,
-        string reason
-    );
-
     /// <summary>
     /// Emitted on any peer whose visible interaction status may have changed.
     /// </summary>
@@ -204,40 +135,11 @@ public partial class InteractiveComponent : Node
     public Godot.Collections.Array<InteractionOffer> Offers { get; set; } = new();
 
     /// <summary>
-    /// Gets the actions this target offers, in the order its host declares them.
-    /// </summary>
-    /// <remarks>
-    /// A target declares no action of its own. Its offers are the <see cref="InteractionAction"/>
-    /// entries of <see cref="ActionComponent"/>, so one authored list is the single source of truth
-    /// and can never drift from the host that actually owns the executions. A generic action the
-    /// host also carries is not an interaction offer and is skipped: interaction presents what an
-    /// interactor can ask for, not everything the host can run.
-    /// </remarks>
-    public IEnumerable<InteractionAction> Actions
-    {
-        get
-        {
-            if (ActionComponent is null)
-            {
-                yield break;
-            }
-
-            foreach (GameplayAction action in ActionComponent.Actions)
-            {
-                if (action is InteractionAction interactionAction)
-                {
-                    yield return interactionAction;
-                }
-            }
-        }
-    }
-
-    /// <summary>
     /// Gets or sets the ordered gameplay conditions shared by every action of this target.
     /// Evaluation stops at the first hidden or blocked result, before the action rules run.
     /// </summary>
     [Export]
-    public Godot.Collections.Array<InteractionRule> TargetRules { get; set; } = new();
+    public Godot.Collections.Array<GameplayActionRule> TargetRules { get; set; } = new();
 
     private const string NotConfiguredReason = "Interaction is not configured.";
     private const string AlreadyRunningReason = "This is already in use.";
@@ -288,15 +190,9 @@ public partial class InteractiveComponent : Node
                 return null;
             }
 
-            return instigator as InteractionInteractor;
+            return InteractionInteractor.ResolveForInstigator(instigator);
         }
     }
-
-    internal InteractionAction? ActiveAction =>
-        ActionComponent?.TryGetFirstActiveExecution(out GameplayAction? action, out _, out _)
-        == true
-            ? action as InteractionAction
-            : null;
 
     /// <summary>Gets whether this peer runs the authoritative half of an interaction.</summary>
     /// <remarks>
@@ -351,20 +247,6 @@ public partial class InteractiveComponent : Node
             );
         }
 
-        bool hasAction = false;
-        foreach (InteractionAction action in Actions)
-        {
-            PrepareAction(action);
-            hasAction = true;
-        }
-
-        if (!hasAction && Offers.Count == 0)
-        {
-            GD.PushError(
-                $"{GetPath()}: InteractiveComponent requires at least one InteractionAction or InteractionOffer."
-            );
-        }
-
         ConnectActionComponent();
 
         if (InteractionArea is not null)
@@ -380,14 +262,6 @@ public partial class InteractiveComponent : Node
         }
     }
 
-    private void PrepareAction(InteractionAction? action)
-    {
-        if (action is not null)
-        {
-            action.PrepareForInteractive(this, TargetRules);
-        }
-    }
-
     private void ConnectActionComponent()
     {
         if (ActionComponent is null)
@@ -395,119 +269,7 @@ public partial class InteractiveComponent : Node
             return;
         }
 
-        ActionComponent.GameplayActionStarted += OnGameplayActionStarted;
-        ActionComponent.GameplayActionCompleted += OnGameplayActionCompleted;
-        ActionComponent.GameplayActionCancelled += OnGameplayActionCancelled;
-        ActionComponent.GameplayActionFailed += OnGameplayActionFailed;
-        ActionComponent.GameplayActionRejected += OnGameplayActionRejected;
         ActionComponent.ExecutionPresentationChanged += OnExecutionPresentationChanged;
-    }
-
-    private void OnGameplayActionStarted(
-        long executionId,
-        GameplayAction action,
-        Node? instigator,
-        Node? requester
-    )
-    {
-        InteractionInteractor? interactor = InteractionInteractor.ResolveForInstigator(instigator);
-        if (action is InteractionAction interactionAction && interactor is not null)
-        {
-            EmitSignal(SignalName.InteractionActionStarted, interactor, interactionAction);
-        }
-    }
-
-    private void OnGameplayActionCompleted(
-        long executionId,
-        GameplayAction action,
-        Node? instigator,
-        Node? requester
-    )
-    {
-        InteractionInteractor? interactor = InteractionInteractor.ResolveForInstigator(instigator);
-        if (action is InteractionAction interactionAction && interactor is not null)
-        {
-            EmitSignal(SignalName.InteractionActionCompleted, interactor, interactionAction);
-        }
-    }
-
-    private void OnGameplayActionCancelled(
-        long executionId,
-        GameplayAction action,
-        Node? instigator,
-        Node? requester,
-        string reason
-    )
-    {
-        InteractionInteractor? interactor = InteractionInteractor.ResolveForInstigator(instigator);
-        if (action is InteractionAction interactionAction && interactor is not null)
-        {
-            EmitSignal(
-                SignalName.InteractionActionCancelled,
-                interactor,
-                interactionAction,
-                reason
-            );
-        }
-    }
-
-    private void OnGameplayActionFailed(
-        long executionId,
-        GameplayAction action,
-        Node? instigator,
-        Node? requester,
-        string reason
-    )
-    {
-        InteractionInteractor? interactor = InteractionInteractor.ResolveForInstigator(instigator);
-        if (action is InteractionAction interactionAction && interactor is not null)
-        {
-            EmitSignal(SignalName.InteractionActionFailed, interactor, interactionAction, reason);
-        }
-    }
-
-    private void OnGameplayActionRejected(
-        long executionId,
-        GameplayAction action,
-        Node? instigator,
-        Node? requester,
-        string reason
-    )
-    {
-        InteractionInteractor? interactor = InteractionInteractor.ResolveForInstigator(instigator);
-        if (action is InteractionAction interactionAction && interactor is not null)
-        {
-            EmitSignal(
-                SignalName.InteractionActionRejected,
-                interactor,
-                interactionAction,
-                AdaptRejectionReason(interactor, interactionAction, reason)
-            );
-        }
-    }
-
-    internal string AdaptRejectionReason(
-        InteractionInteractor interactor,
-        InteractionAction action,
-        string reason
-    )
-    {
-        if (reason == GameplayActionAvailabilityExtensions.UnavailableReason)
-        {
-            return "Interaction unavailable.";
-        }
-
-        if (reason != GameplayActionComponent.AlreadyRunningReason || ActionComponent is null)
-        {
-            return reason;
-        }
-
-        Node interactionInstigator = interactor.Runner?.ResolveInstigator() ?? interactor;
-        bool startedByInteractor = ActionComponent.IsConcurrencyGroupExecutingFor(
-            action.GetHostConcurrencyGroup(),
-            interactionInstigator
-        );
-        return startedByInteractor ? AlreadyRunningReason : SomeoneElseReason;
     }
 
     /// <summary>Resolves one authored offer to the action endpoint it invokes.</summary>
@@ -787,12 +549,12 @@ public partial class InteractiveComponent : Node
         }
 
         Node interactionInstigator = interactor.Runner?.ResolveInstigator() ?? interactor;
-        InteractionContext context = new(
-            interactor,
-            this,
+        GameplayActionContext context = resolution.Component.CreateContext(
+            0ul,
+            interactionInstigator,
+            interactor.Runner,
             resolution.Action,
-            offer,
-            resolution.Component
+            ResolveInvocationTarget()
         );
         GameplayActionAvailability targetAvailability = EvaluateRules(TargetRules, context);
         if (targetAvailability is not GameplayActionAllowed)
@@ -852,18 +614,23 @@ public partial class InteractiveComponent : Node
                 && execution.Relation == GameplayActionExecutionRelation.RequestedLocally;
         }
 
-        return concurrencyActive
-            ? new GameplayActionBlocked(
-                startedByInteractor ? AlreadyRunningReason : SomeoneElseReason
-            )
-            : new GameplayActionAllowed();
+        if (!concurrencyActive)
+        {
+            return new GameplayActionAllowed();
+        }
+
+        GameplayActionUnavailableKind kind = startedByInteractor
+            ? resolution.Action.WhenExecutingBySelf
+            : resolution.Action.WhenExecutingByOther;
+        return kind.ToAvailability(startedByInteractor ? AlreadyRunningReason : SomeoneElseReason);
     }
 
     /// <summary>Re-validates an already-running offer without treating its own reservations as lost access.</summary>
     /// <remarks>
-    /// Sustained access still re-runs spatial, target, offer, and action rules. It deliberately skips
-    /// the target and action-owner busy presentation checks: both reservations belong to the request
-    /// currently being validated and must remain held until its terminal lifecycle.
+    /// Sustained access re-runs spatial, target, and offer rules. The action rules already admitted
+    /// the execution and are not re-evaluated here: an action commonly changes the very state that
+    /// made it available while it is running. The target and action-owner busy checks are also skipped
+    /// because both reservations belong to the request currently being validated.
     /// </remarks>
     internal GameplayActionAvailability EvaluateAccess(
         InteractionInteractor interactor,
@@ -891,12 +658,12 @@ public partial class InteractiveComponent : Node
         }
 
         Node interactionInstigator = interactor.Runner?.ResolveInstigator() ?? interactor;
-        InteractionContext context = new(
-            interactor,
-            this,
+        GameplayActionContext context = resolution.Component.CreateContext(
+            0ul,
+            interactionInstigator,
+            interactor.Runner,
             resolution.Action,
-            offer,
-            resolution.Component
+            ResolveInvocationTarget()
         );
         GameplayActionAvailability targetAvailability = EvaluateRules(TargetRules, context);
         if (targetAvailability is not GameplayActionAllowed)
@@ -908,17 +675,6 @@ public partial class InteractiveComponent : Node
         if (offerAvailability is not GameplayActionAllowed)
         {
             return offerAvailability;
-        }
-
-        GameplayActionAvailability actionAvailability = resolution.Component.EvaluateAction(
-            resolution.Action.Definition.Id,
-            interactionInstigator,
-            interactor.Runner,
-            ResolveInvocationTarget()
-        );
-        if (actionAvailability is not GameplayActionAllowed)
-        {
-            return actionAvailability;
         }
 
         StringName group = offer.TargetConcurrencyGroup;
@@ -945,105 +701,18 @@ public partial class InteractiveComponent : Node
             }
         }
 
-        return Offers.Count == 0;
+        return false;
     }
 
     private void OnExecutionPresentationChanged(StringName actionId) =>
         EmitSignal(SignalName.ExecutionPresentationChanged, actionId);
 
-    /// <summary>
-    /// Evaluates configuration, reservation, target rules, and action rules for one action.
-    /// </summary>
-    /// <remarks>
-    /// Called repeatedly during local client presentation and again on the server before dispatch.
-    /// The evaluation and every rule must be side-effect free. World state influences the result only
-    /// through an explicit rule: this component never interprets a state value itself.
-    /// </remarks>
-    /// <param name="interactor">Interactor for which availability is evaluated.</param>
-    /// <param name="action">Action of this target being evaluated.</param>
-    /// <returns>The first hidden or blocked result, or allowed when every check succeeds.</returns>
-    public GameplayActionAvailability EvaluateAvailability(
-        InteractionInteractor interactor,
-        InteractionAction action
-    )
-    {
-        if (
-            interactor is null
-            || InteractionArea is null
-            || InteractionAnchor is null
-            || action is null
-            || action.Definition is null
-            || action.Executor is null
-            || ActionComponent is null
-            || action.Component != ActionComponent
-        )
-        {
-            return new GameplayActionBlocked(NotConfiguredReason);
-        }
-
-        PrepareAction(action);
-        Node interactionInstigator = interactor.Runner?.ResolveInstigator() ?? interactor;
-        GameplayActionAvailability actionAvailability = ActionComponent.EvaluateAction(
-            action.Definition.Id,
-            interactionInstigator,
-            interactor.Runner,
-            ResolveInvocationTarget()
-        );
-        if (actionAvailability is not GameplayActionAllowed)
-        {
-            return actionAvailability;
-        }
-
-        // Concurrency is evaluated last, after the rules. An action the rules already hid stays
-        // hidden instead of surfacing as blocked just because a sibling is running, and an action
-        // the rules already explained keeps its own reason.
-        //
-        // A reserved group blocks the action for everybody, its own interactor included. Staying
-        // allowed for the owner would make a prompt claim an action the target would immediately
-        // refuse; blocked keeps the action presented, with the reason, which is what a prompt needs.
-        StringName concurrencyGroup = action.GetHostConcurrencyGroup();
-        bool concurrencyActive;
-        bool startedByInteractor;
-        if (ActionComponent.IsAuthoritative)
-        {
-            concurrencyActive =
-                ActionComponent.IsActionExecuting(action.Definition.Id)
-                || ActionComponent.IsConcurrencyGroupExecuting(concurrencyGroup);
-            startedByInteractor =
-                concurrencyActive
-                && ActionComponent.IsConcurrencyGroupExecutingFor(
-                    concurrencyGroup,
-                    interactionInstigator
-                );
-        }
-        else
-        {
-            concurrencyActive = ActionComponent.TryGetExecutionPresentationInGroup(
-                concurrencyGroup,
-                out GameplayActionExecutionPresentation execution
-            );
-            startedByInteractor =
-                concurrencyActive
-                && execution.Relation == GameplayActionExecutionRelation.RequestedLocally;
-        }
-
-        if (concurrencyActive)
-        {
-            GameplayActionUnavailableKind kind = startedByInteractor
-                ? action.WhenExecutingBySelf
-                : action.WhenExecutingByOther;
-            return kind.ToAvailability(
-                startedByInteractor ? AlreadyRunningReason : SomeoneElseReason
-            );
-        }
-
-        return new GameplayActionAllowed();
-    }
-
-    /// <summary>Aggregates the availability of every action into one target-level result.</summary>
+    /// <summary>Aggregates the availability of every offered action into one target-level result.</summary>
     /// <remarks>
     /// Allowed wins over blocked, and blocked over hidden, so a target is presentable as long as one
-    /// action is requestable or explained. A target without any action is hidden.
+    /// offer is requestable or explained. A target without any offer is hidden.
+    /// The evaluation and every rule are side-effect free; world state influences the result only
+    /// through an explicit rule.
     /// </remarks>
     /// <param name="interactor">Interactor for which availability is evaluated.</param>
     /// <returns>Allowed when one action is allowed, the first blocked result, or hidden.</returns>
@@ -1074,35 +743,15 @@ public partial class InteractiveComponent : Node
             return offerAggregate;
         }
 
-        GameplayActionAvailability aggregate = new GameplayActionHidden();
-        foreach (InteractionAction action in Actions)
-        {
-            if (action is null)
-            {
-                continue;
-            }
-
-            GameplayActionAvailability availability = EvaluateAvailability(interactor, action);
-            if (availability is GameplayActionAllowed)
-            {
-                return availability;
-            }
-
-            if (availability is GameplayActionBlocked && aggregate is GameplayActionHidden)
-            {
-                aggregate = availability;
-            }
-        }
-
-        return aggregate;
+        return new GameplayActionHidden();
     }
 
     private static GameplayActionAvailability EvaluateRules(
-        Godot.Collections.Array<InteractionRule> rules,
-        in InteractionContext context
+        Godot.Collections.Array<GameplayActionRule> rules,
+        in GameplayActionContext context
     )
     {
-        foreach (InteractionRule rule in rules)
+        foreach (GameplayActionRule rule in rules)
         {
             if (rule is null)
             {
@@ -1119,32 +768,6 @@ public partial class InteractiveComponent : Node
         return new GameplayActionAllowed();
     }
 
-    /// <summary>Resolves one action of this target from its stable identifier.</summary>
-    /// <remarks>
-    /// This is the only supported way for the authoritative peer to turn a requested identifier into
-    /// an action. The scene owns the mapping, so a client can never designate an executor or an
-    /// action this target does not declare.
-    /// </remarks>
-    /// <param name="actionId">Stable identifier carried by the interaction command.</param>
-    /// <returns>The matching action, or null when this target declares no such action.</returns>
-    public InteractionAction? ResolveAction(StringName actionId)
-    {
-        if (actionId is null || actionId.IsEmpty)
-        {
-            return null;
-        }
-
-        foreach (InteractionAction action in Actions)
-        {
-            if (action?.Definition is not null && action.Definition.Id == actionId)
-            {
-                return action;
-            }
-        }
-
-        return null;
-    }
-
     /// <summary>Builds the local presentation snapshot for prompt or indication widgets.</summary>
     /// <remarks>
     /// One entry is produced per presentable action, in declaration order. Hidden actions are
@@ -1156,37 +779,7 @@ public partial class InteractiveComponent : Node
     public InteractionTargetPresentation GetPresentation(
         InteractionInteractor interactor,
         bool isFocused
-    )
-    {
-        if (Offers.Count > 0)
-        {
-            return GetOfferPresentation(interactor, isFocused);
-        }
-
-        List<GameplayActionPresentation> presentedActions = new();
-        foreach (InteractionAction action in Actions)
-        {
-            if (
-                TryGetActionPresentation(
-                    interactor,
-                    action,
-                    out GameplayActionPresentation presentation
-                )
-            )
-            {
-                presentedActions.Add(presentation);
-            }
-        }
-
-        return new InteractionTargetPresentation(
-            this,
-            DisplayName,
-            Description,
-            presentedActions,
-            isFocused,
-            interactor.Detector?.GetInteractionDistance(this) ?? 0.0f
-        );
-    }
+    ) => GetOfferPresentation(interactor, isFocused);
 
     /// <summary>Gets whether this target currently offers at least one presentable action.</summary>
     /// <remarks>
@@ -1197,85 +790,15 @@ public partial class InteractiveComponent : Node
     /// <returns><see langword="true"/> when one action is allowed or blocked.</returns>
     public bool HasVisibleAction(InteractionInteractor interactor)
     {
-        if (Offers.Count > 0)
+        foreach (InteractionOffer offer in Offers)
         {
-            foreach (InteractionOffer offer in Offers)
-            {
-                if (offer is not null && TryGetOfferPresentation(interactor, offer, out _))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        foreach (InteractionAction action in Actions)
-        {
-            if (TryGetActionPresentation(interactor, action, out _))
+            if (offer is not null && TryGetOfferPresentation(interactor, offer, out _))
             {
                 return true;
             }
         }
 
         return false;
-    }
-
-    private bool TryGetActionPresentation(
-        InteractionInteractor interactor,
-        InteractionAction? action,
-        out GameplayActionPresentation presentation
-    )
-    {
-        presentation = default;
-        if (
-            action?.Definition is null
-            || action.DefaultBindingConfig is not GameplayActionBindingConfig config
-        )
-        {
-            return false;
-        }
-
-        GameplayActionAvailability availability = EvaluateAvailability(interactor, action);
-        if (availability is GameplayActionHidden)
-        {
-            return false;
-        }
-
-        float? holdProgress = null;
-        float? holdElapsed = null;
-        if (
-            ActionComponent is not null
-            && interactor.Runner is not null
-            && interactor.Runner.TryGetBinding(
-                ActionComponent,
-                action.Definition.Id,
-                this,
-                out GameplayActionBinding? binding
-            )
-            && binding is not null
-            && interactor.Runner.TryGetBindingHoldProgress(
-                binding.Id,
-                out float currentProgress,
-                out float currentElapsed
-            )
-        )
-        {
-            holdProgress = currentProgress;
-            holdElapsed = currentElapsed;
-        }
-
-        presentation = new GameplayActionPresentation(
-            action.Definition.Id,
-            action.Definition.Label,
-            action.Definition.Description,
-            config.InputActionName,
-            availability,
-            config.ActivationMode,
-            holdProgress,
-            holdElapsed
-        );
-        return true;
     }
 
     private InteractionTargetPresentation GetOfferPresentation(
@@ -1367,7 +890,7 @@ public partial class InteractiveComponent : Node
 
     /// <summary>Gets the execution presentations visible on this peer.</summary>
     /// <remarks>
-    /// The returned snapshot is ordered by <see cref="Actions"/>, not by execution start time. Progress
+    /// The returned snapshot is ordered by the action owner's declarations, not by execution start time. Progress
     /// is resolved lazily from a local source, a linear transport sample, or a published value.
     /// </remarks>
     /// <returns>A fresh action-ordered snapshot of the visible active executions.</returns>
@@ -1492,11 +1015,6 @@ public partial class InteractiveComponent : Node
     {
         if (ActionComponent is not null && IsInstanceValid(ActionComponent))
         {
-            ActionComponent.GameplayActionStarted -= OnGameplayActionStarted;
-            ActionComponent.GameplayActionCompleted -= OnGameplayActionCompleted;
-            ActionComponent.GameplayActionCancelled -= OnGameplayActionCancelled;
-            ActionComponent.GameplayActionFailed -= OnGameplayActionFailed;
-            ActionComponent.GameplayActionRejected -= OnGameplayActionRejected;
             ActionComponent.ExecutionPresentationChanged -= OnExecutionPresentationChanged;
         }
 

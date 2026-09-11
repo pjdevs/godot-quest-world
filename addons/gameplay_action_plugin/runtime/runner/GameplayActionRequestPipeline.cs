@@ -158,7 +158,8 @@ internal sealed class GameplayActionRequestPipeline(
             _owner.OwnerPeerId,
             GetNetworkPath(binding.Component),
             binding.AccessSource,
-            binding.Target
+            binding.Target,
+            binding.InputRequirement == GameplayActionInputRequirement.Pressed
         );
         if (
             result is GameplayActionExecutionRunning
@@ -719,7 +720,8 @@ internal sealed class GameplayActionRequestPipeline(
         int senderPeerId,
         NodePath componentPath,
         Node? accessSource = null,
-        Node? target = null
+        Node? target = null,
+        bool bindingRequiresRequesterPresence = false
     )
     {
         if (!ValidateSender(senderPeerId))
@@ -734,7 +736,7 @@ internal sealed class GameplayActionRequestPipeline(
         }
 
         GameplayAction? action = component.ResolveAction(actionId);
-        if (action is null || !canAccess(component, action, accessSource, target, false))
+        if (action is null)
         {
             RejectRequest(
                 senderPeerId,
@@ -743,6 +745,28 @@ internal sealed class GameplayActionRequestPipeline(
                 GameplayActionAvailabilityExtensions.UnavailableReason
             );
             return new GameplayActionExecutionRejected();
+        }
+
+        if (!canAccess(component, action, accessSource, target, false))
+        {
+            GameplayActionAvailability actionAvailability = component.EvaluateAction(
+                actionId,
+                resolveInstigator(),
+                _owner,
+                target
+            );
+            string reason = actionAvailability.DescribeRefusal();
+            if (reason.Length == 0)
+            {
+                reason = GameplayActionAvailabilityExtensions.UnavailableReason;
+            }
+            RejectRequest(
+                senderPeerId,
+                componentPath,
+                actionId,
+                reason
+            );
+            return new GameplayActionExecutionRejected(reason);
         }
 
         GameplayActionRequestKey request = new(component, actionId);
@@ -801,7 +825,9 @@ internal sealed class GameplayActionRequestPipeline(
                     component,
                     actionId,
                     executionId,
-                    action.Executor?.RequiresRequesterPresence != false,
+                    action.Executor?.RequiresRequesterPresence != false
+                        || bindingRequiresRequesterPresence
+                        || HasPressedDefaultBinding(action),
                     accessSource,
                     target,
                     runningReservation
@@ -815,6 +841,11 @@ internal sealed class GameplayActionRequestPipeline(
 
         return result;
     }
+
+    private static bool HasPressedDefaultBinding(GameplayAction action) =>
+        action is InputGameplayAction inputAction
+        && inputAction.DefaultBindingConfig?.InputRequirement
+            == GameplayActionInputRequirement.Pressed;
 
     private void SendTerminal(
         GameplayActionComponent component,

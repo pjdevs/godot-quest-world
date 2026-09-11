@@ -183,7 +183,7 @@ catching up.
 
 ### Area-triggered elevator
 
-A level trigger can use the same primitive without any `InteractionAction`: local presentation begins,
+A level trigger can use the same primitive without any `InteractionOffer`: local presentation begins,
 the trigger's own server protocol validates/mutates Stateful, then authoritative replication absorbs or
 supersedes the override.
 

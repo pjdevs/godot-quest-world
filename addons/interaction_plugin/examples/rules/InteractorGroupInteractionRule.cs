@@ -1,12 +1,12 @@
 using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Rules;
 using Godot;
-using InteractionPlugin.Runtime.Rules;
 
 namespace InteractionPlugin.Examples.Rules;
 
 /// <summary>Allows only interactors that belong to a configured Godot node group.</summary>
 [GlobalClass]
-public partial class InteractorGroupInteractionRule : InteractionRule
+public partial class InteractorGroupInteractionRule : GameplayActionRule
 {
     /// <summary>Gets or sets the required group. An empty value allows every interactor.</summary>
     [Export]
@@ -17,9 +17,12 @@ public partial class InteractorGroupInteractionRule : InteractionRule
     public string MissingGroupReason { get; set; } = "You cannot use this yet.";
 
     /// <inheritdoc />
-    public override GameplayActionAvailability Evaluate(in InteractionContext context)
+    public override GameplayActionAvailability Evaluate(in GameplayActionContext context)
     {
-        if (string.IsNullOrEmpty(RequiredGroup) || context.Interactor.IsInGroup(RequiredGroup))
+        if (
+            string.IsNullOrEmpty(RequiredGroup)
+            || context.GetInstigator<Node>()?.IsInGroup(RequiredGroup) == true
+        )
         {
             return new GameplayActionAllowed();
         }

@@ -39,8 +39,7 @@ Authored actions are direct children of the `GameplayActionComponent` and are li
 collection. `InteractiveComponent.Offers` is the ordered interaction-facing contract. Each offer
 resolves an `ActionId` either from the target's `ActionComponent` (`Target`) or from the requesting
 runner's `OwnedActionComponent` (`Instigator`). The offer supplies the local binding and invocation
-target; it never transfers action ownership. The older `InteractionAction` projection remains only as
-a migration bridge for existing scenes and tests.
+target; it never transfers action ownership. Both endpoints are ordinary `GameplayAction` instances.
 
 The requester side composes the same generic runner with Interaction:
 
@@ -81,13 +80,13 @@ offer configuration and endpoint resolution
 → action-owner concurrency
 ```
 
-Offer and target rules receive an `InteractionContext` containing the interactor, Interactive target,
-offer, resolved action and resolved action component. They are evaluated directly and are never copied
-into or injected into a player-owned action's `Rules` collection. Rules are synchronous queries: they
-read gameplay state but do not mutate it. The first result that is not `Allowed` wins.
-
-`InteractionAction` and its target-rule adapter remain a compatibility path for target-owned content
-that has not migrated to `Offers`; new code must author the offer path.
+Target and offer rules are `GameplayActionRule` instances and receive the same generic
+`GameplayActionContext` as action rules and executors. The context exposes the execution id,
+instigator, requester, action component, action, host, world and optional invocation target; it does
+not expose Interaction-specific concepts such as an interactor or offer. They are evaluated directly
+and are never copied into or injected into a player-owned action's `Rules` collection. Rules are
+synchronous queries: they read gameplay state but do not mutate it. The first result that is not
+`Allowed` wins.
 
 A programmatic `GameplayActionComponent.ExecuteAction()` deliberately bypasses spatial access because it
 is not a player request, but still runs the same target/action rules and host reservations.
@@ -102,7 +101,7 @@ Execution    = what is currently running?
 Relation     = did this peer request that execution or merely observe it?
 ```
 
-`InteractionAction.WhenExecutingBySelf` and `WhenExecutingByOther` independently choose `Hidden` or
+`GameplayAction.WhenExecutingBySelf` and `WhenExecutingByOther` independently choose `Hidden` or
 `Blocked` for a busy concurrency group. Both default to `Blocked` for compatibility.
 
 Examples:
@@ -171,13 +170,13 @@ cancelled and completed requests release it. A client-supplied target or action 
 accepted as proof of access. Reservation acquisition fails closed when the authoritative peer can no
 longer resolve the access source, its invocation target, or its unique offer endpoint.
 
-`InteractionActionExecutor` adapts `GameplayActionContext` into `InteractionExecutionContext`. An
-interaction executor requires both an `InteractionAction` hosted by an `InteractiveComponent` and an
-interactor resolved from the generic instigator. An execution with no interactor is generic gameplay,
-not an interaction, and is refused by this adapter rather than silently inventing one.
+Executors are ordinary `GameplayActionExecutor` instances. If an executor needs interaction-specific
+data, it reads the generic `GameplayActionContext.Target` or `Host` through the typed accessors; it
+does not require an interaction-specific action subtype, an interactor or an interaction context. A carry/drop rule or
+executor can therefore run from an owned action as well as from a target offer.
 
-`RequiresInteractorPresence` defaults to `true`. It feeds the generic
-`RequiresRequesterPresence` policy, together with a binding whose `InputRequirement` is `Pressed`.
+`RequiresRequesterPresence` defaults to `true`, together with a binding whose `InputRequirement` is
+`Pressed`.
 Channel-like work is therefore cancelled when the player releases/leaves; world-owned work can opt out
 and continue after the requester has gone. An executor that becomes world-owned at a gameplay commit
 calls `GameplayActionContext.ReleaseRequesterDependency()` at that commit; target disappearance is not
@@ -225,7 +224,8 @@ For a normal interactive object:
    optional `InvocationTarget` and optional indication area, then author ordered `Offers`. Use
    `Source = Target` for target-owned actions and `Source = Instigator` for actions on the requesting
    runner. When `InvocationTarget` is unset, the Interactive itself remains the target for compatibility.
-3. Put shared target conditions in `TargetRules` and offer-specific conditions in `Offer.Rules`.
+3. Put shared target conditions in `TargetRules`, offer-specific conditions in `Offer.Rules`, and
+   capability conditions on the resolved `GameplayAction.Rules`.
 4. Use a Stateful component only when the object owns durable world truth. State-dependent availability
    belongs in `StatefulStateInteractionRule`; state mutations belong in an executor.
 5. Choose `ExecutionVisibility.RequesterOnly` by default. Use `Replicated` only when other peers must see
@@ -306,8 +306,8 @@ target-level allowed/blocked state.
 ### AD-10 — Target rules precede action rules, concurrency comes last
 
 Common target and offer policy is evaluated directly before the resolved generic action rules. The
-legacy target-rule adapter remains only for `InteractionAction` migration. Busy state is applied only
-after the rules, so concurrency never makes a deliberately hidden action resurface.
+the same generic context is used at every rule boundary. Busy state is applied only after the rules,
+so concurrency never makes a deliberately hidden action resurface.
 
 ### AD-11 — Hold selects; execution runs
 

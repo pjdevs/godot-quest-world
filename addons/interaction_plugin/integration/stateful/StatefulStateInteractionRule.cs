@@ -1,6 +1,6 @@
 using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Rules;
 using Godot;
-using InteractionPlugin.Runtime.Rules;
 using StatefulPlugin;
 
 namespace InteractionPlugin.Integration.Stateful;
@@ -14,14 +14,14 @@ namespace InteractionPlugin.Integration.Stateful;
 /// completely, for example a first rule hiding <c>Open</c> outside the closed and opening phases, and
 /// a second one blocking it with a reason while the door is still opening.
 /// <para>
-/// <see cref="StatefulPath"/> is resolved relative to the Interactive target for authored offers.
-/// Legacy InteractionAction rules continue to resolve relative to their owning action. Because rules
-/// are shareable resources, a path crossing scene boundaries belongs to the level that wires both
-/// objects together, exactly like the node reference of an executor.
+/// <see cref="StatefulPath"/> is resolved relative to the invocation target when one is supplied, or
+/// the gameplay host/action otherwise. Because rules are shareable resources, a path crossing scene
+/// boundaries belongs to the level that wires both objects together, exactly like the node reference
+/// of an executor.
 /// </para>
 /// </remarks>
 [GlobalClass]
-public partial class StatefulStateInteractionRule : InteractionRule
+public partial class StatefulStateInteractionRule : GameplayActionRule
 {
     private const string NotConfiguredReason = "Interaction is not configured.";
 
@@ -59,7 +59,7 @@ public partial class StatefulStateInteractionRule : InteractionRule
     /// The rule reads the state and never changes it. An unresolvable path or an empty state list is
     /// a configuration error, reported as blocked instead of silently allowing the action.
     /// </remarks>
-    public override GameplayActionAvailability Evaluate(in InteractionContext context)
+    public override GameplayActionAvailability Evaluate(in GameplayActionContext context)
     {
         StatefulComponent? stateful = ResolveStateful(context);
         if (stateful is null || ExpectedStates.Count == 0)
@@ -72,14 +72,19 @@ public partial class StatefulStateInteractionRule : InteractionRule
             : MismatchAvailability.ToAvailability(BlockReason);
     }
 
-    private StatefulComponent? ResolveStateful(in InteractionContext context)
+    private StatefulComponent? ResolveStateful(in GameplayActionContext context)
     {
-        if (StatefulPath.IsEmpty || context.Action is null)
+        if (StatefulPath.IsEmpty)
         {
             return null;
         }
 
-        Node root = context.Offer is null ? context.Action : context.Interactive;
+        Node? root = context.Target ?? context.Host ?? context.Action;
+        if (root is null)
+        {
+            return null;
+        }
+
         return root.GetNodeOrNull<StatefulComponent>(StatefulPath);
     }
 }

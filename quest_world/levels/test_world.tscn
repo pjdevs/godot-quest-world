@@ -50,13 +50,13 @@ uv1_triplanar_sharpness = 0.000850145
 
 [sub_resource type="Resource" id="Resource_raise_phase"]
 script = ExtResource("6_staterule")
-StatefulPath = NodePath("../../../LeverWall/StatefulComponent")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
 ExpectedStates = Array[StringName]([&"lowered", &"raising"])
 metadata/_custom_type_script = "uid://cvrhmun38iql5"
 
 [sub_resource type="Resource" id="Resource_raise_ready"]
 script = ExtResource("6_staterule")
-StatefulPath = NodePath("../../../LeverWall/StatefulComponent")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
 ExpectedStates = Array[StringName]([&"lowered"])
 MismatchAvailability = 1
 BlockReason = "The wall is moving."
@@ -64,13 +64,13 @@ metadata/_custom_type_script = "uid://cvrhmun38iql5"
 
 [sub_resource type="Resource" id="Resource_lower_phase"]
 script = ExtResource("6_staterule")
-StatefulPath = NodePath("../../../LeverWall/StatefulComponent")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
 ExpectedStates = Array[StringName]([&"raised", &"lowering"])
 metadata/_custom_type_script = "uid://cvrhmun38iql5"
 
 [sub_resource type="Resource" id="Resource_lower_ready"]
 script = ExtResource("6_staterule")
-StatefulPath = NodePath("../../../LeverWall/StatefulComponent")
+StatefulPath = NodePath("../../LeverWall/StatefulComponent")
 ExpectedStates = Array[StringName]([&"raised"])
 MismatchAvailability = 1
 BlockReason = "The wall is moving."

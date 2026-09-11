@@ -85,7 +85,7 @@ invocation target. Nothing is discovered by node name or tree search. Do not aut
 target that resolve to the same `(component, action)` endpoint
 for one interactor: the editor reports same-source duplicates and runtime resolution rejects any
 remaining ambiguity. A replicated action also needs a `GameplayActionExecutionSynchronizer` beside the host,
-pointing at it. Existing `InteractionAction` scenes remain supported as a migration bridge.
+pointing at it.
 
 `InteractionAnchor` is the single world point used for distance, focus, LOS, and UI projection. `InteractionArea` is currently required for every target: the area detector consumes its body overlaps, the aim detector casts against its collision shape, and the proximity detector ignores its geometry. Configure collision layers/masks accordingly.
 
@@ -111,28 +111,28 @@ Actions sharing a `HostConcurrencyGroup` are mutually exclusive on their own tar
 
 ## Write a rule
 
-Subclass `InteractionRule` when availability depends on gameplay:
+Subclass `GameplayActionRule` when availability depends on gameplay:
 
 ```csharp
-public partial class HasKeyRule : InteractionRule
+public partial class HasKeyRule : GameplayActionRule
 {
-    public override InteractionAvailability Evaluate(in InteractionContext context)
+    public override GameplayActionAvailability Evaluate(in GameplayActionContext context)
     {
-        return HasKey(context.Interactor)
-            ? new InteractionAllowed()
-            : new InteractionBlocked("A key is required.");
+        return context.GetInstigator<Player>()?.HasKey == true
+            ? new GameplayActionAllowed()
+            : new GameplayActionBlocked("A key is required.");
     }
 }
 ```
 
 Add shared rules to `InteractiveComponent.TargetRules`; add offer-specific rules to
 `InteractionOffer.Rules`; keep capability rules on the resolved `GameplayAction.Rules`. Target and
-offer rules run before the owned action rules, stopping at the first non-allowed result. The legacy
-`InteractionAction.Rules` path remains available while existing scenes migrate.
+offer rules run before the owned action rules, stopping at the first non-allowed result. All three
+rule locations receive the same generic `GameplayActionContext`.
 
 | Member | Comes from | Called on | Rhythm / constraint |
 | --- | --- | --- | --- |
-| `Evaluate(context)` | `InteractionRule` | Owning client and authoritative server | Potentially several times per presented action per frame on the client, then again per command on the server. Must be synchronous, gameplay-pure, and cheap. |
+| `Evaluate(context)` | `GameplayActionRule` | Owning client and authoritative server | Potentially several times per presented action per frame on the client, then again per command on the server. Must be synchronous, gameplay-pure, and cheap. |
 
 Return:
 
@@ -140,7 +140,7 @@ Return:
 - `InteractionBlocked(reason)`: keep it visible and explain why.
 - `InteractionHidden`: omit it entirely.
 
-Resources may be shared between targets. Never store mutable runtime state in a rule; read nodes or services through `context.Interactor`, `context.Interactive`, and `context.Action`.
+Resources may be shared between targets. Never store mutable runtime state in a rule; read nodes or services through `context.GetInstigator<T>()`, `context.GetHost<T>()`, `context.GetTarget<T>()`, and `context.Action`.
 
 ### Provided rules
 
@@ -152,13 +152,13 @@ Resources may be shared between targets. Never store mutable runtime state in a 
 
 ## Write an executor
 
-Subclass `InteractionActionExecutor` for the one object that mutates gameplay:
+Subclass `GameplayActionExecutor` for the one object that mutates gameplay:
 
 ```csharp
-public partial class OpenDoorExecutor : InteractionActionExecutor
+public partial class OpenDoorExecutor : GameplayActionExecutor
 {
     public override GameplayActionExecutionResult Execute(
-        in InteractionExecutionContext context
+        in GameplayActionContext context
     )
     {
         OpenDoor();
@@ -171,7 +171,7 @@ public partial class OpenDoorExecutor : InteractionActionExecutor
 | --- | --- | --- | --- |
 | `Execute(context)` | Yes | Authority only | Once, synchronously, after rules pass and the execution is reserved |
 | `TimedGameplayActionExecutor.ComputeTimedDuration(context)` | No | Authority and owning client | Pure timed-feature query; must return a positive finite duration |
-| `RequiresInteractorPresence` | No | Authority | Read after a running result; default `true` |
+| `RequiresRequesterPresence` | No | Authority | Read after a running result; default `true` |
 | `OnExecutionCompleted(context)` | No | Authority only | Once when a previously running execution completes |
 | `OnExecutionCancelled(context, reason)` | No | Authority only | Once when a previously running execution is cancelled |
 | `OnExecutionFailed(context, reason)` | No | Authority only | Once when a previously running execution fails |
@@ -183,22 +183,22 @@ public partial class OpenDoorExecutor : InteractionActionExecutor
 - `GameplayActionExecutionRejected(reason)`: nothing started. Use this rarely; ordinary conditions belong in rules.
 - `GameplayActionExecutionFailed(reason)`: it started but failed, so observers receive started then failed.
 
-For an event-driven action such as dialogue, return `Running()`, keep `context.ExecutionId`, and later call `CompleteExecution(id)`, `CancelExecution(id)` or `FailExecution(id, reason)` on the host — `context.Interactive.ActionComponent` — from authoritative gameplay. The lifecycle belongs to the host: `InteractiveComponent` no longer exposes it.
+For an event-driven action such as dialogue, return a running result, keep `context.ExecutionId`, and later call `CompleteExecution(id)`, `CancelExecution(id)` or `FailExecution(id, reason)` on `context.Component` from authoritative gameplay. The lifecycle belongs to the generic action host.
 
 For timed authoring, inherit the generic `TimedGameplayActionExecutor` and return `RunningTimed(context)`;
 its context is the generic one, so use it when the executor needs no spatial vocabulary. When an
-`InteractionActionExecutor` is already required, compose the same policy directly: keep one
-`TimedExecution`, call `Start(context.Interactive.ActionComponent!, context.ExecutionId, duration)` and
-return `Running()` only when the helper started. Forward the three terminal callbacks to `TimedExecution.Stop(context.ExecutionId)`. One helper
+When a custom `GameplayActionExecutor` needs a timer, compose the same policy directly: keep one
+`TimedExecution`, call `Start(context.Component, context.ExecutionId, duration)` and
+return a running result only when the helper started. Forward the three terminal callbacks to `TimedExecution.Stop(context.ExecutionId)`. One helper
 owns at most one active clock and refuses reuse instead of abandoning its first execution. Its `Start`
 result distinguishes an active helper, invalid duration, stale execution, and missing scene tree.
 
 Timed duration is a strict contract: zero, negative, NaN, and infinity fail the accepted execution.
-Use `InteractionActionExecutor` (or `TransitionStateGameplayActionExecutor`) for open-ended gameplay. The
+Use `GameplayActionExecutor` (or `TransitionStateGameplayActionExecutor`) for open-ended gameplay. The
 clock uses monotonic real time on authority and presentation peers, so pausing one node's processing
 does not give the lifecycle and its extrapolated bar different time semantics.
 
-A timed running action delegates its clock to a composed `TimedExecution`, which publishes sparse linear samples and completes the generic execution on the authority. A presence-bound running action is also revalidated once per server process frame through its detector. Set `RequiresInteractorPresence = false` for work handed to the world from its start; an executor that commits during a running interaction can call `GameplayActionContext.ReleaseRequesterDependency()` at that commit to release the sustained dependency. Before that call, `InputRequirement.Pressed` keeps the request presence-bound.
+A timed running action delegates its clock to a composed `TimedExecution`, which publishes sparse linear samples and completes the generic execution on the authority. A presence-bound running action is also revalidated once per server process frame through its detector. Set `RequiresRequesterPresence = false` for work handed to the world from its start; an executor that commits during a running interaction can call `GameplayActionContext.ReleaseRequesterDependency()` at that commit to release the sustained dependency. Before that call, `InputRequirement.Pressed` keeps the request presence-bound.
 
 ### Provided executors
 
@@ -305,7 +305,7 @@ directly; use the runner's `TryStartActionInput` and `TryEndActionInput`.
 The target supplies `ActionPromptScene` and `IndicationScene`; leaving one unset simply omits that visual.
 
 - A prompt container implements `IInteractionPromptContainer.Bind(targetPresentation)` and exposes `ActionsContainer`.
-- One action widget implements `IInteractionActionWidget.Bind(in actionPresentation, executionPresentation?)`.
+- One action widget implements `IGameplayActionWidget.Bind(in actionPresentation, executionPresentation?)`.
 - A target-level indication implements `IInteractionWidget.Bind(targetPresentation)`.
 
 `Bind` runs locally every presentation frame so hold progress, execution presentation, rules, and projection remain current. Keep it allocation-free and side-effect free. The presenter reuses widget instances; it only recreates them when the target, scene, or presented action count changes.
@@ -316,7 +316,7 @@ The target supplies `ActionPromptScene` and `IndicationScene`; leaving one unset
 | --- | --- | --- |
 | `InteractionPresenter` | Projects one focused container plus one indication per non-focused detected target | Each local process frame rebuilds snapshots, re-evaluates every action of the focused and indicated targets, binds widgets, and projects them: O(total actions across presented targets). Stable frames use this single refresh path; status events no longer trigger a duplicate refresh, and the stale-indication buffer is reused. |
 | `InteractionPromptWidget` | Target name and action container | Minimal default; no styling or input glyph resolution |
-| `InteractionActionPromptWidget` | Input and label, or blocked reason | Constant bind cost; text-only |
+| `GameplayActionPromptWidget` | Input and label, or blocked reason | Constant bind cost; text-only |
 | `InteractionIndicatorWidget` | Target name | Constant bind cost; allowed/blocked appearance comes from the selected scene |
 
 ## Technical reference
@@ -337,7 +337,7 @@ Offline and listen-server play take the authoritative path directly. Execution p
 `InteractiveComponent` through one generic record: timed slots extrapolate a linear sample, published slots
 carry discrete values, and a local `Callable` has priority when registered. A requester creates a local
 `ExecutionId = 0` prediction when the executor exposes an initial sample, then reconciles it with the started
-acknowledgement; requester-only corrections use a reliable owner RPC. `InteractionAction.ExecutionVisibility`
+acknowledgement; requester-only corrections use a reliable owner RPC. `GameplayAction.ExecutionVisibility`
 selects who receives that transient slot:
 
 - `RequesterOnly` (default) keeps it on the authority and requesting peer;
@@ -351,7 +351,7 @@ The synchronizer replicates presentation samples, not execution authority. Keep 
 
 ### Notifications
 
-`InteractionActionStarted`, `Completed`, `Cancelled`, `Failed`, and `Rejected` are authoritative notifications on the target. They are never commands. Local interactor signals report focus, presentation invalidation, requests, refusals, and indication changes.
+`GameplayActionStarted`, `Completed`, `Cancelled`, `Failed`, and `Rejected` are authoritative notifications on the generic action component. They are never commands. Local interactor signals report focus, presentation invalidation, requests, refusals, and indication changes.
 
 `InteractionStatusChanged` is an event, not a per-frame push: it fires when focus moves, a target enters detection, or gameplay explicitly invalidates its status. A rule changing by itself emits nothing; consumers needing continuous freshness must pull a new presentation snapshot. The provided presenter already does so once per local process frame.
 

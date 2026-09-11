@@ -8,7 +8,6 @@ using GameplayActionPlugin.Runtime.Bindings;
 using GdUnit4;
 using Godot;
 using InteractionPlugin;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Detection;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
@@ -489,7 +488,7 @@ public sealed partial class InteractionDetectionTest
             InteractionAnchor = target,
             DisplayName = "Target",
         };
-        InteractionAction action = new()
+        InputGameplayAction action = new()
         {
             Name = "activateAction",
             Definition = new GameplayActionDefinition
@@ -518,10 +517,9 @@ public sealed partial class InteractionDetectionTest
         AreaInteractionDetector Detector
     );
 
-    private sealed partial class NoopInteractionExecutor : InteractionActionExecutor
+    private sealed partial class NoopInteractionExecutor : GameplayActionExecutor
     {
-        public override GameplayActionExecutionResult Execute(
-            in InteractionExecutionContext context
-        ) => new GameplayActionExecutionCompleted();
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context) =>
+            new GameplayActionExecutionCompleted();
     }
 }

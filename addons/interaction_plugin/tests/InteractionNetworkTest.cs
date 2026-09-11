@@ -12,7 +12,6 @@ using GdUnit4;
 using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Integration.Stateful;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
 using InteractionPlugin.Runtime.Offers;
@@ -413,7 +412,7 @@ public sealed partial class InteractionNetworkTest : InteractionNetworkTestBase
         {
             foreach (PeerScene scene in new[] { session.Server, session.ClientA, session.ClientB })
             {
-                scene.Interactive.Offers.Add(CreateReservationOffer());
+                ConfigureReservationOffer(scene.Interactive);
             }
 
             session.Arm(new GameplayActionExecutionRunning(), duration: 3600.0f);
@@ -451,7 +450,7 @@ public sealed partial class InteractionNetworkTest : InteractionNetworkTestBase
                 .IsTrue();
 
             late = await session.JoinLate("LateReservationPeer");
-            late.Scene.Interactive.Offers.Add(CreateReservationOffer());
+            ConfigureReservationOffer(late.Scene.Interactive);
             GameplayActionAvailability lateAvailability =
                 late.Scene.Interactive.EvaluateAvailability(
                     late.Scene.InteractorA,
@@ -493,16 +492,6 @@ public sealed partial class InteractionNetworkTest : InteractionNetworkTestBase
         }
     }
 
-    private static InteractionOffer CreateReservationOffer() =>
-        new()
-        {
-            ActionSource = InteractionOfferSource.Target,
-            ActionId = ActivateAction,
-            BindingConfig = new GameplayActionBindingConfig
-            {
-                InputActionName = InteractInput,
-                ActivationMode = GameplayActionActivationMode.Press,
-            },
-            TargetConcurrencyGroup = new StringName("target_operation"),
-        };
+    private static void ConfigureReservationOffer(InteractiveComponent interactive) =>
+        interactive.Offers[0].TargetConcurrencyGroup = new StringName("target_operation");
 }

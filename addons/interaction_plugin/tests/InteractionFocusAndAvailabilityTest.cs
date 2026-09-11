@@ -8,15 +8,14 @@ using GameplayActionPlugin.Integration.Stateful;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Rules;
 using GdUnit4;
 using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Examples.Rules;
 using InteractionPlugin.Integration.Stateful;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
-using InteractionPlugin.Runtime.Rules;
 using QuestWorld.Tests.GameplayActions;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
@@ -143,13 +142,13 @@ public sealed partial class InteractionFocusAndAvailabilityTest : InteractionTes
         {
             InteractionArea = area,
             InteractionAnchor = owner,
-            TargetRules = new Godot.Collections.Array<InteractionRule>
+            TargetRules = new Godot.Collections.Array<GameplayActionRule>
             {
                 new AlwaysBlockedInteractionRule { Reason = "First reason" },
                 new AlwaysBlockedInteractionRule { Reason = "Second reason" },
             },
         };
-        InteractionAction action = CreateAction("activate");
+        GameplayAction action = CreateAction("activate");
         owner.AddChild(area);
         owner.AddChild(interactive);
         interactive.AddAction(action);
@@ -183,12 +182,12 @@ public sealed partial class InteractionFocusAndAvailabilityTest : InteractionTes
         {
             InteractionArea = area,
             InteractionAnchor = owner,
-            TargetRules = new Godot.Collections.Array<InteractionRule>
+            TargetRules = new Godot.Collections.Array<GameplayActionRule>
             {
                 new AlwaysBlockedInteractionRule { Reason = "Target reason" },
             },
         };
-        InteractionAction action = CreateAction(
+        GameplayAction action = CreateAction(
             "activate",
             new AlwaysBlockedInteractionRule { Reason = "Action reason" }
         );
@@ -220,7 +219,7 @@ public sealed partial class InteractionFocusAndAvailabilityTest : InteractionTes
             InteractionArea = area,
             InteractionAnchor = owner,
         };
-        InteractionAction action = CreateAction("activate", new InteractiveParentGameplayRule());
+        GameplayAction action = CreateAction("activate", new InteractiveParentGameplayRule());
         owner.AddChild(area);
         owner.AddChild(interactive);
         interactive.AddAction(action);
@@ -337,9 +336,9 @@ public sealed partial class InteractionFocusAndAvailabilityTest : InteractionTes
     {
         DoorWorld door = BuildDoorWorld();
         await door.Runner.SimulateFrames(1);
-        InteractionAction undefined = new() { Name = "UndefinedAction" };
+        GameplayAction undefined = new() { Name = "UndefinedAction" };
         door.Interactive.ActionComponent!.Actions.Add(undefined);
-        InteractionAction foreign = CreateAction("foreign");
+        GameplayAction foreign = CreateAction("foreign");
 
         try
         {
@@ -376,12 +375,16 @@ public sealed partial class InteractionFocusAndAvailabilityTest : InteractionTes
         ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
         await runner.SimulateFrames(1);
 
-        InteractionAction foreign = CreateAction("foreign");
+        GameplayAction foreign = CreateAction("foreign");
         try
         {
             AssertThat(interactive.EvaluateAvailability(interactor) is GameplayActionHidden)
                 .IsTrue();
-            AssertThat(interactive.ResolveAction(new StringName("foreign")) == null).IsTrue();
+            AssertThat(
+                    interactive.ActionComponent is null
+                    || interactive.ActionComponent.ResolveAction(new StringName("foreign")) == null
+                )
+                .IsTrue();
             AssertThat(
                     interactive.ExecuteAction(interactor, foreign)
                         is GameplayActionExecutionRejected
@@ -476,7 +479,7 @@ public sealed partial class InteractionFocusAndAvailabilityTest : InteractionTes
             InteractionAnchor = crate,
             DisplayName = "Crate",
         };
-        InteractionAction inspect = CreateAction("inspect");
+        GameplayAction inspect = CreateAction("inspect");
         crate.AddChild(crateArea);
         crate.AddChild(crateInteractive);
         crateInteractive.AddAction(inspect);
@@ -520,7 +523,7 @@ public sealed partial class InteractionFocusAndAvailabilityTest : InteractionTes
         TestWorld testWorld = BuildWorld();
         testWorld.Action.DefaultBindingConfig!.ActivationMode = GameplayActionActivationMode.Hold;
         testWorld.Action.DefaultBindingConfig!.HoldDuration = 2.0f;
-        InteractionAction inspect = CreateAction("inspect");
+        GameplayAction inspect = CreateAction("inspect");
         testWorld.Interactive.AddAction(inspect);
         testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);

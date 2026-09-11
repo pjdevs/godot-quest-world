@@ -3,10 +3,10 @@
 [ext_resource type="Script" uid="uid://1pl03uoo7gne" path="res://quest_world/interactibles/door/Door.cs" id="1_6xdtw"]
 [ext_resource type="Script" uid="uid://dip8gc8uyuju" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="1_vodtj"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="2_wx55h"]
-[ext_resource type="Script" uid="uid://8wu3ysgpmbd4" path="res://addons/interaction_plugin/runtime/actions/InteractionAction.cs" id="3_llf4b"]
+[ext_resource type="Script" uid="uid://bpl2q4bryqvmj" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayAction.cs" id="3_llf4b"]
 [ext_resource type="Script" uid="uid://nyac2n1klfrk" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="4_adxal"]
 [ext_resource type="PackedScene" uid="uid://mknaynw5h20v" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="4_qkbub"]
-[ext_resource type="Script" uid="uid://bqbeb86opaj4m" path="res://addons/interaction_plugin/runtime/rules/InteractionRule.cs" id="5_adxal"]
+[ext_resource type="Script" uid="uid://canmvbkunu40a" path="res://addons/gameplay_action_plugin/runtime/rules/GameplayActionRule.cs" id="5_rules"]
 [ext_resource type="Script" uid="uid://cvrhmun38iql5" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="6_bhqfo"]
 [ext_resource type="Script" uid="uid://cpbt7qansaxqx" path="res://addons/stateful_plugin/runtime/StatefulComponent.cs" id="7_bhqfo"]
 [ext_resource type="Script" uid="uid://bw02qn7pyxpy4" path="res://addons/gameplay_action_plugin/integration/stateful/SetStateGameplayActionExecutor.cs" id="7_wx55h"]
@@ -14,6 +14,7 @@
 [ext_resource type="Script" uid="uid://bncq4bgetbnu7" path="res://addons/stateful_plugin/runtime/StateSchema.cs" id="8_j1fib"]
 [ext_resource type="AudioStream" uid="uid://dh5ssj12f4ily" path="res://quest_world/interactibles/door/door_unlock.mp3" id="12_c4v56"]
 [ext_resource type="Script" uid="uid://clv6g48bftyhm" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="13_binding"]
+[ext_resource type="Script" uid="uid://dskma4ncsvn1h" path="res://addons/interaction_plugin/runtime/offers/InteractionOffer.cs" id="14_offer"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_mokd0"]
 size = Vector3(1, 1.9, 0.1)
@@ -106,7 +107,7 @@ ActivationMode = 0
 
 [sub_resource type="Resource" id="Resource_ii2gm"]
 script = ExtResource("6_bhqfo")
-StatefulPath = NodePath("../../StatefulComponent")
+StatefulPath = NodePath("../StatefulComponent")
 ExpectedStates = Array[StringName]([&"closed"])
 BlockReason = ""
 metadata/_custom_type_script = "uid://cvrhmun38iql5"
@@ -125,7 +126,7 @@ Priority = 1
 
 [sub_resource type="Resource" id="Resource_6xdtw"]
 script = ExtResource("6_bhqfo")
-StatefulPath = NodePath("../../StatefulComponent")
+StatefulPath = NodePath("../StatefulComponent")
 ExpectedStates = Array[StringName]([&"opened"])
 BlockReason = ""
 metadata/_custom_type_script = "uid://cvrhmun38iql5"
@@ -145,10 +146,34 @@ Priority = 2
 
 [sub_resource type="Resource" id="Resource_c4v56"]
 script = ExtResource("6_bhqfo")
-StatefulPath = NodePath("../../StatefulComponent")
+StatefulPath = NodePath("../StatefulComponent")
 ExpectedStates = Array[StringName]([&"locked"])
 BlockReason = ""
 metadata/_custom_type_script = "uid://cvrhmun38iql5"
+
+[sub_resource type="Resource" id="Resource_open_offer"]
+resource_name = "Open"
+script = ExtResource("14_offer")
+ActionId = &"open"
+BindingConfig = SubResource("Resource_open_binding")
+Rules = Array[ExtResource("5_rules")]([SubResource("Resource_ii2gm")])
+metadata/_custom_type_script = "uid://dskma4ncsvn1h"
+
+[sub_resource type="Resource" id="Resource_close_offer"]
+resource_name = "Close"
+script = ExtResource("14_offer")
+ActionId = &"close"
+BindingConfig = SubResource("Resource_close_binding")
+Rules = Array[ExtResource("5_rules")]([SubResource("Resource_6xdtw")])
+metadata/_custom_type_script = "uid://dskma4ncsvn1h"
+
+[sub_resource type="Resource" id="Resource_unlock_offer"]
+resource_name = "Unlock"
+script = ExtResource("14_offer")
+ActionId = &"unlock"
+BindingConfig = SubResource("Resource_unlock_binding")
+Rules = Array[ExtResource("5_rules")]([SubResource("Resource_c4v56")])
+metadata/_custom_type_script = "uid://dskma4ncsvn1h"
 
 [sub_resource type="Resource" id="Resource_j1fib"]
 script = ExtResource("8_j1fib")
@@ -219,11 +244,10 @@ metadata/_custom_type_script = "uid://dwmqsp6eyk4gd"
 
 [node name="OpenAction" type="Node" parent="Interaction/GameplayActions" unique_id=395259595 node_paths=PackedStringArray("Executor")]
 script = ExtResource("3_llf4b")
+ConfiguredAccessProviderId = &"interaction"
 Definition = SubResource("Resource_mokd0")
-DefaultBindingConfig = SubResource("Resource_open_binding")
 Executor = NodePath("OpenExecutor")
-Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_ii2gm")])
-metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+metadata/_custom_type_script = "uid://bpl2q4bryqvmj"
 
 [node name="OpenExecutor" type="Node" parent="Interaction/GameplayActions/OpenAction" unique_id=1352586469 node_paths=PackedStringArray("Stateful")]
 script = ExtResource("7_wx55h")
@@ -233,11 +257,10 @@ metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
 
 [node name="CloseAction" type="Node" parent="Interaction/GameplayActions" unique_id=1558009407 node_paths=PackedStringArray("Executor")]
 script = ExtResource("3_llf4b")
+ConfiguredAccessProviderId = &"interaction"
 Definition = SubResource("Resource_wx55h")
-DefaultBindingConfig = SubResource("Resource_close_binding")
 Executor = NodePath("CloseExecutor")
-Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_6xdtw")])
-metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+metadata/_custom_type_script = "uid://bpl2q4bryqvmj"
 
 [node name="CloseExecutor" type="Node" parent="Interaction/GameplayActions/CloseAction" unique_id=1929747493 node_paths=PackedStringArray("Stateful")]
 script = ExtResource("7_wx55h")
@@ -247,11 +270,10 @@ metadata/_custom_type_script = "uid://bw02qn7pyxpy4"
 
 [node name="UnlockAction" type="Node" parent="Interaction/GameplayActions" unique_id=37820192 node_paths=PackedStringArray("Executor")]
 script = ExtResource("3_llf4b")
+ConfiguredAccessProviderId = &"interaction"
 Definition = SubResource("Resource_qkbub")
-DefaultBindingConfig = SubResource("Resource_unlock_binding")
 Executor = NodePath("UnlockExecutor")
-Rules = Array[ExtResource("5_adxal")]([SubResource("Resource_c4v56")])
-metadata/_custom_type_script = "uid://8wu3ysgpmbd4"
+metadata/_custom_type_script = "uid://bpl2q4bryqvmj"
 
 [node name="UnlockExecutor" type="Node" parent="Interaction/GameplayActions/UnlockAction" unique_id=491570712 node_paths=PackedStringArray("Stateful")]
 script = ExtResource("7_wx55h")
@@ -268,6 +290,7 @@ DisplayName = "Door"
 ActionPromptScene = ExtResource("2_wx55h")
 IndicationScene = ExtResource("4_qkbub")
 ActionComponent = NodePath("../GameplayActions")
+Offers = Array[ExtResource("14_offer")]([SubResource("Resource_open_offer"), SubResource("Resource_close_offer"), SubResource("Resource_unlock_offer")])
 metadata/_custom_type_script = "uid://dip8gc8uyuju"
 
 [node name="StatefulComponent" type="Node" parent="Interaction" unique_id=957633712]

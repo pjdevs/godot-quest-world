@@ -3,7 +3,6 @@ namespace QuestWorld.Tests.Interaction;
 using GameplayActionPlugin.Runtime.Actions;
 using GdUnit4;
 using Godot;
-using InteractionPlugin.Runtime.Actions;
 using static GdUnit4.Assertions;
 
 [TestSuite]
@@ -12,10 +11,10 @@ using static GdUnit4.Assertions;
 public sealed partial class InteractionInputMigrationTest
 {
     [TestCase]
-    public void InteractionActionUsesInputGameplayActionDefaultsInsteadOfLegacyInputExports()
+    public void InputGameplayActionUsesGenericActionMetadataAndOptionalInputDefaults()
     {
-        InteractionAction action = AutoFree(new InteractionAction());
-        System.Reflection.Assembly assembly = typeof(InteractionAction).Assembly;
+        InputGameplayAction action = AutoFree(new InputGameplayAction());
+        System.Reflection.Assembly assembly = typeof(GameplayAction).Assembly;
         AssertThat(
                 assembly.GetType("InteractionPlugin.Runtime.Actions.InteractionActionDefinition")
                     is null
@@ -28,11 +27,11 @@ public sealed partial class InteractionInputMigrationTest
             .IsTrue();
 
         AssertThat(action is InputGameplayAction).IsTrue();
-        AssertThat(typeof(InteractionAction).GetProperty("Priority") is null).IsTrue();
-        AssertThat(typeof(InteractionAction).GetProperty("Automatic") is null).IsTrue();
-        AssertThat(typeof(InteractionAction).GetProperty("Definition")?.PropertyType)
+        AssertThat(typeof(GameplayAction).GetProperty("Priority") is null).IsTrue();
+        AssertThat(typeof(GameplayAction).GetProperty("Automatic") is null).IsTrue();
+        AssertThat(typeof(GameplayAction).GetProperty("Definition")?.PropertyType)
             .IsEqual(typeof(GameplayActionDefinition));
-        AssertThat(typeof(InteractionAction).GetProperty("InteractionDefinition") is null).IsTrue();
+        AssertThat(typeof(GameplayAction).GetProperty("InteractionDefinition") is null).IsTrue();
         AssertThat(action.DefaultBindingConfig is null).IsTrue();
     }
 }

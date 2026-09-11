@@ -1,10 +1,8 @@
 namespace QuestWorld.Tests;
 
 using GameplayActionPlugin;
+using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Execution;
-using Godot;
-using InteractionPlugin;
-using InteractionPlugin.Runtime.Actions;
 
 /// <summary>Executor whose single outcome and duration a test writes before the command runs.</summary>
 /// <remarks>
@@ -12,7 +10,7 @@ using InteractionPlugin.Runtime.Actions;
 /// does, so the executor is reduced to the one decision that changes the protocol: which of the four
 /// results it returns.
 /// </remarks>
-public sealed partial class TestScriptedExecutor : InteractionActionExecutor
+public sealed partial class TestScriptedExecutor : GameplayActionExecutor
 {
     private readonly TimedExecution _timedExecution = new();
 
@@ -25,7 +23,7 @@ public sealed partial class TestScriptedExecutor : InteractionActionExecutor
 
     public int ExecuteCount { get; private set; }
 
-    public override GameplayActionExecutionResult Execute(in InteractionExecutionContext context)
+    public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         ExecuteCount++;
         LastExecutionId = context.ExecutionId;
@@ -38,26 +36,23 @@ public sealed partial class TestScriptedExecutor : InteractionActionExecutor
         }
 
         return
-            _timedExecution.Start(
-                context.Interactive.ActionComponent!,
-                context.ExecutionId,
-                Duration.Value
-            ) == TimedExecutionStartResult.Started
-            ? Running()
+            _timedExecution.Start(context.Component, context.ExecutionId, Duration.Value)
+            == TimedExecutionStartResult.Started
+            ? new GameplayActionExecutionRunning()
             : new GameplayActionExecutionFailed("The scripted timer could not start.");
     }
 
-    internal override GameplayActionProgressSample? GetInteractionPredictionSample(
-        in InteractionContext context
+    internal override GameplayActionProgressSample? GetPredictionSample(
+        in GameplayActionContext context
     ) => Duration.HasValue ? TimedExecution.BuildPredictionSample(Duration.Value) : null;
 
-    protected internal override void OnExecutionCompleted(in InteractionExecutionContext context)
+    protected internal override void OnExecutionCompleted(in GameplayActionContext context)
     {
         _timedExecution.Stop(context.ExecutionId);
     }
 
     protected internal override void OnExecutionCancelled(
-        in InteractionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     )
     {
@@ -65,7 +60,7 @@ public sealed partial class TestScriptedExecutor : InteractionActionExecutor
     }
 
     protected internal override void OnExecutionFailed(
-        in InteractionExecutionContext context,
+        in GameplayActionContext context,
         string reason
     )
     {

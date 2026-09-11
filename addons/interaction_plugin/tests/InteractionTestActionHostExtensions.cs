@@ -1,13 +1,15 @@
 namespace QuestWorld.Tests;
 
+using System;
 using GameplayActionPlugin;
 using GameplayActionPlugin.Runtime.Actions;
+using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Execution;
 using GameplayActionPlugin.Runtime.Runner;
 using Godot;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
+using InteractionPlugin.Runtime.Offers;
 
 internal static class InteractionTestActionHostExtensions
 {
@@ -45,31 +47,78 @@ internal static class InteractionTestActionHostExtensions
     /// </remarks>
     public static void AddAction(
         this InteractiveComponent interactive,
-        InteractionAction action,
+        GameplayAction action,
         Node? beside = null
     )
     {
         GameplayActionComponent component = interactive.ConfigureActionHost(beside);
+        action.ConfiguredAccessProviderId = InteractionOffer.InteractionAccessProviderId;
         AdoptAction(component, action);
 
         if (component.IsInsideTree())
         {
-            action.PrepareForInteractive(interactive, interactive.TargetRules);
             component.AddAction(action);
-            return;
         }
-
-        if (!component.Actions.Contains(action))
+        else if (!component.Actions.Contains(action))
         {
             component.Actions.Add(action);
+        }
+
+        if (
+            action.Definition is not null
+            && action is InputGameplayAction inputAction
+            && inputAction.DefaultBindingConfig is GameplayActionBindingConfig binding
+        )
+        {
+            interactive.Offers.Add(
+                new InteractionOffer
+                {
+                    ActionSource = InteractionOfferSource.Target,
+                    ActionId = action.Definition.Id,
+                    BindingConfig = binding,
+                }
+            );
         }
     }
 
     /// <summary>Gets one action of an interactive by its position in the declared order.</summary>
-    public static InteractionAction ActionAt(this InteractiveComponent interactive, int index) =>
-        (InteractionAction)interactive.ActionComponent!.Actions[index];
+    public static GameplayAction ActionAt(this InteractiveComponent interactive, int index) =>
+        interactive.ActionComponent!.Actions[index];
 
-    private static void AdoptAction(GameplayActionComponent component, InteractionAction action)
+    public static InteractionOffer OfferAt(this InteractiveComponent interactive, int index) =>
+        interactive.Offers[index];
+
+    /// <summary>Evaluates the offer that resolves to a target-owned action.</summary>
+    /// <remarks>
+    /// Production callers evaluate authored offers directly. This overload keeps the older test
+    /// worlds readable while they are migrated to the same offer-backed model.
+    /// </remarks>
+    public static GameplayActionAvailability EvaluateAvailability(
+        this InteractiveComponent interactive,
+        InteractionInteractor interactor,
+        GameplayAction action
+    )
+    {
+        GameplayActionComponent? component = action.Component ?? interactive.ActionComponent;
+        if (
+            component is null
+            || action.Definition is null
+            || !interactive.TryResolveOfferForEndpoint(
+                interactor,
+                component,
+                action,
+                out InteractionOffer? offer
+            )
+            || offer is null
+        )
+        {
+            return new GameplayActionBlocked("Interaction is not configured.");
+        }
+
+        return interactive.EvaluateAvailability(interactor, offer);
+    }
+
+    private static void AdoptAction(GameplayActionComponent component, GameplayAction action)
     {
         Node? parent = action.GetParent();
         if (parent == component)
@@ -119,13 +168,13 @@ internal static class InteractionTestActionHostExtensions
     public static GameplayActionExecutionResult ExecuteAction(
         this InteractiveComponent interactive,
         InteractionInteractor interactor,
-        InteractionAction action
+        GameplayAction action
     ) => interactive.ExecuteAction(interactor, action, out _);
 
     public static GameplayActionExecutionResult ExecuteAction(
         this InteractiveComponent interactive,
         InteractionInteractor interactor,
-        InteractionAction action,
+        GameplayAction action,
         out ulong executionId
     )
     {
@@ -140,7 +189,8 @@ internal static class InteractionTestActionHostExtensions
         return interactive.ActionComponent.ExecuteAction(
             action.Definition.Id,
             out executionId,
-            interactor
+            interactor,
+            interactive.ResolveInvocationTarget()
         );
     }
 
@@ -206,10 +256,10 @@ internal static class InteractionTestActionHostExtensions
             return;
 
         interactor.Runner.ServerTryStartAction(
-            component.GetPath(),
+            interactor.GetTree().Root.GetPathTo(component),
             actionId,
-            interactive.GetPath(),
-            interactive.ResolveInvocationTarget().GetPath()
+            interactor.GetTree().Root.GetPathTo(interactive),
+            interactor.GetTree().Root.GetPathTo(interactive.ResolveInvocationTarget())
         );
     }
 

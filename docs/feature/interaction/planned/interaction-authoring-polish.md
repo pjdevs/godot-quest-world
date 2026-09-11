@@ -11,7 +11,7 @@ The runtime topology is now explicit and stable:
 Door
 ├── StatefulComponent
 ├── GameplayActions                         # GameplayActionComponent
-│   ├── OpenAction                          # InteractionAction
+│   ├── OpenAction                          # GameplayAction
 │   │   └── OpenExecutor                    # GameplayActionExecutor
 │   └── CloseAction
 │       └── CloseExecutor
@@ -22,8 +22,8 @@ Door
     └── InteractionAnchor
 ```
 
-`GameplayActionComponent` is the sole owner of action occurrences. `InteractiveComponent.Actions` is
-already a derived projection of the `InteractionAction` occurrences hosted there; this plan does **not**
+`GameplayActionComponent` is the sole owner of action occurrences. `InteractionOffer` resolves the
+generic action endpoint exposed by the host; this plan does **not**
 bring back a second Actions array or an Interaction execution synchronizer.
 
 The remaining authoring pain is reference plumbing: the scene already expresses obvious local
@@ -113,7 +113,7 @@ integration packages.
 - no second action collection on `InteractiveComponent`;
 - no Interaction-specific execution or execution synchronizer;
 - no new state-machine/transition framework;
-- no replacement for custom `GameplayActionRule` / `InteractionRule` / executors;
+- no replacement for custom `GameplayActionRule` / executors;
 - no generic AND/OR rule graph without a concrete gameplay need;
 - no lifecycle, requester, prediction or networking refactor.
 
@@ -125,9 +125,9 @@ A normal door should remain structurally honest while requiring little Inspector
 Door
 ├── StatefulComponent
 ├── GameplayActions
-│   ├── Open : InteractionAction
+│   ├── Open : GameplayAction
 │   │   └── TransitionExecutor
-│   └── Close : InteractionAction
+│   └── Close : GameplayAction
 │       └── TransitionExecutor
 └── InteractiveComponent
     ├── InteractionArea

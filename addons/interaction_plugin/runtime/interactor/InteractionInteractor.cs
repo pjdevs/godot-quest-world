@@ -5,7 +5,6 @@ using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Runner;
 using Godot;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Detection;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Offers;
@@ -184,8 +183,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             );
         }
 
-        return context.Action is InteractionAction legacyAction
-            && legacyAction.Interactive == interactive;
+        return false;
     }
 
     private bool HasInteractionAccess(in GameplayActionAccessContext context)
@@ -213,9 +211,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
                 is GameplayActionAllowed;
         }
 
-        return context.Action is InteractionAction interactionAction
-            && interactionAction.Interactive == interactive
-            && Detector?.Detect(interactive) == InteractionDetectionKind.Interactible;
+        return false;
     }
 
     private static bool TryResolveInteractionAccess(
@@ -382,32 +378,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
             return;
         }
-
-        if (interactive.ActionComponent is null)
-        {
-            return;
-        }
-
-        foreach (InteractionAction action in interactive.Actions)
-        {
-            if (
-                action?.Definition is null
-                || action.DefaultBindingConfig is not GameplayActionBindingConfig config
-            )
-            {
-                continue;
-            }
-
-            Runner.BindAction(
-                interactive.ActionComponent,
-                action.Definition.Id,
-                interactive,
-                config,
-                presentationContext: Variant.From(interactive),
-                target: interactive.ResolveInvocationTarget(),
-                accessSource: interactive
-            );
-        }
     }
 
     internal void RefreshFocusedBindings(InteractiveComponent interactive)
@@ -546,12 +516,11 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         Runner.GameplayActionFailed -= OnGameplayActionFailed;
     }
 
-    /// <summary>Resolves the interaction target one host signal belongs to.</summary>
+    /// <summary>Resolves the interaction target from the contextual binding that requested an action.</summary>
     /// <remarks>
-    /// The host names the action, and an <see cref="InteractionAction"/> knows the target that
-    /// prepared it, so the target is reached by ownership instead of by a reverse index from hosts
-    /// back to interactives. A host carrying generic actions beside the interaction ones therefore
-    /// resolves only the latter, which is exactly what the interaction signals describe.
+    /// Interaction is an offer and access layer, not an owner of the gameplay action. The binding's
+    /// access source therefore remains the authoritative local association between a generic action
+    /// lifecycle notification and the interactive target that exposed it.
     /// </remarks>
     private InteractiveComponent? ResolveInteractive(Node? component, StringName actionId)
     {
@@ -570,11 +539,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
             }
         }
 
-        return
-            (component as GameplayActionComponent)?.ResolveAction(actionId)
-                is InteractionAction action
-            ? action.Interactive
-            : null;
+        return null;
     }
 
     private void OnGameplayActionRequested(Node component, StringName actionId)
@@ -588,11 +553,7 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
     private void OnGameplayActionRejected(Node component, StringName actionId, string reason)
     {
         InteractiveComponent? target = ResolveInteractive(component, actionId);
-        if (target?.ResolveAction(actionId) is InteractionAction action)
-        {
-            reason = target.AdaptRejectionReason(this, action, reason);
-        }
-        else if (reason == GameplayActionAvailabilityExtensions.UnavailableReason)
+        if (reason == GameplayActionAvailabilityExtensions.UnavailableReason)
         {
             reason = "Interaction unavailable.";
         }

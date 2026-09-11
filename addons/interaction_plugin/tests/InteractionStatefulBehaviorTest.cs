@@ -8,15 +8,14 @@ using GameplayActionPlugin.Integration.Stateful;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Rules;
 using GdUnit4;
 using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Examples.Rules;
 using InteractionPlugin.Integration.Stateful;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
-using InteractionPlugin.Runtime.Rules;
 using QuestWorld.Tests.GameplayActions;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
@@ -30,8 +29,8 @@ public sealed partial class InteractionStatefulBehaviorTest : InteractionTestBas
     public async Task StatefulRuleResolvesItsPathRelativeToTheOwningAction()
     {
         DoorWorld door = BuildDoorWorld();
-        StatefulStateInteractionRule rule = (StatefulStateInteractionRule)door.Open.Rules[1];
-        rule.StatefulPath = new NodePath("../../StatefulComponent");
+        StatefulStateInteractionRule rule = (StatefulStateInteractionRule)door.Open.Rules[0];
+        rule.StatefulPath = new NodePath("../StatefulComponent");
         await door.Runner.SimulateFrames(1);
 
         GameplayActionAvailability availability = door.Interactive.EvaluateAvailability(
@@ -51,7 +50,7 @@ public sealed partial class InteractionStatefulBehaviorTest : InteractionTestBas
         door.Open.Rules.Add(
             new StatefulStateInteractionRule
             {
-                StatefulPath = new NodePath("../../StatefulComponent"),
+                StatefulPath = new NodePath("../StatefulComponent"),
                 ExpectedStates = States("closed", "opening"),
             }
         );
@@ -79,7 +78,7 @@ public sealed partial class InteractionStatefulBehaviorTest : InteractionTestBas
         door.Open.Rules.Add(
             new StatefulStateInteractionRule
             {
-                StatefulPath = new NodePath("../../StatefulComponent"),
+                StatefulPath = new NodePath("../StatefulComponent"),
                 ExpectedStates = States("closed"),
                 MismatchAvailability = GameplayActionUnavailableKind.Blocked,
                 BlockReason = "The door is moving.",
@@ -103,7 +102,7 @@ public sealed partial class InteractionStatefulBehaviorTest : InteractionTestBas
         door.Open.Rules.Add(
             new StatefulStateInteractionRule
             {
-                StatefulPath = new NodePath("../../StatefulComponent"),
+                StatefulPath = new NodePath("../StatefulComponent"),
                 ExpectedStates = States("jammed"),
                 Invert = true,
             }
@@ -135,7 +134,7 @@ public sealed partial class InteractionStatefulBehaviorTest : InteractionTestBas
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
             .IsEqual("Interaction is not configured.");
 
-        rule.StatefulPath = new NodePath("../../StatefulComponent");
+        rule.StatefulPath = new NodePath("../StatefulComponent");
         rule.ExpectedStates.Clear();
 
         AssertThat(Describe(door.Interactive.EvaluateAvailability(door.Interactor, door.Open)))
@@ -159,7 +158,7 @@ public sealed partial class InteractionStatefulBehaviorTest : InteractionTestBas
         door.Open.Rules.Add(
             new StatefulStateInteractionRule
             {
-                StatefulPath = new NodePath("../../../LeverWall/StatefulComponent"),
+                StatefulPath = new NodePath("../../LeverWall/StatefulComponent"),
                 ExpectedStates = States("lowered"),
             }
         );
@@ -184,7 +183,7 @@ public sealed partial class InteractionStatefulBehaviorTest : InteractionTestBas
         int stateChanges = 0;
         door.State.StateChanged += (_, _, _) => stateChanges++;
 
-        InteractionAction first = door.Open;
+        GameplayAction first = door.Open;
         GameplayActionExecutionResult openResult = door.Interactive.ExecuteAction(
             door.Interactor,
             first
@@ -195,7 +194,7 @@ public sealed partial class InteractionStatefulBehaviorTest : InteractionTestBas
         AssertThat(door.State.State.ToString()).IsEqual("open");
         AssertThat(stateChanges).IsEqual(1);
 
-        InteractionAction second = door.Close;
+        GameplayAction second = door.Close;
         GameplayActionExecutionResult closeResult = door.Interactive.ExecuteAction(
             door.Interactor,
             second!
@@ -255,7 +254,7 @@ public sealed partial class InteractionStatefulBehaviorTest : InteractionTestBas
         {
             States = States("idle", "working", "completed"),
         };
-        InteractionAction action = NewAction("transition", Array.Empty<InteractionRule>());
+        GameplayAction action = NewAction("transition", Array.Empty<GameplayActionRule>());
         TransitionStateGameplayActionExecutor executor = new()
         {
             Name = "TransitionExecutor",
@@ -292,7 +291,7 @@ public sealed partial class InteractionStatefulBehaviorTest : InteractionTestBas
     {
         TestWorld testWorld = BuildWorld();
         testWorld.Stateful.Schema = new StateSchema { States = States("idle", "working") };
-        InteractionAction action = NewAction("transition", Array.Empty<InteractionRule>());
+        GameplayAction action = NewAction("transition", Array.Empty<GameplayActionRule>());
         TransitionStateGameplayActionExecutor executor = new()
         {
             Name = "TransitionExecutor",

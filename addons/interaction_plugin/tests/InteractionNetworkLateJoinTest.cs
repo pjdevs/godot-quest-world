@@ -12,7 +12,6 @@ using GdUnit4;
 using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Integration.Stateful;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
 using StatefulPlugin;

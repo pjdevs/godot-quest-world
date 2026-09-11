@@ -10,18 +10,17 @@ using GameplayActionPlugin.Presentation.UI;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Execution;
+using GameplayActionPlugin.Runtime.Rules;
 using GdUnit4;
 using Godot;
 using InteractionPlugin;
 using InteractionPlugin.Editor;
 using InteractionPlugin.Integration.Stateful;
 using InteractionPlugin.Presentation.UI;
-using InteractionPlugin.Runtime.Actions;
 using InteractionPlugin.Runtime.Detection;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Interactor;
 using InteractionPlugin.Runtime.Offers;
-using InteractionPlugin.Runtime.Rules;
 using QuestWorld.Tests.GameplayActions;
 using StatefulPlugin;
 using static GdUnit4.Assertions;
@@ -184,15 +183,16 @@ public sealed partial class InteractionConfigurationTest
             .IsTrue();
         AssertThat(typeof(InteractiveComponent).GetProperty("AutomaticInteraction") == null)
             .IsTrue();
-        AssertThat(typeof(InteractionAction).GetProperty("Priority") == null).IsTrue();
-        AssertThat(typeof(InteractionAction).GetProperty("Automatic") == null).IsTrue();
-        AssertThat(typeof(InteractionAction).GetProperty("DefaultBindingConfig") != null).IsTrue();
+        AssertThat(typeof(GameplayAction).GetProperty("Priority") == null).IsTrue();
+        AssertThat(typeof(GameplayAction).GetProperty("Automatic") == null).IsTrue();
+        AssertThat(typeof(InputGameplayAction).GetProperty("DefaultBindingConfig") != null)
+            .IsTrue();
     }
 
     [TestCase]
     public void ActionExecutionVisibilityDefaultsToRequesterOnly()
     {
-        InteractionAction action = AutoFree(new InteractionAction());
+        GameplayAction action = AutoFree(new GameplayAction());
 
         AssertThat(action.ExecutionVisibility)
             .IsEqual(GameplayActionExecutionVisibility.RequesterOnly);
@@ -201,7 +201,7 @@ public sealed partial class InteractionConfigurationTest
     [TestCase]
     public void InteractionExecutionAvailabilityDefaultsToBlocked()
     {
-        InteractionAction action = AutoFree(new InteractionAction());
+        GameplayAction action = AutoFree(new GameplayAction());
 
         AssertThat(action.WhenExecutingBySelf).IsEqual(GameplayActionUnavailableKind.Blocked);
         AssertThat(action.WhenExecutingByOther).IsEqual(GameplayActionUnavailableKind.Blocked);
@@ -284,13 +284,13 @@ public sealed partial class InteractionConfigurationTest
             )
             .IsEqual(typeof(GameplayActionUnavailableKind));
         AssertThat(
-                typeof(InteractionRule)
+                typeof(GameplayActionRule)
                     .GetMethods()
                     .Single(method =>
                         method.Name == "Evaluate"
                         && method.ReturnType == typeof(GameplayActionAvailability)
                         && method.GetParameters()[0].ParameterType
-                            == typeof(InteractionContext).MakeByRefType()
+                            == typeof(GameplayActionContext).MakeByRefType()
                     )
                     .ReturnType
             )
@@ -301,7 +301,7 @@ public sealed partial class InteractionConfigurationTest
     public void ExecutionBelongsToAnExecutorInsteadOfASignalSubscriber()
     {
         AssertThat(
-                typeof(InteractionAction).GetProperty(
+                typeof(InputGameplayAction).GetProperty(
                     "Executor",
                     System.Reflection.BindingFlags.Public
                         | System.Reflection.BindingFlags.Instance
@@ -347,7 +347,7 @@ public sealed partial class InteractionConfigurationTest
         StatefulStateInteractionRule ready = rules[1].As<StatefulStateInteractionRule>();
 
         AssertThat(rules.Count).IsEqual(2);
-        AssertThat(phase.StatefulPath.ToString()).IsEqual("../../../LeverWall/StatefulComponent");
+        AssertThat(phase.StatefulPath.ToString()).IsEqual("../../LeverWall/StatefulComponent");
         AssertThat(phase.ExpectedStates.Count).IsEqual(2);
         AssertThat(phase.MismatchAvailability).IsEqual(GameplayActionUnavailableKind.Hidden);
         AssertThat(ready.ExpectedStates.Count).IsEqual(1);
@@ -377,39 +377,50 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
-    public void InteractionInputSignalsNoLongerExistAsACommandPath()
+    public void GenericActionSignalsOwnTheExecutionLifecycle()
     {
         InteractiveComponent interactive = new();
+        GameplayActionComponent actionComponent = new();
 
         try
         {
-            string[] signals = interactive
+            string[] interactionSignals = interactive
+                .GetSignalList()
+                .Select(signal => signal["name"].AsString())
+                .ToArray();
+            string[] actionSignals = actionComponent
                 .GetSignalList()
                 .Select(signal => signal["name"].AsString())
                 .ToArray();
 
-            AssertThat(signals.Contains("InteractionInputStarted")).IsFalse();
-            AssertThat(signals.Contains("InteractionInputEnded")).IsFalse();
-            AssertThat(signals.Contains("InteractionActionStarted")).IsTrue();
-            AssertThat(signals.Contains("InteractionActionCompleted")).IsTrue();
-            AssertThat(signals.Contains("InteractionActionCancelled")).IsTrue();
-            AssertThat(signals.Contains("InteractionActionFailed")).IsTrue();
-            AssertThat(signals.Contains("InteractionActionRejected")).IsTrue();
+            AssertThat(interactionSignals.Contains("InteractionInputStarted")).IsFalse();
+            AssertThat(interactionSignals.Contains("InteractionInputEnded")).IsFalse();
+            AssertThat(interactionSignals.Contains("InteractionActionStarted")).IsFalse();
+            AssertThat(interactionSignals.Contains("InteractionActionCompleted")).IsFalse();
+            AssertThat(interactionSignals.Contains("InteractionActionCancelled")).IsFalse();
+            AssertThat(interactionSignals.Contains("InteractionActionFailed")).IsFalse();
+            AssertThat(interactionSignals.Contains("InteractionActionRejected")).IsFalse();
+            AssertThat(actionSignals.Contains("GameplayActionStarted")).IsTrue();
+            AssertThat(actionSignals.Contains("GameplayActionCompleted")).IsTrue();
+            AssertThat(actionSignals.Contains("GameplayActionCancelled")).IsTrue();
+            AssertThat(actionSignals.Contains("GameplayActionFailed")).IsTrue();
+            AssertThat(actionSignals.Contains("GameplayActionRejected")).IsTrue();
         }
         finally
         {
             interactive.Free();
+            actionComponent.Free();
         }
     }
 
     [TestCase]
     public void InteractiveReportsActionsWithoutDefinitionOrExecutor()
     {
-        InteractiveComponent interactive = NewValidationInteractive(new InteractionAction());
+        InteractiveComponent interactive = NewValidationInteractive(new GameplayAction());
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
-        AssertThat(warnings.Contains("Actions[0] has no Definition.")).IsTrue();
+        AssertThat(warnings.Contains("Actions[0]: Definition must be assigned.")).IsTrue();
     }
 
     [TestCase]
@@ -425,11 +436,11 @@ public sealed partial class InteractionConfigurationTest
             InteractionArea = area,
             InteractionAnchor = owner,
         };
-        InteractionAction action = NewAction(new GameplayActionDefinition { Id = "open" });
+        GameplayAction action = NewAction(new GameplayActionDefinition { Id = "open" });
         action.Rules.Add(
             new StatefulStateInteractionRule
             {
-                StatefulPath = new NodePath("../../StatefulComponent"),
+                StatefulPath = new NodePath("../StatefulComponent"),
                 ExpectedStates = { new StringName("closed") },
             }
         );
@@ -457,7 +468,11 @@ public sealed partial class InteractionConfigurationTest
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 
-        AssertThat(warnings.Contains("Actions declare the action id 'open' more than once."))
+        AssertThat(
+                warnings.Contains(
+                    "Offers resolve the action endpoint 'open' more than once for the same source."
+                )
+            )
             .IsTrue();
     }
 
@@ -533,8 +548,8 @@ public sealed partial class InteractionConfigurationTest
         // Sharing an input and a threshold is how "open" and "unlock" alternate on one key: the
         // resolver separates them by availability, then by priority. Only a tie the author did not
         // break is worth reporting, because below priority the identifier order decides.
-        InteractionAction open = NewAction(new GameplayActionDefinition { Id = "open" });
-        InteractionAction unlock = NewAction(new GameplayActionDefinition { Id = "unlock" });
+        InputGameplayAction open = NewAction(new GameplayActionDefinition { Id = "open" });
+        InputGameplayAction unlock = NewAction(new GameplayActionDefinition { Id = "unlock" });
         unlock.DefaultBindingConfig!.Priority = 10;
         InteractiveComponent interactive = NewValidationInteractive(open, unlock);
 
@@ -545,11 +560,11 @@ public sealed partial class InteractionConfigurationTest
     }
 
     [TestCase]
-    public void ActionRequiresADefinitionAndAnExecutor()
+    public void GameplayActionRequiresADefinitionAndAnExecutor()
     {
-        InteractionAction action = AutoFree(new InteractionAction());
+        GameplayAction action = AutoFree(new GameplayAction());
 
-        string[] warnings = InteractionValidator.Validate(action).ToArray();
+        string[] warnings = GameplayActionValidator.Validate(action).ToArray();
 
         AssertThat(warnings.Contains("Definition must be assigned.")).IsTrue();
         AssertThat(warnings.Contains("Executor must be assigned.")).IsTrue();
@@ -583,13 +598,12 @@ public sealed partial class InteractionConfigurationTest
 
     private static InteractiveComponent NewConfiguredInteractive()
     {
-        InteractionAction action = NewAction(new GameplayActionDefinition { Id = "open" });
+        InputGameplayAction action = NewAction(new GameplayActionDefinition { Id = "open" });
         InteractiveComponent interactive = NewValidationInteractive(action);
-        action.PrepareForInteractive(interactive, interactive.TargetRules);
         return interactive;
     }
 
-    private static InteractiveComponent NewValidationInteractive(params InteractionAction[] actions)
+    private static InteractiveComponent NewValidationInteractive(params GameplayAction[] actions)
     {
         InteractiveComponent interactive = new();
         interactive.AddChild(new Area3D());
@@ -599,18 +613,33 @@ public sealed partial class InteractionConfigurationTest
         interactive.InteractionArea = (Area3D)interactive.GetChild(0);
         interactive.InteractionAnchor = (Node3D)interactive.GetChild(1);
         interactive.ActionComponent = component;
-        foreach (InteractionAction action in actions)
+        foreach (GameplayAction action in actions)
         {
             component.Actions.Add(action);
             component.AddChild(action);
+            if (
+                action is InputGameplayAction inputAction
+                && inputAction.DefaultBindingConfig is GameplayActionBindingConfig binding
+                && action.Definition is not null
+            )
+            {
+                interactive.Offers.Add(
+                    new InteractionOffer
+                    {
+                        ActionSource = InteractionOfferSource.Target,
+                        ActionId = action.Definition.Id,
+                        BindingConfig = binding,
+                    }
+                );
+            }
         }
 
         return AutoFree(interactive);
     }
 
-    private static InteractionAction NewAction(GameplayActionDefinition definition)
+    private static InputGameplayAction NewAction(GameplayActionDefinition definition)
     {
-        InteractionAction action = new()
+        InputGameplayAction action = new()
         {
             Definition = definition,
             DefaultBindingConfig = new GameplayActionBindingConfig
