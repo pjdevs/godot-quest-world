@@ -6,53 +6,18 @@ namespace DummyCharacterPlugin;
 /// Serialized movement values owned by the Character composition root.
 /// This is a plain value snapshot, not a Godot Resource.
 /// </summary>
-public readonly struct CharacterMovementSettings
-{
-    public CharacterMovementSettings(
-        float walkSpeed,
-        float runSpeed,
-        float acceleration,
-        float airAcceleration,
-        float jumpVelocity,
-        float sprintForwardInputThreshold,
-        float minimumLandingAirTime,
-        float minimumLandingImpactSpeed,
-        float fullLandingImpactSpeed,
-        float minimumLandingStrength
-    )
-    {
-        WalkSpeed = walkSpeed;
-        RunSpeed = runSpeed;
-        Acceleration = acceleration;
-        AirAcceleration = airAcceleration;
-        JumpVelocity = jumpVelocity;
-        SprintForwardInputThreshold = sprintForwardInputThreshold;
-        MinimumLandingAirTime = minimumLandingAirTime;
-        MinimumLandingImpactSpeed = minimumLandingImpactSpeed;
-        FullLandingImpactSpeed = fullLandingImpactSpeed;
-        MinimumLandingStrength = minimumLandingStrength;
-    }
-
-    public float WalkSpeed { get; }
-
-    public float RunSpeed { get; }
-
-    public float Acceleration { get; }
-
-    public float AirAcceleration { get; }
-
-    public float JumpVelocity { get; }
-
-    public float SprintForwardInputThreshold { get; }
-
-    public float MinimumLandingAirTime { get; }
-
-    public float MinimumLandingImpactSpeed { get; }
-
-    public float FullLandingImpactSpeed { get; }
-
-    public float MinimumLandingStrength { get; }
-}
+public readonly record struct CharacterMovementSettings(
+    float WalkSpeed,
+    float RunSpeed,
+    float Acceleration,
+    float AirAcceleration,
+    float JumpVelocity,
+    float SprintForwardInputThreshold,
+    float MinimumLandingAirTime,
+    float MinimumLandingImpactSpeed,
+    float FullLandingImpactSpeed,
+    float MinimumLandingStrength
+);
 
 /// <summary>
 /// Camera-independent character motor. It owns simulation state and talks to

@@ -88,6 +88,8 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
         bool wasPossessed = _wasPossessed;
         base._PhysicsProcess(delta);
 
+        IsMovementLocked = IsInCarryOperation;
+
         if (!IsLocalNetworkAuthority || _interactionInteractor == null)
         {
             return;
@@ -172,6 +174,7 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
     #region ICarrier
     public StringName? CarriedItemId => _carryComponent?.CarriedItemId;
     public bool IsCarrying => _carryComponent?.IsCarrying ?? false;
+    public bool IsInCarryOperation => _carryComponent?.IsInCarryOperation ?? false;
 
     public async Task<bool> TryTakeAsync(
         StringName itemId,
@@ -184,16 +187,9 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
             : false;
     }
 
-    public bool TryTake(StringName itemId, Node3D carriableObject)
+    public async Task<bool> TryDropAsync(Action? onCommited = null)
     {
-        return _carryComponent is not null
-            ? _carryComponent.TryTake(itemId, carriableObject)
-            : false;
-    }
-
-    public bool TryDrop()
-    {
-        return _carryComponent is not null ? _carryComponent.TryDrop() : false;
+        return _carryComponent is not null ? await _carryComponent.TryDropAsync(onCommited) : false;
     }
     #endregion ICarrier
 

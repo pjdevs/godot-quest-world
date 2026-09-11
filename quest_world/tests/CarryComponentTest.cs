@@ -15,9 +15,7 @@ public sealed class CarryComponentTest
     [TestCase]
     public void EmptyReplicatedItemIdIsNormalizedToNoCarriedItem()
     {
-        CarryComponent carry = new();
-
-        carry.CarriedItemId = new StringName();
+        CarryComponent carry = new() { CarriedItemId = new StringName() };
 
         AssertThat(carry.CarriedItemId is null).IsTrue();
         AssertThat(carry.IsCarrying).IsFalse();
@@ -60,12 +58,12 @@ public sealed class CarryComponentTest
         ISceneRunner runner = ISceneRunner.Load(root, autoFree: true);
         await runner.SimulateFrames(1);
 
-        AssertThat(carry.TryTake(batteryId, battery)).IsTrue();
+        AssertThat(await carry.TryTakeAsync(batteryId, battery)).IsTrue();
         AssertThat(battery.IsQueuedForDeletion()).IsTrue();
         AssertThat(inventory.GetItemCount(batteryId)).IsEqual(1);
         AssertThat(carry.CarriedItemId == batteryId).IsTrue();
 
-        AssertThat(carry.TryTake(cellId, cell)).IsTrue();
+        AssertThat(await carry.TryTakeAsync(batteryId, battery)).IsTrue();
         AssertThat(cell.IsQueuedForDeletion()).IsTrue();
         AssertThat(inventory.GetItemCount(batteryId)).IsEqual(0);
         AssertThat(inventory.GetItemCount(cellId)).IsEqual(1);
@@ -75,16 +73,16 @@ public sealed class CarryComponentTest
             .IsEqual(new Vector3(2.0f, 3.0f, 2.5f));
 
         worldSpawner.ShouldSucceed = false;
-        AssertThat(carry.TryDrop()).IsFalse();
+        AssertThat(await carry.TryDropAsync()).IsFalse();
         AssertThat(inventory.GetItemCount(cellId)).IsEqual(1);
         AssertThat(carry.CarriedItemId == cellId).IsTrue();
 
         worldSpawner.ShouldSucceed = true;
-        AssertThat(carry.TryDrop()).IsTrue();
+        AssertThat(await carry.TryDropAsync()).IsTrue();
         AssertThat(inventory.GetItemCount(cellId)).IsEqual(0);
         AssertThat(carry.CarriedItemId is null).IsTrue();
 
-        AssertThat(carry.TryTake(cellId, replacementCell)).IsTrue();
+        AssertThat(carry.TryTakeAsync(cellId, replacementCell)).IsTrue();
         carry.QueueFree();
         await runner.SimulateFrames(1);
 

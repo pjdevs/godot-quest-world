@@ -6,11 +6,11 @@ public interface ICarrier
 {
     public StringName? CarriedItemId { get; }
     public bool IsCarrying { get; }
+    public bool IsInCarryOperation { get; }
     public Task<bool> TryTakeAsync(
         StringName itemId,
         Node3D carriableObject,
         Action? onCommited = null
     );
-    public bool TryTake(StringName itemId, Node3D carriableObject);
-    public bool TryDrop();
+    public Task<bool> TryDropAsync(Action? onCommited = null);
 }

@@ -8,10 +8,7 @@ public partial class CarriableItemDefinition : InventoryItemDefinition
     public SpawnDefinition? SpawnDefinition { get; set; }
 
     [Export]
-    public StringName CustomCarryAnimationName { get; set; } = "PickUp_Kneeling";
-
-    [Export]
-    public StringName CustomDropAnimationName { get; set; } = "PickUp_Kneeling";
+    public CarryKind CarryKind { get; set; } = CarryKind.Ground;
 
     [Export]
     public PackedScene? ItemVisualScene { get; set; }

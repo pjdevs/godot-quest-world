@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CarryAnimationConfig" format=3 uid="uid://dn8hvo70ospl3"]
+
+[ext_resource type="Script" uid="uid://b5v2j4gt0cpkn" path="res://quest_world/interactibles/carriable/CarryKindAnimationConfig.cs" id="1_uknef"]
+[ext_resource type="Script" uid="uid://bf257gm7m46ij" path="res://quest_world/interactibles/carriable/CarryAnimationConfig.cs" id="2_m62i0"]
+
+[sub_resource type="Resource" id="Resource_xgwmf"]
+script = ExtResource("1_uknef")
+metadata/_custom_type_script = "uid://b5v2j4gt0cpkn"
+
+[resource]
+script = ExtResource("2_m62i0")
+AnimationByKind = Dictionary[int, ExtResource("1_uknef")]({
+0: SubResource("Resource_xgwmf")
+})
+metadata/_custom_type_script = "uid://bf257gm7m46ij"

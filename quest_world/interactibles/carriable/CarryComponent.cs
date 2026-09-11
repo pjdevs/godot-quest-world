@@ -4,8 +4,6 @@ using DummyCharacterPlugin;
 using Godot;
 using InventoryPlugin;
 
-public readonly record struct CarryOperation(StringName ItemId, ulong StartedAtServerTimeMsec);
-
 [GlobalClass]
 public partial class CarryComponent : Node, ICarrier
 {
@@ -21,63 +19,47 @@ public partial class CarryComponent : Node, ICarrier
     [Export]
     public CharacterAnimationController? AnimationController { get; set; }
 
+    [Export]
+    public CarryAnimationConfig? AnimationConfig { get; set; }
+
     public IWorldSpawner? WorldSpawner { get; set; }
 
     public IOriented? Carrier { get; set; }
 
-    private CarryOperation? _currentCarryOperation;
+    private CarryOperationState? _currentCarryOperationState;
+
+    private CarryOperationState? CurrentCarryOperationState
+    {
+        get => _currentCarryOperationState;
+        set
+        {
+            _currentCarryOperationState = value;
+            ReplicatedCurrentCarryOperationState = _currentCarryOperationState?.Serialize();
+        }
+    }
 
     [ExportGroup("Replication")]
     [Export]
-    public Godot.Collections.Dictionary<string, Variant>? CurrentCarryOperationVariant
+    public Godot.Collections.Dictionary<string, Variant>? ReplicatedCurrentCarryOperationState
     {
-        get =>
-            _currentCarryOperation is CarryOperation op
-                ? new Godot.Collections.Dictionary<string, Variant>()
-                {
-                    { "item_id", op.ItemId },
-                    { "started_at_server_time_msec", op.StartedAtServerTimeMsec },
-                }
-                : null;
+        get => _currentCarryOperationState?.Serialize();
         set
         {
-            if (value is null)
+            CarryOperationState? newCarryOperationState = null;
+
+            if (value is not null)
             {
-                _currentCarryOperation = null;
-                return;
+                if (!CarryOperationState.Deserialize(value, out newCarryOperationState))
+                {
+                    GD.PushWarning($"{GetPath()}: invalid CarryOperationState variant");
+                    _currentCarryOperationState = null;
+                }
             }
 
-            if (
-                !value.TryGetValue("item_id", out Variant itemIdVariant)
-                || !value.TryGetValue(
-                    "started_at_server_time_msec",
-                    out Variant startedAtServerTimeMsecVariant
-                )
-            )
-            {
-                GD.PushWarning($"{GetPath()}: invalid carry operation variant.");
-                _currentCarryOperation = null;
-                return;
-            }
+            CarryOperationState? lastOperation = _currentCarryOperationState;
+            _currentCarryOperationState = newCarryOperationState;
 
-            StringName itemId;
-            ulong startedAtServerTimeMsec;
-            try
-            {
-                itemId = (StringName)itemIdVariant;
-                startedAtServerTimeMsec = (ulong)startedAtServerTimeMsecVariant;
-            }
-            catch (InvalidCastException)
-            {
-                GD.PushWarning($"{GetPath()}: invalid carry operation variant.");
-                _currentCarryOperation = null;
-                return;
-            }
-
-            CarryOperation? lastOperation = _currentCarryOperation;
-            _currentCarryOperation = new CarryOperation(itemId, startedAtServerTimeMsec);
-
-            OnCarryOperationChanged(lastOperation, _currentCarryOperation);
+            OnCarryOperationChanged(lastOperation, _currentCarryOperationState);
         }
     }
 
@@ -99,6 +81,7 @@ public partial class CarryComponent : Node, ICarrier
     }
 
     public bool IsCarrying => CarriedItemId is not null;
+    public bool IsInCarryOperation => CurrentCarryOperationState is not null;
 
     private StringName? _carriedItemId;
     private Node3D? _itemVisualInstance;
@@ -110,7 +93,7 @@ public partial class CarryComponent : Node, ICarrier
 
     public override void _ExitTree()
     {
-        if (IsAuthoritative && IsCarrying && !TryDrop())
+        if (IsAuthoritative && IsCarrying && !TryCommitDrop())
         {
             GD.PushWarning(
                 $"{GetPath()}: carried item '{CarriedItemId}' could not be dropped on exit."
@@ -134,33 +117,56 @@ public partial class CarryComponent : Node, ICarrier
             return false;
         }
 
-        _currentCarryOperation = new CarryOperation(itemId, Time.GetTicksMsec());
-        CurrentCarryOperationVariant = CurrentCarryOperationVariant; // Replicate to clients
-
-        await Task.Delay(700);
-
-        if (!TryTake(itemId, carriableObject))
+        if (IsCarrying && !await TryDropAsync())
         {
             return false;
         }
+
+        CarryKindAnimationConfig? config = AnimationConfig?.GetConfigForKind(definition.CarryKind);
+        if (config is null)
+        {
+            GD.PushWarning(
+                $"{GetPath()}: CarryKind {definition.CarryKind} has no animation config"
+            );
+        }
+
+        CurrentCarryOperationState = new CarryOperationState(
+            CarryOperationKind.Take,
+            itemId,
+            Time.GetTicksMsec()
+        );
+
+        await ToSignal(
+            GetTree().CreateTimer(config?.TakeAnimationCommitTimeSec ?? 0f, processAlways: false),
+            SceneTreeTimer.SignalName.Timeout
+        );
+
+        if (!TryCommitTake(itemId, carriableObject))
+        {
+            CurrentCarryOperationState = null;
+            return false;
+        }
+
         onCommited?.Invoke();
 
-        // TODO: wait for animation finishg
-        await Task.Delay(700);
+        await ToSignal(
+            GetTree().CreateTimer(config?.TakeAnimationEndTimeSec ?? 0f, processAlways: false),
+            SceneTreeTimer.SignalName.Timeout
+        );
 
-        _currentCarryOperation = null;
-        CurrentCarryOperationVariant = null; // Replicate to clients
+        CurrentCarryOperationState = null;
 
         return true;
     }
 
-    public bool TryTake(StringName itemId, Node3D carriableObject)
+    private bool TryCommitTake(StringName itemId, Node3D carriableObject)
     {
         if (
             !IsAuthoritative
             || carriableObject is null
             || !TryGetCarriableDefinition(itemId, out CarriableItemDefinition definition)
             || Inventory is null
+            || IsCarrying
         )
         {
             return false;
@@ -171,22 +177,63 @@ public partial class CarryComponent : Node, ICarrier
             return false;
         }
 
-        if (IsCarrying && !TryDrop())
-        {
-            if (Inventory.RemoveItem(itemId) != 1)
-            {
-                GD.PushError($"{GetPath()}: failed to roll back pickup of '{itemId}'.");
-            }
-
-            return false;
-        }
-
         CarriedItemId = itemId;
         carriableObject.QueueFree();
+
         return true;
     }
 
-    public bool TryDrop()
+    public async Task<bool> TryDropAsync(Action? onCommited = null)
+    {
+        if (
+            !IsAuthoritative
+            || Inventory is null
+            || !IsCarrying
+            || CarriedItemId is null
+            || !TryGetCarriableDefinition(CarriedItemId, out CarriableItemDefinition definition)
+        )
+        {
+            return false;
+        }
+
+        CarryKindAnimationConfig? config = AnimationConfig?.GetConfigForKind(definition.CarryKind);
+        if (config is null)
+        {
+            GD.PushWarning(
+                $"{GetPath()}: CarryKind {definition.CarryKind} has no animation config"
+            );
+        }
+
+        CurrentCarryOperationState = new CarryOperationState(
+            CarryOperationKind.Drop,
+            CarriedItemId,
+            Time.GetTicksMsec()
+        );
+
+        await ToSignal(
+            GetTree().CreateTimer(config?.DropAnimationCommitTimeSec ?? 0f, processAlways: false),
+            SceneTreeTimer.SignalName.Timeout
+        );
+
+        if (!TryCommitDrop())
+        {
+            CurrentCarryOperationState = null;
+            return false;
+        }
+
+        onCommited?.Invoke();
+
+        await ToSignal(
+            GetTree().CreateTimer(config?.DropAnimationEndTimeSec ?? 0f, processAlways: false),
+            SceneTreeTimer.SignalName.Timeout
+        );
+
+        CurrentCarryOperationState = null;
+
+        return true;
+    }
+
+    private bool TryCommitDrop()
     {
         if (
             !IsAuthoritative
@@ -200,8 +247,6 @@ public partial class CarryComponent : Node, ICarrier
             return false;
         }
 
-        AnimationController?.PlayOneShot(definition.CustomDropAnimationName);
-
         if (Inventory.RemoveItem(CarriedItemId) != 1)
         {
             return false;
@@ -212,7 +257,7 @@ public partial class CarryComponent : Node, ICarrier
         );
         if (!WorldSpawner.TrySpawn(definition.SpawnDefinition!.Id, request, out _))
         {
-            if (!Inventory.AddItem(CarriedItemId))
+            if (Inventory.AddItem(CarriedItemId))
             {
                 GD.PushError(
                     $"{GetPath()}: failed to restore '{CarriedItemId}' after a failed drop."
@@ -299,20 +344,41 @@ public partial class CarryComponent : Node, ICarrier
     }
 
     private void OnCarryOperationChanged(
-        CarryOperation? lastOperation,
-        CarryOperation? currentCarryOperation
+        CarryOperationState? lastOperation,
+        CarryOperationState? currentCarryOperation
     )
     {
         // Started carrying
         if (
-            currentCarryOperation is not null
-            && TryGetCarriableDefinition(
+            currentCarryOperation is null
+            || !TryGetCarriableDefinition(
                 currentCarryOperation.Value.ItemId,
                 out CarriableItemDefinition definition
             )
         )
         {
-            AnimationController?.PlayOneShot(definition.CustomCarryAnimationName);
+            return;
+        }
+
+        CarryKindAnimationConfig? config = AnimationConfig?.GetConfigForKind(definition.CarryKind);
+        if (config is not null)
+        {
+            switch (currentCarryOperation?.OperationKind)
+            {
+                case CarryOperationKind.Take:
+                    AnimationController?.PlayOneShot(config.TakeAnimationName);
+                    break;
+
+                case CarryOperationKind.Drop:
+                    AnimationController?.PlayOneShot(config.DropAnimationName);
+                    break;
+            }
+        }
+        else
+        {
+            GD.PushWarning(
+                $"{GetPath()}: CarryKind {definition.CarryKind} has no animation config"
+            );
         }
     }
 }

@@ -23,6 +23,9 @@ public partial class Character : CharacterBody3D
 
     [ExportGroup("Movement")]
     [Export]
+    public bool IsMovementLocked { get; set; } = false;
+
+    [Export]
     public float WalkSpeed { get; set; } = 3.0f;
 
     [Export]
@@ -181,7 +184,14 @@ public partial class Character : CharacterBody3D
 
     public void SubmitInputFrame(CharacterInputFrame inputFrame)
     {
-        _pendingInput = inputFrame;
+        _pendingInput = IsMovementLocked
+            ? inputFrame with
+            {
+                Move = Vector2.Zero,
+                JumpPressed = false,
+                SprintHeld = false,
+            }
+            : inputFrame;
     }
 
     internal void TakePossession(CharacterPlayerController controller)
@@ -216,7 +226,7 @@ public partial class Character : CharacterBody3D
     {
         if (_possessingController == controller)
         {
-            _pendingInput = inputFrame;
+            SubmitInputFrame(inputFrame);
         }
     }
 
