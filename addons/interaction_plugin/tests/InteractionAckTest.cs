@@ -67,7 +67,7 @@ public sealed partial class InteractionAckTest
 
         AssertThat(world.Kinds()).IsEqual(new List<string> { "started" });
         AssertThat(
-                world.Interactive.TryGetExecutionPresentation(
+                world.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     world.Definition.Id,
                     out GameplayActionExecutionPresentation presentation
                 )
@@ -82,7 +82,7 @@ public sealed partial class InteractionAckTest
         AckWorld world = BuildWorld();
         await world.Runner.SimulateFrames(1);
 
-        world.Interactor.ClientInteractionStarted(
+        world.Interactor.ClientGameplayActionStarted(
             world.Interactive.GetPath(),
             world.Definition.Id,
             42ul,
@@ -94,7 +94,12 @@ public sealed partial class InteractionAckTest
         );
 
         AssertThat(world.Kinds()).IsEqual(new List<string> { "started" });
-        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+        AssertThat(
+                world.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                    world.Definition.Id,
+                    out _
+                )
+            )
             .IsFalse();
     }
 
@@ -185,7 +190,12 @@ public sealed partial class InteractionAckTest
 
         world.Interactor.TryStartInteractionInput(InteractInput);
 
-        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+        AssertThat(
+                world.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                    world.Definition.Id,
+                    out _
+                )
+            )
             .IsFalse();
     }
 
@@ -233,7 +243,12 @@ public sealed partial class InteractionAckTest
             "This is already in use."
         );
 
-        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+        AssertThat(
+                world.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                    world.Definition.Id,
+                    out _
+                )
+            )
             .IsTrue();
     }
 
@@ -264,7 +279,7 @@ public sealed partial class InteractionAckTest
         );
         await world.Runner.SimulateFrames(30);
         AssertThat(
-                world.Interactive.TryGetExecutionPresentation(
+                world.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     world.Definition.Id,
                     out GameplayActionExecutionPresentation beforeAck
                 )
@@ -272,7 +287,7 @@ public sealed partial class InteractionAckTest
             .IsTrue();
         float uncompensated = beforeAck.Progress!.Value;
 
-        world.Interactor.ClientInteractionStarted(
+        world.Interactor.ClientGameplayActionStarted(
             world.Interactive.GetPath(),
             world.Definition.Id,
             world.Executor.LastExecutionId + 1ul,
@@ -284,7 +299,7 @@ public sealed partial class InteractionAckTest
         );
 
         AssertThat(
-                world.Interactive.TryGetExecutionPresentation(
+                world.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     world.Definition.Id,
                     out GameplayActionExecutionPresentation afterAck
                 )
@@ -309,12 +324,22 @@ public sealed partial class InteractionAckTest
         await world.Runner.SimulateFrames(1);
         world.Focus();
         world.Interactor.TryStartInteractionInput(InteractInput);
-        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+        AssertThat(
+                world.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                    world.Definition.Id,
+                    out _
+                )
+            )
             .IsTrue();
 
         world.Interactive.CancelExecution(world.Executor.LastExecutionId, "The reactor tripped.");
 
-        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+        AssertThat(
+                world.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                    world.Definition.Id,
+                    out _
+                )
+            )
             .IsFalse();
     }
 
@@ -334,7 +359,12 @@ public sealed partial class InteractionAckTest
 
         world.Interactor.TryEndInteractionInput(InteractInput);
 
-        AssertThat(world.Interactive.TryGetExecutionPresentation(world.Definition.Id, out _))
+        AssertThat(
+                world.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                    world.Definition.Id,
+                    out _
+                )
+            )
             .IsFalse();
         AssertThat(world.Kinds()).IsEqual(new List<string> { "started", "cancelled" });
     }
@@ -529,14 +559,26 @@ public sealed partial class InteractionAckTest
     {
         public void Listen()
         {
-            Interactor.InteractionStarted += (target, actionId, executionId) =>
-                Acks.Add(new Ack("started", target, actionId, executionId, string.Empty));
-            Interactor.InteractionCompleted += (target, actionId) =>
-                Acks.Add(new Ack("completed", target, actionId, 0ul, string.Empty));
-            Interactor.InteractionCancelled += (target, actionId, reason) =>
-                Acks.Add(new Ack("cancelled", target, actionId, 0ul, reason));
-            Interactor.InteractionFailed += (target, actionId, reason) =>
-                Acks.Add(new Ack("failed", target, actionId, 0ul, reason));
+            Interactor.Runner!.GameplayActionStarted += (_, actionId, executionId) =>
+                Acks.Add(
+                    new Ack(
+                        "started",
+                        Interactor.FocusedInteractive,
+                        actionId,
+                        checked((ulong)executionId),
+                        string.Empty
+                    )
+                );
+            Interactor.Runner.GameplayActionCompleted += (_, actionId, _) =>
+                Acks.Add(
+                    new Ack("completed", Interactor.FocusedInteractive, actionId, 0ul, string.Empty)
+                );
+            Interactor.Runner.GameplayActionCancelled += (_, actionId, _, reason) =>
+                Acks.Add(
+                    new Ack("cancelled", Interactor.FocusedInteractive, actionId, 0ul, reason)
+                );
+            Interactor.Runner.GameplayActionFailed += (_, actionId, _, reason) =>
+                Acks.Add(new Ack("failed", Interactor.FocusedInteractive, actionId, 0ul, reason));
             Interactor.InteractionRejected += (target, actionId, reason) =>
                 Acks.Add(new Ack("rejected", target, actionId, 0ul, reason));
         }
@@ -578,10 +620,10 @@ public sealed partial class InteractionAckTest
 
         public void Listen(InteractionInteractor interactor)
         {
-            interactor.InteractionStarted += (_, _, _) => Open();
-            interactor.InteractionCompleted += (_, _) => Close();
-            interactor.InteractionCancelled += (_, _, _) => Close();
-            interactor.InteractionFailed += (_, _, _) => Close();
+            interactor.Runner!.GameplayActionStarted += (_, _, _) => Open();
+            interactor.Runner.GameplayActionCompleted += (_, _, _) => Close();
+            interactor.Runner.GameplayActionCancelled += (_, _, _, _) => Close();
+            interactor.Runner.GameplayActionFailed += (_, _, _, _) => Close();
         }
 
         private void Open()

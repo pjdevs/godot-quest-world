@@ -347,7 +347,8 @@ interactor per gameplay instigator.
 occurrence. The offer owns contextual input binding, target-side rules and invocation target data;
 focus never grants, clones or transfers the action. A focused binding keeps the Interactive as its
 cleanup `Source` and access-validation `AccessSource`, while its `Target` is resolved explicitly from
-`InvocationTarget`.
+`InvocationTarget`. When the binding requires `Pressed`, that requirement is carried with the
+request to authority; it is not inferred from the action's optional default binding.
 
 ### AD-17 — Authority reconstructs the offer endpoint
 

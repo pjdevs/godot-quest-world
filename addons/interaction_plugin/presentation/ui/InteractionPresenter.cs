@@ -234,15 +234,6 @@ public partial class InteractionPresenter : CanvasLayer
                     execution = currentExecution;
                 }
             }
-            else if (
-                presentation.Interactive.TryGetExecutionPresentation(
-                    action.ActionId,
-                    out GameplayActionExecutionPresentation currentExecution
-                )
-            )
-            {
-                execution = currentExecution;
-            }
             (_promptActions[index] as IGameplayActionWidget)?.Bind(action, execution);
         }
     }

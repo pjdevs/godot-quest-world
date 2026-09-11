@@ -230,7 +230,7 @@ public sealed partial class InteractionNetworkBehaviorTest : InteractionTestBase
         Godot.Collections.Dictionary started = source.CaptureSnapshot();
         AssertThat(destination.ApplySnapshot(started)).IsTrue();
         AssertThat(
-                receiver.TryGetExecutionPresentation(
+                receiver.ActionComponent!.TryGetExecutionPresentation(
                     authority.Action.Definition.Id,
                     out GameplayActionExecutionPresentation initial
                 )
@@ -243,7 +243,7 @@ public sealed partial class InteractionNetworkBehaviorTest : InteractionTestBase
         AssertThat(destination.ApplySnapshot(progressed)).IsTrue();
         AssertThat(destination.ApplySnapshot(started)).IsFalse();
         AssertThat(
-                receiver.TryGetExecutionPresentation(
+                receiver.ActionComponent.TryGetExecutionPresentation(
                     authority.Action.Definition.Id,
                     out GameplayActionExecutionPresentation current
                 )
@@ -253,7 +253,12 @@ public sealed partial class InteractionNetworkBehaviorTest : InteractionTestBase
 
         AssertThat(authority.Interactive.CompleteExecution(executionId)).IsTrue();
         AssertThat(destination.ApplySnapshot(source.CaptureSnapshot())).IsTrue();
-        AssertThat(receiver.TryGetExecutionPresentation(authority.Action.Definition.Id, out _))
+        AssertThat(
+                receiver.ActionComponent.TryGetExecutionPresentation(
+                    authority.Action.Definition.Id,
+                    out _
+                )
+            )
             .IsFalse();
     }
 
@@ -269,7 +274,7 @@ public sealed partial class InteractionNetworkBehaviorTest : InteractionTestBase
         await testWorld.Runner.SimulateFrames(2);
 
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     testWorld.Action.Definition!.Id,
                     out GameplayActionExecutionPresentation presentation
                 )
@@ -283,7 +288,7 @@ public sealed partial class InteractionNetworkBehaviorTest : InteractionTestBase
         AssertThat(testWorld.Interactor.TryEndInteractionInput(InteractInput)).IsTrue();
 
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     testWorld.Action.Definition!.Id,
                     out _
                 )

@@ -178,7 +178,8 @@ public sealed partial class GameplayActionRunnerNetworkTest
                 new NodePath("Door/Actions"),
                 OpenAction,
                 new NodePath(),
-                new NodePath()
+                new NodePath(),
+                false
             );
             await session.Pump(RoundTripFrames);
 
@@ -210,7 +211,8 @@ public sealed partial class GameplayActionRunnerNetworkTest
                 new NodePath("Door/Actions"),
                 OpenAction,
                 new NodePath("Door/AccessSource"),
-                new NodePath("Door/UnknownTarget")
+                new NodePath("Door/UnknownTarget"),
+                false
             );
             await session.Pump(RoundTripFrames);
 

@@ -45,30 +45,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
     );
 
     [Signal]
-    public delegate void InteractionStartedEventHandler(
-        Node interactive,
-        StringName actionId,
-        ulong executionId
-    );
-
-    [Signal]
-    public delegate void InteractionCompletedEventHandler(Node interactive, StringName actionId);
-
-    [Signal]
-    public delegate void InteractionCancelledEventHandler(
-        Node interactive,
-        StringName actionId,
-        string reason
-    );
-
-    [Signal]
-    public delegate void InteractionFailedEventHandler(
-        Node interactive,
-        StringName actionId,
-        string reason
-    );
-
-    [Signal]
     public delegate void InteractiveIndicationAddedEventHandler(Node interactive);
 
     [Signal]
@@ -495,10 +471,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
         Runner.GameplayActionRequested += OnGameplayActionRequested;
         Runner.GameplayActionRejected += OnGameplayActionRejected;
-        Runner.GameplayActionStarted += OnGameplayActionStarted;
-        Runner.GameplayActionCompleted += OnGameplayActionCompleted;
-        Runner.GameplayActionCancelled += OnGameplayActionCancelled;
-        Runner.GameplayActionFailed += OnGameplayActionFailed;
     }
 
     private void DisconnectRunnerSignals()
@@ -510,17 +482,13 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
         Runner.GameplayActionRequested -= OnGameplayActionRequested;
         Runner.GameplayActionRejected -= OnGameplayActionRejected;
-        Runner.GameplayActionStarted -= OnGameplayActionStarted;
-        Runner.GameplayActionCompleted -= OnGameplayActionCompleted;
-        Runner.GameplayActionCancelled -= OnGameplayActionCancelled;
-        Runner.GameplayActionFailed -= OnGameplayActionFailed;
     }
 
     /// <summary>Resolves the interaction target from the contextual binding that requested an action.</summary>
     /// <remarks>
     /// Interaction is an offer and access layer, not an owner of the gameplay action. The binding's
-    /// access source therefore remains the authoritative local association between a generic action
-    /// lifecycle notification and the interactive target that exposed it.
+    /// access source therefore remains the authoritative local association between a request or
+    /// refusal notification and the interactive target that exposed it.
     /// </remarks>
     private InteractiveComponent? ResolveInteractive(Node? component, StringName actionId)
     {
@@ -560,53 +528,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
 
         Variant interactive = target is null ? default : Variant.From(target);
         EmitSignal(SignalName.InteractionRejected, interactive, actionId, reason);
-    }
-
-    private void OnGameplayActionStarted(Node component, StringName actionId, long executionId)
-    {
-        Variant interactive = ResolveInteractive(component, actionId) is { } target
-            ? Variant.From(target)
-            : default;
-        EmitSignal(
-            SignalName.InteractionStarted,
-            interactive,
-            actionId,
-            checked((ulong)executionId)
-        );
-    }
-
-    private void OnGameplayActionCompleted(Node component, StringName actionId, long executionId)
-    {
-        Variant interactive = ResolveInteractive(component, actionId) is { } target
-            ? Variant.From(target)
-            : default;
-        EmitSignal(SignalName.InteractionCompleted, interactive, actionId);
-    }
-
-    private void OnGameplayActionCancelled(
-        Node component,
-        StringName actionId,
-        long executionId,
-        string reason
-    )
-    {
-        Variant interactive = ResolveInteractive(component, actionId) is { } target
-            ? Variant.From(target)
-            : default;
-        EmitSignal(SignalName.InteractionCancelled, interactive, actionId, reason);
-    }
-
-    private void OnGameplayActionFailed(
-        Node component,
-        StringName actionId,
-        long executionId,
-        string reason
-    )
-    {
-        Variant interactive = ResolveInteractive(component, actionId) is { } target
-            ? Variant.From(target)
-            : default;
-        EmitSignal(SignalName.InteractionFailed, interactive, actionId, reason);
     }
 
     public override void _ExitTree()

@@ -43,7 +43,7 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
 
         AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsTrue();
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     testWorld.Action.Definition!.Id,
                     out GameplayActionExecutionPresentation startedPresentation
                 )
@@ -176,7 +176,7 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
         AssertThat(result is GameplayActionExecutionFailed).IsTrue();
         AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsFalse();
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     testWorld.Action.Definition!.Id,
                     out _
                 )
@@ -200,7 +200,7 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
         AssertThat(result is GameplayActionExecutionFailed).IsTrue();
         AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsFalse();
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     testWorld.Action.Definition!.Id,
                     out _
                 )
@@ -227,7 +227,7 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
             )
             .IsTrue();
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     action.Definition!.Id,
                     out GameplayActionExecutionPresentation sourcedPresentation
                 )
@@ -238,7 +238,7 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
 
         AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, -1.0f)).IsTrue();
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     action.Definition!.Id,
                     out GameplayActionExecutionPresentation presentation
                 )
@@ -249,7 +249,7 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
         AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, 0.33f)).IsTrue();
         AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, 0.66f)).IsTrue();
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     action.Definition.Id,
                     out presentation
                 )
@@ -258,7 +258,7 @@ public sealed partial class InteractionTimedExecutionTest : InteractionTestBase
         AssertThat(presentation.Progress!.Value).IsEqualApprox(0.66f, 0.001f);
         AssertThat(testWorld.Interactive.ReportExecutionProgress(executionId, null)).IsTrue();
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     action.Definition!.Id,
                     out presentation
                 )

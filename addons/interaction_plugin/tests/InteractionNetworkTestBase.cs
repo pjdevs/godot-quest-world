@@ -564,14 +564,26 @@ public abstract partial class InteractionNetworkTestBase
 
         private static void Record(InteractionInteractor interactor, List<Ack> acks)
         {
-            interactor.InteractionStarted += (target, actionId, executionId) =>
-                acks.Add(new Ack("started", target, actionId, executionId, string.Empty));
-            interactor.InteractionCompleted += (target, actionId) =>
-                acks.Add(new Ack("completed", target, actionId, 0ul, string.Empty));
-            interactor.InteractionCancelled += (target, actionId, reason) =>
-                acks.Add(new Ack("cancelled", target, actionId, 0ul, reason));
-            interactor.InteractionFailed += (target, actionId, reason) =>
-                acks.Add(new Ack("failed", target, actionId, 0ul, reason));
+            interactor.Runner!.GameplayActionStarted += (_, actionId, executionId) =>
+                acks.Add(
+                    new Ack(
+                        "started",
+                        interactor.FocusedInteractive,
+                        actionId,
+                        checked((ulong)executionId),
+                        string.Empty
+                    )
+                );
+            interactor.Runner.GameplayActionCompleted += (_, actionId, _) =>
+                acks.Add(
+                    new Ack("completed", interactor.FocusedInteractive, actionId, 0ul, string.Empty)
+                );
+            interactor.Runner.GameplayActionCancelled += (_, actionId, _, reason) =>
+                acks.Add(
+                    new Ack("cancelled", interactor.FocusedInteractive, actionId, 0ul, reason)
+                );
+            interactor.Runner.GameplayActionFailed += (_, actionId, _, reason) =>
+                acks.Add(new Ack("failed", interactor.FocusedInteractive, actionId, 0ul, reason));
             interactor.InteractionRejected += (target, actionId, reason) =>
                 acks.Add(new Ack("rejected", target, actionId, 0ul, reason));
         }

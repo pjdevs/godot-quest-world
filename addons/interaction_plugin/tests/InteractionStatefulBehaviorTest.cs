@@ -274,7 +274,7 @@ public sealed partial class InteractionStatefulBehaviorTest : InteractionTestBas
         AssertThat(testWorld.Interactive.IsExecutionActive(executionId)).IsTrue();
         AssertThat(testWorld.Stateful.State).IsEqual(new StringName("working"));
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     action.Definition!.Id,
                     out GameplayActionExecutionPresentation presentation
                 )

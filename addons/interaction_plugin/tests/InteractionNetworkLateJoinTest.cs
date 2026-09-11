@@ -183,14 +183,14 @@ public sealed partial class InteractionNetworkLateJoinTest : InteractionNetworkT
             await session.Pump(RoundTripFrames);
 
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
                         ActivateAction,
                         out GameplayActionExecutionPresentation requester
                     )
                 )
                 .IsTrue();
             AssertThat(
-                    session.ClientB.Interactive.TryGetExecutionPresentation(
+                    session.ClientB.Interactive.ActionComponent!.TryGetExecutionPresentation(
                         ActivateAction,
                         out GameplayActionExecutionPresentation observer
                     )
@@ -203,7 +203,7 @@ public sealed partial class InteractionNetworkLateJoinTest : InteractionNetworkT
 
             LatePeer late = await session.JoinLate("ClientC");
             AssertThat(
-                    late.Scene.Interactive.TryGetExecutionPresentation(
+                    late.Scene.Interactive.ActionComponent!.TryGetExecutionPresentation(
                         ActivateAction,
                         out GameplayActionExecutionPresentation joined
                     )
@@ -217,14 +217,25 @@ public sealed partial class InteractionNetworkLateJoinTest : InteractionNetworkT
             await session.Pump(RoundTripFrames);
 
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsFalse();
             AssertThat(
-                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientB.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsFalse();
-            AssertThat(late.Scene.Interactive.TryGetExecutionPresentation(ActivateAction, out _))
+            AssertThat(
+                    late.Scene.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
+                )
                 .IsFalse();
         }
         finally
@@ -248,15 +259,24 @@ public sealed partial class InteractionNetworkLateJoinTest : InteractionNetworkT
 
             AssertThat(session.KindsA()).IsEqual(new List<string> { "started" });
             AssertThat(
-                    session.Server.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.Server.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsTrue();
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsFalse();
             AssertThat(
-                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientB.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsFalse();
         }
@@ -286,7 +306,10 @@ public sealed partial class InteractionNetworkLateJoinTest : InteractionNetworkT
             AssertThat(session.Server.ExecutionSynchronizer.GetVisibilityFor(observerPeerId))
                 .IsFalse();
             AssertThat(
-                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientB.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsFalse();
 
@@ -294,11 +317,17 @@ public sealed partial class InteractionNetworkLateJoinTest : InteractionNetworkT
             await session.Pump(RoundTripFrames);
 
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsTrue();
             AssertThat(
-                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientB.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsFalse();
 
@@ -307,7 +336,10 @@ public sealed partial class InteractionNetworkLateJoinTest : InteractionNetworkT
             await session.Pump(RoundTripFrames);
 
             AssertThat(
-                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientB.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsTrue();
         }

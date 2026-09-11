@@ -382,7 +382,8 @@ public sealed partial class InteractionFocusAndAvailabilityTest : InteractionTes
                 .IsTrue();
             AssertThat(
                     interactive.ActionComponent is null
-                    || interactive.ActionComponent.ResolveAction(new StringName("foreign")) == null
+                        || interactive.ActionComponent.ResolveAction(new StringName("foreign"))
+                            == null
                 )
                 .IsTrue();
             AssertThat(
@@ -551,9 +552,10 @@ public sealed partial class InteractionFocusAndAvailabilityTest : InteractionTes
         AssertThat(testWorld.Interactor.TryStartInteractionInput(InteractInput)).IsTrue();
 
         await testWorld.Runner.SimulateFrames(2);
-        AssertThat(testWorld.Interactive.GetExecutionPresentations().Count).IsEqual(1);
+        AssertThat(testWorld.Interactive.ActionComponent!.GetExecutionPresentations().Count)
+            .IsEqual(1);
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent.TryGetExecutionPresentation(
                     new StringName("activate"),
                     out GameplayActionExecutionPresentation activation
                 )
@@ -562,7 +564,10 @@ public sealed partial class InteractionFocusAndAvailabilityTest : InteractionTes
         AssertThat(activation.Progress.HasValue).IsTrue();
         AssertThat(activation.Progress!.Value > 0.0f).IsTrue();
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(new StringName("inspect"), out _)
+                testWorld.Interactive.ActionComponent.TryGetExecutionPresentation(
+                    new StringName("inspect"),
+                    out _
+                )
             )
             .IsFalse();
     }

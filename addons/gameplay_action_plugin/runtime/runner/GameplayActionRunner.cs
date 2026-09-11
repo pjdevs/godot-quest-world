@@ -549,6 +549,7 @@ public partial class GameplayActionRunner : Node
     /// <summary>Reliable server RPC endpoint used by local request transport to start an action.</summary>
     /// <param name="accessSourcePath">Optional network-relative path of the access validation source.</param>
     /// <param name="targetPath">Optional network-relative path of the invocation target.</param>
+    /// <param name="bindingRequiresRequesterPresence">Whether the requesting binding sustains the input press.</param>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,
         CallLocal = false,
@@ -558,8 +559,16 @@ public partial class GameplayActionRunner : Node
         NodePath componentPath,
         StringName actionId,
         NodePath accessSourcePath,
-        NodePath targetPath
-    ) => _requests.ServerTryStartAction(componentPath, actionId, accessSourcePath, targetPath);
+        NodePath targetPath,
+        bool bindingRequiresRequesterPresence
+    ) =>
+        _requests.ServerTryStartAction(
+            componentPath,
+            actionId,
+            accessSourcePath,
+            targetPath,
+            bindingRequiresRequesterPresence
+        );
 
     /// <summary>Reliable server RPC endpoint used by requester input release/cancellation.</summary>
     [Rpc(

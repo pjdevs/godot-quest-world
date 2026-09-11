@@ -39,9 +39,10 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
             out ulong executionId
         );
 
-        AssertThat(testWorld.Interactive.GetExecutionPresentations().Count).IsEqual(1);
+        AssertThat(testWorld.Interactive.ActionComponent!.GetExecutionPresentations().Count)
+            .IsEqual(1);
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent.TryGetExecutionPresentation(
                     new StringName("activate"),
                     out GameplayActionExecutionPresentation presentation
                 )
@@ -54,9 +55,13 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
 
         AssertThat(testWorld.Interactive.CompleteExecution(executionId)).IsTrue();
 
-        AssertThat(testWorld.Interactive.GetExecutionPresentations().Count).IsEqual(0);
+        AssertThat(testWorld.Interactive.ActionComponent.GetExecutionPresentations().Count)
+            .IsEqual(0);
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(new StringName("activate"), out _)
+                testWorld.Interactive.ActionComponent.TryGetExecutionPresentation(
+                    new StringName("activate"),
+                    out _
+                )
             )
             .IsFalse();
         AssertThat(invalidations).IsEqual(2);
@@ -75,7 +80,7 @@ public sealed partial class InteractionExecutionBehaviorTest : InteractionTestBa
         );
 
         AssertThat(
-                testWorld.Interactive.TryGetExecutionPresentation(
+                testWorld.Interactive.ActionComponent!.TryGetExecutionPresentation(
                     new StringName("activate"),
                     out GameplayActionExecutionPresentation presentation
                 )

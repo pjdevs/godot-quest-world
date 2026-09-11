@@ -123,6 +123,9 @@ request. The provider receives the optional access source and invocation target 
 lease while the request enters the executor, binds it to a running `ExecutionId`, and releases it on
 every synchronous rollback, terminal result, cancellation, requester disconnect or runner cleanup.
 Client bindings and access claims never cross the network as proof.
+The request transport does carry the binding's `InputRequirement` as intent: the authority must know
+when a contextual `Pressed` binding requires requester presence even if the action itself is an
+ordinary `GameplayAction` without a `DefaultBindingConfig`.
 
 Executors require requester presence by default. An executor may opt out through
 `RequiresRequesterPresence == false` when accepted work is world-owned from its start. An execution

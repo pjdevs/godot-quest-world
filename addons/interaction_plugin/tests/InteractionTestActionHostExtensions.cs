@@ -259,7 +259,8 @@ internal static class InteractionTestActionHostExtensions
             interactor.GetTree().Root.GetPathTo(component),
             actionId,
             interactor.GetTree().Root.GetPathTo(interactive),
-            interactor.GetTree().Root.GetPathTo(interactive.ResolveInvocationTarget())
+            interactor.GetTree().Root.GetPathTo(interactive.ResolveInvocationTarget()),
+            false
         );
     }
 
@@ -282,7 +283,7 @@ internal static class InteractionTestActionHostExtensions
         interactor.Runner.ClientActionRejected(component.GetPath(), actionId, reason);
     }
 
-    public static void ClientInteractionStarted(
+    public static void ClientGameplayActionStarted(
         this InteractionInteractor interactor,
         NodePath targetPath,
         StringName actionId,

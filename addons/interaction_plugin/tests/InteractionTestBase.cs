@@ -698,7 +698,7 @@ public abstract partial class InteractionTestBase
         }
 
         public float Read() =>
-            _interactive.TryGetExecutionPresentation(
+            _interactive.ActionComponent!.TryGetExecutionPresentation(
                 _actionId,
                 out GameplayActionExecutionPresentation presentation
             )

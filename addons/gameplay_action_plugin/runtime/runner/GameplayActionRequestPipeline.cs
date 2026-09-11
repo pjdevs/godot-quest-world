@@ -147,7 +147,8 @@ internal sealed class GameplayActionRequestPipeline(
                 GetNetworkPath(binding.Component),
                 binding.ActionId,
                 GetNetworkPath(binding.AccessSource),
-                GetNetworkPath(binding.Target)
+                GetNetworkPath(binding.Target),
+                binding.InputRequirement == GameplayActionInputRequirement.Pressed
             );
             return true;
         }
@@ -372,7 +373,8 @@ internal sealed class GameplayActionRequestPipeline(
         NodePath componentPath,
         StringName actionId,
         NodePath accessSourcePath,
-        NodePath targetPath
+        NodePath targetPath,
+        bool bindingRequiresRequesterPresence
     )
     {
         int senderPeerId = GetRemoteSenderOrOwner();
@@ -430,7 +432,8 @@ internal sealed class GameplayActionRequestPipeline(
             senderPeerId,
             componentPath,
             accessSource,
-            target
+            target,
+            bindingRequiresRequesterPresence
         );
     }
 
@@ -760,12 +763,7 @@ internal sealed class GameplayActionRequestPipeline(
             {
                 reason = GameplayActionAvailabilityExtensions.UnavailableReason;
             }
-            RejectRequest(
-                senderPeerId,
-                componentPath,
-                actionId,
-                reason
-            );
+            RejectRequest(senderPeerId, componentPath, actionId, reason);
             return new GameplayActionExecutionRejected(reason);
         }
 

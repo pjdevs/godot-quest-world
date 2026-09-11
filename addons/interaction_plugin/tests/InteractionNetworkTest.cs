@@ -143,7 +143,10 @@ public sealed partial class InteractionNetworkTest : InteractionNetworkTestBase
             AssertThat(session.KindsA()).IsEqual(new List<string> { "rejected" });
             AssertThat(session.AcksA[0].Reason).IsEqual("The till is closed.");
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsFalse();
         }
@@ -196,7 +199,7 @@ public sealed partial class InteractionNetworkTest : InteractionNetworkTestBase
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
 
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
                         ActivateAction,
                         out GameplayActionExecutionPresentation presentation
                     )
@@ -209,7 +212,10 @@ public sealed partial class InteractionNetworkTest : InteractionNetworkTestBase
             await session.Pump(RoundTripFrames);
 
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsTrue();
         }
@@ -235,14 +241,20 @@ public sealed partial class InteractionNetworkTest : InteractionNetworkTestBase
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
 
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsFalse();
 
             await session.Pump(RoundTripFrames);
 
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsTrue();
         }
@@ -269,7 +281,10 @@ public sealed partial class InteractionNetworkTest : InteractionNetworkTestBase
             session.ClientA.InteractorA.TryStartInteractionInput(InteractInput);
 
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsTrue();
 
@@ -277,7 +292,7 @@ public sealed partial class InteractionNetworkTest : InteractionNetworkTestBase
 
             AssertThat(session.KindsA()).IsEqual(new List<string> { "started" });
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
                         ActivateAction,
                         out GameplayActionExecutionPresentation presentation
                     )
@@ -309,12 +324,18 @@ public sealed partial class InteractionNetworkTest : InteractionNetworkTestBase
             // The loser drew a bar at its own press, like the winner did, and the refusal takes it
             // away: an unacknowledged prediction is exactly what a refusal invalidates.
             AssertThat(
-                    session.ClientB.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientB.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsFalse();
             // The winner keeps drawing its own bar.
             AssertThat(
-                    session.ClientA.Interactive.TryGetExecutionPresentation(ActivateAction, out _)
+                    session.ClientA.Interactive.ActionComponent!.TryGetExecutionPresentation(
+                        ActivateAction,
+                        out _
+                    )
                 )
                 .IsTrue();
         }

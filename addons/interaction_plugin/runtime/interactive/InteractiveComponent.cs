@@ -888,43 +888,6 @@ public partial class InteractiveComponent : Node
         return true;
     }
 
-    /// <summary>Gets the execution presentations visible on this peer.</summary>
-    /// <remarks>
-    /// The returned snapshot is ordered by the action owner's declarations, not by execution start time. Progress
-    /// is resolved lazily from a local source, a linear transport sample, or a published value.
-    /// </remarks>
-    /// <returns>A fresh action-ordered snapshot of the visible active executions.</returns>
-    public IReadOnlyList<GameplayActionExecutionPresentation> GetExecutionPresentations()
-    {
-        return ActionComponent?.GetExecutionPresentations()
-            ?? System.Array.Empty<GameplayActionExecutionPresentation>();
-    }
-
-    /// <summary>Looks up the visible execution presentation for one action identifier.</summary>
-    /// <param name="actionId">Stable identifier of the action to look up.</param>
-    /// <param name="presentation">Visible execution snapshot when one exists.</param>
-    /// <returns><see langword="true"/> when this target has a matching visible execution.</returns>
-    public bool TryGetExecutionPresentation(
-        StringName actionId,
-        out GameplayActionExecutionPresentation presentation
-    )
-    {
-        presentation = default;
-        if (
-            ActionComponent is null
-            || !ActionComponent.TryGetExecutionPresentation(
-                actionId,
-                out GameplayActionExecutionPresentation current
-            )
-        )
-        {
-            return false;
-        }
-
-        presentation = current;
-        return true;
-    }
-
     /// <summary>Looks up an execution presentation through the action owner of an authored offer.</summary>
     public bool TryGetExecutionPresentation(
         InteractionInteractor interactor,
