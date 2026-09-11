@@ -17,7 +17,11 @@ public partial class GameplayActionPromptWidget : PanelContainer, IGameplayActio
 
     /// <summary>Gets or sets the optional progress bar used for hold-selection progress.</summary>
     [Export]
-    public ProgressBar? ActionProgress { get; set; }
+    public ProgressBar? ActionHoldProgress { get; set; }
+
+    /// <summary>Gets or sets the optional progress bar used for execution progress.</summary>
+    [Export]
+    public ProgressBar? ActionExecutionProgress { get; set; }
 
     public override void _Ready() { }
 
@@ -47,10 +51,16 @@ public partial class GameplayActionPromptWidget : PanelContainer, IGameplayActio
             ActionKeyLabel?.AddThemeColorOverride("font_color", Colors.Red);
         }
 
-        if (ActionProgress is not null)
+        if (ActionHoldProgress is not null)
         {
-            ActionProgress.Visible = presentation.IsHoldable;
-            ActionProgress.SetValue(presentation.HoldProgress ?? 0.0f);
+            ActionHoldProgress.Visible = presentation.IsHoldable;
+            ActionHoldProgress.SetValue(presentation.HoldProgress ?? 0.0f);
+        }
+
+        if (ActionExecutionProgress is not null)
+        {
+            ActionExecutionProgress.Visible = execution is not null;
+            ActionExecutionProgress.SetValue(execution?.Progress ?? 0f);
         }
     }
 }

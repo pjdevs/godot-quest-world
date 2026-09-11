@@ -109,8 +109,8 @@ public sealed partial class GameplayActionPresenterTest
 
         GameplayActionPromptWidget widget = world.Actions.GetChild<GameplayActionPromptWidget>(0);
         AssertThat(widget.GetInstanceId()).IsEqual(widgetId);
-        AssertThat(widget.ActionProgress!.Value > 0.25f).IsTrue();
-        AssertThat(widget.ActionProgress.Value < 0.4f).IsTrue();
+        AssertThat(widget.ActionHoldProgress!.Value > 0.25f).IsTrue();
+        AssertThat(widget.ActionHoldProgress.Value < 0.4f).IsTrue();
     }
 
     [TestCase]

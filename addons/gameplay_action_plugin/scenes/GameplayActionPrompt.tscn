@@ -5,47 +5,30 @@
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vlcnc"]
 bg_color = Color(0, 0, 0, 0.1764706)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8rywm"]
+bg_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_72247"]
+bg_color = Color(0.04686996, 0.004299996, 0.43, 0.75686276)
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kjfq5"]
 bg_color = Color(0.4320224, 0.60253876, 0.877438, 1)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8rywm"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wrs8j"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_72247"]
-bg_color = Color(0, 0, 0, 0.39215687)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4tqr7"]
+bg_color = Color(0.047058824, 0.003921569, 0.43137255, 0.75686276)
 
-[node name="GameplayActionPrompt" type="PanelContainer" unique_id=768295207 node_paths=PackedStringArray("ActionNameLabel", "ActionKeyLabel", "ActionProgress")]
+[node name="GameplayActionPrompt" type="PanelContainer" unique_id=768295207 node_paths=PackedStringArray("ActionNameLabel", "ActionKeyLabel", "ActionHoldProgress", "ActionExecutionProgress")]
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_vlcnc")
 script = ExtResource("1_action_prompt")
-ActionNameLabel = NodePath("ActionPromptLayout/ActionLabel")
-ActionKeyLabel = NodePath("ActionPromptLayout/ActionKey/ActionKeyLayout/ActionKeyLabel")
-ActionProgress = NodePath("ActionPromptLayout/ActionKey/ActionKeyLayout/ActionProgress")
+ActionNameLabel = NodePath("MarginContainer/ActionPromptLayout/ActionLabel")
+ActionKeyLabel = NodePath("MarginContainer/ActionPromptLayout/ActionKey/ActionKeyLayout/ActionKeyLabel")
+ActionHoldProgress = NodePath("MarginContainer/ActionPromptLayout/ActionKey/ActionKeyLayout/ActionHoldProgress")
+ActionExecutionProgress = NodePath("ActionExecutionProgress")
 
-[node name="ActionPromptLayout" type="HBoxContainer" parent="." unique_id=257096984]
-layout_mode = 2
-theme_override_constants/separation = 5
-
-[node name="ActionKey" type="PanelContainer" parent="ActionPromptLayout" unique_id=1767217260]
-custom_minimum_size = Vector2(30, 30)
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_styles/panel = SubResource("StyleBoxFlat_kjfq5")
-
-[node name="ActionKeyLayout" type="VBoxContainer" parent="ActionPromptLayout/ActionKey" unique_id=2041342466]
-custom_minimum_size = Vector2(30, 0)
-layout_mode = 2
-theme_override_constants/separation = 0
-alignment = 1
-
-[node name="ActionKeyLabel" type="Label" parent="ActionPromptLayout/ActionKey/ActionKeyLayout" unique_id=1601164135]
-layout_mode = 2
-size_flags_vertical = 3
-theme_override_colors/font_color = Color(0.19881096, 0.19881096, 0.19881096, 1)
-text = "E"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="ActionProgress" type="ProgressBar" parent="ActionPromptLayout/ActionKey/ActionKeyLayout" unique_id=1720511514]
+[node name="ActionExecutionProgress" type="ProgressBar" parent="." unique_id=1833751204]
 layout_mode = 2
 size_flags_vertical = 3
 size_flags_stretch_ratio = 0.1
@@ -53,10 +36,51 @@ theme_override_styles/background = SubResource("StyleBoxFlat_8rywm")
 theme_override_styles/fill = SubResource("StyleBoxFlat_72247")
 max_value = 1.0
 step = 0.001
+show_percentage = false
+
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=1224761918]
+layout_mode = 2
+theme_override_constants/margin_left = 2
+theme_override_constants/margin_top = 2
+theme_override_constants/margin_right = 2
+theme_override_constants/margin_bottom = 2
+
+[node name="ActionPromptLayout" type="HBoxContainer" parent="MarginContainer" unique_id=257096984]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="ActionKey" type="PanelContainer" parent="MarginContainer/ActionPromptLayout" unique_id=1767217260]
+custom_minimum_size = Vector2(30, 30)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_kjfq5")
+
+[node name="ActionKeyLayout" type="VBoxContainer" parent="MarginContainer/ActionPromptLayout/ActionKey" unique_id=2041342466]
+custom_minimum_size = Vector2(30, 0)
+layout_mode = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="ActionKeyLabel" type="Label" parent="MarginContainer/ActionPromptLayout/ActionKey/ActionKeyLayout" unique_id=1601164135]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.19881096, 0.19881096, 0.19881096, 1)
+text = "E"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ActionHoldProgress" type="ProgressBar" parent="MarginContainer/ActionPromptLayout/ActionKey/ActionKeyLayout" unique_id=1720511514]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.1
+theme_override_styles/background = SubResource("StyleBoxFlat_wrs8j")
+theme_override_styles/fill = SubResource("StyleBoxFlat_4tqr7")
+max_value = 1.0
+step = 0.001
 value = 0.5
 show_percentage = false
 
-[node name="ActionLabel" type="Label" parent="ActionPromptLayout" unique_id=2111660497]
+[node name="ActionLabel" type="Label" parent="MarginContainer/ActionPromptLayout" unique_id=2111660497]
 layout_mode = 2
 text = "Open"
 horizontal_alignment = 1

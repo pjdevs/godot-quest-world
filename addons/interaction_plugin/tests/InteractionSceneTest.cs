@@ -210,7 +210,7 @@ public sealed partial class InteractionSceneTest
         widget.AddChild(progress);
         widget.ActionNameLabel = actionName;
         widget.ActionKeyLabel = actionKey;
-        widget.ActionProgress = progress;
+        widget.ActionHoldProgress = progress;
         ISceneRunner runner = ISceneRunner.Load(widget, autoFree: true);
         await runner.SimulateFrames(1);
 
