@@ -273,6 +273,18 @@ post-commit recovery survive target disappearance, requester departure, or acces
 generic execution reservation remains active until its normal terminal lifecycle. Interaction does not
 special-case destroyed targets as valid access.
 
+### AD-15 — Stable capabilities are authored; transient conditions are rules
+
+A capability that structurally belongs to an actor or object is authored on that owner's
+`GameplayActionComponent`. Temporary gameplay state changes availability rather than creating/destroying
+the occurrence. QuestWorld's Take/Drop migration is the reference example: the player permanently owns
+the capabilities, while carry state hides or allows them through `GameplayActionRule` and explicit
+binding invalidation.
+
+Dynamic `AddAction`/`RemoveAction` remains valid when gameplay genuinely grants or revokes a capability
+(for example equipping a tool that introduces a new ability). It is not the default representation of
+"the same ability is currently unusable".
+
 ## Deliberately deferred
 
 These are boundaries, not partially implemented features or roadmap commitments:
