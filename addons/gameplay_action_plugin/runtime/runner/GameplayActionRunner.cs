@@ -106,7 +106,7 @@ public partial class GameplayActionRunner : Node
     public GameplayActionRunner()
     {
         _bindings = new GameplayActionBindingStore(EvaluateBinding);
-        _requests = new GameplayActionRequestPipeline(this, CanAccess, ResolveInstigator);
+        _requests = new GameplayActionRequestPipeline(this, ResolveAccess, ResolveInstigator);
         _gestures = new GameplayActionGestureResolver(
             _bindings,
             RequestBest,
@@ -409,13 +409,13 @@ public partial class GameplayActionRunner : Node
         GameplayAction? action = binding.Component.ResolveAction(binding.ActionId);
         if (
             action is null
-            || !CanAccess(
+            || !ResolveAccess(
                 binding.Component,
                 action,
                 binding.AccessSource,
                 binding.Target,
                 sustained: false
-            )
+            ).Allowed
         )
         {
             return new GameplayActionHidden();
@@ -429,7 +429,7 @@ public partial class GameplayActionRunner : Node
         );
     }
 
-    private bool CanAccess(
+    private GameplayActionAccessPolicy ResolveAccess(
         GameplayActionComponent component,
         GameplayAction action,
         Node? accessSource,
@@ -440,12 +440,12 @@ public partial class GameplayActionRunner : Node
         StringName providerId = action.AccessProviderId;
         if (providerId is null || providerId.IsEmpty)
         {
-            return component == OwnedActionComponent;
+            return new GameplayActionAccessPolicy(component == OwnedActionComponent);
         }
 
         if (!_accessProviders.TryGetValue(providerId, out IGameplayActionAccessProvider? provider))
         {
-            return false;
+            return new GameplayActionAccessPolicy(false);
         }
 
         GameplayActionAccessContext context = new(
@@ -456,7 +456,7 @@ public partial class GameplayActionRunner : Node
             target,
             sustained
         );
-        return provider.CanRequest(context);
+        return provider.ResolveAccess(context);
     }
 
     internal bool TryAcquireRequestReservation(
@@ -549,7 +549,6 @@ public partial class GameplayActionRunner : Node
     /// <summary>Reliable server RPC endpoint used by local request transport to start an action.</summary>
     /// <param name="accessSourcePath">Optional network-relative path of the access validation source.</param>
     /// <param name="targetPath">Optional network-relative path of the invocation target.</param>
-    /// <param name="bindingRequiresRequesterPresence">Whether the requesting binding sustains the input press.</param>
     [Rpc(
         MultiplayerApi.RpcMode.AnyPeer,
         CallLocal = false,
@@ -559,16 +558,8 @@ public partial class GameplayActionRunner : Node
         NodePath componentPath,
         StringName actionId,
         NodePath accessSourcePath,
-        NodePath targetPath,
-        bool bindingRequiresRequesterPresence
-    ) =>
-        _requests.ServerTryStartAction(
-            componentPath,
-            actionId,
-            accessSourcePath,
-            targetPath,
-            bindingRequiresRequesterPresence
-        );
+        NodePath targetPath
+    ) => _requests.ServerTryStartAction(componentPath, actionId, accessSourcePath, targetPath);
 
     /// <summary>Reliable server RPC endpoint used by requester input release/cancellation.</summary>
     [Rpc(

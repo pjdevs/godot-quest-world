@@ -27,10 +27,12 @@ properties/1/path = NodePath(".:CurrentCarryOperationVariant")
 properties/1/spawn = true
 properties/1/replication_mode = 2
 
-[node name="Character" unique_id=493885237 instance=ExtResource("1_base")]
+[node name="Character" unique_id=493885237 groups=["Player"] instance=ExtResource("1_base")]
 script = ExtResource("2_project_character")
+TakeAction = &"take"
+DropAction = &"drop"
 
-[node name="GeneralSkeleton" parent="Visual/UALCharacter/Armature" parent_id_path=PackedInt32Array(1190744522, 1290648370) index="0" unique_id=1989870170]
+[node name="GeneralSkeleton" parent="Visual/UALCharacter/Armature" parent_id_path=PackedInt32Array(1190744522, 566434821) index="0" unique_id=1239908282]
 bones/1/position = Vector3(0, 0.9167, -0.05010003)
 bones/1/rotation = Quaternion(0, 0, 0, 1)
 bones/3/rotation = Quaternion(0, 0, 0, 1)
@@ -134,7 +136,7 @@ script = ExtResource("8_runner")
 OwnedActionComponent = NodePath("../GameplayActions")
 metadata/_custom_type_script = "uid://cq7x5laa2qc4c"
 
-[node name="InteractionInteractor" type="Node" parent="." index="8" unique_id=1688919232 node_paths=PackedStringArray("Detector", "Runner") groups=["Player"]]
+[node name="InteractionInteractor" type="Node" parent="." index="8" unique_id=1688919232 node_paths=PackedStringArray("Detector", "Runner")]
 script = ExtResource("3_interactor")
 Detector = NodePath("AreaInteractionDetector")
 Runner = NodePath("../GameplayActionRunner")

@@ -20,6 +20,16 @@ public readonly record struct GameplayActionAccessContext(
     bool Sustained = false
 );
 
+/// <summary>Authority-side access decision and contextual requester policy.</summary>
+/// <param name="Allowed">Whether the runner may request or sustain the action.</param>
+/// <param name="RequiresRequesterPresence">
+/// Whether this access context requires the requester to remain present while execution runs.
+/// </param>
+public readonly record struct GameplayActionAccessPolicy(
+    bool Allowed,
+    bool RequiresRequesterPresence = false
+);
+
 /// <summary>Authority-side access reservation attached to one requested execution.</summary>
 /// <remarks>
 /// The request pipeline calls <see cref="BindExecution"/> once the action owner has allocated its
@@ -38,8 +48,8 @@ public interface IGameplayActionRequestReservation
 /// <summary>Domain adapter used by a runner to validate request access to gameplay actions.</summary>
 public interface IGameplayActionAccessProvider
 {
-    /// <summary>Returns whether the runner currently has access to request the action.</summary>
-    bool CanRequest(in GameplayActionAccessContext context);
+    /// <summary>Resolves access and contextual requester policy for the current request.</summary>
+    GameplayActionAccessPolicy ResolveAccess(in GameplayActionAccessContext context);
 
     /// <summary>
     /// Tries to acquire an optional authority-side lease for the request after access validation.

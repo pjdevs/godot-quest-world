@@ -841,7 +841,7 @@ public sealed partial class GameplayActionRunnerTest
 
         public Node? LastReservationAccessSource { get; private set; }
 
-        public bool CanRequest(in GameplayActionAccessContext context)
+        public GameplayActionAccessPolicy ResolveAccess(in GameplayActionAccessContext context)
         {
             RequestChecks++;
             LastAccessSource = context.AccessSource;
@@ -851,7 +851,7 @@ public sealed partial class GameplayActionRunnerTest
                 LastSustainedAccessSource = context.AccessSource;
                 LastSustainedTarget = context.Target;
             }
-            return Allowed;
+            return new GameplayActionAccessPolicy(Allowed);
         }
 
         public bool TryAcquireRequestReservation(
@@ -870,8 +870,8 @@ public sealed partial class GameplayActionRunnerTest
     {
         public IGameplayActionRequestReservation? Reservation { get; set; }
 
-        public bool CanRequest(in GameplayActionAccessContext context) =>
-            context.Target is not null && GodotObject.IsInstanceValid(context.Target);
+        public GameplayActionAccessPolicy ResolveAccess(in GameplayActionAccessContext context) =>
+            new(context.Target is not null && GodotObject.IsInstanceValid(context.Target));
 
         public bool TryAcquireRequestReservation(
             in GameplayActionAccessContext context,
@@ -879,7 +879,7 @@ public sealed partial class GameplayActionRunnerTest
         )
         {
             reservation = Reservation;
-            return CanRequest(context);
+            return ResolveAccess(context).Allowed;
         }
     }
 

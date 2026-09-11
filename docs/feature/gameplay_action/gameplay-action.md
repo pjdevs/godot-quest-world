@@ -119,13 +119,13 @@ provider is accessible only when it belongs to the runner's `OwnedActionComponen
 `AccessProviderId` always asks the runner's matching
 `IGameplayActionAccessProvider`, whether the action is owned or external. A missing provider rejects the
 request. The provider receives the optional access source and invocation target independently and may expose a transient
-`IGameplayActionRequestReservation` after `CanRequest()` succeeds. The authoritative runner holds that
+`IGameplayActionRequestReservation` after the provider's access policy allows the request. The authoritative runner holds that
 lease while the request enters the executor, binds it to a running `ExecutionId`, and releases it on
 every synchronous rollback, terminal result, cancellation, requester disconnect or runner cleanup.
 Client bindings and access claims never cross the network as proof.
-The request transport does carry the binding's `InputRequirement` as intent: the authority must know
-when a contextual `Pressed` binding requires requester presence even if the action itself is an
-ordinary `GameplayAction` without a `DefaultBindingConfig`.
+An `IGameplayActionAccessProvider` returns both access and any contextual requester-presence policy;
+the authority derives that policy from its resolved domain data. The request transport carries no
+binding `InputRequirement` or other binding data.
 
 Executors require requester presence by default. An executor may opt out through
 `RequiresRequesterPresence == false` when accepted work is world-owned from its start. An execution

@@ -220,19 +220,21 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
         );
         GameplayActionAccessContext spoofed = accepted with { Target = spoofedTarget };
 
-        AssertThat(interactor.CanRequest(accepted)).IsTrue();
-        AssertThat(interactor.CanRequest(spoofed)).IsFalse();
+        GameplayActionAccessPolicy acceptedPolicy = interactor.ResolveAccess(accepted);
+        AssertThat(acceptedPolicy.Allowed).IsTrue();
+        AssertThat(acceptedPolicy.RequiresRequesterPresence).IsTrue();
+        AssertThat(interactor.ResolveAccess(spoofed).Allowed).IsFalse();
         AssertThat(interactor.TryAcquireRequestReservation(accepted, out var reservation)).IsTrue();
         reservation!.Release();
         AssertThat(interactor.TryAcquireRequestReservation(spoofed, out _)).IsFalse();
 
         owner.Free();
         await runner.SimulateFrames(1);
-        AssertThat(interactor.CanRequest(accepted)).IsFalse();
+        AssertThat(interactor.ResolveAccess(accepted).Allowed).IsFalse();
 
         interactive.QueueFree();
         await runner.SimulateFrames(1);
-        AssertThat(interactor.CanRequest(accepted)).IsFalse();
+        AssertThat(interactor.ResolveAccess(accepted).Allowed).IsFalse();
     }
 
     [TestCase]

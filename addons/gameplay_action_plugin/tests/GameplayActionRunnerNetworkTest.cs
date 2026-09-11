@@ -160,6 +160,33 @@ public sealed partial class GameplayActionRunnerNetworkTest
     }
 
     [TestCase]
+    public async Task AuthorityAccessPolicyCannotBeDowngradedByClientBinding()
+    {
+        Session session = await Connect(
+            serverAllowsAccess: true,
+            authorityRequiresRequesterPresence: true
+        );
+        session.Server.Executor.PresenceRequired = false;
+        try
+        {
+            AssertThat(session.Client.Runner.TryStartActionInput("use")).IsTrue();
+            await session.Pump(RoundTripFrames);
+            AssertThat(session.Server.ExternalActions.IsActionExecuting(OpenAction)).IsTrue();
+
+            session.Server.AccessProvider.Allowed = false;
+            session.Server.Runner.ValidateSustainedExecutions();
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(session.Server.Executor.CancelledCount).IsEqual(1);
+            AssertThat(session.Server.ExternalActions.IsActionExecuting(OpenAction)).IsFalse();
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
     public async Task NonOwnerPeerCannotRequestThroughAnotherPlayersRunner()
     {
         Session session = await Connect(serverAllowsAccess: true);
@@ -178,8 +205,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
                 new NodePath("Door/Actions"),
                 OpenAction,
                 new NodePath(),
-                new NodePath(),
-                false
+                new NodePath()
             );
             await session.Pump(RoundTripFrames);
 
@@ -211,8 +237,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
                 new NodePath("Door/Actions"),
                 OpenAction,
                 new NodePath("Door/AccessSource"),
-                new NodePath("Door/UnknownTarget"),
-                false
+                new NodePath("Door/UnknownTarget")
             );
             await session.Pump(RoundTripFrames);
 
@@ -282,6 +307,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
     private static async Task<Session> Connect(
         bool serverAllowsAccess,
         bool sustainedInput = false,
+        bool authorityRequiresRequesterPresence = false,
         GameplayActionExecutionVisibility visibility =
             GameplayActionExecutionVisibility.RequesterOnly,
         bool targeted = true
@@ -309,7 +335,12 @@ public sealed partial class GameplayActionRunnerNetworkTest
         AssertThat(observerPeer.CreateClient("127.0.0.1", port)).IsEqual(Error.Ok);
         MultiplayerApi observerApi = Attach(tree, observerRoot, observerPeer);
 
-        PeerScene server = BuildPeerScene(serverRoot, serverAllowsAccess, visibility);
+        PeerScene server = BuildPeerScene(
+            serverRoot,
+            serverAllowsAccess,
+            visibility,
+            authorityRequiresRequesterPresence
+        );
         PeerScene client = BuildPeerScene(clientRoot, allowsAccess: true, visibility);
         PeerScene observer = BuildPeerScene(observerRoot, allowsAccess: true, visibility);
         await sceneRunner.SimulateFrames(1);
@@ -373,7 +404,8 @@ public sealed partial class GameplayActionRunnerNetworkTest
     private static PeerScene BuildPeerScene(
         Node root,
         bool allowsAccess,
-        GameplayActionExecutionVisibility visibility
+        GameplayActionExecutionVisibility visibility,
+        bool requiresRequesterPresence = false
     )
     {
         Node actor = new() { Name = "Actor" };
@@ -406,7 +438,11 @@ public sealed partial class GameplayActionRunnerNetworkTest
         door.AddChild(externalActions);
         root.AddChild(door);
 
-        NetworkAccessProvider accessProvider = new() { Allowed = allowsAccess };
+        NetworkAccessProvider accessProvider = new()
+        {
+            Allowed = allowsAccess,
+            RequiresRequesterPresence = requiresRequesterPresence,
+        };
         runner.RegisterAccessProvider(NetworkAccessAction.ProviderId, accessProvider);
         return new PeerScene(
             runner,
@@ -429,18 +465,20 @@ public sealed partial class GameplayActionRunnerNetworkTest
     {
         public bool Allowed { get; set; }
 
+        public bool RequiresRequesterPresence { get; set; }
+
         public Node? LastAccessSource { get; private set; }
 
         public Node? LastTarget { get; private set; }
 
         public List<Node?> Targets { get; } = new();
 
-        public bool CanRequest(in GameplayActionAccessContext context)
+        public GameplayActionAccessPolicy ResolveAccess(in GameplayActionAccessContext context)
         {
             LastAccessSource = context.AccessSource;
             LastTarget = context.Target;
             Targets.Add(context.Target);
-            return Allowed;
+            return new GameplayActionAccessPolicy(Allowed, RequiresRequesterPresence);
         }
 
         public bool TryAcquireRequestReservation(
@@ -455,6 +493,10 @@ public sealed partial class GameplayActionRunnerNetworkTest
 
     private sealed partial class NetworkRecordingExecutor : GameplayActionExecutor
     {
+        public bool PresenceRequired { get; set; } = true;
+
+        public override bool RequiresRequesterPresence => PresenceRequired;
+
         public int ExecuteCount { get; private set; }
 
         public int CancelledCount { get; private set; }

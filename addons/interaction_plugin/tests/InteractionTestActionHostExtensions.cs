@@ -259,8 +259,7 @@ internal static class InteractionTestActionHostExtensions
             interactor.GetTree().Root.GetPathTo(component),
             actionId,
             interactor.GetTree().Root.GetPathTo(interactive),
-            interactor.GetTree().Root.GetPathTo(interactive.ResolveInvocationTarget()),
-            false
+            interactor.GetTree().Root.GetPathTo(interactive.ResolveInvocationTarget())
         );
     }
 

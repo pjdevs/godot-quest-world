@@ -221,7 +221,7 @@ as an event that should interrupt an execution.
 Current behavior in `GameplayActionRequestPipeline.ValidateSustainedExecutions()` already revalidates
 requester access once per process frame for executions whose executor requires requester presence. This is
 correct for spatial access, detector validity, requester departure, and similar continuous relationships.
-`IGameplayActionAccessProvider` intentionally has one `CanRequest()` query; the removed
+`IGameplayActionAccessProvider` intentionally has one `ResolveAccess()` query; the removed
 `HasSustainedAccess()` hook previously delegated to exactly the same access predicate and should **not** be
 reintroduced merely to represent movement/damage.
 

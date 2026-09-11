@@ -10,7 +10,14 @@ namespace GameplayActionPlugin.Runtime.Runner;
 
 internal sealed class GameplayActionRequestPipeline(
     GameplayActionRunner owner,
-    Func<GameplayActionComponent, GameplayAction, Node?, Node?, bool, bool> canAccess,
+    Func<
+        GameplayActionComponent,
+        GameplayAction,
+        Node?,
+        Node?,
+        bool,
+        GameplayActionAccessPolicy
+    > resolveAccess,
     Func<Node?> resolveInstigator
 )
 {
@@ -147,8 +154,7 @@ internal sealed class GameplayActionRequestPipeline(
                 GetNetworkPath(binding.Component),
                 binding.ActionId,
                 GetNetworkPath(binding.AccessSource),
-                GetNetworkPath(binding.Target),
-                binding.InputRequirement == GameplayActionInputRequirement.Pressed
+                GetNetworkPath(binding.Target)
             );
             return true;
         }
@@ -159,8 +165,7 @@ internal sealed class GameplayActionRequestPipeline(
             _owner.OwnerPeerId,
             GetNetworkPath(binding.Component),
             binding.AccessSource,
-            binding.Target,
-            binding.InputRequirement == GameplayActionInputRequirement.Pressed
+            binding.Target
         );
         if (
             result is GameplayActionExecutionRunning
@@ -247,13 +252,13 @@ internal sealed class GameplayActionRequestPipeline(
     {
         GameplayAction? action = execution.Component.ResolveAction(execution.ActionId);
         return action is not null
-            && canAccess(
+            && resolveAccess(
                 execution.Component,
                 action,
                 execution.AccessSource,
                 execution.Target,
                 true
-            );
+            ).Allowed;
     }
 
     private void CancelRequesterOwnedExecutions(string reason)
@@ -373,8 +378,7 @@ internal sealed class GameplayActionRequestPipeline(
         NodePath componentPath,
         StringName actionId,
         NodePath accessSourcePath,
-        NodePath targetPath,
-        bool bindingRequiresRequesterPresence
+        NodePath targetPath
     )
     {
         int senderPeerId = GetRemoteSenderOrOwner();
@@ -432,8 +436,7 @@ internal sealed class GameplayActionRequestPipeline(
             senderPeerId,
             componentPath,
             accessSource,
-            target,
-            bindingRequiresRequesterPresence
+            target
         );
     }
 
@@ -723,8 +726,7 @@ internal sealed class GameplayActionRequestPipeline(
         int senderPeerId,
         NodePath componentPath,
         Node? accessSource = null,
-        Node? target = null,
-        bool bindingRequiresRequesterPresence = false
+        Node? target = null
     )
     {
         if (!ValidateSender(senderPeerId))
@@ -750,7 +752,14 @@ internal sealed class GameplayActionRequestPipeline(
             return new GameplayActionExecutionRejected();
         }
 
-        if (!canAccess(component, action, accessSource, target, false))
+        GameplayActionAccessPolicy accessPolicy = resolveAccess(
+            component,
+            action,
+            accessSource,
+            target,
+            false
+        );
+        if (!accessPolicy.Allowed)
         {
             GameplayActionAvailability actionAvailability = component.EvaluateAction(
                 actionId,
@@ -824,7 +833,7 @@ internal sealed class GameplayActionRequestPipeline(
                     actionId,
                     executionId,
                     action.Executor?.RequiresRequesterPresence != false
-                        || bindingRequiresRequesterPresence
+                        || accessPolicy.RequiresRequesterPresence
                         || HasPressedDefaultBinding(action),
                     accessSource,
                     target,

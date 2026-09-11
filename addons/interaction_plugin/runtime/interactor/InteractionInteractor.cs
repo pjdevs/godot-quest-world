@@ -125,7 +125,32 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
         return null;
     }
 
-    public bool CanRequest(in GameplayActionAccessContext context) => HasInteractionAccess(context);
+    public GameplayActionAccessPolicy ResolveAccess(in GameplayActionAccessContext context)
+    {
+        if (
+            !TryResolveInteractionAccess(context, out InteractiveComponent? interactive)
+            || interactive is null
+            || !interactive.TryResolveOfferForEndpoint(
+                this,
+                context.Component,
+                context.Action,
+                out InteractionOffer? offer
+            )
+            || offer is null
+            || Detector?.Detect(interactive) != InteractionDetectionKind.Interactible
+            || interactive.EvaluateAccess(this, offer, context.Sustained)
+                is not GameplayActionAllowed
+        )
+        {
+            return new GameplayActionAccessPolicy(false);
+        }
+
+        return new GameplayActionAccessPolicy(
+            Allowed: true,
+            RequiresRequesterPresence: offer.BindingConfig?.InputRequirement
+                == GameplayActionInputRequirement.Pressed
+        );
+    }
 
     public bool TryAcquireRequestReservation(
         in GameplayActionAccessContext context,
@@ -157,34 +182,6 @@ public partial class InteractionInteractor : Node, IGameplayActionAccessProvider
                 context.Action,
                 out reservation
             );
-        }
-
-        return false;
-    }
-
-    private bool HasInteractionAccess(in GameplayActionAccessContext context)
-    {
-        if (
-            !TryResolveInteractionAccess(context, out InteractiveComponent? interactive)
-            || interactive is null
-        )
-        {
-            return false;
-        }
-
-        if (
-            interactive.TryResolveOfferForEndpoint(
-                this,
-                context.Component,
-                context.Action,
-                out InteractionOffer? offer
-            )
-            && offer is not null
-            && Detector?.Detect(interactive) == InteractionDetectionKind.Interactible
-        )
-        {
-            return interactive.EvaluateAccess(this, offer, context.Sustained)
-                is GameplayActionAllowed;
         }
 
         return false;

@@ -358,7 +358,7 @@ Do not merge choreography phases into Interaction's access provider.
 
 The current sustained-access path answers whether the requester still has domain access to the externally
 owned action: target remains detectable/valid, requester remains present, etc. It uses the same
-`IGameplayActionAccessProvider.CanRequest()` semantics by design.
+`IGameplayActionAccessProvider.ResolveAccess()` semantics by design.
 
 Runtime events such as movement, jump, damage or knockback belong to the generic interruption channel.
 Choreography consumes both:

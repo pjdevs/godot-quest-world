@@ -295,8 +295,9 @@ waits.
 
 The reliable client RPC carries `accessSourcePath + targetPath + actionId`. The server checks the owning
 peer, resolves both nodes and the action from its scene, verifies that the access source authorizes the
-target, validates `Detect`, evaluates rules, and only then executes. Do not call the RPC methods
-directly; use the runner's `TryStartActionInput` and `TryEndActionInput`.
+target, derives contextual requester-presence policy from the authoritative offer, validates `Detect`,
+evaluates rules, and only then executes. Do not call the RPC methods directly; use the runner's
+`TryStartActionInput` and `TryEndActionInput`.
 
 ## Build presentation
 
