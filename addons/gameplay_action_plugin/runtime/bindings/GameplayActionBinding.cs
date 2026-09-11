@@ -29,4 +29,10 @@ public sealed record GameplayActionBinding(
     GameplayActionInputRequirement InputRequirement,
     int Priority,
     Variant PresentationContext
-);
+)
+{
+    /// <summary>
+    /// Shortcut to ResolveAction(ActionId) on Component
+    /// </summary>
+    public GameplayAction? ResolveAction() => Component.ResolveAction(ActionId);
+};

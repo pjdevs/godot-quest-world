@@ -49,7 +49,7 @@ public partial class GameplayActionPresenter : CanvasLayer
         foreach (GameplayActionBinding binding in ActionRunner.GetBindings())
         {
             if (
-                binding.Component != ActionRunner.OwnedActionComponent
+                binding.ResolveAction() is not InputGameplayAction // TODO temp hack lol
                 || binding.ActivationMode == GameplayActionActivationMode.Automatic
                 || ActionRunner.GetBindingAvailability(binding.Id) is GameplayActionHidden
             )

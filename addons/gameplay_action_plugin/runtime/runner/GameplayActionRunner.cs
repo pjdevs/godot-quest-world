@@ -340,6 +340,18 @@ public partial class GameplayActionRunner : Node
         RequestAutomaticEdges(automaticEdges);
     }
 
+    /// <summary>
+    /// Re-evaluates every binding referring to one action occurrence identity
+    /// on the owned action component if any.
+    /// </summary>
+    public void InvalidateOwnedAction(StringName actionId)
+    {
+        if (OwnedActionComponent is GameplayActionComponent gac)
+        {
+            InvalidateAction(gac, actionId);
+        }
+    }
+
     /// <summary>Registers the domain adapter used to validate requests with this ID.</summary>
     public void RegisterAccessProvider(
         StringName providerId,

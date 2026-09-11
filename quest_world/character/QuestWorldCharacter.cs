@@ -113,6 +113,11 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
             return;
         }
 
+        if (IsCarrying)
+        {
+            _gameplayActionRunner.InvalidateOwnedAction(DropAction);
+        }
+
         // The focused target decides which inputs matter, so binding an action to another key in a
         // scene needs no change here. What the interactor reports is information, not a command:
         // arbitrating between interacting and anything else sharing a key stays this class's job.
@@ -195,10 +200,10 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
 
     private void OnCarriedItemChanged()
     {
-        if (_gameplayActionRunner?.OwnedActionComponent is GameplayActionComponent gac)
+        if (_gameplayActionRunner is not null)
         {
-            _gameplayActionRunner.InvalidateAction(gac, TakeAction);
-            _gameplayActionRunner.InvalidateAction(gac, DropAction);
+            _gameplayActionRunner.InvalidateOwnedAction(TakeAction);
+            _gameplayActionRunner.InvalidateOwnedAction(DropAction);
         }
     }
 }
