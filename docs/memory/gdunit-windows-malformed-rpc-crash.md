@@ -6,6 +6,7 @@ The regression is bisected from the last known green CI commit `f95995a2e57db448
 
 - `f3e317f` is the first bad commit when the full test assembly is loaded. It introduced target transport and malformed manual RPC coverage in `GameplayActionRunnerNetworkTest`.
 - With that suite excluded, `4e6d43d` is the first bad commit. It introduced `InteractionOfferTest` and its related interaction-offer surface.
+- These bisect points identify the first affected project surfaces, not a proven single offending method. A copied `InteractionOfferTest` method still reproduces the bridge failure, while a blank Godot/GdUnit project with one malformed `NodePath` RPC does not.
 - A clean `f95995a` worktree passes `CarryComponentTest` 2/2 on the same Windows machine and toolchain.
 
 Symptoms include:
@@ -16,3 +17,4 @@ Symptoms include:
 
 Temporary policy: guard the complete `GameplayActionRunnerNetworkTest` and `InteractionOfferTest` suites with `#if !GODOT_WINDOWS`. Keep malformed-RPC coverage in a dedicated non-Windows file. A runtime early return, or an MSBuild-only exclusion, is too late for the affected assemblies because the bridge can crash while loading/discovering them. Do not treat changing the SDK, deleting `.godot`, or broadening the test filter as a fix; those only remove unrelated variables.
 
+The current evidence is sufficient for a project-level workaround and a GdUnit adapter report, but not yet for a standalone upstream minimal reproduction. The reliable repro requires the project's runtime type graph and the GdUnit bridge; direct `Godot --headless -e` startup can still exit `0`.
