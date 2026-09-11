@@ -16,6 +16,7 @@ using InteractionPlugin.Runtime.Interactor;
 using InteractionPlugin.Runtime.Offers;
 using static GdUnit4.Assertions;
 
+#if !GODOT_WINDOWS
 [TestSuite]
 [RequireGodotRuntime]
 [TestCategory("Runtime")]
@@ -538,3 +539,4 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
         }
     }
 }
+#endif

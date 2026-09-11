@@ -76,6 +76,20 @@ GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot dotnet test --settin
 
 On Windows, set `GODOT_BIN` to the Godot executable path if `godot` is not on `PATH`. See `AGENTS.md` for the required build and validation policy.
 
+### Windows/GdUnit bridge limitation
+
+With Godot `4.7.2.stable.mono`, .NET SDK `10.0.401`, `gdUnit4.api` `5.1.0-rc5` and `gdUnit4.test.adapter` `3.1.1`, some runtime test assemblies can terminate the GdUnit bridge on Windows with `-1073741819` (`0xC0000005`) before VSTest receives any result. A targeted filter then misleadingly reports that no test matches.
+
+Until the upstream Godot/GdUnit issue is resolved, keep the complete `GameplayActionRunnerNetworkTest` and `InteractionOfferTest` suites out of the Windows test assembly with a compile-time guard:
+
+```csharp
+#if !GODOT_WINDOWS
+// [TestSuite] ...
+#endif
+```
+
+The guard must cover the whole suite. A runtime `OperatingSystem.IsWindows()` early return, or guarding only the malformed-RPC method, is too late because the bridge can crash while loading/discovering the assembly. Keep malformed RPC coverage in a separate file guarded with `#if !GODOT_WINDOWS`; retain normal authority and interaction coverage through the production paths on platforms where the suites are enabled.
+
 ## Which scope to run
 
 | Change | First command | Add this when relevant |
