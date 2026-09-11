@@ -86,7 +86,7 @@ tasks:
     internal: true
     platforms: [windows]
     env:
-      GODOT_BIN: godot
+      GODOT_BIN: {{.GODOT}}
     cmds:
       - dotnet test {{.PROJECT}} --settings gdunit4.runsettings {{.DOTNET_ARGS}}
 
