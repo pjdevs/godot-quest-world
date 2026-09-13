@@ -48,8 +48,10 @@ public partial class GameplayActionPresenter : CanvasLayer
         _relevantBindingIds.Clear();
         foreach (GameplayActionBinding binding in ActionRunner.GetBindings())
         {
+            GameplayAction? action = binding.ResolveAction();
+
             if (
-                binding.ResolveAction() is not InputGameplayAction // TODO temp hack lol
+                action != binding.Source
                 || binding.ActivationMode == GameplayActionActivationMode.Automatic
                 || ActionRunner.GetBindingAvailability(binding.Id) is GameplayActionHidden
             )
@@ -57,7 +59,6 @@ public partial class GameplayActionPresenter : CanvasLayer
                 continue;
             }
 
-            GameplayAction? action = binding.Component.ResolveAction(binding.ActionId);
             if (action?.Definition is null)
             {
                 continue;

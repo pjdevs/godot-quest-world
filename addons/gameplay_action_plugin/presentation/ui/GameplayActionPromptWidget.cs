@@ -1,5 +1,4 @@
 using System.Linq;
-using GameplayActionPlugin;
 using Godot;
 
 namespace GameplayActionPlugin.Presentation.UI;
@@ -59,7 +58,7 @@ public partial class GameplayActionPromptWidget : PanelContainer, IGameplayActio
 
         if (ActionExecutionProgress is not null)
         {
-            ActionExecutionProgress.Visible = execution is not null;
+            ActionExecutionProgress.Visible = execution?.Progress is not null;
             ActionExecutionProgress.SetValue(execution?.Progress ?? 0f);
         }
     }

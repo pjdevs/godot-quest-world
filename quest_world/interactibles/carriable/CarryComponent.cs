@@ -257,7 +257,7 @@ public partial class CarryComponent : Node, ICarrier
         );
         if (!WorldSpawner.TrySpawn(definition.SpawnDefinition!.Id, request, out _))
         {
-            if (Inventory.AddItem(CarriedItemId))
+            if (!Inventory.AddItem(CarriedItemId))
             {
                 GD.PushError(
                     $"{GetPath()}: failed to restore '{CarriedItemId}' after a failed drop."

@@ -21,6 +21,7 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
     private InventoryComponent? _inventory = null;
     private CarryComponent? _carryComponent = null;
     private bool _wasPossessed;
+    private bool _wasGrounded;
 
     public InventoryComponent Inventory => _inventory!;
 
@@ -113,9 +114,14 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
             return;
         }
 
-        if (IsCarrying)
+        if (_wasGrounded != NetworkIsGrounded)
         {
-            _gameplayActionRunner.InvalidateOwnedAction(DropAction);
+            _wasGrounded = NetworkIsGrounded;
+
+            if (IsCarrying)
+            {
+                _gameplayActionRunner.InvalidateOwnedAction(DropAction);
+            }
         }
 
         // The focused target decides which inputs matter, so binding an action to another key in a
