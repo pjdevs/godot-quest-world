@@ -507,16 +507,19 @@ public sealed partial class InteractionConfigurationTest
                 ActivationMode = GameplayActionActivationMode.Press,
             },
         };
-        InteractiveComponent interactive = AutoFree(
-            new InteractiveComponent
-            {
-                InteractionArea = new Area3D(),
-                InteractionAnchor = new Node3D(),
-                ActionComponent = component,
-                Offers = { first, second },
-            }
-        );
+        Area3D area = new();
+        Node3D anchor = new();
+        InteractiveComponent interactive = new()
+        {
+            InteractionArea = area,
+            InteractionAnchor = anchor,
+            ActionComponent = component,
+            Offers = { first, second },
+        };
+        interactive.AddChild(area);
+        interactive.AddChild(anchor);
         interactive.AddChild(component);
+        interactive = AutoFree(interactive);
 
         string[] warnings = InteractionValidator.Validate(interactive).ToArray();
 

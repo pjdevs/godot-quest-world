@@ -143,8 +143,7 @@ public sealed partial class InteractionDetectionTest
 
         AssertThat(world.Detector.GetCandidates().Any()).IsFalse();
         AssertThat(world.Interactor.FocusedInteractive == null).IsTrue();
-        world.Target.QueueFree();
-        await world.Runner.SimulateFrames(1);
+        world.Target.Free();
     }
 
     [TestCase]

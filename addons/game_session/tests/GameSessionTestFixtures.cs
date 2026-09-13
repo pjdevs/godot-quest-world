@@ -176,6 +176,7 @@ internal static partial class GameSessionTestFixtures
     )
     {
         private readonly List<NetworkSession> _additionalNetworks = new();
+        private readonly List<Node> _additionalBranches = new();
 
         public async Task Pump(int frames = 1) => await Runner.SimulateFrames((uint)frames);
 
@@ -211,6 +212,7 @@ internal static partial class GameSessionTestFixtures
             AssertThat(api.GetUniqueId()).IsGreater(1);
             await Pump(12);
             _additionalNetworks.Add(late.Network);
+            _additionalBranches.Add(branch);
             return new LatePeer(late, api);
         }
 
@@ -245,6 +247,14 @@ internal static partial class GameSessionTestFixtures
 
             Client.Network.Stop();
             Server.Network.Stop();
+
+            foreach (Node branch in _additionalBranches)
+            {
+                if (GodotObject.IsInstanceValid(branch))
+                {
+                    branch.Free();
+                }
+            }
         }
     }
 

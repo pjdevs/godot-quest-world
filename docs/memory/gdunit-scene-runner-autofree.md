@@ -8,3 +8,6 @@
   alive until Godot exits and appear as orphan/leaked objects.
 - If a test root is already registered with `AutoFree`, use one owner only: remove that wrapper and
   let the scene runner own the root when the runner is configured with `autoFree: true`.
+- When a fixture adds dynamic branches after the runner is created, such as a late network peer, its
+  `Close` method must also free those branches after stopping their runtime. The runner-owned root
+  is not a substitute for cleaning a branch that is still alive when GdUnit checks teardown.

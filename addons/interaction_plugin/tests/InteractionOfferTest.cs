@@ -197,7 +197,7 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
                 },
             },
         };
-        owner.AddChild(area);
+        world.AddChild(area);
         world.AddChild(interactive);
 
         InteractionInteractor interactor = new() { Name = "Interactor" };
@@ -232,6 +232,7 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
         reservation!.Release();
         AssertThat(interactor.TryAcquireRequestReservation(spoofed, out _)).IsFalse();
 
+        detector.ClearDetection(interactive);
         owner.Free();
         await runner.SimulateFrames(1);
         AssertThat(interactor.ResolveAccess(accepted).Allowed).IsFalse();

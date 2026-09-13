@@ -188,6 +188,9 @@ Le bootstrap multi-instance est maintenant disponible pour expérimenter le flow
 - `PlayerCharacterSpawnManager` assigne explicitement `OwnerPeerId` et appelle `SetMultiplayerAuthority()`
   sur chaque Character spawné. La convention `Player_<peerId>` reste limitée à la glue QuestWorld ; le
   Character générique ne lit plus son nom pour déduire son propriétaire.
+- Le manager mémorise les connexions de signaux qu'il a réellement établies et ne tente de les retirer
+  que si leur source Godot est encore valide. Une scène pouvant être lancée seule sans `GameSession`,
+  son teardown reste ainsi sûr même si l'initialisation réseau n'a jamais eu lieu.
 - Le `PlayerSpawner` transporte `peer_id` et `local_transform` dans son payload de spawn. Son
   `spawn_function` instancie le Character, applique `OwnerPeerId` et l'authority racine avant le retour
   à `MultiplayerSpawner`, donc avant l'entrée dans l'arbre. Les sous-systèmes qui reprennent l'authority

@@ -22,6 +22,8 @@ public partial class PlayerCharacterSpawnManager : Node
 
     private readonly Dictionary<long, QuestWorldCharacter> _charactersByPeerId = new();
     private bool _initialized;
+    private bool _gameSessionAttachedConnected;
+    private bool _playerSpawnerSpawnedConnected;
 
     private GameSession? _gameSession;
 
@@ -41,6 +43,7 @@ public partial class PlayerCharacterSpawnManager : Node
 
         PlayerSpawner.SpawnFunction = Callable.From<Variant, Node>(SpawnPlayerCharacter);
         World.GameSessionAttached += Initialize;
+        _gameSessionAttachedConnected = true;
 
         if (World.GameSession is not null)
         {
@@ -92,7 +95,11 @@ public partial class PlayerCharacterSpawnManager : Node
         _gameSession = gameSession;
         _initialized = true;
 
-        PlayerSpawner?.Spawned += OnPlayerSpawned;
+        if (PlayerSpawner is not null)
+        {
+            PlayerSpawner.Spawned += OnPlayerSpawned;
+            _playerSpawnerSpawnedConnected = true;
+        }
         Node3D? root = PlayerSpawner?.GetSpawnRoot();
         if (root is not null)
         {
@@ -274,17 +281,30 @@ public partial class PlayerCharacterSpawnManager : Node
 
     public override void _ExitTree()
     {
-        if (_initialized && _gameSession is not null)
+        if (_initialized && _gameSession is not null && IsInstanceValid(_gameSession))
         {
             _gameSession.PlayerLeft -= OnPlayerLeft;
             _gameSession.PlayerWorldReady -= OnPlayerWorldReady;
         }
 
-        PlayerSpawner?.Spawned -= OnPlayerSpawned;
-        World?.GameSessionAttached -= Initialize;
+        if (
+            _playerSpawnerSpawnedConnected
+            && PlayerSpawner is not null
+            && IsInstanceValid(PlayerSpawner)
+        )
+        {
+            PlayerSpawner.Spawned -= OnPlayerSpawned;
+        }
+
+        if (_gameSessionAttachedConnected && World is not null && IsInstanceValid(World))
+        {
+            World.GameSessionAttached -= Initialize;
+        }
 
         _charactersByPeerId.Clear();
         _gameSession = null;
         _initialized = false;
+        _gameSessionAttachedConnected = false;
+        _playerSpawnerSpawnedConnected = false;
     }
 }

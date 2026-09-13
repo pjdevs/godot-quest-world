@@ -101,6 +101,7 @@ public sealed class GameSessionNetworkTest
 
             AssertThat(serverLeft).IsEqual(1);
             AssertThat(clientLeft).IsEqual(1);
+            await fixture.Pump();
         }
         finally
         {
