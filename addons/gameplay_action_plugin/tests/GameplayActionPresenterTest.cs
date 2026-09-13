@@ -29,7 +29,7 @@ public sealed partial class GameplayActionPresenterTest
         AddAction(external, "external");
         Node source = new();
         world.Root.AddChild(source);
-        world.Runner.BindAction(world.Owned, "owned", source, Config("owned"));
+        world.Runner.BindAction(world.Owned, "owned", ownedAction, Config("owned"));
         world.Runner.BindAction(external, "external", source, Config("external"));
 
         await world.Scene.SimulateFrames(1);
@@ -37,7 +37,12 @@ public sealed partial class GameplayActionPresenterTest
         AssertThat(world.Actions.GetChildCount()).IsEqual(1);
         AssertThat(world.Actions.GetChild(0) is GameplayActionPromptWidget).IsTrue();
         AssertThat(
-                world.Runner.TryGetBinding(world.Owned, ownedAction.Definition!.Id, source, out _)
+                world.Runner.TryGetBinding(
+                    world.Owned,
+                    ownedAction.Definition!.Id,
+                    ownedAction,
+                    out _
+                )
             )
             .IsTrue();
     }
@@ -51,14 +56,12 @@ public sealed partial class GameplayActionPresenterTest
         GameplayAction hidden = AddAction(world.Owned, "hidden");
         hidden.Rules.Add(new FixedAvailabilityRule(new GameplayActionHidden()));
         GameplayAction automatic = AddAction(world.Owned, "automatic");
-        Node source = new();
-        world.Root.AddChild(source);
-        world.Runner.BindAction(world.Owned, "blocked", source, Config("blocked"));
-        world.Runner.BindAction(world.Owned, "hidden", source, Config("hidden"));
+        world.Runner.BindAction(world.Owned, "blocked", blocked, Config("blocked"));
+        world.Runner.BindAction(world.Owned, "hidden", hidden, Config("hidden"));
         world.Runner.BindAction(
             world.Owned,
             "automatic",
-            source,
+            automatic,
             Config(string.Empty, GameplayActionActivationMode.Automatic)
         );
 
@@ -74,13 +77,9 @@ public sealed partial class GameplayActionPresenterTest
     public async Task PresenterUsesBindingIdsForTwoBindingsOfTheSameAction()
     {
         PresentationWorld world = BuildWorld();
-        AddAction(world.Owned, "shared");
-        Node firstSource = new();
-        Node secondSource = new();
-        world.Root.AddChild(firstSource);
-        world.Root.AddChild(secondSource);
-        world.Runner.BindAction(world.Owned, "shared", firstSource, Config("first"));
-        world.Runner.BindAction(world.Owned, "shared", secondSource, Config("second"));
+        GameplayAction sharedAction = AddAction(world.Owned, "shared");
+        world.Runner.BindAction(world.Owned, "shared", sharedAction, Config("first"));
+        world.Runner.BindAction(world.Owned, "shared", sharedAction, Config("second"));
 
         await world.Scene.SimulateFrames(1);
 
@@ -91,13 +90,11 @@ public sealed partial class GameplayActionPresenterTest
     public async Task PresenterRebindsHoldProgressWithoutRecreatingTheWidget()
     {
         PresentationWorld world = BuildWorld();
-        AddAction(world.Owned, "charge");
-        Node source = new();
-        world.Root.AddChild(source);
+        GameplayAction chargeAction = AddAction(world.Owned, "charge");
         world.Runner.BindAction(
             world.Owned,
             "charge",
-            source,
+            chargeAction,
             Config("charge", GameplayActionActivationMode.Hold, holdDuration: 1.0f)
         );
         world.Runner.TryStartActionInput("charge");
@@ -117,13 +114,11 @@ public sealed partial class GameplayActionPresenterTest
     public async Task PresenterRemovesUnboundActionsAndClearsWhenRunnerIsNotLocal()
     {
         PresentationWorld world = BuildWorld();
-        AddAction(world.Owned, "owned");
-        Node source = new();
-        world.Root.AddChild(source);
+        GameplayAction ownedAction = AddAction(world.Owned, "owned");
         GameplayActionBinding binding = world.Runner.BindAction(
             world.Owned,
             "owned",
-            source,
+            ownedAction,
             Config("owned")
         )!;
         await world.Scene.SimulateFrames(1);
@@ -133,7 +128,7 @@ public sealed partial class GameplayActionPresenterTest
         await world.Scene.SimulateFrames(1);
         AssertThat(world.Actions.GetChildCount()).IsEqual(0);
 
-        world.Runner.BindAction(world.Owned, "owned", source, Config("owned"));
+        world.Runner.BindAction(world.Owned, "owned", ownedAction, Config("owned"));
         await world.Scene.SimulateFrames(1);
         world.Runner.OwnerPeerId = 2;
         await world.Scene.SimulateFrames(1);

@@ -176,10 +176,11 @@ accepted for the execution.
 `GameplayActionPresentation` is the read model for one offered binding: identity, label/description,
 input, availability, activation mode and optional per-binding hold progress.
 
-`GameplayActionPresenter` presents only bindings owned by the runner's `OwnedActionComponent`; external
-bindings remain with their integration-specific presenter. `Hidden` and `Automatic` bindings are not
-shown, while `Blocked` remains presentable with its reason. Controls are reconciled by binding ID, not
-`ActionId`, so two bindings of the same action remain distinct.
+`GameplayActionPresenter` presents only bindings whose resolved action is their cleanup `Source`; this
+action identity marks the bindings authored for the owned-action presenter. Contextual or targeted
+bindings use their integration-specific source and remain with their integration presenter. `Hidden`
+and `Automatic` bindings are not shown, while `Blocked` remains presentable with its reason. Controls
+are reconciled by binding ID, not `ActionId`, so two bindings of the same action remain distinct.
 
 `IGameplayActionWidget` and `GameplayActionPromptWidget` are the default generic widget contract and
 implementation. Interaction reuses this action-level read model while adding target-level projection,

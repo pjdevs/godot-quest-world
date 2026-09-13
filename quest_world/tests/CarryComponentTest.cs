@@ -58,13 +58,29 @@ public sealed class CarryComponentTest
         ISceneRunner runner = ISceneRunner.Load(root, autoFree: true);
         await runner.SimulateFrames(1);
 
-        AssertThat(await carry.TryTakeAsync(batteryId, battery)).IsTrue();
-        AssertThat(battery.IsQueuedForDeletion()).IsTrue();
+        bool batteryQueuedForDeletion = false;
+        AssertThat(
+                await carry.TryTakeAsync(
+                    batteryId,
+                    battery,
+                    () => batteryQueuedForDeletion = battery.IsQueuedForDeletion()
+                )
+            )
+            .IsTrue();
+        AssertThat(batteryQueuedForDeletion).IsTrue();
         AssertThat(inventory.GetItemCount(batteryId)).IsEqual(1);
         AssertThat(carry.CarriedItemId == batteryId).IsTrue();
 
-        AssertThat(await carry.TryTakeAsync(batteryId, battery)).IsTrue();
-        AssertThat(cell.IsQueuedForDeletion()).IsTrue();
+        bool cellQueuedForDeletion = false;
+        AssertThat(
+                await carry.TryTakeAsync(
+                    cellId,
+                    cell,
+                    () => cellQueuedForDeletion = cell.IsQueuedForDeletion()
+                )
+            )
+            .IsTrue();
+        AssertThat(cellQueuedForDeletion).IsTrue();
         AssertThat(inventory.GetItemCount(batteryId)).IsEqual(0);
         AssertThat(inventory.GetItemCount(cellId)).IsEqual(1);
         AssertThat(carry.CarriedItemId == cellId).IsTrue();
@@ -82,7 +98,7 @@ public sealed class CarryComponentTest
         AssertThat(inventory.GetItemCount(cellId)).IsEqual(0);
         AssertThat(carry.CarriedItemId is null).IsTrue();
 
-        AssertThat(carry.TryTakeAsync(cellId, replacementCell)).IsTrue();
+        AssertThat(await carry.TryTakeAsync(cellId, replacementCell)).IsTrue();
         carry.QueueFree();
         await runner.SimulateFrames(1);
 

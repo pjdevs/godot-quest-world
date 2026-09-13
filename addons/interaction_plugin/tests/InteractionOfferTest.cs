@@ -189,7 +189,10 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
                 {
                     ActionSource = InteractionOfferSource.Instigator,
                     ActionId = new StringName("take"),
-                    BindingConfig = Press("interact"),
+                    BindingConfig = Press(
+                        "interact",
+                        inputRequirement: GameplayActionInputRequirement.Pressed
+                    ),
                     TargetConcurrencyGroup = new StringName("battery_operation"),
                 },
             },
@@ -501,11 +504,15 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
         return action;
     }
 
-    private static GameplayActionBindingConfig Press(string input) =>
+    private static GameplayActionBindingConfig Press(
+        string input,
+        GameplayActionInputRequirement inputRequirement = GameplayActionInputRequirement.None
+    ) =>
         new()
         {
             InputActionName = new StringName(input),
             ActivationMode = GameplayActionActivationMode.Press,
+            InputRequirement = inputRequirement,
         };
 
     private sealed partial class CompletingExecutor : GameplayActionExecutor
