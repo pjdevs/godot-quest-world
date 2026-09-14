@@ -856,9 +856,7 @@ public sealed partial class GameplayActionRunnerTest
         bool reentrantCompletionSucceeded = false;
         secondReservation.OnRelease = () =>
         {
-            reentrantCompletionSucceeded = component.CompleteExecution(
-                secondExecutor.ExecutionId
-            );
+            reentrantCompletionSucceeded = component.CompleteExecution(secondExecutor.ExecutionId);
         };
 
         runner._ExitTree();
@@ -866,7 +864,7 @@ public sealed partial class GameplayActionRunnerTest
         AssertThat(reentrantCompletionSucceeded).IsTrue();
         AssertThat(firstReservation.ReleaseCount).IsEqual(1);
         AssertThat(secondReservation.ReleaseCount).IsEqual(1);
-        AssertThat(component.IsActionExecuting("first")).IsFalse();
+        AssertThat(component.IsActionExecuting("first")).IsTrue();
         AssertThat(component.IsActionExecuting("second")).IsFalse();
     }
 

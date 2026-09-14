@@ -139,7 +139,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
 
             AssertThat(session.Server.Executor.RequesterDependencyReleased).IsTrue();
             AssertThat(session.Server.ExternalActions.IsActionExecuting(OpenAction)).IsTrue();
-            AssertThat(session.Client.Runner.TryEndActionInput("use")).IsFalse();
+            AssertThat(session.Client.Runner.TryEndActionInput("use")).IsTrue();
             AssertThat(
                     session.Client.ExternalActions.TryGetExecutionPresentation(OpenAction, out _)
                 )

@@ -133,7 +133,10 @@ internal sealed class GameplayActionRequestPipeline(
             if (_pendingRequesterDependencyReleases.Add(request))
             {
                 RemoveSustainedRequest(component, request.ActionId);
-                if (component.ResolveAction(request.ActionId) is GameplayAction action)
+                if (
+                    component.TryGetActiveExecution(executionId, out GameplayAction? action, out _)
+                    && action is not null
+                )
                 {
                     NotifyRequesterDependencyReleased(component, action, executionId);
                 }
@@ -1257,11 +1260,17 @@ internal sealed class GameplayActionRequestPipeline(
             if (execution.Reservation is not null)
             {
                 IGameplayActionRequestReservation reservation = execution.Reservation;
-                _requestedExecutions[index] = execution with { Reservation = null };
+                if (keepTracking)
+                {
+                    _requestedExecutions[index] = execution with { Reservation = null };
+                }
+                else
+                {
+                    _requestedExecutions.RemoveAt(index);
+                }
                 reservation.Release();
             }
-
-            if (!keepTracking)
+            else if (!keepTracking)
             {
                 _requestedExecutions.RemoveAt(index);
             }

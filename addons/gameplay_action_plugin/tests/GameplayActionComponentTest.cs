@@ -245,7 +245,6 @@ public sealed partial class GameplayActionComponentTest
     public async Task DestroyedRequesterDoesNotReceiveProgressOrTerminalCallbacks()
     {
         Node world = new() { Name = "World" };
-        GameplayActionComponent ownedActions = new() { Name = "OwnedActions" };
         GameplayActionComponent component = new() { Name = "Actions" };
         TestGameplayActionExecutor executor = new()
         {
@@ -253,12 +252,7 @@ public sealed partial class GameplayActionComponentTest
         };
         GameplayAction action = CreateAction("world", executor);
         component.AddAction(action);
-        GameplayActionRunner runner = new()
-        {
-            Name = "Runner",
-            OwnedActionComponent = ownedActions,
-        };
-        world.AddChild(ownedActions);
+        GameplayActionRunner runner = new() { Name = "Runner", OwnedActionComponent = component };
         world.AddChild(component);
         world.AddChild(runner);
         ISceneRunner scene = ISceneRunner.Load(world, autoFree: true);

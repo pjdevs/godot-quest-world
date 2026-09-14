@@ -892,7 +892,11 @@ public partial class GameplayActionComponent : Node
             ToVariant(requester),
             reason
         );
-        if (requester is GameplayActionRunner runner && runner.IsAuthoritativeRunner)
+        if (
+            requester is GameplayActionRunner runner
+            && GodotObject.IsInstanceValid(runner)
+            && runner.IsAuthoritativeRunner
+        )
         {
             runner.NotifyExecutionRejected(this, action, reason);
         }
@@ -900,13 +904,17 @@ public partial class GameplayActionComponent : Node
 
     private void NotifyRequesterProgress(in ActiveExecution execution)
     {
-        if (execution.Requester is GameplayActionRunner runner)
+        if (
+            execution.Requester is GameplayActionRunner runner
+            && GodotObject.IsInstanceValid(runner)
+        )
         {
             runner.NotifyExecutionProgress(this, execution.Action, execution.Id);
         }
     }
 
-    private static Variant ToVariant(Node? node) => node is null ? default : Variant.From(node);
+    private static Variant ToVariant(Node? node) =>
+        node is not null && GodotObject.IsInstanceValid(node) ? Variant.From(node) : default;
 
     internal GameplayActionContext CreateContext(
         ulong executionId,

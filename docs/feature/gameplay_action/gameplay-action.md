@@ -134,7 +134,9 @@ re-entrant cleanup remains idempotent. If the action is already retiring, reques
 the action retained by the active execution rather than the requestable-action catalogue. When a peer
 disconnects after detachment, the pipeline releases any remaining access lease but retains the active
 execution record with an empty lease, so a later executor release remains an idempotent success until
-the execution reaches its terminal lifecycle.
+the execution reaches its terminal lifecycle. If the requester node is destroyed after detachment,
+the component keeps the execution alive, skips runner progress/lifecycle callbacks, and exposes a
+null requester in its lifecycle signals.
 Client bindings and access claims never cross the network as proof.
 An `IGameplayActionAccessProvider` returns both access and any contextual requester-presence policy;
 the authority derives that policy from its resolved domain data. The request transport carries no
