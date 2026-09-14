@@ -128,6 +128,30 @@ public sealed partial class GameplayActionRunnerNetworkTest
     }
 
     [TestCase]
+    public async Task RetiringActionCanNotifyTheRequesterWhenDependencyIsReleasedDuringExecute()
+    {
+        Session session = await Connect(serverAllowsAccess: true, sustainedInput: true);
+        session.Server.Executor.RetireAndReleaseRequesterDuringExecute = true;
+        try
+        {
+            AssertThat(session.Client.Runner.TryStartActionInput("use")).IsTrue();
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(session.Server.Executor.RequesterDependencyReleased).IsTrue();
+            AssertThat(session.Server.ExternalActions.IsActionExecuting(OpenAction)).IsTrue();
+            AssertThat(session.Client.Runner.TryEndActionInput("use")).IsFalse();
+            AssertThat(
+                    session.Client.ExternalActions.TryGetExecutionPresentation(OpenAction, out _)
+                )
+                .IsTrue();
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
     public async Task FabricatedClientBindingCannotBypassTheAuthorityAccessProvider()
     {
         Session session = await Connect(serverAllowsAccess: false);
@@ -582,6 +606,10 @@ public sealed partial class GameplayActionRunnerNetworkTest
 
         public int CancelledCount { get; private set; }
 
+        public bool RetireAndReleaseRequesterDuringExecute { get; set; }
+
+        public bool RequesterDependencyReleased { get; private set; }
+
         public ulong ExecutionId { get; private set; }
 
         public Node? LastTarget { get; private set; }
@@ -592,6 +620,11 @@ public sealed partial class GameplayActionRunnerNetworkTest
             ExecutionId = context.ExecutionId;
             LastTarget = context.Target;
             _context = context;
+            if (RetireAndReleaseRequesterDuringExecute)
+            {
+                context.Component.RemoveAction(context.Action.Definition!.Id);
+                RequesterDependencyReleased = context.ReleaseRequesterDependency();
+            }
             return new GameplayActionExecutionRunning();
         }
 

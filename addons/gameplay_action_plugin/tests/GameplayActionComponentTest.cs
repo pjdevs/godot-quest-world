@@ -242,6 +242,55 @@ public sealed partial class GameplayActionComponentTest
     }
 
     [TestCase]
+    public async Task DestroyedRequesterDoesNotReceiveProgressOrTerminalCallbacks()
+    {
+        Node world = new() { Name = "World" };
+        GameplayActionComponent ownedActions = new() { Name = "OwnedActions" };
+        GameplayActionComponent component = new() { Name = "Actions" };
+        TestGameplayActionExecutor executor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayAction action = CreateAction("world", executor);
+        component.AddAction(action);
+        GameplayActionRunner runner = new()
+        {
+            Name = "Runner",
+            OwnedActionComponent = ownedActions,
+        };
+        world.AddChild(ownedActions);
+        world.AddChild(component);
+        world.AddChild(runner);
+        ISceneRunner scene = ISceneRunner.Load(world, autoFree: true);
+        await scene.SimulateFrames(1);
+        runner.BindAction(
+            component,
+            "world",
+            runner,
+            new GameplayActionBindingConfig
+            {
+                InputActionName = "world",
+                ActivationMode = GameplayActionActivationMode.Press,
+            }
+        );
+
+        Node? terminalRequester = runner;
+        component.GameplayActionCompleted += (_, _, _, requester) => terminalRequester = requester;
+
+        AssertThat(runner.TryStartActionInput("world")).IsTrue();
+        ulong executionId = executor.LastContext.ExecutionId;
+        AssertThat(component.ReleaseRequesterDependency(executionId)).IsTrue();
+
+        runner.QueueFree();
+        await scene.SimulateFrames(1);
+
+        AssertThat(GodotObject.IsInstanceValid(runner)).IsFalse();
+        AssertThat(component.ReportExecutionProgress(executionId, 0.5f)).IsTrue();
+        AssertThat(component.CompleteExecution(executionId)).IsTrue();
+        AssertThat(terminalRequester).IsNull();
+    }
+
+    [TestCase]
     public void ProgrammaticExecutionStopsAtRulesBeforeAllocatingOrInvoking()
     {
         GameplayActionComponent component = AutoFree(new GameplayActionComponent());

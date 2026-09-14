@@ -1,5 +1,6 @@
 namespace QuestWorld.Tests.GameplayActions;
 
+using System;
 using System.Threading.Tasks;
 using GameplayActionPlugin;
 using GameplayActionPlugin.Runtime.Access;
@@ -797,6 +798,78 @@ public sealed partial class GameplayActionRunnerTest
         AssertThat(component.IsActionExecuting("world")).IsTrue();
     }
 
+    [TestCase]
+    public void ExitRemovesDetachedExecutionsBeforeReentrantReservationRelease()
+    {
+        GameplayActionComponent component = AutoFree(new GameplayActionComponent());
+        CommitAwareExecutor firstExecutor = new();
+        CommitAwareExecutor secondExecutor = new();
+        GameplayAction firstAction = AutoFree(
+            new AccessControlledAction
+            {
+                Name = "FirstAction",
+                Definition = new GameplayActionDefinition { Id = "first" },
+                Executor = firstExecutor,
+                HostConcurrencyGroup = "first",
+            }
+        );
+        GameplayAction secondAction = AutoFree(
+            new AccessControlledAction
+            {
+                Name = "SecondAction",
+                Definition = new GameplayActionDefinition { Id = "second" },
+                Executor = secondExecutor,
+                HostConcurrencyGroup = "second",
+            }
+        );
+        firstAction.AddChild(firstExecutor);
+        secondAction.AddChild(secondExecutor);
+        component.AddAction(firstAction);
+        component.AddAction(secondAction);
+
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = component }
+        );
+        ReentrantReleaseReservation firstReservation = new();
+        ReentrantReleaseReservation secondReservation = new();
+        TestAccessProvider provider = new() { Allowed = true, Reservation = firstReservation };
+        runner.RegisterAccessProvider(AccessControlledAction.ProviderId, provider);
+        runner.BindAction(
+            component,
+            "first",
+            AutoFree(new Node()),
+            Config("first", GameplayActionActivationMode.Press)
+        );
+        runner.BindAction(
+            component,
+            "second",
+            AutoFree(new Node()),
+            Config("second", GameplayActionActivationMode.Press)
+        );
+
+        AssertThat(runner.TryStartActionInput("first")).IsTrue();
+        provider.Reservation = secondReservation;
+        AssertThat(runner.TryStartActionInput("second")).IsTrue();
+        AssertThat(firstExecutor.Commit()).IsTrue();
+        AssertThat(secondExecutor.Commit()).IsTrue();
+
+        bool reentrantCompletionSucceeded = false;
+        secondReservation.OnRelease = () =>
+        {
+            reentrantCompletionSucceeded = component.CompleteExecution(
+                secondExecutor.ExecutionId
+            );
+        };
+
+        runner._ExitTree();
+
+        AssertThat(reentrantCompletionSucceeded).IsTrue();
+        AssertThat(firstReservation.ReleaseCount).IsEqual(1);
+        AssertThat(secondReservation.ReleaseCount).IsEqual(1);
+        AssertThat(component.IsActionExecuting("first")).IsFalse();
+        AssertThat(component.IsActionExecuting("second")).IsFalse();
+    }
+
     private static GameplayActionRunner CreateRunnerWithOwnedActions(
         out GameplayActionComponent component,
         params (string Id, TestGameplayActionExecutor Executor)[] actions
@@ -945,6 +1018,21 @@ public sealed partial class GameplayActionRunnerTest
         public void Release() => ReleaseCount++;
     }
 
+    private sealed class ReentrantReleaseReservation : IGameplayActionRequestReservation
+    {
+        public int ReleaseCount { get; private set; }
+
+        public Action? OnRelease { get; set; }
+
+        public void BindExecution(ulong executionId) { }
+
+        public void Release()
+        {
+            ReleaseCount++;
+            OnRelease?.Invoke();
+        }
+    }
+
     private sealed partial class PresencePolicyExecutor(bool requiresRequesterPresence)
         : GameplayActionExecutor
     {
@@ -967,9 +1055,12 @@ public sealed partial class GameplayActionRunnerTest
 
         public int CancelledCount { get; private set; }
 
+        public ulong ExecutionId { get; private set; }
+
         public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
         {
             _context = context;
+            ExecutionId = context.ExecutionId;
             return new GameplayActionExecutionRunning();
         }
 
