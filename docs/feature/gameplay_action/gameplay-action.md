@@ -130,7 +130,11 @@ every synchronous rollback, terminal result, cancellation, requester disconnect 
 executor may release that lease early through `GameplayActionContext.ReleaseAccessReservation()`, but
 only after `ReleaseRequesterDependency()` has detached the execution from requester presence and
 sustained input. The request pipeline clears its lease reference before invoking the domain release so
-re-entrant cleanup remains idempotent.
+re-entrant cleanup remains idempotent. If the action is already retiring, requester notifications use
+the action retained by the active execution rather than the requestable-action catalogue. When a peer
+disconnects after detachment, the pipeline releases any remaining access lease but retains the active
+execution record with an empty lease, so a later executor release remains an idempotent success until
+the execution reaches its terminal lifecycle.
 Client bindings and access claims never cross the network as proof.
 An `IGameplayActionAccessProvider` returns both access and any contextual requester-presence policy;
 the authority derives that policy from its resolved domain data. The request transport carries no

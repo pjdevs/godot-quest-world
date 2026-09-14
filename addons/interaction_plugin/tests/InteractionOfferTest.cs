@@ -441,6 +441,89 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
     }
 
     [TestCase]
+    public async Task ReleasingAnInstigatorReservationLetsAnotherInteractorClaimTheTarget()
+    {
+        Node3D world = new();
+        TestInteractiveActor owner = new() { Name = "Door", Position = new Vector3(0, 0, -2) };
+        Area3D area = new() { Name = "InteractionArea" };
+        InteractiveComponent interactive = new()
+        {
+            Name = "Interactive",
+            InteractionArea = area,
+            InteractionAnchor = owner,
+            Offers =
+            {
+                new InteractionOffer
+                {
+                    ActionSource = InteractionOfferSource.Instigator,
+                    ActionId = new StringName("use"),
+                    BindingConfig = Press(
+                        "interact",
+                        inputRequirement: GameplayActionInputRequirement.Pressed
+                    ),
+                    TargetConcurrencyGroup = new StringName("door_operation"),
+                },
+            },
+        };
+        owner.AddChild(area);
+        owner.AddChild(interactive);
+
+        InteractionInteractor first = new() { Name = "FirstInteractor" };
+        Node3D firstView = new() { Name = "ViewOrigin" };
+        first.AddChild(firstView);
+        TestInteractionDetector firstDetector = AttachDetector(first, firstView);
+        InteractionInteractor second = new() { Name = "SecondInteractor" };
+        Node3D secondView = new() { Name = "ViewOrigin" };
+        second.AddChild(secondView);
+        TestInteractionDetector secondDetector = AttachDetector(second, secondView);
+        world.AddChild(owner);
+        world.AddChild(first);
+        world.AddChild(second);
+        ISceneRunner runner = ISceneRunner.Load(world, autoFree: true);
+        await runner.SimulateFrames(1);
+
+        CommitAndReleaseExecutor firstExecutor = AddReservedAction(first, "use");
+        CommitAndReleaseExecutor secondExecutor = AddReservedAction(second, "use");
+        firstDetector.SetDetection(interactive, InteractionDetectionKind.Interactible);
+        secondDetector.SetDetection(interactive, InteractionDetectionKind.Interactible);
+        first.RecalculateFocus();
+        second.RecalculateFocus();
+
+        AssertThat(first.Runner!.TryStartActionInput("interact")).IsTrue();
+        AssertThat(firstExecutor.ExecuteCount).IsEqual(1);
+        AssertThat(
+                interactive.EvaluateAvailability(second, interactive.Offers[0])
+                    is GameplayActionBlocked blocked
+                    && blocked.Reason == "Someone else is using this target."
+            )
+            .IsTrue();
+
+        AssertThat(firstExecutor.CommitAndRelease()).IsTrue();
+        AssertThat(
+                interactive.EvaluateAvailability(second, interactive.Offers[0])
+                    is GameplayActionAllowed
+            )
+            .IsTrue();
+        AssertThat(first.Runner.OwnedActionComponent!.IsActionExecuting(new StringName("use")))
+            .IsTrue();
+
+        AssertThat(second.Runner!.TryStartActionInput("interact")).IsTrue();
+        AssertThat(secondExecutor.ExecuteCount).IsEqual(1);
+        AssertThat(
+                interactive.EvaluateAvailability(first, interactive.Offers[0])
+                    is GameplayActionBlocked blockedAfter
+                    && blockedAfter.Reason == "Someone else is using this target."
+            )
+            .IsTrue();
+        AssertThat(first.Runner.OwnedActionComponent!.IsActionExecuting(new StringName("use")))
+            .IsTrue();
+
+        AssertThat(firstExecutor.Complete()).IsTrue();
+        AssertThat(second.Runner.OwnedActionComponent!.IsActionExecuting(new StringName("use")))
+            .IsTrue();
+    }
+
+    [TestCase]
     public async Task TargetAndOfferRulesSeeGenericActionContextWithoutMutatingTheOwnedAction()
     {
         Node3D world = new();
@@ -505,6 +588,24 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
         return action;
     }
 
+    private static CommitAndReleaseExecutor AddReservedAction(
+        InteractionInteractor interactor,
+        string id
+    )
+    {
+        GameplayAction action = new()
+        {
+            Name = $"{id}Action",
+            ConfiguredAccessProviderId = InteractionOffer.InteractionAccessProviderId,
+            Definition = new GameplayActionDefinition { Id = new StringName(id), Label = id },
+        };
+        CommitAndReleaseExecutor executor = new() { Name = $"{id}Executor" };
+        action.AddChild(executor);
+        action.Executor = executor;
+        interactor.Runner!.OwnedActionComponent!.AddAction(action);
+        return executor;
+    }
+
     private static GameplayActionBindingConfig Press(
         string input,
         GameplayActionInputRequirement inputRequirement = GameplayActionInputRequirement.None
@@ -531,6 +632,28 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
             ExecuteCount++;
             return Result;
         }
+    }
+
+    private sealed partial class CommitAndReleaseExecutor : GameplayActionExecutor
+    {
+        private GameplayActionContext? _context;
+
+        public int ExecuteCount { get; private set; }
+
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
+        {
+            _context = context;
+            ExecuteCount++;
+            return new GameplayActionExecutionRunning();
+        }
+
+        public bool CommitAndRelease() =>
+            _context is GameplayActionContext context
+            && context.ReleaseRequesterDependency()
+            && context.ReleaseAccessReservation();
+
+        public bool Complete() =>
+            _context is GameplayActionContext context && context.CompleteExecution();
     }
 
     private sealed partial class RecordingInteractionRule : GameplayActionRule

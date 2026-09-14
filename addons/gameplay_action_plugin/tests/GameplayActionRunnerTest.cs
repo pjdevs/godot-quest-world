@@ -562,6 +562,57 @@ public sealed partial class GameplayActionRunnerTest
     }
 
     [TestCase]
+    public void ReleaseDuringExecuteDetachesTheRunningExecutionBeforeValidation()
+    {
+        ReleaseDuringExecuteExecutor executor = new();
+        GameplayActionComponent component = AutoFree(new GameplayActionComponent());
+        AccessControlledAction action = AutoFree(
+            new AccessControlledAction
+            {
+                Definition = new GameplayActionDefinition { Id = "take" },
+                Executor = executor,
+                HostConcurrencyGroup = new StringName("take-group"),
+            }
+        );
+        action.AddChild(executor);
+        component.AddAction(action);
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = component }
+        );
+        TrackingReservation reservation = new();
+        TestAccessProvider provider = new() { Allowed = true, Reservation = reservation };
+        runner.RegisterAccessProvider(AccessControlledAction.ProviderId, provider);
+        Node target = AutoFree(new Node { Name = "Target" });
+        runner.BindAction(
+            component,
+            "take",
+            AutoFree(new Node()),
+            Config(
+                "use",
+                GameplayActionActivationMode.Press,
+                inputRequirement: GameplayActionInputRequirement.Pressed
+            ),
+            target: target
+        );
+
+        AssertThat(runner.TryStartActionInput("use")).IsTrue();
+        AssertThat(executor.RequesterDependencyReleased).IsTrue();
+        AssertThat(executor.AccessReservationReleased).IsTrue();
+        AssertThat(reservation.BindCount).IsEqual(0);
+        AssertThat(reservation.ReleaseCount).IsEqual(1);
+        AssertThat(component.IsActionExecuting("take")).IsTrue();
+        AssertThat(component.IsConcurrencyGroupExecuting("take-group")).IsTrue();
+
+        provider.Allowed = false;
+        runner.ValidateSustainedExecutions();
+
+        AssertThat(executor.CancelledCount).IsEqual(0);
+        AssertThat(component.IsActionExecuting("take")).IsTrue();
+        AssertThat(component.CompleteExecution(1)).IsTrue();
+        AssertThat(reservation.ReleaseCount).IsEqual(1);
+    }
+
+    [TestCase]
     public void RequestReservationLeaseLivesThroughRunningExecutionAndReleasesOnTerminal()
     {
         TestGameplayActionExecutor executor = new()
@@ -924,6 +975,27 @@ public sealed partial class GameplayActionRunnerTest
 
         public bool Commit() =>
             _context is GameplayActionContext context && context.ReleaseRequesterDependency();
+
+        protected internal override void OnExecutionCancelled(
+            in GameplayActionContext context,
+            string reason
+        ) => CancelledCount++;
+    }
+
+    private sealed partial class ReleaseDuringExecuteExecutor : GameplayActionExecutor
+    {
+        public bool RequesterDependencyReleased { get; private set; }
+
+        public bool AccessReservationReleased { get; private set; }
+
+        public int CancelledCount { get; private set; }
+
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
+        {
+            RequesterDependencyReleased = context.ReleaseRequesterDependency();
+            AccessReservationReleased = context.ReleaseAccessReservation();
+            return new GameplayActionExecutionRunning();
+        }
 
         protected internal override void OnExecutionCancelled(
             in GameplayActionContext context,

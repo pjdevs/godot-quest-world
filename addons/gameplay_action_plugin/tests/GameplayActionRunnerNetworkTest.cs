@@ -93,6 +93,41 @@ public sealed partial class GameplayActionRunnerNetworkTest
     }
 
     [TestCase]
+    public async Task RetiringActionStillNotifiesTheRequesterWhenDependencyIsReleased()
+    {
+        Session session = await Connect(serverAllowsAccess: true, sustainedInput: true);
+        try
+        {
+            AssertThat(session.Client.Runner.TryStartActionInput("use")).IsTrue();
+            await session.Pump(RoundTripFrames);
+            AssertThat(session.Server.ExternalActions.IsActionExecuting(OpenAction)).IsTrue();
+            AssertThat(
+                    session.Client.ExternalActions.TryGetExecutionPresentation(
+                        OpenAction,
+                        out GameplayActionExecutionPresentation presentation
+                    )
+                )
+                .IsTrue();
+            AssertThat(presentation.ExecutionId).IsEqual(session.Server.Executor.ExecutionId);
+
+            AssertThat(session.Server.ExternalActions.RemoveAction(OpenAction)).IsTrue();
+            AssertThat(session.Server.ExternalActions.IsActionExecuting(OpenAction)).IsTrue();
+            AssertThat(session.Server.Executor.Commit()).IsTrue();
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(session.Client.Runner.TryEndActionInput("use")).IsTrue();
+            AssertThat(
+                    session.Client.ExternalActions.TryGetExecutionPresentation(OpenAction, out _)
+                )
+                .IsTrue();
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
     public async Task FabricatedClientBindingCannotBypassTheAuthorityAccessProvider()
     {
         Session session = await Connect(serverAllowsAccess: false);
@@ -232,6 +267,77 @@ public sealed partial class GameplayActionRunnerNetworkTest
             AssertThat(session.Server.ExternalActions.IsActionExecuting(OpenAction)).IsTrue();
 
             session.Peers[1].Close();
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(session.Server.Executor.CancelledCount).IsEqual(1);
+            AssertThat(session.Server.ExternalActions.IsActionExecuting(OpenAction)).IsFalse();
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
+    public async Task RequesterDisconnectReleasesDetachedReservationButKeepsExecutionTracked()
+    {
+        Session session = await Connect(serverAllowsAccess: true, sustainedInput: true);
+        NetworkTrackingReservation reservation = new();
+        session.Server.AccessProvider.Reservation = reservation;
+        try
+        {
+            AssertThat(session.Client.Runner.TryStartActionInput("use")).IsTrue();
+            await session.Pump(RoundTripFrames);
+            AssertThat(reservation.BindCount).IsEqual(1);
+            AssertThat(session.Server.Executor.Commit()).IsTrue();
+            await session.Pump(RoundTripFrames);
+
+            session.Peers[1].Close();
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(reservation.ReleaseCount).IsEqual(1);
+            AssertThat(session.Server.Executor.ReleaseAccess()).IsTrue();
+            AssertThat(reservation.ReleaseCount).IsEqual(1);
+            AssertThat(session.Server.ExternalActions.IsActionExecuting(OpenAction)).IsTrue();
+            AssertThat(
+                    session.Server.ExternalActions.CompleteExecution(
+                        session.Server.Executor.ExecutionId
+                    )
+                )
+                .IsTrue();
+            AssertThat(reservation.ReleaseCount).IsEqual(1);
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
+    public async Task StaleRequesterDependencyReleaseCannotDetachANewerExecution()
+    {
+        Session session = await Connect(serverAllowsAccess: true, sustainedInput: true);
+        try
+        {
+            AssertThat(session.Client.Runner.TryStartActionInput("use")).IsTrue();
+            await session.Pump(RoundTripFrames);
+            ulong firstExecutionId = session.Server.Executor.ExecutionId;
+
+            AssertThat(session.Server.ExternalActions.CompleteExecution(firstExecutionId)).IsTrue();
+            await session.Pump(RoundTripFrames);
+            AssertThat(session.Client.Runner.TryEndActionInput("use")).IsTrue();
+
+            AssertThat(session.Client.Runner.TryStartActionInput("use")).IsTrue();
+            await session.Pump(RoundTripFrames);
+            ulong secondExecutionId = session.Server.Executor.ExecutionId;
+            AssertThat(secondExecutionId).IsNotEqual(firstExecutionId);
+
+            session.Client.Runner.ClientActionRequesterDependencyReleased(
+                new NodePath("Door/Actions"),
+                OpenAction,
+                checked((long)firstExecutionId)
+            );
+            AssertThat(session.Client.Runner.TryEndActionInput("use")).IsTrue();
             await session.Pump(RoundTripFrames);
 
             AssertThat(session.Server.Executor.CancelledCount).IsEqual(1);
@@ -438,6 +544,8 @@ public sealed partial class GameplayActionRunnerNetworkTest
 
         public bool RequiresRequesterPresence { get; set; }
 
+        public IGameplayActionRequestReservation? Reservation { get; set; }
+
         public Node? LastAccessSource { get; private set; }
 
         public Node? LastTarget { get; private set; }
@@ -457,13 +565,15 @@ public sealed partial class GameplayActionRunnerNetworkTest
             out IGameplayActionRequestReservation? reservation
         )
         {
-            reservation = null;
+            reservation = Reservation;
             return Allowed;
         }
     }
 
     private sealed partial class NetworkRecordingExecutor : GameplayActionExecutor
     {
+        private GameplayActionContext? _context;
+
         public bool PresenceRequired { get; set; } = true;
 
         public override bool RequiresRequesterPresence => PresenceRequired;
@@ -481,8 +591,15 @@ public sealed partial class GameplayActionRunnerNetworkTest
             ExecuteCount++;
             ExecutionId = context.ExecutionId;
             LastTarget = context.Target;
+            _context = context;
             return new GameplayActionExecutionRunning();
         }
+
+        public bool Commit() =>
+            _context is GameplayActionContext context && context.ReleaseRequesterDependency();
+
+        public bool ReleaseAccess() =>
+            _context is GameplayActionContext context && context.ReleaseAccessReservation();
 
         internal override GameplayActionProgressSample? GetPredictionSample(
             in GameplayActionContext context
@@ -492,6 +609,17 @@ public sealed partial class GameplayActionRunnerNetworkTest
             in GameplayActionContext context,
             string reason
         ) => CancelledCount++;
+    }
+
+    private sealed class NetworkTrackingReservation : IGameplayActionRequestReservation
+    {
+        public int BindCount { get; private set; }
+
+        public int ReleaseCount { get; private set; }
+
+        public void BindExecution(ulong executionId) => BindCount++;
+
+        public void Release() => ReleaseCount++;
     }
 
     private sealed record PeerScene(

@@ -60,7 +60,7 @@ internal sealed class GameplayActionRequestPipeline(
             reservation.Release();
         }
         _pendingReservations.Clear();
-        ReleaseDetachedExecutions();
+        ReleaseDetachedExecutions(keepTracking: false);
         _pendingRequests.Clear();
         _pendingRequesterDependencyReleases.Clear();
         _pendingClientRequesterDependencyReleases.Clear();
@@ -113,13 +113,15 @@ internal sealed class GameplayActionRequestPipeline(
                 return true;
             }
 
-            _requestedExecutions[index] = execution with
-            {
-                RequiresRequesterPresence = false,
-                RequesterDependencyReleased = true,
-            };
+            _requestedExecutions[index] = execution with { RequiresRequesterPresence = false };
             RemoveSustainedRequest(component, execution.ActionId);
-            if (component.ResolveAction(execution.ActionId) is GameplayAction action)
+            if (
+                component.TryGetActiveExecution(
+                    execution.ExecutionId,
+                    out GameplayAction? action,
+                    out _
+                ) && action is not null
+            )
             {
                 NotifyRequesterDependencyReleased(component, action, execution.ExecutionId);
             }
@@ -999,10 +1001,11 @@ internal sealed class GameplayActionRequestPipeline(
                     component,
                     actionId,
                     executionId,
-                    action.Executor?.RequiresRequesterPresence != false
+                    (
+                        action.Executor?.RequiresRequesterPresence != false
                         || accessPolicy.RequiresRequesterPresence
-                        || HasPressedDefaultBinding(action),
-                    requesterDependencyReleased,
+                        || HasPressedDefaultBinding(action)
+                    ) && !requesterDependencyReleased,
                     accessSource,
                     target,
                     runningReservation
@@ -1241,7 +1244,7 @@ internal sealed class GameplayActionRequestPipeline(
         }
     }
 
-    private void ReleaseDetachedExecutions()
+    private void ReleaseDetachedExecutions(bool keepTracking)
     {
         for (int index = _requestedExecutions.Count - 1; index >= 0; index--)
         {
@@ -1251,8 +1254,17 @@ internal sealed class GameplayActionRequestPipeline(
                 continue;
             }
 
-            _requestedExecutions.RemoveAt(index);
-            execution.Reservation?.Release();
+            if (execution.Reservation is not null)
+            {
+                IGameplayActionRequestReservation reservation = execution.Reservation;
+                _requestedExecutions[index] = execution with { Reservation = null };
+                reservation.Release();
+            }
+
+            if (!keepTracking)
+            {
+                _requestedExecutions.RemoveAt(index);
+            }
         }
     }
 
@@ -1334,7 +1346,7 @@ internal sealed class GameplayActionRequestPipeline(
         if (_owner.IsAuthoritativeRunner)
         {
             CancelRequesterOwnedExecutions(RequesterLostReason);
-            ReleaseDetachedExecutions();
+            ReleaseDetachedExecutions(keepTracking: true);
         }
     }
 
@@ -1380,7 +1392,6 @@ internal sealed class GameplayActionRequestPipeline(
         StringName ActionId,
         ulong ExecutionId,
         bool RequiresRequesterPresence,
-        bool RequesterDependencyReleased,
         Node? AccessSource,
         Node? Target,
         IGameplayActionRequestReservation? Reservation
