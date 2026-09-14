@@ -400,6 +400,12 @@ public partial class GameplayActionRunner : Node
         ulong executionId
     ) => _requests.ReleaseRequesterDependency(component, executionId);
 
+    /// <summary>
+    /// Releases the optional access-provider reservation for a detached requested execution.
+    /// </summary>
+    internal bool ReleaseAccessReservation(GameplayActionComponent component, ulong executionId) =>
+        _requests.ReleaseAccessReservation(component, executionId);
+
     /// <summary>Advances local gestures and authority-side sustained access validation.</summary>
     public override void _Process(double delta)
     {
@@ -618,6 +624,20 @@ public partial class GameplayActionRunner : Node
             revision
         );
 
+    /// <summary>
+    /// Authority RPC telling the requester to stop sustaining one acknowledged execution.
+    /// </summary>
+    [Rpc(
+        MultiplayerApi.RpcMode.Authority,
+        CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable
+    )]
+    public void ClientActionRequesterDependencyReleased(
+        NodePath componentPath,
+        StringName actionId,
+        long executionId
+    ) => _requests.ClientActionRequesterDependencyReleased(componentPath, actionId, executionId);
+
     /// <summary>Authority RPC endpoint applying a requester-only progress correction.</summary>
     [Rpc(
         MultiplayerApi.RpcMode.Authority,
@@ -686,6 +706,12 @@ public partial class GameplayActionRunner : Node
         GameplayAction action,
         ulong executionId
     ) => _requests.NotifyExecutionStarted(component, action, executionId);
+
+    internal void NotifyRequesterDependencyReleased(
+        GameplayActionComponent component,
+        GameplayAction action,
+        ulong executionId
+    ) => _requests.NotifyRequesterDependencyReleased(component, action, executionId);
 
     internal void NotifyExecutionProgress(
         GameplayActionComponent component,

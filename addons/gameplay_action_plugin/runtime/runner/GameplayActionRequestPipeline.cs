@@ -29,6 +29,11 @@ internal sealed class GameplayActionRequestPipeline(
         new();
     private readonly List<GameplayActionRequestedExecution> _requestedExecutions = new();
     private readonly HashSet<GameplayActionRequestKey> _pendingRequests = new();
+    private readonly HashSet<GameplayActionRequestKey> _pendingRequesterDependencyReleases = new();
+    private readonly Dictionary<
+        GameplayActionRequestKey,
+        ulong
+    > _pendingClientRequesterDependencyReleases = new();
     private readonly Dictionary<
         GameplayActionRequestKey,
         IGameplayActionRequestReservation
@@ -55,6 +60,11 @@ internal sealed class GameplayActionRequestPipeline(
             reservation.Release();
         }
         _pendingReservations.Clear();
+        ReleaseDetachedExecutions();
+        _pendingRequests.Clear();
+        _pendingRequesterDependencyReleases.Clear();
+        _pendingClientRequesterDependencyReleases.Clear();
+        _sustainedInputs.Clear();
     }
 
     public void ValidateSustainedExecutions()
@@ -98,11 +108,73 @@ internal sealed class GameplayActionRequestPipeline(
                 continue;
             }
 
-            if (execution.RequiresRequesterPresence)
+            if (!execution.RequiresRequesterPresence)
             {
-                _requestedExecutions[index] = execution with { RequiresRequesterPresence = false };
+                return true;
             }
 
+            _requestedExecutions[index] = execution with
+            {
+                RequiresRequesterPresence = false,
+                RequesterDependencyReleased = true,
+            };
+            RemoveSustainedRequest(component, execution.ActionId);
+            if (component.ResolveAction(execution.ActionId) is GameplayAction action)
+            {
+                NotifyRequesterDependencyReleased(component, action, execution.ExecutionId);
+            }
+            return true;
+        }
+
+        if (TryGetPendingRequest(component, executionId, out GameplayActionRequestKey request))
+        {
+            if (_pendingRequesterDependencyReleases.Add(request))
+            {
+                RemoveSustainedRequest(component, request.ActionId);
+                if (component.ResolveAction(request.ActionId) is GameplayAction action)
+                {
+                    NotifyRequesterDependencyReleased(component, action, executionId);
+                }
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    internal bool ReleaseAccessReservation(GameplayActionComponent component, ulong executionId)
+    {
+        for (int index = _requestedExecutions.Count - 1; index >= 0; index--)
+        {
+            GameplayActionRequestedExecution execution = _requestedExecutions[index];
+            if (execution.Component != component || execution.ExecutionId != executionId)
+            {
+                continue;
+            }
+
+            if (execution.RequiresRequesterPresence)
+            {
+                return false;
+            }
+
+            IGameplayActionRequestReservation? reservation = execution.Reservation;
+            if (reservation is null)
+            {
+                return true;
+            }
+
+            _requestedExecutions[index] = execution with { Reservation = null };
+            reservation.Release();
+            return true;
+        }
+
+        if (
+            TryGetPendingRequest(component, executionId, out GameplayActionRequestKey request)
+            && _pendingRequesterDependencyReleases.Contains(request)
+        )
+        {
+            ReleasePendingReservation(request);
             return true;
         }
 
@@ -165,11 +237,13 @@ internal sealed class GameplayActionRequestPipeline(
             _owner.OwnerPeerId,
             GetNetworkPath(binding.Component),
             binding.AccessSource,
-            binding.Target
+            binding.Target,
+            out bool requesterDependencyReleased
         );
         if (
             result is GameplayActionExecutionRunning
             && binding.InputRequirement == GameplayActionInputRequirement.Pressed
+            && !requesterDependencyReleased
         )
         {
             RememberSustainedInput(binding.InputActionName, binding.Component, binding.ActionId);
@@ -216,6 +290,11 @@ internal sealed class GameplayActionRequestPipeline(
             if (execution.Component != component || execution.ActionId != actionId)
             {
                 continue;
+            }
+
+            if (!execution.RequiresRequesterPresence)
+            {
+                return false;
             }
 
             // Keep the record until CancelExecution dispatches its terminal notification: that
@@ -353,6 +432,7 @@ internal sealed class GameplayActionRequestPipeline(
     )
     {
         _pendingRequests.Remove(request);
+        _pendingClientRequesterDependencyReleases.Remove(request);
         if (
             request.Component.TryGetExecutionPresentation(
                 request.ActionId,
@@ -436,7 +516,8 @@ internal sealed class GameplayActionRequestPipeline(
             senderPeerId,
             componentPath,
             accessSource,
-            target
+            target,
+            out _
         );
     }
 
@@ -501,6 +582,9 @@ internal sealed class GameplayActionRequestPipeline(
         }
 
         GameplayActionRequestKey request = new(component, actionId);
+        bool requesterDependencyReleased =
+            _pendingClientRequesterDependencyReleases.Remove(request, out ulong releasedId)
+            && releasedId == (ulong)executionId;
         _pendingRequests.Remove(request);
         bool accepted;
         if (
@@ -526,6 +610,11 @@ internal sealed class GameplayActionRequestPipeline(
             return;
         }
 
+        if (requesterDependencyReleased)
+        {
+            RemoveSustainedRequest(component, actionId);
+        }
+
         _acknowledgedExecutions[request] = (ulong)executionId;
 
         _owner.EmitSignal(
@@ -534,6 +623,50 @@ internal sealed class GameplayActionRequestPipeline(
             actionId,
             executionId
         );
+    }
+
+    public void ClientActionRequesterDependencyReleased(
+        NodePath componentPath,
+        StringName actionId,
+        long executionId
+    )
+    {
+        if (executionId <= 0)
+        {
+            return;
+        }
+
+        GameplayActionComponent? component =
+            ResolveNetworkPath(componentPath) as GameplayActionComponent;
+        if (component is null)
+        {
+            return;
+        }
+
+        GameplayActionRequestKey request = new(component, actionId);
+        if (_acknowledgedExecutions.TryGetValue(request, out ulong acknowledgedId))
+        {
+            if (acknowledgedId == (ulong)executionId)
+            {
+                RemoveSustainedRequest(component, actionId);
+            }
+
+            return;
+        }
+
+        if (_pendingRequests.Contains(request))
+        {
+            if (
+                !_pendingClientRequesterDependencyReleases.TryGetValue(
+                    request,
+                    out ulong pendingReleasedId
+                )
+                || pendingReleasedId == (ulong)executionId
+            )
+            {
+                _pendingClientRequesterDependencyReleases[request] = (ulong)executionId;
+            }
+        }
     }
 
     public void ClientActionProgress(
@@ -641,6 +774,33 @@ internal sealed class GameplayActionRequestPipeline(
         }
     }
 
+    internal void NotifyRequesterDependencyReleased(
+        GameplayActionComponent component,
+        GameplayAction action,
+        ulong executionId
+    )
+    {
+        if (!TryBuildAcknowledgement(component, action, out NodePath path, out StringName actionId))
+        {
+            return;
+        }
+
+        if (_owner.IsLocallyControlled)
+        {
+            ClientActionRequesterDependencyReleased(path, actionId, checked((long)executionId));
+        }
+        else if (CanSendToOwner)
+        {
+            _owner.RpcId(
+                _owner.OwnerPeerId,
+                nameof(ClientActionRequesterDependencyReleased),
+                path,
+                actionId,
+                checked((long)executionId)
+            );
+        }
+    }
+
     internal void NotifyExecutionProgress(
         GameplayActionComponent component,
         GameplayAction action,
@@ -725,10 +885,12 @@ internal sealed class GameplayActionRequestPipeline(
         StringName actionId,
         int senderPeerId,
         NodePath componentPath,
-        Node? accessSource = null,
-        Node? target = null
+        Node? accessSource,
+        Node? target,
+        out bool requesterDependencyReleased
     )
     {
+        requesterDependencyReleased = false;
         if (!ValidateSender(senderPeerId))
         {
             RejectRequest(
@@ -801,6 +963,7 @@ internal sealed class GameplayActionRequestPipeline(
             _pendingReservations[request] = reservation;
         }
 
+        _pendingRequests.Add(request);
         GameplayActionExecutionResult result;
         ulong executionId;
         try
@@ -816,9 +979,13 @@ internal sealed class GameplayActionRequestPipeline(
         catch
         {
             ReleasePendingReservation(request);
+            _pendingRequests.Remove(request);
+            _pendingRequesterDependencyReleases.Remove(request);
             throw;
         }
 
+        requesterDependencyReleased = _pendingRequesterDependencyReleases.Remove(request);
+        _pendingRequests.Remove(request);
         if (result is GameplayActionExecutionRunning)
         {
             IGameplayActionRequestReservation? runningReservation = null;
@@ -835,6 +1002,7 @@ internal sealed class GameplayActionRequestPipeline(
                     action.Executor?.RequiresRequesterPresence != false
                         || accessPolicy.RequiresRequesterPresence
                         || HasPressedDefaultBinding(action),
+                    requesterDependencyReleased,
                     accessSource,
                     target,
                     runningReservation
@@ -1021,6 +1189,31 @@ internal sealed class GameplayActionRequestPipeline(
         && _owner.Multiplayer is not null
         && _owner.Multiplayer.MultiplayerPeer is not null;
 
+    private bool TryGetPendingRequest(
+        GameplayActionComponent component,
+        ulong executionId,
+        out GameplayActionRequestKey request
+    )
+    {
+        request = default;
+        if (
+            !component.TryGetActiveExecution(
+                executionId,
+                out GameplayAction? action,
+                out Node? requester
+            )
+            || requester != _owner
+            || action is null
+            || action.Definition is null
+        )
+        {
+            return false;
+        }
+
+        request = new GameplayActionRequestKey(component, action.Definition.Id);
+        return _pendingRequests.Contains(request);
+    }
+
     private void RemoveRequestedExecution(
         GameplayActionComponent component,
         GameplayAction action,
@@ -1045,6 +1238,21 @@ internal sealed class GameplayActionRequestPipeline(
             ReleasePendingReservation(
                 new GameplayActionRequestKey(component, action.Definition.Id)
             );
+        }
+    }
+
+    private void ReleaseDetachedExecutions()
+    {
+        for (int index = _requestedExecutions.Count - 1; index >= 0; index--)
+        {
+            GameplayActionRequestedExecution execution = _requestedExecutions[index];
+            if (execution.RequiresRequesterPresence)
+            {
+                continue;
+            }
+
+            _requestedExecutions.RemoveAt(index);
+            execution.Reservation?.Release();
         }
     }
 
@@ -1126,6 +1334,7 @@ internal sealed class GameplayActionRequestPipeline(
         if (_owner.IsAuthoritativeRunner)
         {
             CancelRequesterOwnedExecutions(RequesterLostReason);
+            ReleaseDetachedExecutions();
         }
     }
 
@@ -1171,6 +1380,7 @@ internal sealed class GameplayActionRequestPipeline(
         StringName ActionId,
         ulong ExecutionId,
         bool RequiresRequesterPresence,
+        bool RequesterDependencyReleased,
         Node? AccessSource,
         Node? Target,
         IGameplayActionRequestReservation? Reservation

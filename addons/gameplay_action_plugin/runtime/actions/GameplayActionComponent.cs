@@ -339,6 +339,44 @@ public partial class GameplayActionComponent : Node
         return requester.ReleaseRequesterDependency(this, executionId);
     }
 
+    /// <summary>
+    /// Releases the optional access-provider reservation for one detached requested execution.
+    /// </summary>
+    /// <remarks>
+    /// The execution and this host's action reservation remain active. Requester dependency must be
+    /// released first, so an exclusive target is never made reusable while it is still sustained.
+    /// </remarks>
+    public bool ReleaseAccessReservation(ulong executionId)
+    {
+        if (
+            !_executionsById.TryGetValue(executionId, out ActiveExecution execution)
+            || execution.Requester is not GameplayActionRunner requester
+        )
+        {
+            return false;
+        }
+
+        return requester.ReleaseAccessReservation(this, executionId);
+    }
+
+    internal bool TryGetActiveExecution(
+        ulong executionId,
+        out GameplayAction? action,
+        out Node? requester
+    )
+    {
+        if (_executionsById.TryGetValue(executionId, out ActiveExecution execution))
+        {
+            action = execution.Action;
+            requester = execution.Requester;
+            return true;
+        }
+
+        action = null;
+        requester = null;
+        return false;
+    }
+
     internal bool TryGetFirstActiveExecution(
         out GameplayAction? action,
         out Node? instigator,
@@ -773,7 +811,10 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Instigator),
             ToVariant(execution.Requester)
         );
-        if (execution.Requester is GameplayActionRunner runner)
+        if (
+            execution.Requester is GameplayActionRunner runner
+            && GodotObject.IsInstanceValid(runner)
+        )
         {
             runner.NotifyExecutionStarted(this, execution.Action, execution.Id);
         }
@@ -788,7 +829,10 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Instigator),
             ToVariant(execution.Requester)
         );
-        if (execution.Requester is GameplayActionRunner runner)
+        if (
+            execution.Requester is GameplayActionRunner runner
+            && GodotObject.IsInstanceValid(runner)
+        )
         {
             runner.NotifyExecutionCompleted(this, execution.Action, execution.Id);
         }
@@ -804,7 +848,10 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Requester),
             reason
         );
-        if (execution.Requester is GameplayActionRunner runner)
+        if (
+            execution.Requester is GameplayActionRunner runner
+            && GodotObject.IsInstanceValid(runner)
+        )
         {
             runner.NotifyExecutionCancelled(this, execution.Action, execution.Id, reason);
         }
@@ -820,7 +867,10 @@ public partial class GameplayActionComponent : Node
             ToVariant(execution.Requester),
             reason
         );
-        if (execution.Requester is GameplayActionRunner runner)
+        if (
+            execution.Requester is GameplayActionRunner runner
+            && GodotObject.IsInstanceValid(runner)
+        )
         {
             runner.NotifyExecutionFailed(this, execution.Action, execution.Id, reason);
         }

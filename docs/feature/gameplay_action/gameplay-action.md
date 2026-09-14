@@ -85,6 +85,11 @@ Rules and executors receive one `GameplayActionContext` containing:
 `GetInstigator<T>()`, `GetHost<T>()`, `GetWorld<T>()` and `GetTarget<T>()` are the integration seam for
 typed game context. The framework deliberately does not replace them with a global game manager.
 
+For an active requested execution, `ReleaseRequesterDependency()` ends sustained requester presence
+and held-input cancellation while leaving the execution and host/action reservation active.
+`ReleaseAccessReservation()` may then release the optional access-provider lease while that execution
+continues. The second transition is valid only after the first one.
+
 ## Input and requester pipeline
 
 `GameplayActionBinding` is local runtime state, not ownership and not replicated authority. It
@@ -121,7 +126,11 @@ provider is accessible only when it belongs to the runner's `OwnedActionComponen
 request. The provider receives the optional access source and invocation target independently and may expose a transient
 `IGameplayActionRequestReservation` after the provider's access policy allows the request. The authoritative runner holds that
 lease while the request enters the executor, binds it to a running `ExecutionId`, and releases it on
-every synchronous rollback, terminal result, cancellation, requester disconnect or runner cleanup.
+every synchronous rollback, terminal result, cancellation, requester disconnect or runner cleanup. An
+executor may release that lease early through `GameplayActionContext.ReleaseAccessReservation()`, but
+only after `ReleaseRequesterDependency()` has detached the execution from requester presence and
+sustained input. The request pipeline clears its lease reference before invoking the domain release so
+re-entrant cleanup remains idempotent.
 Client bindings and access claims never cross the network as proof.
 An `IGameplayActionAccessProvider` returns both access and any contextual requester-presence policy;
 the authority derives that policy from its resolved domain data. The request transport carries no
@@ -130,9 +139,12 @@ binding `InputRequirement` or other binding data.
 Executors require requester presence by default. An executor may opt out through
 `RequiresRequesterPresence == false` when accepted work is world-owned from its start. An execution
 that becomes world-owned at an authoritative gameplay commit keeps the default pre-commit policy and
-calls `GameplayActionContext.ReleaseRequesterDependency()` from its commit path. This transition only
-stops sustained requester-access and requester-teardown cancellation; it does not complete the
-execution, release its action reservation, or make a missing target valid before the commit.
+calls `GameplayActionContext.ReleaseRequesterDependency()` from its commit path. This transition also
+removes held-input cancellation and tells the requesting client to stop tracking sustain for the
+matching execution ID without removing its presentation. It does not complete the execution, release
+its action reservation, or make a missing target valid before the commit. Once requester dependency is
+released, the executor may call `ReleaseAccessReservation()` to release an optional target/resource
+lease while retaining the execution and host reservation.
 
 ## Execution presentation and networking
 
@@ -165,11 +177,12 @@ its more informative `RequestedLocally` relation is preserved.
 
 The request payload is intentionally small: component path + stable `ActionId` + optional access-source
 path + optional target path. The authority resolves both paths independently in its own scene tree and
-never trusts client-provided objects. It returns started/progress/terminal acknowledgements. Terminal
-reconciliation includes the `ExecutionId`, so an old acknowledgement cannot close a newer execution
-of the same action. Access source and target remain request data rather than execution identity:
-request/concurrency keys stay `(Component, ActionId)`, while sustained validation retains both values
-accepted for the execution.
+never trusts client-provided objects. It returns started/progress/terminal acknowledgements plus a
+requester-dependency release acknowledgement carrying the execution ID. Terminal and lifecycle
+reconciliation include the `ExecutionId`, so an old acknowledgement cannot close or detach a newer
+execution of the same action. Access source and target remain request data rather than execution
+identity: request/concurrency keys stay `(Component, ActionId)`, while sustained validation retains
+both values accepted for the execution.
 
 ## Generic action presentation
 
@@ -264,15 +277,20 @@ target UX.
 
 Access checks stay pure so local availability can be evaluated repeatedly. A provider may acquire an
 optional authority-side lease only after that check succeeds; the runner owns the lease lifecycle and
-does not turn domain-specific access into a second execution engine.
+does not turn domain-specific access into a second execution engine. The executor may release the lease
+before terminal completion, but only after requester dependency has ended; the pipeline remains the
+sole owner of the concrete reservation.
 
-### AD-14 — Commit releases requester dependency explicitly
+### AD-14 — Commit releases requester dependencies explicitly
 
 A requested execution remains subject to sustained requester access until its authoritative gameplay
 commit succeeds. The executor then calls `GameplayActionContext.ReleaseRequesterDependency()` to let
 post-commit recovery survive target disappearance, requester departure, or access loss while the
-generic execution reservation remains active until its normal terminal lifecycle. Interaction does not
-special-case destroyed targets as valid access.
+generic execution reservation remains active until its normal terminal lifecycle. This also removes
+sustained-input cancellation and is acknowledged to the requester with a stable execution ID. The
+executor may subsequently call `ReleaseAccessReservation()` to make the optional target/resource lease
+available while retaining host/action concurrency. Interaction does not special-case destroyed targets
+as valid access before this explicit transition.
 
 ### AD-15 — Stable capabilities are authored; transient conditions are rules
 
@@ -308,8 +326,6 @@ than new features:
 
 - terminal executor callbacks currently run between reservation release and final notification;
   exception handling should eventually guarantee retirement finalization and terminal notification;
-- a world-owned running execution may outlive the requester node stored with it; terminal requester
-  notification should explicitly guard or detach a freed requester;
 - a gesture snapshots candidate binding IDs on press but re-reads their current cached availability at
   hold/release resolution, so availability may change the winner inside an already-started gesture;
 - when a `Press` binding shares an input with a `Release` binding, the gesture resolver currently waits

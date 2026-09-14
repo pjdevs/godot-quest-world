@@ -211,6 +211,16 @@ public readonly record struct GameplayActionContext(
         ExecutionId > 0ul && Component.ReleaseRequesterDependency(ExecutionId);
 
     /// <summary>
+    /// Releases the optional access-provider reservation after requester dependency was released.
+    /// </summary>
+    /// <remarks>
+    /// This leaves the execution and its host/action reservation active. Executors should call
+    /// <see cref="ReleaseRequesterDependency"/> first, after their authoritative gameplay commit.
+    /// </remarks>
+    public bool ReleaseAccessReservation() =>
+        ExecutionId > 0ul && Component.ReleaseAccessReservation(ExecutionId);
+
+    /// <summary>
     /// Completes the execution and releases its action reservation.
     /// </summary>
     public bool CompleteExecution() =>
