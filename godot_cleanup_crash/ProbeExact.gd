@@ -1,9 +1,9 @@
 extends SceneTree
 
 const REPRO_SCENES := [
-    "res://quest_world/character/Character.tscn",
-    "res://quest_world/interactibles/lever_wall/LeverWall.tscn",
-    "res://addons/interaction_plugin/integration/stateful/examples/LongActionExample.tscn",
+    "res://mrp/MinimalBaseGroundedActionPair.tscn",
+    "res://mrp/LeverScriptOnly.tscn",
+    "res://mrp/LongActionWithOfferDetails.tscn",
 ]
 
 func _initialize() -> void:
