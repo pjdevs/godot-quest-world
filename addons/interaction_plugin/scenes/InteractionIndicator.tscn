@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://mknaynw5h20v"]
 
-[ext_resource type="Script" uid="uid://b1swvsewk4irt" path="res://addons/interaction_plugin/presentation/ui/InteractionIndicatorWidget.cs" id="1_indicator"]
-[ext_resource type="Texture2D" uid="uid://cisb8qps17tgm" path="res://addons/interaction_plugin/resources/indicator.svg" id="2_indicator_texture"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/presentation/ui/InteractionIndicatorWidget.cs" id="1_indicator"]
+[ext_resource type="Texture2D" path="res://addons/interaction_plugin/resources/indicator.svg" id="2_indicator_texture"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_axnyr"]
 bg_color = Color(0.6, 0.6, 0.6, 0)

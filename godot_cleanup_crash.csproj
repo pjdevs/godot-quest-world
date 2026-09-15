@@ -11,52 +11,6 @@
     <RootNamespace>GodotCleanupCrash</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Remove="quest_world/game/**/*.cs" />
-    <Compile Remove="quest_world/world/**/*.cs" />
     <PackageReference Include="gdUnit4.api" Version="5.1.0-rc5" />
-    <Compile
-      Include="../gdunit4_testadapter_v5/GdUnit4TestRunnerScene.cs"
-      LinkBase="external/gdunit4_testadapter_v5"
-    />
-    <Compile
-      Include="../addons/game_session/runtime/**/*.cs"
-      LinkBase="external/game_session/runtime"
-    />
-    <Compile
-      Include="../addons/network_session/runtime/**/*.cs"
-      LinkBase="external/network_session/runtime"
-    />
-    <Compile
-      Include="../addons/game_session/tests/GameSessionTestFixtures.cs"
-      LinkBase="external/game_session/tests"
-    />
-    <Compile
-      Include="../addons/gameplay_action_plugin/tests/**/*.cs"
-      LinkBase="external/gameplay_action_plugin/tests"
-    />
-    <Compile Include="../addons/*/editor/**/*.cs" LinkBase="external/addons/editor" />
-    <Compile
-      Include="../addons/interaction_plugin/tests/**/*.cs"
-      Exclude="../addons/interaction_plugin/tests/InteractionInputMigrationTest.cs"
-      LinkBase="external/interaction_plugin/tests"
-    />
-    <Compile
-      Include="../addons/stateful_plugin/tests/StatefulBehaviorTest.cs"
-      LinkBase="external/stateful_plugin/tests"
-    />
-    <Compile Include="../quest_world/game/Game.cs" LinkBase="external/quest_world/game" />
-    <Compile
-      Include="../quest_world/game/PlayerCharacterSpawnManager.cs"
-      LinkBase="external/quest_world/game"
-    />
-    <Compile
-      Include="../quest_world/game/PlayerNetworkIdentity.cs"
-      LinkBase="external/quest_world/game"
-    />
-    <Compile Include="../quest_world/world/**/*.cs" LinkBase="external/quest_world/world" />
-    <Compile
-      Include="../quest_world/interactibles/door/**/*.cs"
-      LinkBase="external/quest_world/interactibles/door"
-    />
   </ItemGroup>
 </Project>

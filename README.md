@@ -1,70 +1,66 @@
 # Godot Mono cleanup-crash MRP
 
-This directory contains the smallest reproduction currently confirmed for the
-Godot Mono shutdown crash observed in the Quest World project.
+Cette branche est un projet Godot Mono autonome dédié à la reproduction du
+crash de shutdown observé dans Quest World. Le MRP est volontairement à la
+racine du dépôt ; il ne dépend plus de fichiers situés dans un dépôt parent.
 
-## Reproduction
-
-Environment used for the confirmed runs:
+## Environnement
 
 - macOS
 - Godot `4.7.2.stable.mono.official.ed1daf0bf`
 - .NET `10.0.401`
 
-From the repository root:
+## Vérifier la baseline
+
+Depuis la racine :
 
 ```sh
-dotnet build godot_cleanup_crash/godot_cleanup_crash.csproj --nologo
+dotnet build godot_cleanup_crash.csproj --nologo
 /Applications/Godot_mono.app/Contents/MacOS/Godot \
-  --headless --path godot_cleanup_crash \
+  --headless --path . \
   --script res://ProbeExact.gd --quit-after 1
 ```
 
-`ProbeExact.gd` performs synchronous `PackedScene` loads and then calls
-`quit()`. It does not instantiate the scenes and does not run GdUnit tests.
-The default load order is:
+`ProbeExact.gd` charge synchroniquement les trois scènes réduites puis quitte.
+Il n'instancie pas les scènes et n'exécute pas de test GdUnit. La séquence par
+défaut est :
 
 1. `mrp/MinimalBaseGroundedActionPair.tscn`
 2. `mrp/LeverScriptOnly.tscn`
 3. `mrp/LongActionWithOfferDetails.tscn`
 
-The process may report exit code `0` or `134`; classify a run as a crash when
-the output contains `handle_crash: Program crashed with signal 11`.
+Une liste séparée par des virgules peut être passée après `--` pour tester une
+autre combinaison de scènes :
 
-The loader also accepts a comma-separated scene list after `--`, which is
-useful for controls and load-order experiments.
+```sh
+/Applications/Godot_mono.app/Contents/MacOS/Godot \
+  --headless --path . \
+  --script res://ProbeExact.gd --quit-after 1 -- \
+  'res://mrp/MinimalBaseGroundedActionPair.tscn,res://mrp/LeverScriptOnly.tscn'
+```
 
-## Current findings
+## État actuel
 
-The positive sequence was reproduced repeatedly at 10/10 before and after
-cache cleanup. Single scenes and several scene pairs are stable. The crash is
-at process teardown, after the synchronous loads, with the characteristic
-Godot Mono backtrace entering `std::__1::recursive_mutex::lock()` and the
-CoreCLR finalizer thread. Verbose runs reported leaked `CSharpScript`
-resources, including gameplay-action, inventory, carry and interaction-offer
-scripts.
+Le montage aplati compile et charge proprement la séquence positive sur la
+baseline actuelle. Les références de scripts et de textures utilisent les
+chemins locaux ; les anciens UID de l'autre projet ont été retirés pour que le
+MRP reste reproductible après un clone propre. Les fichiers `.uid` et
+`.godot/` sont générés localement et ignorés.
 
-The scene graph needed by the positive sequence is the reduced Character
-action/inventory/carry graph plus the stateful long-action offer chain. In the
-current assembly experiment, the following parent-project source groups are
-also required to preserve the positive result:
+Le crash historique n'est pas reproduit par cette baseline aplatie : les
+sources et l'assemblage externes qui le déclenchaient dans l'expérience
+précédente ont été supprimés avec le projet original. La suite de
+l'investigation consiste donc à réintroduire les composants ou groupes de
+sources un par un dans ce projet local, en conservant le probe load-only.
 
-- the GdUnit adapter and `gdUnit4.api` package;
-- game-session and network-session runtime sources;
-- `GameSessionTestFixtures.cs`;
-- the gameplay-action, editor and interaction test source groups, except
-  `InteractionInputMigrationTest.cs`;
-- `StatefulBehaviorTest.cs`;
-- `Game.cs`, `PlayerCharacterSpawnManager.cs` and `PlayerNetworkIdentity.cs`;
-- the world and door source groups.
+Le crash à documenter, lorsqu'il est présent, se produit à la sortie du
+processus et contient typiquement :
 
-These files are linked from the parent project by the standalone `.csproj`.
-That is intentional for the current assembly-composition repro, but means this
-is not yet a fully self-contained upstream MRP. Copying those sources into the
-standalone project changes the assembly/resource composition and was stable in
-the experiments.
+```text
+handle_crash: Program crashed with signal 11
+std::__1::recursive_mutex::lock()
+FinalizerThread::FinalizeAllObjects()
+```
 
-The tests are therefore not the execution trigger, but their compiled type
-graph contributes to the current project-dependent reproduction. The next
-step for an upstream issue is to replace the parent-project links with a
-small, self-contained assembly while retaining the same crash.
+Le code de retour peut être `0` ou `134`; il faut classifier la sortie sur la
+présence de `handle_crash: Program crashed` plutôt que sur le seul code retour.
