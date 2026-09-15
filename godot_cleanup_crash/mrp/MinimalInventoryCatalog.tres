@@ -1,0 +1,6 @@
+[gd_resource type="Resource" script_class="InventoryCatalog" format=3]
+
+[ext_resource type="Script" path="res://addons/inventory_plugin/runtime/InventoryCatalog.cs" id="1_catalog"]
+
+[resource]
+script = ExtResource("1_catalog")

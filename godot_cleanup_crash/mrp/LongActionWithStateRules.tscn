@@ -1,0 +1,24 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://mrp/LongActionActionInteractiveStatefulOnly.tscn" id="1_action"]
+[ext_resource type="Script" path="res://addons/gameplay_action_plugin/runtime/rules/GameplayActionRule.cs" id="2_rule"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/integration/stateful/StatefulStateInteractionRule.cs" id="3_state_rule"]
+
+[sub_resource type="Resource" id="PhaseRule"]
+script = ExtResource("3_state_rule")
+StatefulPath = NodePath("../StatefulComponent")
+ExpectedStates = Array[StringName]([&"idle", &"activating"])
+MismatchAvailability = 1
+BlockReason = "This is already activated."
+
+[sub_resource type="Resource" id="ReadyRule"]
+script = ExtResource("3_state_rule")
+StatefulPath = NodePath("../StatefulComponent")
+ExpectedStates = Array[StringName]([&"idle"])
+MismatchAvailability = 1
+BlockReason = "This is busy."
+
+[node name="LongActionWithStateRules" instance=ExtResource("1_action")]
+
+[node name="ActivateAction" parent="GameplayActions" index="0"]
+Rules = Array[ExtResource("2_rule")]([SubResource("PhaseRule"), SubResource("ReadyRule")])

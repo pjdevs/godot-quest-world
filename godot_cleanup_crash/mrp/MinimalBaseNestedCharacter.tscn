@@ -1,0 +1,25 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/runtime/Character.cs" id="1_character"]
+[ext_resource type="PackedScene" path="res://mrp/MinimalUAL.tscn" id="2_ual"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/runtime/CharacterCameraRig.cs" id="3_camera_rig"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/runtime/CharacterCameraEffects.cs" id="4_camera_effects"]
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/runtime/CharacterAnimationController.cs" id="5_animation_controller"]
+
+[node name="Character" type="CharacterBody3D"]
+script = ExtResource("1_character")
+
+[node name="Visual" type="Node3D" parent="."]
+
+[node name="UALCharacter" parent="Visual" instance=ExtResource("2_ual")]
+
+[node name="AnimationController" type="Node" parent="."]
+script = ExtResource("5_animation_controller")
+
+[node name="CameraYaw" type="Node3D" parent="."]
+script = ExtResource("3_camera_rig")
+
+[node name="CameraPitch" type="Node3D" parent="CameraYaw"]
+
+[node name="CameraEffects" type="Node3D" parent="CameraYaw/CameraPitch"]
+script = ExtResource("4_camera_effects")

@@ -1,0 +1,12 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://mrp/LongActionActionInteractiveOnly.tscn" id="1_action"]
+[ext_resource type="Script" path="res://addons/stateful_plugin/runtime/StatefulComponent.cs" id="2_stateful"]
+[ext_resource type="Resource" path="res://addons/interaction_plugin/integration/stateful/examples/long_action_states.tres" id="3_states"]
+
+[node name="LongActionActionInteractiveStatefulOnly" instance=ExtResource("1_action")]
+
+[node name="StatefulComponent" type="Node" parent="."]
+script = ExtResource("2_stateful")
+Schema = ExtResource("3_states")
+InitialState = &"idle"

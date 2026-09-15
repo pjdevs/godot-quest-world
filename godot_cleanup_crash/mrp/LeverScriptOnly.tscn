@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://quest_world/interactibles/lever_wall/LeverWall.cs" id="1_lever"]
+
+[node name="LeverScriptOnly" type="Node3D"]
+script = ExtResource("1_lever")

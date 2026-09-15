@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="InventoryCatalog" format=3 uid="uid://vqd34pcyut5r"]
+
+[ext_resource type="Script" uid="uid://dn35rp4w1f58" path="res://addons/inventory_plugin/runtime/InventoryItemDefinition.cs" id="1_nv1fm"]
+[ext_resource type="Resource" uid="uid://dh5md4bnp2o3x" path="res://quest_world/interactibles/battery/BatteryItem.tres" id="2_x8yms"]
+[ext_resource type="Script" uid="uid://bigpf5i68whtl" path="res://addons/inventory_plugin/runtime/InventoryCatalog.cs" id="2_yg3h4"]
+
+[resource]
+script = ExtResource("2_yg3h4")
+Items = Array[ExtResource("1_nv1fm")]([ExtResource("2_x8yms")])
+metadata/_custom_type_script = "uid://bigpf5i68whtl"

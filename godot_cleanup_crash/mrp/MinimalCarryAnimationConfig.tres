@@ -1,0 +1,6 @@
+[gd_resource type="Resource" script_class="CarryAnimationConfig" format=3]
+
+[ext_resource type="Script" path="res://quest_world/interactibles/carriable/CarryAnimationConfig.cs" id="1_config"]
+
+[resource]
+script = ExtResource("1_config")

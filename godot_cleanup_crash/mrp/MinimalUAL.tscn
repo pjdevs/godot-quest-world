@@ -1,0 +1,12 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/dummy_character_plugin/runtime/CharacterLookPitchModifier.cs" id="1_look_pitch"]
+
+[node name="UALCharacter" type="Node3D"]
+
+[node name="Armature" type="Node3D" parent="."]
+
+[node name="GeneralSkeleton" type="Skeleton3D" parent="Armature"]
+
+[node name="LookPitchModifier" type="SkeletonModifier3D" parent="Armature/GeneralSkeleton"]
+script = ExtResource("1_look_pitch")

@@ -1,0 +1,29 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://mrp/LongActionActionOnly.tscn" id="1_action"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/interactive/InteractiveComponent.cs" id="2_interactive"]
+[ext_resource type="PackedScene" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="3_action_prompt"]
+[ext_resource type="PackedScene" path="res://addons/interaction_plugin/scenes/InteractionIndicator.tscn" id="4_indicator"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/offers/InteractionOffer.cs" id="5_offer"]
+
+[sub_resource type="Resource" id="Offer"]
+script = ExtResource("5_offer")
+ActionId = &"activate"
+
+[node name="LongActionActionInteractiveOnly" instance=ExtResource("1_action")]
+
+[node name="Interactive" type="Node" parent="." node_paths=PackedStringArray("InteractionArea", "IndicationArea", "InteractionAnchor", "ActionComponent")]
+script = ExtResource("2_interactive")
+InteractionArea = NodePath("../InteractionArea")
+IndicationArea = NodePath("../IndicationArea")
+InteractionAnchor = NodePath("../InteractionAnchor")
+ActionPromptScene = ExtResource("3_action_prompt")
+IndicationScene = ExtResource("4_indicator")
+ActionComponent = NodePath("../GameplayActions")
+Offers = Array[ExtResource("5_offer")]([SubResource("Offer")])
+
+[node name="InteractionArea" type="Area3D" parent="."]
+
+[node name="IndicationArea" type="Area3D" parent="."]
+
+[node name="InteractionAnchor" type="Marker3D" parent="."]

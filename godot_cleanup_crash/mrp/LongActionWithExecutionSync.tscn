@@ -1,0 +1,10 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://mrp/LongActionWithStateRules.tscn" id="1_action"]
+[ext_resource type="Script" path="res://addons/gameplay_action_plugin/runtime/execution/GameplayActionExecutionSynchronizer.cs" id="2_sync"]
+
+[node name="LongActionWithExecutionSync" instance=ExtResource("1_action")]
+
+[node name="GameplayActionExecutionSynchronizer" type="MultiplayerSynchronizer" parent="." node_paths=PackedStringArray("Component")]
+script = ExtResource("2_sync")
+Component = NodePath("../GameplayActions")

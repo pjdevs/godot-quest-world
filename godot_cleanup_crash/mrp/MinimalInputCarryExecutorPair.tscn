@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/gameplay_action_plugin/runtime/actions/InputGameplayAction.cs" id="1_action"]
+[ext_resource type="Script" path="res://quest_world/interactibles/carriable/DropExecutor.cs" id="2_executor"]
+[ext_resource type="Script" path="res://quest_world/interactibles/carriable/CarryItemRule.cs" id="3_carry_rule"]
+
+[node name="MinimalInputCarryExecutorPair" type="Node"]
+script = ExtResource("1_action")

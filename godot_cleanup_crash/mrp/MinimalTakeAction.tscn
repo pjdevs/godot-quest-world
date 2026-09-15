@@ -1,0 +1,20 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayAction.cs" id="1_action"]
+[ext_resource type="Script" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionDefinition.cs" id="2_definition"]
+[ext_resource type="Script" path="res://quest_world/interactibles/carriable/TakeExecutor.cs" id="3_executor"]
+
+[sub_resource type="Resource" id="Definition"]
+script = ExtResource("2_definition")
+Id = &"take"
+Label = "Take"
+
+[node name="TakeAction" type="Node" node_paths=PackedStringArray("Executor")]
+script = ExtResource("1_action")
+Definition = SubResource("Definition")
+Executor = NodePath("TakeExecutor")
+ExecutionVisibility = 2
+ConfiguredAccessProviderId = &"interaction"
+
+[node name="TakeExecutor" type="Node" parent="."]
+script = ExtResource("3_executor")

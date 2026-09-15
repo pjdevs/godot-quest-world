@@ -1,0 +1,25 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <EnablePreviewFeatures>true</EnablePreviewFeatures>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NuGetAudit>false</NuGetAudit>
+    <RootNamespace>GodotCleanupCrash</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="gdUnit4.api" Version="5.1.0-rc5" />
+    <Compile Include="../gdunit4_testadapter_v5/GdUnit4TestRunnerScene.cs" LinkBase="external/gdunit4_testadapter_v5" />
+    <Compile Include="../addons/game_session/runtime/**/*.cs" LinkBase="external/game_session/runtime" />
+    <Compile Include="../addons/network_session/runtime/**/*.cs" LinkBase="external/network_session/runtime" />
+    <Compile Include="../addons/game_session/tests/GameSessionTestFixtures.cs" LinkBase="external/game_session/tests" />
+    <Compile Include="../addons/*/editor/**/*.cs" LinkBase="external/addons/editor" />
+    <Compile Include="../addons/stateful_plugin/tests/**/*.cs" LinkBase="external/stateful_plugin/tests" />
+    <Compile Include="../addons/gameplay_action_plugin/tests/**/*.cs" LinkBase="external/gameplay_action_plugin/tests" />
+    <Compile Include="../addons/interaction_plugin/tests/**/*.cs" LinkBase="external/interaction_plugin/tests" />
+    <Compile Include="../quest_world/character/QuestWorldPlayerState.cs" LinkBase="external/quest_world/character" />
+  </ItemGroup>
+</Project>

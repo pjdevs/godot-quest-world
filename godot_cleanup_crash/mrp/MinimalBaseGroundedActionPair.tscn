@@ -1,0 +1,78 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://mrp/MinimalBaseNestedCharacter.tscn" id="1_base"]
+[ext_resource type="Script" path="res://quest_world/character/QuestWorldCharacter.cs" id="2_character"]
+[ext_resource type="Script" path="res://addons/gameplay_action_plugin/runtime/actions/GameplayActionComponent.cs" id="3_component"]
+[ext_resource type="PackedScene" path="res://mrp/MinimalTakeAction.tscn" id="4_take"]
+[ext_resource type="PackedScene" path="res://mrp/MinimalInputCarryExecutorPair.tscn" id="5_pair"]
+[ext_resource type="Script" path="res://addons/gameplay_action_plugin/runtime/rules/GameplayActionRule.cs" id="6_rule"]
+[ext_resource type="Script" path="res://quest_world/character/GroundedActionRule.cs" id="7_grounded"]
+[ext_resource type="Script" path="res://addons/gameplay_action_plugin/runtime/runner/GameplayActionRunner.cs" id="8_runner"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/interactor/InteractionInteractor.cs" id="9_interactor"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/detection/AreaInteractionDetector.cs" id="10_detector"]
+[ext_resource type="Script" path="res://addons/inventory_plugin/runtime/InventoryComponent.cs" id="11_inventory"]
+[ext_resource type="Script" path="res://addons/inventory_plugin/runtime/InventoryReplicationSynchronizer.cs" id="12_inventory_sync"]
+[ext_resource type="Resource" path="res://mrp/MinimalInventoryCatalog.tres" id="13_catalog"]
+[ext_resource type="Script" path="res://quest_world/interactibles/carriable/CarryComponent.cs" id="14_carry"]
+[ext_resource type="Resource" path="res://mrp/MinimalCarryAnimationConfig.tres" id="15_animation"]
+[ext_resource type="Script" path="res://addons/gameplay_action_plugin/presentation/ui/GameplayActionPresenter.cs" id="16_action_presenter"]
+[ext_resource type="PackedScene" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="17_action_prompt"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/presentation/ui/InteractionPresenter.cs" id="18_interaction_presenter"]
+[ext_resource type="PackedScene" path="res://addons/interaction_plugin/scenes/InteractionPrompt.tscn" id="19_interaction_prompt"]
+
+[sub_resource type="SceneReplicationConfig" id="CarryReplication"]
+properties/0/path = NodePath(".:CarriedItemId")
+properties/0/spawn = true
+properties/0/replication_mode = 2
+properties/1/path = NodePath(".:ReplicatedCurrentCarryOperationState")
+properties/1/spawn = true
+properties/1/replication_mode = 2
+
+[sub_resource type="SceneReplicationConfig" id="InventoryReplication"]
+
+[sub_resource type="Resource" id="GroundedRule"]
+script = ExtResource("7_grounded")
+
+[node name="MinimalBaseGroundedActionPair" instance=ExtResource("1_base")]
+script = ExtResource("2_character")
+
+[node name="GameplayActions" type="Node" parent="." node_paths=PackedStringArray("Actions", "Host")]
+script = ExtResource("3_component")
+Actions = [NodePath("TakeAction")]
+Host = NodePath("..")
+
+[node name="TakeAction" parent="GameplayActions" instance=ExtResource("4_take")]
+Rules = Array[ExtResource("6_rule")]([SubResource("GroundedRule")])
+
+[node name="GameplayActionRunner" type="Node" parent="." node_paths=PackedStringArray("OwnedActionComponent")]
+script = ExtResource("8_runner")
+OwnedActionComponent = NodePath("../GameplayActions")
+
+[node name="InteractionInteractor" type="Node" parent="." node_paths=PackedStringArray("Detector", "Runner")]
+script = ExtResource("9_interactor")
+Detector = NodePath("Detector")
+Runner = NodePath("../GameplayActionRunner")
+
+[node name="Detector" type="Node" parent="InteractionInteractor" node_paths=PackedStringArray("ViewOrigin")]
+script = ExtResource("10_detector")
+ViewOrigin = NodePath("../../CameraYaw/CameraPitch/CameraEffects")
+
+[node name="InventoryComponent" type="Node" parent="."]
+script = ExtResource("11_inventory")
+Catalog = ExtResource("13_catalog")
+
+[node name="InventoryReplicationSynchronizer" type="MultiplayerSynchronizer" parent="InventoryComponent" node_paths=PackedStringArray("Inventory")]
+root_path = NodePath("../..")
+replication_config = SubResource("InventoryReplication")
+script = ExtResource("12_inventory_sync")
+Inventory = NodePath("..")
+
+[node name="CarryComponent" type="Node" parent="." node_paths=PackedStringArray("CarriableAnchor", "Inventory", "AnimationController")]
+script = ExtResource("14_carry")
+CarriableAnchor = NodePath("CarriableAnchor")
+Inventory = NodePath("../InventoryComponent")
+AnimationController = NodePath("../AnimationController")
+AnimationConfig = ExtResource("15_animation")
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="CarryComponent"]
+replication_config = SubResource("CarryReplication")

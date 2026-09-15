@@ -1,0 +1,28 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://mrp/LongActionWithExecutionSync.tscn" id="1_action"]
+[ext_resource type="Script" path="res://addons/gameplay_action_plugin/runtime/bindings/GameplayActionBindingConfig.cs" id="2_binding"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/examples/rules/InteractorGroupInteractionRule.cs" id="3_group_rule"]
+[ext_resource type="Script" path="res://addons/interaction_plugin/runtime/offers/InteractionOffer.cs" id="4_offer"]
+[ext_resource type="Script" path="res://addons/gameplay_action_plugin/runtime/rules/GameplayActionRule.cs" id="5_rule"]
+
+[sub_resource type="Resource" id="Binding"]
+script = ExtResource("2_binding")
+InputActionName = &"interact"
+InputRequirement = 1
+
+[sub_resource type="Resource" id="GroupRule"]
+script = ExtResource("3_group_rule")
+RequiredGroup = &"Player"
+MissingGroupReason = "Only the player can use this."
+
+[sub_resource type="Resource" id="Offer"]
+script = ExtResource("4_offer")
+ActionId = &"activate"
+BindingConfig = SubResource("Binding")
+Rules = Array[ExtResource("5_rule")]([SubResource("GroupRule")])
+
+[node name="LongActionWithOfferDetails" instance=ExtResource("1_action")]
+
+[node name="Interactive" parent="." index="3"]
+Offers = Array[ExtResource("4_offer")]([SubResource("Offer")])
