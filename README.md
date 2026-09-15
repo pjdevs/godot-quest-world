@@ -39,22 +39,19 @@ autre combinaison de scènes :
   'res://mrp/MinimalBaseGroundedActionPair.tscn,res://mrp/LeverScriptOnly.tscn'
 ```
 
-## État actuel
+## Résultat de l'investigation crash
 
-Le montage aplati compile et charge proprement la séquence positive sur la
-baseline actuelle. Les références de scripts et de textures utilisent les
-chemins locaux ; les anciens UID de l'autre projet ont été retirés pour que le
-MRP reste reproductible après un clone propre. Les fichiers `.uid` et
-`.godot/` sont générés localement et ignorés.
+La baseline aplatie reste stable. Le positif observé dans le projet complet
+nécessitait le graphe C# réseau/session/world complet, l'assembly de test et la
+scène `test_world.tscn` complète ; le MRP minimal n'a pas permis d'isoler une
+cause unique.
 
-Le crash historique n'est pas reproduit par cette baseline aplatie : les
-sources et l'assemblage externes qui le déclenchaient dans l'expérience
-précédente ont été supprimés avec le projet original. La suite de
-l'investigation consiste donc à réintroduire les composants ou groupes de
-sources un par un dans ce projet local, en conservant le probe load-only.
+Les tests ont confirmé que `.godot/` n'est pas indispensable et qu'aucune
+correction de code production n'a été identifiée. L'investigation est donc
+mise en pause ici ; les fichiers `.uid` et `.godot/` restent générés localement
+et ignorés.
 
-Le crash à documenter, lorsqu'il est présent, se produit à la sortie du
-processus et contient typiquement :
+Le crash observé contient typiquement :
 
 ```text
 handle_crash: Program crashed with signal 11
