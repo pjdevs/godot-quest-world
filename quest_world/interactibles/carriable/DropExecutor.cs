@@ -23,7 +23,7 @@ public partial class DropExecutor : GameplayActionExecutor
 
     private async Task<bool> WaitForDropCompletion(GameplayActionContext context, ICarrier carrier)
     {
-        bool result = await carrier.TryDropAsync(() => context.ReleaseRequesterDependency());
+        bool result = await carrier.TryDropAsync();
 
         if (result)
         {

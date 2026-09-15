@@ -1,0 +1,18 @@
+{
+    "godotTools.editorPath.godot4": "/Applications/Godot_mono.app/Contents/MacOS/Godot",
+    "files.eol": "\n",
+    "files.encoding": "utf8",
+    "editor.formatOnSave": true,
+    "[csharp]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 4,
+        "editor.detectIndentation": false,
+        "editor.defaultFormatter": "csharpier.csharpier-vscode"
+    },
+    "[xml]": {
+        "editor.defaultFormatter": "csharpier.csharpier-vscode"
+    },
+    "editor.rulers": [
+        100
+    ]
+}

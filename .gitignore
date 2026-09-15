@@ -1,15 +1,2 @@
-# Godot 4+ specific ignores
 .godot/
-/android/
-/gdunit4_testadapter_v5/
-
-# MacOS
-**/.DS_Store
-
-# Local linked worktrees
-.worktrees/
-
-# VSCode
-.vscode/
-!.vscode/launch.json
-!.vscode/tasks.json
+*.uid
