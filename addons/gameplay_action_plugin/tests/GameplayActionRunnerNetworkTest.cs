@@ -21,6 +21,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
     private const int ConnectFrames = 240;
     private const int RoundTripFrames = 16;
     private static readonly StringName OpenAction = new("open");
+    private static readonly StringName BusyAction = new("busy");
     private static int _nextPort = 49120;
 
     [TestCase]
@@ -175,6 +176,47 @@ public sealed partial class GameplayActionRunnerNetworkTest
                     session.Client.ExternalActions.TryGetExecutionPresentation(OpenAction, out _)
                 )
                 .IsFalse();
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [TestCase]
+    public async Task AuthorityRejectsCrossComponentRequesterConcurrencyRace()
+    {
+        Session session = await Connect(serverAllowsAccess: true);
+        NetworkRecordingExecutor serverBusy = AddNetworkAction(session.Server, BusyAction);
+        AddNetworkAction(session.Client, BusyAction);
+        AddNetworkAction(session.Observer, BusyAction);
+        try
+        {
+            int rejections = 0;
+            session.Client.Runner.GameplayActionRejected += (_, actionId, reason) =>
+            {
+                AssertThat(actionId).IsEqual(BusyAction);
+                AssertThat(reason).IsEqual(GameplayActionAvailabilityExtensions.UnavailableReason);
+                rejections++;
+            };
+
+            AssertThat(session.Client.Runner.TryStartActionInput("use")).IsTrue();
+            await session.Pump(RoundTripFrames);
+            AssertThat(session.Server.ExternalActions.IsActionExecuting(OpenAction)).IsTrue();
+
+            // Bypass the requester's local availability to prove the authority repeats the check.
+            session.Client.Runner.RpcId(
+                1,
+                nameof(GameplayActionRunner.ServerTryStartAction),
+                new NodePath("Door/Actions"),
+                BusyAction,
+                new NodePath("Door/AccessSource"),
+                new NodePath("Door/Target")
+            );
+            await session.Pump(RoundTripFrames);
+
+            AssertThat(serverBusy.ExecuteCount).IsEqual(0);
+            AssertThat(rejections).IsEqual(1);
         }
         finally
         {
@@ -553,6 +595,20 @@ public sealed partial class GameplayActionRunnerNetworkTest
             target,
             accessProvider
         );
+    }
+
+    private static NetworkRecordingExecutor AddNetworkAction(PeerScene peer, StringName actionId)
+    {
+        NetworkRecordingExecutor executor = new() { Name = $"{actionId}Executor" };
+        NetworkAccessAction action = new()
+        {
+            Name = $"{actionId}Action",
+            Definition = new GameplayActionDefinition { Id = actionId },
+            Executor = executor,
+        };
+        action.AddChild(executor);
+        peer.ExternalActions.AddAction(action);
+        return executor;
     }
 
     private sealed partial class NetworkAccessAction : GameplayAction

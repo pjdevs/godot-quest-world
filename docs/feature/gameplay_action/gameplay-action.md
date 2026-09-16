@@ -6,8 +6,9 @@ The V1 extraction is complete. `gameplay_action_plugin` is the generic execution
 Interaction and by owned player actions such as `Drop Battery`; there is no remaining Interaction
 compatibility execution path.
 
-The documentation below describes the current contract. Historical implementation plans are not kept
-as roadmap documents once their decisions have been absorbed here.
+The documentation below describes the current contract. The restored requester-concurrency proposal is
+kept in `planned/` as a design record; other historical implementation plans are not kept as roadmap
+documents once their decisions have been absorbed here.
 
 ## Package boundary
 
@@ -16,6 +17,7 @@ as roadmap documents once their decisions have been absorbed here.
 - stable action identity and occurrence ownership;
 - ordered availability rules;
 - host-local reservations and concurrency groups;
+- requester-local concurrency arbitration across action hosts;
 - authoritative execution and terminal lifecycle;
 - local input bindings and gesture arbitration;
 - requester transport, acknowledgements and prediction;
@@ -34,9 +36,10 @@ semantics baked into the action model.
 optional `Label` and `Description` presentation metadata.
 
 `GameplayAction : Node` is one occurrence owned by one `GameplayActionComponent`. It references one
-definition, one executor, an ordered `Rules` collection, a host-local concurrency group and an
-execution visibility policy. `InputGameplayAction` adds only an optional `DefaultBindingConfig` so an
-owned action may opt into automatic local binding without making input a concern of every action.
+definition, one executor, an ordered `Rules` collection, a host-local concurrency group, a requester-local
+concurrency group and execution visibility policies. `InputGameplayAction` adds only an optional
+`DefaultBindingConfig` so an owned action may opt into automatic local binding without making input a
+concern of every action.
 
 `GameplayActionExecutor` is the single command owner. `Execute()` returns:
 
@@ -64,7 +67,9 @@ their requester-specific access.
 
 Reservations are local to one component. One `ActionId` can have at most one active execution and all
 actions sharing a `HostConcurrencyGroup` exclude one another. Different components never share a
-lock.
+lock. Requester concurrency is a separate runner-local reservation: actions with the same non-empty
+`RequesterConcurrencyGroup` exclude one another across the components that runner can request.
+An empty requester group opts out. Programmatic `ExecuteAction()` calls do not occupy requester groups.
 
 Removing an idle action makes it unresolvable and frees it. Removing a running action makes it
 unresolvable immediately but keeps its node, ID reservation and transient presentation alive until
@@ -107,6 +112,14 @@ binding:
 `GameplayActionRunner` owns the input/request boundary. When `OwnedActionComponent` contains an
 `InputGameplayAction` with a `DefaultBindingConfig`, the runner creates/removes that binding with the
 action lifecycle. Integrations such as Interaction add external bindings explicitly.
+
+The runner's request pipeline tracks requester-group occupancy from the pending-request window through
+acknowledged and active requested executions. A non-empty `RequesterConcurrencyGroup` defaults to
+`"default"`; `WhenRequesterBusy` selects `Blocked` or `Hidden` availability while another request in
+that group is present. Occupancy changes invalidate matching bindings across all action components on
+the runner, and terminal results, rejection, rollback and cleanup release it. This arbitration applies
+only to runner requests; it does not change host reservations, target reservations or programmatic
+execution.
 
 `GetRelevantInputs()` is the game input-loop boundary: a locally controlled runner returns all
 non-automatic bound inputs plus inputs still consumed by an active gesture/sustained request. Remote
@@ -230,10 +243,12 @@ Programmatic and player-triggered actions do not have different execution semant
 attached only by request transport and means “this runner is waiting for acknowledgements”; there is
 no invocation-kind flag.
 
-### AD-05 — Concurrency is deliberately host-local
+### AD-05 — Host and requester concurrency have separate owners
 
 Reservations are by `ActionId` and concurrency group inside one `GameplayActionComponent`. V1 does not
-introduce global locks or a cross-host arbitration service.
+introduce global locks or a cross-runner arbitration service. Requester groups are the deliberate
+runner-local counterpart: the request pipeline arbitrates one requester's pending and active actions
+across hosts without changing host ownership.
 
 ### AD-06 — Action removal has a retirement window
 
@@ -315,7 +330,7 @@ Dynamic `AddAction`/`RemoveAction` remains valid when gameplay genuinely grants 
 These are boundaries, not partially implemented features or roadmap commitments:
 
 - gameplay tags, attributes and cooldown frameworks;
-- cross-host locks or global concurrency arbitration;
+- global or cross-runner concurrency arbitration;
 - arbitrary target data / invocation payloads;
 - a generic inventory contract;
 - standardized menus/HUD policy beyond the small presentation model;

@@ -39,6 +39,8 @@ internal sealed class GameplayActionRequestPipeline(
         IGameplayActionRequestReservation
     > _pendingReservations = new();
     private readonly Dictionary<GameplayActionRequestKey, ulong> _acknowledgedExecutions = new();
+    private readonly Dictionary<GameplayActionRequestKey, StringName> _requesterConcurrencyGroups =
+        new();
     private MultiplayerApi? _watchedMultiplayer;
     private bool _ownerPeerLost;
 
@@ -64,7 +66,23 @@ internal sealed class GameplayActionRequestPipeline(
         _pendingRequests.Clear();
         _pendingRequesterDependencyReleases.Clear();
         _pendingClientRequesterDependencyReleases.Clear();
+        _requesterConcurrencyGroups.Clear();
         _sustainedInputs.Clear();
+    }
+
+    internal GameplayActionAvailability EvaluateRequesterConcurrency(
+        GameplayActionComponent component,
+        GameplayAction action,
+        StringName actionId
+    )
+    {
+        GameplayActionRequestKey request = new(component, actionId);
+        StringName group = action.GetRequesterConcurrencyGroup();
+        return !group.IsEmpty && IsRequesterConcurrencyBusy(request, group)
+            ? action.WhenRequesterBusy.ToAvailability(
+                GameplayActionAvailabilityExtensions.UnavailableReason
+            )
+            : new GameplayActionAllowed();
     }
 
     public void ValidateSustainedExecutions()
@@ -76,6 +94,9 @@ internal sealed class GameplayActionRequestPipeline(
             {
                 _requestedExecutions.RemoveAt(index);
                 execution.Reservation?.Release();
+                UntrackRequesterConcurrency(
+                    new GameplayActionRequestKey(execution.Component, execution.ActionId)
+                );
                 continue;
             }
 
@@ -94,6 +115,9 @@ internal sealed class GameplayActionRequestPipeline(
             {
                 _requestedExecutions.RemoveAt(index);
                 execution.Reservation?.Release();
+                UntrackRequesterConcurrency(
+                    new GameplayActionRequestKey(execution.Component, execution.ActionId)
+                );
             }
         }
     }
@@ -202,6 +226,7 @@ internal sealed class GameplayActionRequestPipeline(
             || binding.Component.HasLocalExecutionInGroup(action.GetHostConcurrencyGroup())
             || HasPendingRequestInGroup(binding.Component, action.GetHostConcurrencyGroup())
             || HasAcknowledgedExecutionInGroup(binding.Component, action.GetHostConcurrencyGroup())
+            || IsRequesterConcurrencyBusy(request, action.GetRequesterConcurrencyGroup())
         )
         {
             return false;
@@ -215,6 +240,7 @@ internal sealed class GameplayActionRequestPipeline(
         if (!_owner.IsAuthoritativeRunner)
         {
             _pendingRequests.Add(request);
+            TrackRequesterConcurrency(request, action);
             PredictExecution(binding, action);
             if (binding.InputRequirement == GameplayActionInputRequirement.Pressed)
             {
@@ -309,6 +335,9 @@ internal sealed class GameplayActionRequestPipeline(
             {
                 _requestedExecutions.RemoveAt(index);
                 execution.Reservation?.Release();
+                UntrackRequesterConcurrency(
+                    new GameplayActionRequestKey(execution.Component, execution.ActionId)
+                );
             }
 
             return cancelled;
@@ -362,6 +391,9 @@ internal sealed class GameplayActionRequestPipeline(
             {
                 _requestedExecutions.RemoveAt(index);
                 execution.Reservation?.Release();
+                UntrackRequesterConcurrency(
+                    new GameplayActionRequestKey(execution.Component, execution.ActionId)
+                );
             }
         }
     }
@@ -423,6 +455,51 @@ internal sealed class GameplayActionRequestPipeline(
         return false;
     }
 
+    private bool IsRequesterConcurrencyBusy(in GameplayActionRequestKey request, StringName group)
+    {
+        if (group is null || group.IsEmpty)
+        {
+            return false;
+        }
+
+        foreach (
+            KeyValuePair<
+                GameplayActionRequestKey,
+                StringName
+            > occupied in _requesterConcurrencyGroups
+        )
+        {
+            if (occupied.Key != request && occupied.Value == group)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void TrackRequesterConcurrency(
+        in GameplayActionRequestKey request,
+        GameplayAction action
+    )
+    {
+        StringName group = action.GetRequesterConcurrencyGroup();
+        if (group is null || group.IsEmpty || !_requesterConcurrencyGroups.TryAdd(request, group))
+        {
+            return;
+        }
+
+        _owner.InvalidateRequesterConcurrencyGroup(group, request.Component, request.ActionId);
+    }
+
+    private void UntrackRequesterConcurrency(in GameplayActionRequestKey request)
+    {
+        if (_requesterConcurrencyGroups.Remove(request, out StringName? group) && group is not null)
+        {
+            _owner.InvalidateRequesterConcurrencyGroup(group, request.Component, request.ActionId);
+        }
+    }
+
     /// <summary>Drops the local presentation of one request.</summary>
     /// <remarks>
     /// A prediction is always dropped: nothing acknowledged it. An acknowledged execution is only
@@ -438,6 +515,10 @@ internal sealed class GameplayActionRequestPipeline(
     {
         _pendingRequests.Remove(request);
         _pendingClientRequesterDependencyReleases.Remove(request);
+        if (!_acknowledgedExecutions.ContainsKey(request))
+        {
+            UntrackRequesterConcurrency(request);
+        }
         if (
             request.Component.TryGetExecutionPresentation(
                 request.ActionId,
@@ -613,6 +694,11 @@ internal sealed class GameplayActionRequestPipeline(
         if (!accepted)
         {
             return;
+        }
+
+        if (component.ResolveAction(actionId) is GameplayAction action)
+        {
+            TrackRequesterConcurrency(request, action);
         }
 
         if (requesterDependencyReleased)
@@ -919,6 +1005,14 @@ internal sealed class GameplayActionRequestPipeline(
             return new GameplayActionExecutionRejected();
         }
 
+        GameplayActionRequestKey request = new(component, actionId);
+        if (IsRequesterConcurrencyBusy(request, action.GetRequesterConcurrencyGroup()))
+        {
+            const string reason = GameplayActionAvailabilityExtensions.UnavailableReason;
+            RejectRequest(senderPeerId, componentPath, actionId, reason);
+            return new GameplayActionExecutionRejected(reason);
+        }
+
         GameplayActionAccessPolicy accessPolicy = resolveAccess(
             component,
             action,
@@ -943,7 +1037,6 @@ internal sealed class GameplayActionRequestPipeline(
             return new GameplayActionExecutionRejected(reason);
         }
 
-        GameplayActionRequestKey request = new(component, actionId);
         if (
             !_owner.TryAcquireRequestReservation(
                 component,
@@ -969,6 +1062,7 @@ internal sealed class GameplayActionRequestPipeline(
         }
 
         _pendingRequests.Add(request);
+        TrackRequesterConcurrency(request, action);
         GameplayActionExecutionResult result;
         ulong executionId;
         try
@@ -986,6 +1080,7 @@ internal sealed class GameplayActionRequestPipeline(
             ReleasePendingReservation(request);
             _pendingRequests.Remove(request);
             _pendingRequesterDependencyReleases.Remove(request);
+            UntrackRequesterConcurrency(request);
             throw;
         }
 
@@ -1018,6 +1113,7 @@ internal sealed class GameplayActionRequestPipeline(
         else
         {
             ReleasePendingReservation(request);
+            UntrackRequesterConcurrency(request);
         }
 
         return result;
@@ -1106,6 +1202,7 @@ internal sealed class GameplayActionRequestPipeline(
         }
 
         _acknowledgedExecutions.Remove(request);
+        UntrackRequesterConcurrency(request);
         component.RemoveRequesterExecution(actionId, (ulong)executionId);
         RemoveSustainedRequest(component, actionId);
 
@@ -1236,14 +1333,17 @@ internal sealed class GameplayActionRequestPipeline(
 
             _requestedExecutions.RemoveAt(index);
             execution.Reservation?.Release();
+            UntrackRequesterConcurrency(
+                new GameplayActionRequestKey(execution.Component, execution.ActionId)
+            );
             return;
         }
 
         if (action.Definition is not null)
         {
-            ReleasePendingReservation(
-                new GameplayActionRequestKey(component, action.Definition.Id)
-            );
+            GameplayActionRequestKey request = new(component, action.Definition.Id);
+            ReleasePendingReservation(request);
+            UntrackRequesterConcurrency(request);
         }
     }
 
@@ -1267,12 +1367,18 @@ internal sealed class GameplayActionRequestPipeline(
                 else
                 {
                     _requestedExecutions.RemoveAt(index);
+                    UntrackRequesterConcurrency(
+                        new GameplayActionRequestKey(execution.Component, execution.ActionId)
+                    );
                 }
                 reservation.Release();
             }
             else if (!keepTracking)
             {
                 _requestedExecutions.RemoveAt(index);
+                UntrackRequesterConcurrency(
+                    new GameplayActionRequestKey(execution.Component, execution.ActionId)
+                );
             }
         }
     }

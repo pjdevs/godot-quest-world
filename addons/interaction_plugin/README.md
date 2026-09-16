@@ -97,7 +97,8 @@ An action has two layers:
 
 - `GameplayActionDefinition` is reusable static data: stable `Id`, label, and description.
 - `GameplayAction` is one occurrence on one action host: executor, action rules, concurrency and
-  execution policy.
+  execution policy. `RequesterConcurrencyGroup` and `WhenRequesterBusy` optionally arbitrate this
+  action against other actions requested by the same runner, even when they use another host.
 - `InteractionOffer` is one target-facing invocation: source, `ActionId`, Interaction rules and an
   optional `BindingConfig` containing input, activation mode, hold duration, input requirement, and
   priority. The offer is not an ownership or grant mechanism.
@@ -107,7 +108,12 @@ Keep `Id` stable across builds because it crosses the network. For a non-automat
 input; it is not execution duration. `InputRequirement.Pressed` makes a running execution depend on
 that input until release. Automatic bindings use an empty input and `InputRequirement.None`.
 
-Actions sharing a `HostConcurrencyGroup` are mutually exclusive on their own target. The default group makes all actions of a target exclusive. `Automatic` actions request themselves when focused and do not appear as input prompts.
+Actions sharing a `HostConcurrencyGroup` are mutually exclusive on their own target. The default group
+makes all actions of a target exclusive. Actions sharing a non-empty `RequesterConcurrencyGroup` are
+also mutually exclusive for one runner across hosts; the default requester group is `default`, and an
+empty value opts out. `WhenRequesterBusy` controls whether a busy action is blocked or hidden.
+Programmatic executions do not occupy requester groups. `Automatic` actions request themselves when
+focused and do not appear as input prompts.
 
 ## Write a rule
 
@@ -295,8 +301,9 @@ waits.
 
 The reliable client RPC carries `accessSourcePath + targetPath + actionId`. The server checks the owning
 peer, resolves both nodes and the action from its scene, verifies that the access source authorizes the
-target, derives contextual requester-presence policy from the authoritative offer, validates `Detect`,
-evaluates rules, and only then executes. Do not call the RPC methods directly; use the runner's
+target, rechecks requester concurrency from its runner-local request state, derives contextual
+requester-presence policy from the authoritative offer, validates `Detect`, evaluates rules, and only
+then executes. Do not call the RPC methods directly; use the runner's
 `TryStartActionInput` and `TryEndActionInput`.
 
 ## Build presentation

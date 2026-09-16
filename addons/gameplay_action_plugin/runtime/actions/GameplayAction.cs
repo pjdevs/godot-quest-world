@@ -10,6 +10,9 @@ public partial class GameplayAction : Node
     /// <summary>Default host-local concurrency group used when none is authored.</summary>
     public static readonly StringName DefaultHostConcurrencyGroup = new("default");
 
+    /// <summary>Default requester-local concurrency group used when none is authored.</summary>
+    public static readonly StringName DefaultRequesterConcurrencyGroup = new("default");
+
     /// <summary>Gets or sets the reusable identity and presentation metadata for this occurrence.</summary>
     [Export]
     public GameplayActionDefinition? Definition { get; set; }
@@ -25,6 +28,16 @@ public partial class GameplayAction : Node
     /// <summary>Gets or sets the host-local group whose active actions exclude this occurrence.</summary>
     [Export]
     public StringName HostConcurrencyGroup { get; set; } = DefaultHostConcurrencyGroup;
+
+    /// <summary>Gets or sets the requester-local group whose requested actions exclude one another.</summary>
+    [ExportGroup("Requester Availability")]
+    [Export]
+    public StringName RequesterConcurrencyGroup { get; set; } = DefaultRequesterConcurrencyGroup;
+
+    /// <summary>Gets or sets the availability while this requester's group runs for another action.</summary>
+    [Export]
+    public GameplayActionUnavailableKind WhenRequesterBusy { get; set; } =
+        GameplayActionUnavailableKind.Blocked;
 
     /// <summary>Gets or sets the availability while this action's host group runs for the requester.</summary>
     [ExportGroup("Execution Availability")]
@@ -61,6 +74,10 @@ public partial class GameplayAction : Node
         HostConcurrencyGroup is null || HostConcurrencyGroup.IsEmpty
             ? DefaultHostConcurrencyGroup
             : HostConcurrencyGroup;
+
+    /// <summary>Returns the authored requester group, preserving an empty value as opt-out.</summary>
+    public StringName GetRequesterConcurrencyGroup() =>
+        RequesterConcurrencyGroup ?? new StringName();
 
     /// <summary>Validates the minimum action configuration when the node enters the tree.</summary>
     public override void _Ready()

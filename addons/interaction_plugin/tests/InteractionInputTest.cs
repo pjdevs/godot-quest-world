@@ -198,6 +198,7 @@ public sealed partial class InteractionInputTest : InteractionTestBase
         // A group of its own, so the running execution leaves it available and a fresh resolution
         // really would pick it. Sharing the default group would block it like everything else.
         alternative.HostConcurrencyGroup = new StringName("inspection");
+        alternative.RequesterConcurrencyGroup = new StringName("inspection");
         testWorld.Interactive.AddAction(alternative);
         testWorld.Detect(testWorld.Interactive);
         await testWorld.Runner.SimulateFrames(1);

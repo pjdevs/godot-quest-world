@@ -17,6 +17,460 @@ using static GdUnit4.Assertions;
 public sealed partial class GameplayActionRunnerTest
 {
     [TestCase]
+    public void RunningActionBlocksTheSameRequesterGroupAcrossComponents()
+    {
+        TestGameplayActionExecutor firstExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayActionRunner runner = CreateRunnerWithOwnedActions(
+            out GameplayActionComponent owned,
+            ("first", firstExecutor)
+        );
+        GameplayActionComponent external = AutoFree(new GameplayActionComponent());
+        TestGameplayActionExecutor secondExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        AddExternalAction(external, "second", secondExecutor);
+        runner.RegisterAccessProvider(
+            AccessControlledAction.ProviderId,
+            new TestAccessProvider { Allowed = true }
+        );
+
+        GameplayActionBinding firstBinding = runner.BindAction(
+            owned,
+            "first",
+            AutoFree(new Node()),
+            Config("first", GameplayActionActivationMode.Press)
+        )!;
+        GameplayActionBinding secondBinding = runner.BindAction(
+            external,
+            "second",
+            AutoFree(new Node()),
+            Config("second", GameplayActionActivationMode.Press)
+        )!;
+
+        AssertThat(runner.TryStartActionInput(firstBinding.InputActionName)).IsTrue();
+        AssertThat(
+                runner.GetBindingAvailability(secondBinding.Id) is GameplayActionBlocked blocked
+                    && blocked.Reason == GameplayActionAvailabilityExtensions.UnavailableReason
+            )
+            .IsTrue();
+        AssertThat(runner.TryStartActionInput(secondBinding.InputActionName)).IsFalse();
+        AssertThat(secondExecutor.ExecuteCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public void RequesterConcurrencyIsLocalToEachRunner()
+    {
+        TestGameplayActionExecutor firstExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayActionRunner firstRunner = CreateRunnerWithOwnedActions(
+            out GameplayActionComponent firstComponent,
+            ("first", firstExecutor)
+        );
+        TestGameplayActionExecutor secondExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayActionRunner secondRunner = CreateRunnerWithOwnedActions(
+            out GameplayActionComponent secondComponent,
+            ("second", secondExecutor)
+        );
+
+        GameplayActionBinding firstBinding = firstRunner.BindAction(
+            firstComponent,
+            "first",
+            AutoFree(new Node()),
+            Config("first", GameplayActionActivationMode.Press)
+        )!;
+        GameplayActionBinding secondBinding = secondRunner.BindAction(
+            secondComponent,
+            "second",
+            AutoFree(new Node()),
+            Config("second", GameplayActionActivationMode.Press)
+        )!;
+
+        AssertThat(firstRunner.TryStartActionInput(firstBinding.InputActionName)).IsTrue();
+        AssertThat(secondRunner.GetBindingAvailability(secondBinding.Id) is GameplayActionAllowed)
+            .IsTrue();
+        AssertThat(secondRunner.TryStartActionInput(secondBinding.InputActionName)).IsTrue();
+    }
+
+    [TestCase]
+    public void DifferentRequesterGroupsCanRunConcurrently()
+    {
+        TestGameplayActionExecutor firstExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayActionRunner runner = CreateRunnerWithOwnedActions(
+            out GameplayActionComponent firstComponent,
+            ("first", firstExecutor)
+        );
+        GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
+        TestGameplayActionExecutor secondExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayAction secondAction = AddExternalAction(secondComponent, "second", secondExecutor);
+        secondAction.RequesterConcurrencyGroup = "dialogue";
+        runner.RegisterAccessProvider(
+            AccessControlledAction.ProviderId,
+            new TestAccessProvider { Allowed = true }
+        );
+
+        GameplayActionBinding firstBinding = runner.BindAction(
+            firstComponent,
+            "first",
+            AutoFree(new Node()),
+            Config("first", GameplayActionActivationMode.Press)
+        )!;
+        GameplayActionBinding secondBinding = runner.BindAction(
+            secondComponent,
+            "second",
+            AutoFree(new Node()),
+            Config("second", GameplayActionActivationMode.Press)
+        )!;
+
+        AssertThat(runner.TryStartActionInput(firstBinding.InputActionName)).IsTrue();
+        AssertThat(runner.GetBindingAvailability(secondBinding.Id) is GameplayActionAllowed)
+            .IsTrue();
+        AssertThat(runner.TryStartActionInput(secondBinding.InputActionName)).IsTrue();
+        AssertThat(secondExecutor.ExecuteCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public void EmptyRequesterGroupOptsOutOfRequesterConcurrency()
+    {
+        TestGameplayActionExecutor firstExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayActionRunner runner = CreateRunnerWithOwnedActions(
+            out GameplayActionComponent firstComponent,
+            ("first", firstExecutor)
+        );
+        GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
+        TestGameplayActionExecutor secondExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayAction secondAction = AddExternalAction(secondComponent, "second", secondExecutor);
+        secondAction.RequesterConcurrencyGroup = new StringName();
+        runner.RegisterAccessProvider(
+            AccessControlledAction.ProviderId,
+            new TestAccessProvider { Allowed = true }
+        );
+
+        GameplayActionBinding firstBinding = runner.BindAction(
+            firstComponent,
+            "first",
+            AutoFree(new Node()),
+            Config("first", GameplayActionActivationMode.Press)
+        )!;
+        GameplayActionBinding secondBinding = runner.BindAction(
+            secondComponent,
+            "second",
+            AutoFree(new Node()),
+            Config("second", GameplayActionActivationMode.Press)
+        )!;
+
+        AssertThat(runner.TryStartActionInput(firstBinding.InputActionName)).IsTrue();
+        AssertThat(runner.GetBindingAvailability(secondBinding.Id) is GameplayActionAllowed)
+            .IsTrue();
+        AssertThat(runner.TryStartActionInput(secondBinding.InputActionName)).IsTrue();
+        AssertThat(secondExecutor.ExecuteCount).IsEqual(1);
+    }
+
+    [TestCase]
+    public void HiddenRequesterBusyActionsAreRemovedFromCandidates()
+    {
+        TestGameplayActionExecutor firstExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayActionRunner runner = CreateRunnerWithOwnedActions(
+            out GameplayActionComponent firstComponent,
+            ("first", firstExecutor)
+        );
+        GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
+        TestGameplayActionExecutor secondExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayAction secondAction = AddExternalAction(secondComponent, "second", secondExecutor);
+        secondAction.WhenRequesterBusy = GameplayActionUnavailableKind.Hidden;
+        runner.RegisterAccessProvider(
+            AccessControlledAction.ProviderId,
+            new TestAccessProvider { Allowed = true }
+        );
+
+        GameplayActionBinding firstBinding = runner.BindAction(
+            firstComponent,
+            "first",
+            AutoFree(new Node()),
+            Config("first", GameplayActionActivationMode.Press)
+        )!;
+        GameplayActionBinding secondBinding = runner.BindAction(
+            secondComponent,
+            "second",
+            AutoFree(new Node()),
+            Config("second", GameplayActionActivationMode.Press)
+        )!;
+
+        AssertThat(runner.TryStartActionInput(firstBinding.InputActionName)).IsTrue();
+        AssertThat(runner.GetBindingAvailability(secondBinding.Id) is GameplayActionHidden)
+            .IsTrue();
+        AssertThat(runner.TryStartActionInput(secondBinding.InputActionName)).IsFalse();
+        AssertThat(secondExecutor.ExecuteCount).IsEqual(0);
+    }
+
+    [TestCase]
+    public void RequesterConcurrencyIsReleasedWhenExecutionCompletes()
+    {
+        TestGameplayActionExecutor firstExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayActionRunner runner = CreateRunnerWithOwnedActions(
+            out GameplayActionComponent firstComponent,
+            ("first", firstExecutor)
+        );
+        GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
+        TestGameplayActionExecutor secondExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        AddExternalAction(secondComponent, "second", secondExecutor);
+        runner.RegisterAccessProvider(
+            AccessControlledAction.ProviderId,
+            new TestAccessProvider { Allowed = true }
+        );
+
+        GameplayActionBinding firstBinding = runner.BindAction(
+            firstComponent,
+            "first",
+            AutoFree(new Node()),
+            Config("first", GameplayActionActivationMode.Press)
+        )!;
+        GameplayActionBinding secondBinding = runner.BindAction(
+            secondComponent,
+            "second",
+            AutoFree(new Node()),
+            Config("second", GameplayActionActivationMode.Press)
+        )!;
+
+        AssertThat(runner.TryStartActionInput(firstBinding.InputActionName)).IsTrue();
+        AssertThat(runner.GetBindingAvailability(secondBinding.Id) is GameplayActionBlocked)
+            .IsTrue();
+        AssertThat(firstComponent.CompleteExecution(1)).IsTrue();
+        AssertThat(runner.GetBindingAvailability(secondBinding.Id) is GameplayActionAllowed)
+            .IsTrue();
+        AssertThat(runner.TryStartActionInput(secondBinding.InputActionName)).IsTrue();
+    }
+
+    [TestCase]
+    public void RequesterConcurrencyIsReleasedWhenExecutionIsCancelled()
+    {
+        RequesterConcurrencyFixture fixture = CreateRequesterConcurrencyFixture(
+            new GameplayActionExecutionRunning(),
+            new GameplayActionExecutionRunning()
+        );
+
+        AssertThat(fixture.Runner.TryStartActionInput(fixture.FirstBinding.InputActionName))
+            .IsTrue();
+        AssertThat(
+                fixture.Runner.GetBindingAvailability(fixture.SecondBinding.Id)
+                    is GameplayActionBlocked
+            )
+            .IsTrue();
+        AssertThat(fixture.Runner.TryEndActionInput(fixture.FirstBinding.InputActionName)).IsTrue();
+        AssertThat(
+                fixture.Runner.GetBindingAvailability(fixture.SecondBinding.Id)
+                    is GameplayActionAllowed
+            )
+            .IsTrue();
+    }
+
+    [TestCase]
+    public void RequesterConcurrencyIsReleasedWhenExecutionFails()
+    {
+        RequesterConcurrencyFixture fixture = CreateRequesterConcurrencyFixture(
+            new GameplayActionExecutionRunning(),
+            new GameplayActionExecutionRunning()
+        );
+
+        AssertThat(fixture.Runner.TryStartActionInput(fixture.FirstBinding.InputActionName))
+            .IsTrue();
+        AssertThat(fixture.FirstComponent.FailExecution(1, "failed")).IsTrue();
+        AssertThat(
+                fixture.Runner.GetBindingAvailability(fixture.SecondBinding.Id)
+                    is GameplayActionAllowed
+            )
+            .IsTrue();
+    }
+
+    [TestCase]
+    public void RejectedExecutionDoesNotLeaveRequesterConcurrencyOccupied()
+    {
+        RequesterConcurrencyFixture fixture = CreateRequesterConcurrencyFixture(
+            new GameplayActionExecutionRejected("not now"),
+            new GameplayActionExecutionRunning()
+        );
+
+        AssertThat(fixture.Runner.TryStartActionInput(fixture.FirstBinding.InputActionName))
+            .IsFalse();
+        AssertThat(
+                fixture.Runner.GetBindingAvailability(fixture.SecondBinding.Id)
+                    is GameplayActionAllowed
+            )
+            .IsTrue();
+    }
+
+    [TestCase]
+    public void ReleasingRequesterDependencyDoesNotReleaseRequesterConcurrency()
+    {
+        GameplayActionComponent firstComponent = AutoFree(new GameplayActionComponent());
+        ReleaseDuringExecuteExecutor firstExecutor = new();
+        AccessControlledAction firstAction = AutoFree(
+            new AccessControlledAction
+            {
+                Definition = new GameplayActionDefinition { Id = "first" },
+                Executor = firstExecutor,
+            }
+        );
+        firstAction.AddChild(firstExecutor);
+        firstComponent.AddAction(firstAction);
+
+        GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
+        TestGameplayActionExecutor secondExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        AddExternalAction(secondComponent, "second", secondExecutor);
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = firstComponent }
+        );
+        TrackingReservation reservation = new();
+        runner.RegisterAccessProvider(
+            AccessControlledAction.ProviderId,
+            new TestAccessProvider { Allowed = true, Reservation = reservation }
+        );
+
+        GameplayActionBinding firstBinding = runner.BindAction(
+            firstComponent,
+            "first",
+            AutoFree(new Node()),
+            Config("first", GameplayActionActivationMode.Press)
+        )!;
+        GameplayActionBinding secondBinding = runner.BindAction(
+            secondComponent,
+            "second",
+            AutoFree(new Node()),
+            Config("second", GameplayActionActivationMode.Press)
+        )!;
+
+        AssertThat(runner.TryStartActionInput(firstBinding.InputActionName)).IsTrue();
+        AssertThat(firstExecutor.RequesterDependencyReleased).IsTrue();
+        AssertThat(firstExecutor.AccessReservationReleased).IsTrue();
+        AssertThat(reservation.ReleaseCount).IsEqual(1);
+        AssertThat(runner.GetBindingAvailability(secondBinding.Id) is GameplayActionBlocked)
+            .IsTrue();
+    }
+
+    [TestCase]
+    public void ProgrammaticExecutionDoesNotOccupyRequesterConcurrency()
+    {
+        TestGameplayActionExecutor firstExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayActionRunner runner = CreateRunnerWithOwnedActions(
+            out GameplayActionComponent firstComponent,
+            ("first", firstExecutor)
+        );
+        GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
+        TestGameplayActionExecutor secondExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        AddExternalAction(secondComponent, "second", secondExecutor);
+        runner.RegisterAccessProvider(
+            AccessControlledAction.ProviderId,
+            new TestAccessProvider { Allowed = true }
+        );
+        GameplayActionBinding secondBinding = runner.BindAction(
+            secondComponent,
+            "second",
+            AutoFree(new Node()),
+            Config("second", GameplayActionActivationMode.Press)
+        )!;
+
+        AssertThat(firstComponent.ExecuteAction("first", out _) is GameplayActionExecutionRunning)
+            .IsTrue();
+        AssertThat(runner.GetBindingAvailability(secondBinding.Id) is GameplayActionAllowed)
+            .IsTrue();
+        AssertThat(runner.TryStartActionInput(secondBinding.InputActionName)).IsTrue();
+    }
+
+    [TestCase]
+    public void PendingRequesterRequestOccupiesItsGroupBeforeExecutorReturns()
+    {
+        ReentrantRequesterExecutor firstExecutor = new();
+        GameplayActionComponent component = AutoFree(new GameplayActionComponent());
+        GameplayAction firstAction = AutoFree(
+            new GameplayAction
+            {
+                Definition = new GameplayActionDefinition { Id = "first" },
+                Executor = firstExecutor,
+                HostConcurrencyGroup = "first-host",
+            }
+        );
+        TestGameplayActionExecutor secondExecutor = new()
+        {
+            Result = new GameplayActionExecutionRunning(),
+        };
+        GameplayAction secondAction = AutoFree(
+            new GameplayAction
+            {
+                Definition = new GameplayActionDefinition { Id = "second" },
+                Executor = secondExecutor,
+                HostConcurrencyGroup = "second-host",
+            }
+        );
+        firstAction.AddChild(firstExecutor);
+        secondAction.AddChild(secondExecutor);
+        component.AddAction(firstAction);
+        component.AddAction(secondAction);
+        GameplayActionRunner runner = AutoFree(
+            new GameplayActionRunner { OwnedActionComponent = component }
+        );
+        firstExecutor.Runner = runner;
+        GameplayActionBinding firstBinding = runner.BindAction(
+            component,
+            "first",
+            AutoFree(new Node()),
+            Config("first", GameplayActionActivationMode.Press)
+        )!;
+        GameplayActionBinding secondBinding = runner.BindAction(
+            component,
+            "second",
+            AutoFree(new Node()),
+            Config("second", GameplayActionActivationMode.Press)
+        )!;
+
+        AssertThat(runner.TryStartActionInput(firstBinding.InputActionName)).IsTrue();
+        AssertThat(firstExecutor.SecondRequestResult).IsFalse();
+        AssertThat(runner.GetBindingAvailability(secondBinding.Id) is GameplayActionBlocked)
+            .IsTrue();
+        AssertThat(secondExecutor.ExecuteCount).IsEqual(0);
+    }
+
+    [TestCase]
     public async Task RunnerClaimsServerAuthorityWhenInheritedFromPlayerRoot()
     {
         Node player = new() { Name = "Player_1883133663" };
@@ -757,6 +1211,7 @@ public sealed partial class GameplayActionRunnerTest
                 Definition = new GameplayActionDefinition { Id = "presence" },
                 Executor = presenceOwned,
                 HostConcurrencyGroup = "presence",
+                RequesterConcurrencyGroup = "presence",
             }
         );
         GameplayAction worldAction = AutoFree(
@@ -765,6 +1220,7 @@ public sealed partial class GameplayActionRunnerTest
                 Definition = new GameplayActionDefinition { Id = "world" },
                 Executor = worldOwned,
                 HostConcurrencyGroup = "world",
+                RequesterConcurrencyGroup = "world",
             }
         );
         presenceAction.AddChild(presenceOwned);
@@ -811,6 +1267,7 @@ public sealed partial class GameplayActionRunnerTest
                 Definition = new GameplayActionDefinition { Id = "first" },
                 Executor = firstExecutor,
                 HostConcurrencyGroup = "first",
+                RequesterConcurrencyGroup = "first",
             }
         );
         GameplayAction secondAction = AutoFree(
@@ -820,6 +1277,7 @@ public sealed partial class GameplayActionRunnerTest
                 Definition = new GameplayActionDefinition { Id = "second" },
                 Executor = secondExecutor,
                 HostConcurrencyGroup = "second",
+                RequesterConcurrencyGroup = "second",
             }
         );
         firstAction.AddChild(firstExecutor);
@@ -891,6 +1349,71 @@ public sealed partial class GameplayActionRunnerTest
         return AutoFree(new GameplayActionRunner { OwnedActionComponent = component });
     }
 
+    private static GameplayAction AddExternalAction(
+        GameplayActionComponent component,
+        string id,
+        TestGameplayActionExecutor executor
+    )
+    {
+        AccessControlledAction action = AutoFree(
+            new AccessControlledAction
+            {
+                Name = id,
+                Definition = new GameplayActionDefinition { Id = new StringName(id) },
+                Executor = executor,
+            }
+        );
+        action.AddChild(executor);
+        component.AddAction(action);
+        return action;
+    }
+
+    private static RequesterConcurrencyFixture CreateRequesterConcurrencyFixture(
+        GameplayActionExecutionResult firstResult,
+        GameplayActionExecutionResult secondResult,
+        GameplayActionUnavailableKind busyKind = GameplayActionUnavailableKind.Blocked
+    )
+    {
+        TestGameplayActionExecutor firstExecutor = new() { Result = firstResult };
+        GameplayActionRunner runner = CreateRunnerWithOwnedActions(
+            out GameplayActionComponent firstComponent,
+            ("first", firstExecutor)
+        );
+        GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
+        TestGameplayActionExecutor secondExecutor = new() { Result = secondResult };
+        GameplayAction secondAction = AddExternalAction(secondComponent, "second", secondExecutor);
+        secondAction.WhenRequesterBusy = busyKind;
+        runner.RegisterAccessProvider(
+            AccessControlledAction.ProviderId,
+            new TestAccessProvider { Allowed = true }
+        );
+
+        GameplayActionBinding firstBinding = runner.BindAction(
+            firstComponent,
+            "first",
+            AutoFree(new Node()),
+            Config(
+                "first",
+                GameplayActionActivationMode.Press,
+                inputRequirement: GameplayActionInputRequirement.Pressed
+            )
+        )!;
+        GameplayActionBinding secondBinding = runner.BindAction(
+            secondComponent,
+            "second",
+            AutoFree(new Node()),
+            Config("second", GameplayActionActivationMode.Press)
+        )!;
+        return new RequesterConcurrencyFixture(
+            runner,
+            firstComponent,
+            firstBinding,
+            secondBinding,
+            firstExecutor,
+            secondExecutor
+        );
+    }
+
     private static GameplayActionBindingConfig Config(
         string input,
         GameplayActionActivationMode mode,
@@ -926,6 +1449,15 @@ public sealed partial class GameplayActionRunnerTest
         AssertThat(progress).IsEqualApprox(expectedProgress, 0.001f);
         AssertThat(elapsed).IsEqualApprox(expectedElapsed, 0.001f);
     }
+
+    private sealed record RequesterConcurrencyFixture(
+        GameplayActionRunner Runner,
+        GameplayActionComponent FirstComponent,
+        GameplayActionBinding FirstBinding,
+        GameplayActionBinding SecondBinding,
+        TestGameplayActionExecutor FirstExecutor,
+        TestGameplayActionExecutor SecondExecutor
+    );
 
     private sealed partial class MutableRule(GameplayActionAvailability result)
         : GameplayActionPlugin.Runtime.Rules.GameplayActionRule
@@ -1090,5 +1622,18 @@ public sealed partial class GameplayActionRunnerTest
             in GameplayActionContext context,
             string reason
         ) => CancelledCount++;
+    }
+
+    private sealed partial class ReentrantRequesterExecutor : GameplayActionExecutor
+    {
+        public GameplayActionRunner? Runner { get; set; }
+
+        public bool SecondRequestResult { get; private set; }
+
+        public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
+        {
+            SecondRequestResult = Runner?.TryStartActionInput("second") == true;
+            return new GameplayActionExecutionRunning();
+        }
     }
 }

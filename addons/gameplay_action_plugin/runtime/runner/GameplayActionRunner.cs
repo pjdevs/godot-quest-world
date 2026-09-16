@@ -340,6 +340,45 @@ public partial class GameplayActionRunner : Node
         RequestAutomaticEdges(automaticEdges);
     }
 
+    /// <summary>Re-evaluates bindings whose action belongs to one requester concurrency group.</summary>
+    internal void InvalidateRequesterConcurrencyGroup(
+        StringName group,
+        GameplayActionComponent? excludedComponent = null,
+        StringName? excludedActionId = null
+    )
+    {
+        if (group is null || group.IsEmpty)
+        {
+            return;
+        }
+
+        List<ulong> affected = FindBindingIds(binding =>
+        {
+            if (binding.Component == excludedComponent && binding.ActionId == excludedActionId)
+            {
+                return false;
+            }
+
+            GameplayAction? action = binding.Component.ResolveAction(binding.ActionId);
+            return action?.GetRequesterConcurrencyGroup() == group;
+        });
+        List<GameplayActionBindingCandidate> automaticEdges = new();
+        foreach (ulong bindingId in affected)
+        {
+            automaticEdges.AddRange(_bindings.InvalidateBinding(bindingId));
+        }
+
+        NotifyBindingsInvalidated(affected);
+        RequestAutomaticEdges(automaticEdges);
+    }
+
+    /// <summary>Evaluates requester-local concurrency for one action presentation.</summary>
+    internal GameplayActionAvailability EvaluateRequesterConcurrency(
+        GameplayActionComponent component,
+        GameplayAction action,
+        StringName actionId
+    ) => _requests.EvaluateRequesterConcurrency(component, action, actionId);
+
     /// <summary>
     /// Re-evaluates every binding referring to one action occurrence identity
     /// on the owned action component if any.
@@ -439,12 +478,18 @@ public partial class GameplayActionRunner : Node
             return new GameplayActionHidden();
         }
 
-        return binding.Component.EvaluateAction(
+        GameplayActionAvailability availability = binding.Component.EvaluateAction(
             binding.ActionId,
             ResolveInstigator(),
             this,
             binding.Target
         );
+        if (availability is not GameplayActionAllowed)
+        {
+            return availability;
+        }
+
+        return _requests.EvaluateRequesterConcurrency(binding.Component, action, binding.ActionId);
     }
 
     private GameplayActionAccessPolicy ResolveAccess(

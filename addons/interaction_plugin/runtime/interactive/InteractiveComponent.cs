@@ -4,6 +4,7 @@ using GameplayActionPlugin.Runtime.Access;
 using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Bindings;
 using GameplayActionPlugin.Runtime.Rules;
+using GameplayActionPlugin.Runtime.Runner;
 using Godot;
 using InteractionPlugin.Runtime.Detection;
 using InteractionPlugin.Runtime.Interactor;
@@ -532,6 +533,12 @@ public partial class InteractiveComponent : Node
     public GameplayActionAvailability EvaluateAvailability(
         InteractionInteractor interactor,
         InteractionOffer offer
+    ) => EvaluateAvailability(interactor, offer, includeRequesterConcurrency: true);
+
+    private GameplayActionAvailability EvaluateAvailability(
+        InteractionInteractor interactor,
+        InteractionOffer offer,
+        bool includeRequesterConcurrency
     )
     {
         if (
@@ -588,6 +595,19 @@ public partial class InteractiveComponent : Node
             return actionAvailability;
         }
 
+        if (includeRequesterConcurrency && interactor.Runner is GameplayActionRunner runner)
+        {
+            GameplayActionAvailability requesterAvailability = runner.EvaluateRequesterConcurrency(
+                resolution.Component,
+                resolution.Action,
+                resolution.Action.Definition.Id
+            );
+            if (requesterAvailability is not GameplayActionAllowed)
+            {
+                return requesterAvailability;
+            }
+        }
+
         StringName concurrencyGroup = resolution.Action.GetHostConcurrencyGroup();
         bool concurrencyActive;
         bool startedByInteractor;
@@ -640,7 +660,7 @@ public partial class InteractiveComponent : Node
     {
         if (!sustained)
         {
-            return EvaluateAvailability(interactor, offer);
+            return EvaluateAvailability(interactor, offer, includeRequesterConcurrency: false);
         }
 
         if (
