@@ -16,7 +16,7 @@ public partial class NestedSpawnerWorld : Node3D
         }
 
         PackedScene scene = GD.Load<PackedScene>(
-            "res://addons/game_session/tests/fixtures/NestedSpawnedNode.tscn"
+            "res://game_session_tests/fixtures/NestedSpawnedNode.tscn"
         );
         Node node = scene.Instantiate();
         node.Name = name;

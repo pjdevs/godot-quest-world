@@ -14,10 +14,10 @@ using static GdUnit4.Assertions;
 public sealed class GameSessionTravelNetworkTest
 {
     private const string NestedWorldPath =
-        "res://addons/game_session/tests/fixtures/NestedSpawnerWorld.tscn";
+        "res://game_session_tests/fixtures/NestedSpawnerWorld.tscn";
 
     private const string ReplicatedPlayerStatePath =
-        "res://addons/game_session/tests/fixtures/ReplicatedTestPlayerState.tscn";
+        "res://game_session_tests/fixtures/ReplicatedTestPlayerState.tscn";
 
     [TestCase]
     public async Task ClientDisconnectDuringTravelClearsRuntimeSession()
@@ -26,14 +26,14 @@ public sealed class GameSessionTravelNetworkTest
         try
         {
             PackedScene firstWorld = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+                "res://game_session_tests/fixtures/WorldA.tscn"
             );
             AssertThat(fixture.Server.GameSession.Travel(firstWorld)).IsTrue();
             await WaitForActive(fixture);
             AssertThat(fixture.Client.GameSession.CurrentWorld).IsNotNull();
 
             PackedScene secondWorld = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldB.tscn"
+                "res://game_session_tests/fixtures/WorldB.tscn"
             );
             AssertThat(fixture.Server.GameSession.Travel(secondWorld)).IsTrue();
             fixture.Client.GameSession.BeginTravel(
@@ -69,7 +69,7 @@ public sealed class GameSessionTravelNetworkTest
             fixture.Client.GameSession.TravelCompleted += (_, _) => clientCompletions++;
             fixture.Server.GameSession.PlayerWorldReady += _ => playerWorldReadyCount++;
             PackedScene world = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+                "res://game_session_tests/fixtures/WorldA.tscn"
             );
 
             AssertThat(fixture.Server.GameSession.Travel(world)).IsTrue();
@@ -102,7 +102,7 @@ public sealed class GameSessionTravelNetworkTest
         try
         {
             PackedScene world = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+                "res://game_session_tests/fixtures/WorldA.tscn"
             );
             AssertThat(fixture.Server.GameSession.Travel(world)).IsTrue();
             await WaitForActive(fixture);
@@ -178,10 +178,10 @@ public sealed class GameSessionTravelNetworkTest
         try
         {
             PackedScene firstWorld = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+                "res://game_session_tests/fixtures/WorldA.tscn"
             );
             PackedScene secondWorld = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldB.tscn"
+                "res://game_session_tests/fixtures/WorldB.tscn"
             );
             AssertThat(fixture.Server.GameSession.Travel(firstWorld)).IsTrue();
             await WaitForActive(fixture);
@@ -288,12 +288,12 @@ public sealed class GameSessionTravelNetworkTest
             }
 
             PackedScene firstWorld = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+                "res://game_session_tests/fixtures/WorldA.tscn"
             );
             AssertThat(fixture.Server.GameSession.Travel(firstWorld)).IsTrue();
             await WaitForActive(fixture);
             PackedScene secondWorld = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldB.tscn"
+                "res://game_session_tests/fixtures/WorldB.tscn"
             );
             AssertThat(fixture.Server.GameSession.Travel(secondWorld)).IsTrue();
             await WaitForActive(fixture);
@@ -332,7 +332,7 @@ public sealed class GameSessionTravelNetworkTest
         try
         {
             PackedScene world = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+                "res://game_session_tests/fixtures/WorldA.tscn"
             );
             AssertThat(fixture.Server.GameSession.Travel(world)).IsTrue();
             await WaitForActive(fixture);
@@ -407,7 +407,7 @@ public sealed class GameSessionTravelNetworkTest
         try
         {
             PackedScene world = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldB.tscn"
+                "res://game_session_tests/fixtures/WorldB.tscn"
             );
 
             AssertThat(fixture.Server.GameSession.PlayerStates.Count).IsEqual(1);
@@ -431,7 +431,7 @@ public sealed class GameSessionTravelNetworkTest
         try
         {
             PackedScene world = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+                "res://game_session_tests/fixtures/WorldA.tscn"
             );
             AssertThat(fixture.Server.GameSession.Travel(world)).IsTrue();
             await WaitForActive(fixture);
@@ -457,7 +457,7 @@ public sealed class GameSessionTravelNetworkTest
         try
         {
             PackedScene world = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+                "res://game_session_tests/fixtures/WorldA.tscn"
             );
             AssertThat(fixture.Server.GameSession.Travel(world)).IsTrue();
             await WaitForActive(fixture);

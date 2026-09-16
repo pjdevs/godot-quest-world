@@ -40,7 +40,7 @@ public sealed class GameSessionTravelTest
         fixture.GameSession.TravelCompleted += (travelId, _) => events.Add($"completed:{travelId}");
 
         PackedScene world = GD.Load<PackedScene>(
-            "res://addons/game_session/tests/fixtures/WorldA.tscn"
+            "res://game_session_tests/fixtures/WorldA.tscn"
         );
         AssertThat(fixture.GameSession.Travel(world)).IsTrue();
         await runner.SimulateFrames(2);
@@ -65,7 +65,7 @@ public sealed class GameSessionTravelTest
         OfflineFixture fixture = await StartOfflineFixture();
         Node firstWorld = fixture.GameSession.CurrentWorld!;
         PackedScene secondScene = GD.Load<PackedScene>(
-            "res://addons/game_session/tests/fixtures/WorldB.tscn"
+            "res://game_session_tests/fixtures/WorldB.tscn"
         );
 
         AssertThat(fixture.GameSession.Travel(secondScene)).IsTrue();
@@ -109,7 +109,7 @@ public sealed class GameSessionTravelTest
         AssertThat(fixture.GameSession.Initialize()).IsTrue();
         AssertThat(fixture.Network.Start(CreateOfflineOptions())).IsTrue();
         PackedScene firstScene = GD.Load<PackedScene>(
-            "res://addons/game_session/tests/fixtures/WorldA.tscn"
+            "res://game_session_tests/fixtures/WorldA.tscn"
         );
 
         AssertThat(fixture.GameSession.Travel(firstScene)).IsTrue();
@@ -126,7 +126,7 @@ public sealed class GameSessionTravelTest
         AssertThat(fixture.GameSession.Initialize()).IsTrue();
         AssertThat(fixture.Network.Start(CreateOfflineOptions())).IsTrue();
         PackedScene firstScene = GD.Load<PackedScene>(
-            "res://addons/game_session/tests/fixtures/WorldA.tscn"
+            "res://game_session_tests/fixtures/WorldA.tscn"
         );
         AssertThat(fixture.GameSession.Travel(firstScene)).IsTrue();
         await fixture.Runner.SimulateFrames(2);

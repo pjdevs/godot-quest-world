@@ -19,7 +19,7 @@ public sealed class GameSessionNetworkTest
         {
             GameSessionPlugin.GameSession gameSession = fixture.Client.GameSession;
             PackedScene world = GD.Load<PackedScene>(
-                "res://addons/game_session/tests/fixtures/WorldA.tscn"
+                "res://game_session_tests/fixtures/WorldA.tscn"
             );
             AssertThat(fixture.Server.GameSession.Travel(world)).IsTrue();
             for (int frame = 0; frame < 120; frame++)
