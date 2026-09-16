@@ -12,7 +12,6 @@ using GdUnit4;
 using Godot;
 using static GdUnit4.Assertions;
 
-#if !GODOT_WINDOWS
 [TestSuite]
 [RequireGodotRuntime]
 [TestCategory("Network")]
@@ -288,7 +287,6 @@ public sealed partial class GameplayActionRunnerNetworkTest
         }
     }
 
-#if !GODOT_WINDOWS
     [TestCase]
     public async Task NonOwnerPeerCannotRequestThroughAnotherPlayersRunner()
     {
@@ -320,7 +318,6 @@ public sealed partial class GameplayActionRunnerNetworkTest
             session.Close();
         }
     }
-#endif
 
     [TestCase]
     public async Task RequesterDisconnectCancelsPresenceOwnedAuthoritativeExecution()
@@ -741,4 +738,3 @@ public sealed partial class GameplayActionRunnerNetworkTest
         }
     }
 }
-#endif

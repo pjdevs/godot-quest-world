@@ -40,10 +40,11 @@ The large network suite follows the same rule and is split into `InteractionNetw
 
 ## Commands
 
-Task is the platform-agnostic entry point. It configures the correct Godot executable on macOS,
-resolves the Linux executable from `PATH` to an absolute path for GdUnit, keeps the Windows
-`godot` convention, and applies `gdunit4.runsettings`, whose `--headless` runtime parameter
-prevents GdUnit from opening a graphical Godot window.
+Task is the platform-agnostic entry point. Test tasks target the dedicated
+`quest-world-tests/quest-world-tests.csproj` assembly. Task configures the correct Godot executable
+on macOS, resolves the Linux executable from `PATH` to an absolute path for GdUnit, keeps the
+Windows `godot` convention, and applies `quest-world-tests/gdunit4.runsettings`, whose `--headless`
+runtime parameter prevents GdUnit from opening a graphical Godot window.
 
 ```text
 task --list
@@ -71,26 +72,10 @@ task test:full CONFIRM_FULL=yes
 When Task is unavailable, use the VSTest filter directly:
 
 ```text
-GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot dotnet test --settings gdunit4.runsettings --filter "FullyQualifiedName~InteractionNetworkTest"
+GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot dotnet test quest-world-tests/quest-world-tests.csproj --settings quest-world-tests/gdunit4.runsettings --filter "FullyQualifiedName~InteractionNetworkTest"
 ```
 
 On Windows, set `GODOT_BIN` to the Godot executable path if `godot` is not on `PATH`. See `AGENTS.md` for the required build and validation policy.
-
-### Windows/GdUnit bridge limitation
-
-With Godot `4.7.2.stable.mono`, .NET SDK `10.0.401`, `gdUnit4.api` `5.1.0-rc5` and `gdUnit4.test.adapter` `3.1.1`, some runtime test assemblies can terminate the GdUnit bridge on Windows with `-1073741819` (`0xC0000005`) before VSTest receives any result. A targeted filter then misleadingly reports that no test matches.
-
-Until the upstream Godot/GdUnit issue is resolved, keep the complete `GameplayActionRunnerNetworkTest` and `InteractionOfferTest` suites out of the Windows test assembly with a compile-time guard:
-
-```csharp
-#if !GODOT_WINDOWS
-// [TestSuite] ...
-#endif
-```
-
-The guard must cover the whole suite. A runtime `OperatingSystem.IsWindows()` early return, or guarding only the malformed-RPC method, is too late because the bridge can crash while loading/discovering the assembly. Keep malformed RPC coverage in a separate file guarded with `#if !GODOT_WINDOWS`; retain normal authority and interaction coverage through the production paths on platforms where the suites are enabled.
-
-This is not currently reduced to a blank-project upstream repro: a standalone Godot/GdUnit project with one malformed `NodePath` RPC passes on the same Windows toolchain. The failure is reproducible through this repository's runtime type graph and the GdUnit bridge, while direct headless editor startup may still exit `0`.
 
 ## Which scope to run
 

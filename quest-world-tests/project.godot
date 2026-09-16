@@ -1,0 +1,10 @@
+config_version=5
+
+[application]
+
+config/name="quest-world-tests"
+
+[dotnet]
+
+project/assembly_name="quest-world-tests"
+project/solution_directory="../"

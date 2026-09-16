@@ -1,7 +1,7 @@
 # Godot 4+ specific ignores
-.godot/
-/android/
-/gdunit4_testadapter_v5/
+**/.godot/
+**/android/
+**/gdunit4_testadapter_v5/
 
 # MacOS
 **/.DS_Store
@@ -13,3 +13,7 @@
 .vscode/
 !.vscode/launch.json
 !.vscode/tasks.json
+
+# Symlinks
+quest-world-tests/addons
+quest-world-tests/quest_world

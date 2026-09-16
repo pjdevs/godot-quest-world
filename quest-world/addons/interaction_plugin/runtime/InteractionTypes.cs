@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using Godot;
 using GameplayActionPlugin;
+using Godot;
 using InteractionPlugin.Runtime.Interactive;
 using InteractionPlugin.Runtime.Offers;
 
@@ -22,7 +22,7 @@ public enum InteractionDetectionKind
     Indicated,
 
     /// <summary>The target is eligible for focus, for a command, and for continued validation.</summary>
-    Interactible
+    Interactible,
 }
 
 /// <summary>Snapshot consumed by local prompt and indication presentation.</summary>

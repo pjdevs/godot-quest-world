@@ -2,32 +2,22 @@ version: '3'
 
 vars:
   PROJECT: quest-world.sln
+  TEST_PROJECT: quest-world-tests/quest-world-tests.csproj
+  TEST_SETTINGS: quest-world-tests/gdunit4.runsettings
 
 tasks:
-  default:
-    desc: List available build and test tasks
-    cmds:
-      - task --list
-
   build:
     desc: Build the project without running tests
     cmds:
       - dotnet build
 
-  tools:restore:
-    internal: true
-    cmds:
-      - dotnet tool restore
-
   format:
     desc: Format the repository with CSharpier
-    deps: [tools:restore]
     cmds:
       - dotnet tool run csharpier format .
 
   format:check:
     desc: Check repository formatting with CSharpier
-    deps: [tools:restore]
     cmds:
       - dotnet tool run csharpier check .
 
@@ -80,7 +70,7 @@ tasks:
     env:
       GODOT_BIN: /Applications/Godot_mono.app/Contents/MacOS/Godot
     cmds:
-      - dotnet test {{.PROJECT}} --settings gdunit4.runsettings {{.DOTNET_ARGS}}
+      - dotnet test {{.TEST_PROJECT}} --settings {{.TEST_SETTINGS}} {{.DOTNET_ARGS}}
 
   test:command:windows:
     internal: true
@@ -88,7 +78,7 @@ tasks:
     env:
       GODOT_BIN: '{{.GODOT}}'
     cmds:
-      - dotnet test {{.PROJECT}} --settings gdunit4.runsettings {{.DOTNET_ARGS}}
+      - dotnet test {{.TEST_PROJECT}} --settings {{.TEST_SETTINGS}} {{.DOTNET_ARGS}}
 
   test:command:linux:
     internal: true
@@ -97,7 +87,7 @@ tasks:
       GODOT_BIN:
         sh: command -v godot
     cmds:
-      - dotnet test {{.PROJECT}} --settings gdunit4.runsettings {{.DOTNET_ARGS}}
+      - dotnet test {{.TEST_PROJECT}} --settings {{.TEST_SETTINGS}} {{.DOTNET_ARGS}}
 
   test:interaction:
     desc: Run all Interaction suites

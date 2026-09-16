@@ -1,0 +1,68 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2" InitialTargets="CreateSymlinks">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <NoWarn>NU1605</NoWarn>
+    <RootNamespace>QuestWorld.Tests</RootNamespace>
+    <AssemblyName>quest-world-tests</AssemblyName>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageReference Include="gdUnit4.api" Version="5.1.0-rc5" />
+    <PackageReference Include="gdUnit4.test.adapter" Version="3.1.1">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="gdUnit4.analyzers" Version="1.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>
+        runtime; build; native; contentfiles; analyzers; buildtransitive
+      </IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+   <Target Name="CreateSymlinks">
+    <PropertyGroup>
+      <RuntimeRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../quest-world'))</RuntimeRoot>
+
+      <AddonsSource>$(RuntimeRoot)/addons</AddonsSource>
+      <AddonsTarget>$(MSBuildProjectDirectory)/addons</AddonsTarget>
+
+      <GameSource>$(RuntimeRoot)/quest_world</GameSource>
+      <GameTarget>$(MSBuildProjectDirectory)/quest_world</GameTarget>
+    </PropertyGroup>
+
+    <!-- Windows  -->
+    <Exec
+      Command="if not exist &quot;$(AddonsTarget)&quot; mklink /J &quot;$(AddonsTarget)&quot; &quot;$(AddonsSource)&quot;"
+      Condition="'$(OS)' == 'Windows_NT'" />
+    <Exec
+      Command="if not exist &quot;$(GameTarget)&quot; mklink /J &quot;$(GameTarget)&quot; &quot;$(GameSource)&quot;"
+      Condition="'$(OS)' == 'Windows_NT'" />
+
+    <!-- macOS / Linux -->
+    <Exec
+      Command="[ -e '$(AddonsTarget)' ] || ln -s '$(AddonsSource)' '$(AddonsTarget)'"
+      Condition="'$(OS)' != 'Windows_NT'" />
+    <Exec
+      Command="[ -e '$(GameTarget)' ] || ln -s '$(GameSource)' '$(GameTarget)'"
+      Condition="'$(OS)' != 'Windows_NT'" />
+
+    <Error
+      Condition="!Exists('$(AddonsTarget)')"
+      Text="Impossible de créer le lien $(AddonsTarget) -> $(AddonsSource)" />
+    <Error
+      Condition="!Exists('$(GameTarget)')"
+      Text="Impossible de créer le lien $(GameTarget) -> $(GameSource)" />
+
+    <Message
+      Text="Runtime links ready: addons and quest_world"
+      Importance="high" />
+  </Target>
+</Project>

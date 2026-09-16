@@ -1,5 +1,3 @@
-#if !GODOT_WINDOWS
-
 namespace QuestWorld.Tests.GameplayActions;
 
 using System.Threading.Tasks;
@@ -42,5 +40,3 @@ public sealed partial class GameplayActionRunnerNetworkTest
         }
     }
 }
-
-#endif
