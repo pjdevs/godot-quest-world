@@ -112,8 +112,8 @@ that input until release. Automatic bindings use an empty input and `InputRequir
 
 Actions sharing a `HostConcurrencyGroup` are mutually exclusive on their own target. The default group
 makes all actions of a target exclusive. Actions sharing a non-empty `RequesterConcurrencyGroup` are
-also mutually exclusive for one runner across hosts; the default requester group is `default`, and an
-empty value opts out. `WhenRequesterBusy` controls whether a busy action is blocked or hidden.
+also mutually exclusive for one runner across hosts; the requester group is empty by default, so this
+axis is opt-in. `WhenRequesterBusy` controls whether a busy action is blocked or hidden.
 Programmatic executions do not occupy requester groups. Configure static requester-group refusal text
 on `GameplayActionRunner.RequesterConcurrencyReasons`; missing entries use the generic unavailable
 reason. `Automatic` actions request themselves when

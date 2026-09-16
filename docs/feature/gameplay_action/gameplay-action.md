@@ -69,7 +69,8 @@ Reservations are local to one component. One `ActionId` can have at most one act
 actions sharing a `HostConcurrencyGroup` exclude one another. Different components never share a
 lock. Requester concurrency is a separate runner-local reservation: actions with the same non-empty
 `RequesterConcurrencyGroup` exclude one another across the components that runner can request.
-An empty requester group opts out. Programmatic `ExecuteAction()` calls do not occupy requester groups.
+The requester group defaults to empty, so this axis is opt-in; an empty requester group opts out.
+Programmatic `ExecuteAction()` calls do not occupy requester groups.
 Host-concurrency reasons are authored on the candidate action through `ExecutingBySelfReason` and
 `ExecutingByOtherReason`, preserving the existing defaults when omitted.
 
@@ -116,9 +117,10 @@ binding:
 action lifecycle. Integrations such as Interaction add external bindings explicitly.
 
 The runner's request pipeline tracks requester-group occupancy from the pending-request window through
-acknowledged and active requested executions. A non-empty `RequesterConcurrencyGroup` defaults to
-`"default"`; `WhenRequesterBusy` selects `Blocked` or `Hidden` availability while another request in
-that group is present. A blocked result uses the runner's `RequesterConcurrencyReasons` dictionary,
+acknowledged and active requested executions. `RequesterConcurrencyGroup` is empty by default and a
+non-empty value opts the action into this axis; `WhenRequesterBusy` selects `Blocked` or `Hidden` while
+another request in that group is present. A blocked result uses the runner's
+`RequesterConcurrencyReasons` dictionary,
 falling back to the generic unavailable reason when the group has no entry. Occupancy changes invalidate matching bindings across all action components on
 the runner, and terminal results, rejection, rollback and cleanup release it. This arbitration applies
 only to runner requests; it does not change host reservations, target reservations or programmatic

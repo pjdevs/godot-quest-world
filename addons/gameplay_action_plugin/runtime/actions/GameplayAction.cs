@@ -10,8 +10,8 @@ public partial class GameplayAction : Node
     /// <summary>Default host-local concurrency group used when none is authored.</summary>
     public static readonly StringName DefaultHostConcurrencyGroup = new("default");
 
-    /// <summary>Default requester-local concurrency group used when none is authored.</summary>
-    public static readonly StringName DefaultRequesterConcurrencyGroup = new("default");
+    /// <summary>Empty requester-local concurrency group used when none is authored.</summary>
+    public static readonly StringName DefaultRequesterConcurrencyGroup = new();
 
     /// <summary>Gets or sets the reusable identity and presentation metadata for this occurrence.</summary>
     [Export]

@@ -573,6 +573,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
             Definition = new GameplayActionDefinition { Id = OpenAction },
             Executor = executor,
             ExecutionVisibility = visibility,
+            RequesterConcurrencyGroup = "network",
         };
         action.AddChild(executor);
         externalActions.AddAction(action);
@@ -605,6 +606,7 @@ public sealed partial class GameplayActionRunnerNetworkTest
             Name = $"{actionId}Action",
             Definition = new GameplayActionDefinition { Id = actionId },
             Executor = executor,
+            RequesterConcurrencyGroup = "network",
         };
         action.AddChild(executor);
         peer.ExternalActions.AddAction(action);

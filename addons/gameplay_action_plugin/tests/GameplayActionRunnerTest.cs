@@ -17,6 +17,14 @@ using static GdUnit4.Assertions;
 public sealed partial class GameplayActionRunnerTest
 {
     [TestCase]
+    public void RequesterConcurrencyIsOptIn()
+    {
+        GameplayAction action = AutoFree(new GameplayAction());
+
+        AssertThat(action.GetRequesterConcurrencyGroup().IsEmpty).IsTrue();
+    }
+
+    [TestCase]
     public void RunningActionBlocksTheSameRequesterGroupAcrossComponents()
     {
         TestGameplayActionExecutor firstExecutor = new()
@@ -27,12 +35,14 @@ public sealed partial class GameplayActionRunnerTest
             out GameplayActionComponent owned,
             ("first", firstExecutor)
         );
+        owned.ResolveAction("first")!.RequesterConcurrencyGroup = "shared";
         GameplayActionComponent external = AutoFree(new GameplayActionComponent());
         TestGameplayActionExecutor secondExecutor = new()
         {
             Result = new GameplayActionExecutionRunning(),
         };
-        AddExternalAction(external, "second", secondExecutor);
+        GameplayAction secondAction = AddExternalAction(external, "second", secondExecutor);
+        secondAction.RequesterConcurrencyGroup = "shared";
         runner.RegisterAccessProvider(
             AccessControlledAction.ProviderId,
             new TestAccessProvider { Allowed = true }
@@ -80,6 +90,8 @@ public sealed partial class GameplayActionRunnerTest
             out GameplayActionComponent secondComponent,
             ("second", secondExecutor)
         );
+        firstComponent.ResolveAction("first")!.RequesterConcurrencyGroup = "shared";
+        secondComponent.ResolveAction("second")!.RequesterConcurrencyGroup = "shared";
 
         GameplayActionBinding firstBinding = firstRunner.BindAction(
             firstComponent,
@@ -111,6 +123,7 @@ public sealed partial class GameplayActionRunnerTest
             out GameplayActionComponent firstComponent,
             ("first", firstExecutor)
         );
+        firstComponent.ResolveAction("first")!.RequesterConcurrencyGroup = "hands";
         GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
         TestGameplayActionExecutor secondExecutor = new()
         {
@@ -154,6 +167,7 @@ public sealed partial class GameplayActionRunnerTest
             out GameplayActionComponent firstComponent,
             ("first", firstExecutor)
         );
+        firstComponent.ResolveAction("first")!.RequesterConcurrencyGroup = "hands";
         GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
         TestGameplayActionExecutor secondExecutor = new()
         {
@@ -197,6 +211,7 @@ public sealed partial class GameplayActionRunnerTest
             out GameplayActionComponent firstComponent,
             ("first", firstExecutor)
         );
+        firstComponent.ResolveAction("first")!.RequesterConcurrencyGroup = "shared";
         GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
         TestGameplayActionExecutor secondExecutor = new()
         {
@@ -204,6 +219,7 @@ public sealed partial class GameplayActionRunnerTest
         };
         GameplayAction secondAction = AddExternalAction(secondComponent, "second", secondExecutor);
         secondAction.WhenRequesterBusy = GameplayActionUnavailableKind.Hidden;
+        secondAction.RequesterConcurrencyGroup = "shared";
         runner.RegisterAccessProvider(
             AccessControlledAction.ProviderId,
             new TestAccessProvider { Allowed = true }
@@ -236,7 +252,7 @@ public sealed partial class GameplayActionRunnerTest
             new GameplayActionExecutionRunning(),
             new GameplayActionExecutionRunning()
         );
-        fixture.Runner.RequesterConcurrencyReasons["default"] = "Your hands are not free.";
+        fixture.Runner.RequesterConcurrencyReasons["shared"] = "Your hands are not free.";
 
         AssertThat(fixture.Runner.TryStartActionInput(fixture.FirstBinding.InputActionName))
             .IsTrue();
@@ -259,12 +275,14 @@ public sealed partial class GameplayActionRunnerTest
             out GameplayActionComponent firstComponent,
             ("first", firstExecutor)
         );
+        firstComponent.ResolveAction("first")!.RequesterConcurrencyGroup = "shared";
         GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
         TestGameplayActionExecutor secondExecutor = new()
         {
             Result = new GameplayActionExecutionRunning(),
         };
-        AddExternalAction(secondComponent, "second", secondExecutor);
+        GameplayAction secondAction = AddExternalAction(secondComponent, "second", secondExecutor);
+        secondAction.RequesterConcurrencyGroup = "shared";
         runner.RegisterAccessProvider(
             AccessControlledAction.ProviderId,
             new TestAccessProvider { Allowed = true }
@@ -374,6 +392,8 @@ public sealed partial class GameplayActionRunnerTest
         GameplayActionRunner runner = AutoFree(
             new GameplayActionRunner { OwnedActionComponent = firstComponent }
         );
+        firstComponent.ResolveAction("first")!.RequesterConcurrencyGroup = "shared";
+        secondComponent.ResolveAction("second")!.RequesterConcurrencyGroup = "shared";
         TrackingReservation reservation = new();
         runner.RegisterAccessProvider(
             AccessControlledAction.ProviderId,
@@ -412,12 +432,14 @@ public sealed partial class GameplayActionRunnerTest
             out GameplayActionComponent firstComponent,
             ("first", firstExecutor)
         );
+        firstComponent.ResolveAction("first")!.RequesterConcurrencyGroup = "shared";
         GameplayActionComponent secondComponent = AutoFree(new GameplayActionComponent());
         TestGameplayActionExecutor secondExecutor = new()
         {
             Result = new GameplayActionExecutionRunning(),
         };
-        AddExternalAction(secondComponent, "second", secondExecutor);
+        GameplayAction secondAction = AddExternalAction(secondComponent, "second", secondExecutor);
+        secondAction.RequesterConcurrencyGroup = "shared";
         runner.RegisterAccessProvider(
             AccessControlledAction.ProviderId,
             new TestAccessProvider { Allowed = true }
@@ -447,6 +469,7 @@ public sealed partial class GameplayActionRunnerTest
                 Definition = new GameplayActionDefinition { Id = "first" },
                 Executor = firstExecutor,
                 HostConcurrencyGroup = "first-host",
+                RequesterConcurrencyGroup = "shared",
             }
         );
         TestGameplayActionExecutor secondExecutor = new()
@@ -459,6 +482,7 @@ public sealed partial class GameplayActionRunnerTest
                 Definition = new GameplayActionDefinition { Id = "second" },
                 Executor = secondExecutor,
                 HostConcurrencyGroup = "second-host",
+                RequesterConcurrencyGroup = "shared",
             }
         );
         firstAction.AddChild(firstExecutor);
@@ -1402,6 +1426,8 @@ public sealed partial class GameplayActionRunnerTest
         TestGameplayActionExecutor secondExecutor = new() { Result = secondResult };
         GameplayAction secondAction = AddExternalAction(secondComponent, "second", secondExecutor);
         secondAction.WhenRequesterBusy = busyKind;
+        secondAction.RequesterConcurrencyGroup = "shared";
+        runner.OwnedActionComponent!.ResolveAction("first")!.RequesterConcurrencyGroup = "shared";
         runner.RegisterAccessProvider(
             AccessControlledAction.ProviderId,
             new TestAccessProvider { Allowed = true }

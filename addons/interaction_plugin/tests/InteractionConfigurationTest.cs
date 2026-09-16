@@ -205,6 +205,7 @@ public sealed partial class InteractionConfigurationTest
 
         AssertThat(action.WhenExecutingBySelf).IsEqual(GameplayActionUnavailableKind.Blocked);
         AssertThat(action.WhenExecutingByOther).IsEqual(GameplayActionUnavailableKind.Blocked);
+        AssertThat(action.GetRequesterConcurrencyGroup().IsEmpty).IsTrue();
     }
 
     [TestCase]
