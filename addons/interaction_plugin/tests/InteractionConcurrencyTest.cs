@@ -82,6 +82,7 @@ public sealed partial class InteractionConcurrencyTest : InteractionTestBase
         InteractionInteractor other = AddOtherInteractor(testWorld);
         testWorld.Action.WhenExecutingBySelf = GameplayActionUnavailableKind.Blocked;
         testWorld.Action.WhenExecutingByOther = GameplayActionUnavailableKind.Hidden;
+        testWorld.Action.ExecutingBySelfReason = "You are already forcing this door.";
         ActivationExecutorOf(testWorld.Action).Duration = 3600.0f;
         await testWorld.Runner.SimulateFrames(1);
         testWorld.Action.Rules.Clear();
@@ -91,7 +92,7 @@ public sealed partial class InteractionConcurrencyTest : InteractionTestBase
         AssertThat(
                 testWorld.Interactive.EvaluateAvailability(testWorld.Interactor, testWorld.Action)
                     is GameplayActionBlocked blocked
-                    && blocked.Reason == "This is already in use."
+                    && blocked.Reason == "You are already forcing this door."
             )
             .IsTrue();
         AssertThat(

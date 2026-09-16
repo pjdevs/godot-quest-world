@@ -26,11 +26,11 @@ public partial class GameplayAction : Node
     public Godot.Collections.Array<GameplayActionRule> Rules { get; set; } = new();
 
     /// <summary>Gets or sets the host-local group whose active actions exclude this occurrence.</summary>
+    [ExportGroup("Concurrency")]
     [Export]
     public StringName HostConcurrencyGroup { get; set; } = DefaultHostConcurrencyGroup;
 
     /// <summary>Gets or sets the requester-local group whose requested actions exclude one another.</summary>
-    [ExportGroup("Requester Availability")]
     [Export]
     public StringName RequesterConcurrencyGroup { get; set; } = DefaultRequesterConcurrencyGroup;
 
@@ -45,10 +45,18 @@ public partial class GameplayAction : Node
     public GameplayActionUnavailableKind WhenExecutingBySelf { get; set; } =
         GameplayActionUnavailableKind.Blocked;
 
+    /// <summary>Gets or sets the blocked reason while this action's host group runs for the requester.</summary>
+    [Export]
+    public string ExecutingBySelfReason { get; set; } = "This is already in use.";
+
     /// <summary>Gets or sets the availability while this action's host group runs for another actor.</summary>
     [Export]
     public GameplayActionUnavailableKind WhenExecutingByOther { get; set; } =
         GameplayActionUnavailableKind.Blocked;
+
+    /// <summary>Gets or sets the blocked reason while this action's host group runs for another actor.</summary>
+    [Export]
+    public string ExecutingByOtherReason { get; set; } = "Someone else is using this.";
 
     /// <summary>Gets or sets how transient execution presentation is exposed to remote peers.</summary>
     [Export]

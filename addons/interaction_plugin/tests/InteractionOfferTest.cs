@@ -375,6 +375,7 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
             ActionId = new StringName("force"),
             BindingConfig = Press("force"),
             TargetConcurrencyGroup = new StringName("door_operation"),
+            ReservedByOtherReason = "Another operator is using this target.",
         };
         interactive.Offers.Add(forceOffer);
         GameplayActionAvailability otherAvailability = interactive.EvaluateAvailability(
@@ -398,7 +399,7 @@ public sealed partial class InteractionOfferTest : InteractionTestBase
         AssertThat(
                 interactive.EvaluateAvailability(second, forceOffer)
                     is GameplayActionBlocked blockedForce
-                    && blockedForce.Reason == "Someone else is using this target."
+                    && blockedForce.Reason == "Another operator is using this target."
             )
             .IsTrue();
 

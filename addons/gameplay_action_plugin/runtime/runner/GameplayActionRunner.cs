@@ -86,6 +86,14 @@ public partial class GameplayActionRunner : Node
     [Export]
     public Node? Instigator { get; set; }
 
+    /// <summary>Gets or sets static blocked reasons keyed by requester concurrency group.</summary>
+    [ExportGroup("Requester Availability")]
+    [Export]
+    public Godot.Collections.Dictionary<
+        StringName,
+        string
+    > RequesterConcurrencyReasons { get; set; } = new();
+
     /// <summary>Gets or sets the authoritative peer that owns this runner's RPC endpoints.</summary>
     [ExportGroup("Network")]
     [Export]
@@ -378,6 +386,13 @@ public partial class GameplayActionRunner : Node
         GameplayAction action,
         StringName actionId
     ) => _requests.EvaluateRequesterConcurrency(component, action, actionId);
+
+    /// <summary>Returns the configured requester-concurrency reason or the generic fallback.</summary>
+    internal string GetRequesterConcurrencyReason(StringName group) =>
+        RequesterConcurrencyReasons.TryGetValue(group, out string? reason)
+        && !string.IsNullOrEmpty(reason)
+            ? reason
+            : GameplayActionAvailabilityExtensions.UnavailableReason;
 
     /// <summary>
     /// Re-evaluates every binding referring to one action occurrence identity

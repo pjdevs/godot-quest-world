@@ -143,10 +143,6 @@ public partial class InteractiveComponent : Node
     public Godot.Collections.Array<GameplayActionRule> TargetRules { get; set; } = new();
 
     private const string NotConfiguredReason = "Interaction is not configured.";
-    private const string AlreadyRunningReason = "This is already in use.";
-    private const string SomeoneElseReason = "Someone else is using this.";
-    private const string TargetAlreadyReservedReason = "This target is already in use.";
-    private const string TargetReservedByOtherReason = "Someone else is using this target.";
 
     // Every target currently in the tree, for the detectors whose source is not an overlap event. A
     // plain list rather than a Godot group: GetNodesInGroup allocates on every call, and a detector
@@ -410,10 +406,10 @@ public partial class InteractiveComponent : Node
         return relation switch
         {
             TargetReservationRelation.ReservedBySelf => offer.WhenReservedBySelf.ToAvailability(
-                TargetAlreadyReservedReason
+                offer.ReservedBySelfReason
             ),
             TargetReservationRelation.ReservedByOther => offer.WhenReservedByOther.ToAvailability(
-                TargetReservedByOtherReason
+                offer.ReservedByOtherReason
             ),
             _ => new GameplayActionAllowed(),
         };
@@ -642,7 +638,11 @@ public partial class InteractiveComponent : Node
         GameplayActionUnavailableKind kind = startedByInteractor
             ? resolution.Action.WhenExecutingBySelf
             : resolution.Action.WhenExecutingByOther;
-        return kind.ToAvailability(startedByInteractor ? AlreadyRunningReason : SomeoneElseReason);
+        return kind.ToAvailability(
+            startedByInteractor
+                ? resolution.Action.ExecutingBySelfReason
+                : resolution.Action.ExecutingByOtherReason
+        );
     }
 
     /// <summary>Re-validates an already-running offer without treating its own reservations as lost access.</summary>
@@ -705,7 +705,7 @@ public partial class InteractiveComponent : Node
                 != TargetReservationRelation.ReservedBySelf
         )
         {
-            return new GameplayActionBlocked(TargetReservedByOtherReason);
+            return new GameplayActionBlocked(offer.ReservedByOtherReason);
         }
 
         return new GameplayActionAllowed();

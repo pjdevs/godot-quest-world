@@ -48,10 +48,18 @@ public partial class InteractionOffer : Resource
     public GameplayActionUnavailableKind WhenReservedBySelf { get; set; } =
         GameplayActionUnavailableKind.Blocked;
 
+    /// <summary>Gets or sets the blocked reason while this target is reserved by this requester.</summary>
+    [Export]
+    public string ReservedBySelfReason { get; set; } = "This target is already in use.";
+
     /// <summary>Gets or sets the presentation while this target is reserved by another requester.</summary>
     [Export]
     public GameplayActionUnavailableKind WhenReservedByOther { get; set; } =
         GameplayActionUnavailableKind.Blocked;
+
+    /// <summary>Gets or sets the blocked reason while this target is reserved by another requester.</summary>
+    [Export]
+    public string ReservedByOtherReason { get; set; } = "Someone else is using this target.";
 }
 
 /// <summary>Resolved endpoint for one interaction offer.</summary>

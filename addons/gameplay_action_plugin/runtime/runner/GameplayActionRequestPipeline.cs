@@ -79,9 +79,7 @@ internal sealed class GameplayActionRequestPipeline(
         GameplayActionRequestKey request = new(component, actionId);
         StringName group = action.GetRequesterConcurrencyGroup();
         return !group.IsEmpty && IsRequesterConcurrencyBusy(request, group)
-            ? action.WhenRequesterBusy.ToAvailability(
-                GameplayActionAvailabilityExtensions.UnavailableReason
-            )
+            ? action.WhenRequesterBusy.ToAvailability(_owner.GetRequesterConcurrencyReason(group))
             : new GameplayActionAllowed();
     }
 
@@ -1008,7 +1006,9 @@ internal sealed class GameplayActionRequestPipeline(
         GameplayActionRequestKey request = new(component, actionId);
         if (IsRequesterConcurrencyBusy(request, action.GetRequesterConcurrencyGroup()))
         {
-            const string reason = GameplayActionAvailabilityExtensions.UnavailableReason;
+            string reason = _owner.GetRequesterConcurrencyReason(
+                action.GetRequesterConcurrencyGroup()
+            );
             RejectRequest(senderPeerId, componentPath, actionId, reason);
             return new GameplayActionExecutionRejected(reason);
         }

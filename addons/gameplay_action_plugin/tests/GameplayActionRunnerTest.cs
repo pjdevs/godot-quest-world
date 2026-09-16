@@ -230,6 +230,25 @@ public sealed partial class GameplayActionRunnerTest
     }
 
     [TestCase]
+    public void RequesterConcurrencyUsesConfiguredGroupReason()
+    {
+        RequesterConcurrencyFixture fixture = CreateRequesterConcurrencyFixture(
+            new GameplayActionExecutionRunning(),
+            new GameplayActionExecutionRunning()
+        );
+        fixture.Runner.RequesterConcurrencyReasons["default"] = "Your hands are not free.";
+
+        AssertThat(fixture.Runner.TryStartActionInput(fixture.FirstBinding.InputActionName))
+            .IsTrue();
+        AssertThat(
+                fixture.Runner.GetBindingAvailability(fixture.SecondBinding.Id)
+                    is GameplayActionBlocked blocked
+                    && blocked.Reason == "Your hands are not free."
+            )
+            .IsTrue();
+    }
+
+    [TestCase]
     public void RequesterConcurrencyIsReleasedWhenExecutionCompletes()
     {
         TestGameplayActionExecutor firstExecutor = new()

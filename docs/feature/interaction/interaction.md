@@ -102,7 +102,8 @@ Relation     = did this peer request that execution or merely observe it?
 ```
 
 `GameplayAction.WhenExecutingBySelf` and `WhenExecutingByOther` independently choose `Hidden` or
-`Blocked` for a busy concurrency group. Both default to `Blocked` for compatibility.
+`Blocked` for a busy concurrency group. Both default to `Blocked` for compatibility, and their paired
+`ExecutingBySelfReason` / `ExecutingByOtherReason` strings provide the blocked wording.
 
 Examples:
 
@@ -117,6 +118,11 @@ Target reservation is a separate scope from action-host concurrency. Offers shar
 `GameplayActionComponent` instances, such as a door-owned `Open` and a player-owned `Force`. A claim
 is acquired only after request access validation and remains held through the generic request lease
 until the execution reaches a terminal state.
+
+Offers own the paired target-reservation reasons `ReservedBySelfReason` and `ReservedByOtherReason`.
+Requester-concurrency reasons remain runner-owned and are configured by requester group, so one
+capability such as `hands` can use one wording across all its action hosts. Hidden policies ignore their
+reasons; blocked policies expose them as-is.
 
 On the authority, “self” is attributed through the execution instigator. On a client,
 `RequestedLocally` means self and `Observed` means other. The query applies to the whole host concurrency

@@ -97,11 +97,13 @@ An action has two layers:
 
 - `GameplayActionDefinition` is reusable static data: stable `Id`, label, and description.
 - `GameplayAction` is one occurrence on one action host: executor, action rules, concurrency and
-  execution policy. `RequesterConcurrencyGroup` and `WhenRequesterBusy` optionally arbitrate this
+  execution policy. `ExecutingBySelfReason` and `ExecutingByOtherReason` customize host-concurrency
+  refusal text. `RequesterConcurrencyGroup` and `WhenRequesterBusy` optionally arbitrate this
   action against other actions requested by the same runner, even when they use another host.
 - `InteractionOffer` is one target-facing invocation: source, `ActionId`, Interaction rules and an
   optional `BindingConfig` containing input, activation mode, hold duration, input requirement, and
-  priority. The offer is not an ownership or grant mechanism.
+  priority. `ReservedBySelfReason` and `ReservedByOtherReason` customize target-reservation refusal
+  text. The offer is not an ownership or grant mechanism.
 
 Keep `Id` stable across builds because it crosses the network. For a non-automatic binding, declare
 `InputActionName` in the project Input Map. `HoldDuration` only selects between actions sharing an
@@ -112,7 +114,9 @@ Actions sharing a `HostConcurrencyGroup` are mutually exclusive on their own tar
 makes all actions of a target exclusive. Actions sharing a non-empty `RequesterConcurrencyGroup` are
 also mutually exclusive for one runner across hosts; the default requester group is `default`, and an
 empty value opts out. `WhenRequesterBusy` controls whether a busy action is blocked or hidden.
-Programmatic executions do not occupy requester groups. `Automatic` actions request themselves when
+Programmatic executions do not occupy requester groups. Configure static requester-group refusal text
+on `GameplayActionRunner.RequesterConcurrencyReasons`; missing entries use the generic unavailable
+reason. `Automatic` actions request themselves when
 focused and do not appear as input prompts.
 
 ## Write a rule

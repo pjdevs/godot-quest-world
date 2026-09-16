@@ -6,9 +6,8 @@ The V1 extraction is complete. `gameplay_action_plugin` is the generic execution
 Interaction and by owned player actions such as `Drop Battery`; there is no remaining Interaction
 compatibility execution path.
 
-The documentation below describes the current contract. The restored requester-concurrency proposal is
-kept in `planned/` as a design record; other historical implementation plans are not kept as roadmap
-documents once their decisions have been absorbed here.
+The documentation below describes the current contract. Historical implementation plans are not kept as
+roadmap documents once their decisions have been absorbed here.
 
 ## Package boundary
 
@@ -37,7 +36,8 @@ optional `Label` and `Description` presentation metadata.
 
 `GameplayAction : Node` is one occurrence owned by one `GameplayActionComponent`. It references one
 definition, one executor, an ordered `Rules` collection, a host-local concurrency group, a requester-local
-concurrency group and execution visibility policies. `InputGameplayAction` adds only an optional
+concurrency group, static host-concurrency refusal reasons and execution visibility policies.
+`InputGameplayAction` adds only an optional
 `DefaultBindingConfig` so an owned action may opt into automatic local binding without making input a
 concern of every action.
 
@@ -70,6 +70,8 @@ actions sharing a `HostConcurrencyGroup` exclude one another. Different componen
 lock. Requester concurrency is a separate runner-local reservation: actions with the same non-empty
 `RequesterConcurrencyGroup` exclude one another across the components that runner can request.
 An empty requester group opts out. Programmatic `ExecuteAction()` calls do not occupy requester groups.
+Host-concurrency reasons are authored on the candidate action through `ExecutingBySelfReason` and
+`ExecutingByOtherReason`, preserving the existing defaults when omitted.
 
 Removing an idle action makes it unresolvable and frees it. Removing a running action makes it
 unresolvable immediately but keeps its node, ID reservation and transient presentation alive until
@@ -116,7 +118,8 @@ action lifecycle. Integrations such as Interaction add external bindings explici
 The runner's request pipeline tracks requester-group occupancy from the pending-request window through
 acknowledged and active requested executions. A non-empty `RequesterConcurrencyGroup` defaults to
 `"default"`; `WhenRequesterBusy` selects `Blocked` or `Hidden` availability while another request in
-that group is present. Occupancy changes invalidate matching bindings across all action components on
+that group is present. A blocked result uses the runner's `RequesterConcurrencyReasons` dictionary,
+falling back to the generic unavailable reason when the group has no entry. Occupancy changes invalidate matching bindings across all action components on
 the runner, and terminal results, rejection, rollback and cleanup release it. This arbitration applies
 only to runner requests; it does not change host reservations, target reservations or programmatic
 execution.
@@ -324,6 +327,13 @@ binding invalidation.
 Dynamic `AddAction`/`RemoveAction` remains valid when gameplay genuinely grants or revokes a capability
 (for example equipping a tool that introduces a new ability). It is not the default representation of
 "the same ability is currently unusable".
+
+### AD-16 — Native concurrency owns its refusal wording
+
+Host concurrency reasons belong to the candidate action, target-reservation reasons belong to the
+candidate interaction offer, and requester-concurrency reasons belong to the runner's group dictionary.
+`Hidden` ignores the paired reason; `Blocked` carries it through `GameplayActionBlocked`. V1 reasons are
+static strings with no interpolation or localization subsystem.
 
 ## Deliberately deferred
 
