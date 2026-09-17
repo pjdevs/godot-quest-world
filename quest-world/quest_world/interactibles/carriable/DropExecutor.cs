@@ -6,36 +6,46 @@ using Godot;
 [GlobalClass]
 public partial class DropExecutor : GameplayActionExecutor
 {
-    private Task<bool>? _currentTakeTask = null;
+    private GameplayActionContext? _context = null;
+    private ICarrier? _carrier = null;
 
     public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         ICarrier? carrier = context.GetHost<ICarrier>();
-        if (carrier is null || !carrier.IsCarrying)
+        if (carrier is null || carrier.CarryComponent is null)
         {
-            return new GameplayActionExecutionFailed("Carriable pickup context is incomplete.");
+            return new GameplayActionExecutionFailed("Carriable drop context is incomplete.");
         }
 
-        _currentTakeTask = WaitForDropCompletion(context, carrier);
+        carrier.CarryComponent.DropOperationFailed += OnDropOperationFailed;
+        carrier.CarryComponent.DropOperationFinished += OnDropOperationFinished;
+
+        if (!carrier.CarryComponent.TryStartDrop())
+        {
+            return new GameplayActionExecutionFailed("TryStartTake failed.");
+        }
+
+        _context = context;
+        _carrier = carrier;
 
         return new GameplayActionExecutionRunning();
     }
 
-    private async Task<bool> WaitForDropCompletion(GameplayActionContext context, ICarrier carrier)
+    private void OnDropOperationFinished()
     {
-        bool result = await carrier.TryDropAsync(() => context.ReleaseRequesterDependency());
+        _context?.CompleteExecution();
+    }
 
-        if (result)
-        {
-            context.CompleteExecution();
-        }
-        else
-        {
-            context.FailExecution("Could not take carriable object.");
-        }
+    private void OnDropOperationFailed(string reason)
+    {
+        _context?.FailExecution(reason);
+    }
 
-        _currentTakeTask = null;
-
-        return result;
+    protected internal override void OnExecutionCancelled(
+        in GameplayActionContext context,
+        string reason
+    )
+    {
+        _carrier?.CarryComponent?.CancelCurrentOperation();
     }
 }

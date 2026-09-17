@@ -70,6 +70,31 @@ internal sealed class GameplayActionRequestPipeline(
         _sustainedInputs.Clear();
     }
 
+    internal bool IsActionExecuting(GameplayActionComponent component, StringName actionId)
+    {
+        GameplayActionRequestKey key = new(component, actionId);
+
+        if (_pendingRequests.Contains(key))
+        {
+            return true;
+        }
+
+        if (_acknowledgedExecutions.ContainsKey(key))
+        {
+            return true;
+        }
+
+        foreach (GameplayActionRequestedExecution execution in _requestedExecutions)
+        {
+            if (execution.Component == component && execution.ActionId == actionId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal GameplayActionAvailability EvaluateRequesterConcurrency(
         GameplayActionComponent component,
         GameplayAction action,

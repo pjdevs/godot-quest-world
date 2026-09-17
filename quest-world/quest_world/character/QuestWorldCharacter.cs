@@ -1,7 +1,5 @@
-using System;
-using System.Threading.Tasks;
+using System.Linq;
 using DummyCharacterPlugin;
-using GameplayActionPlugin.Runtime.Actions;
 using GameplayActionPlugin.Runtime.Runner;
 using Godot;
 using InteractionPlugin.Runtime.Interactor;
@@ -11,10 +9,14 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
 {
     [ExportGroup("Carry")]
     [Export]
-    public StringName TakeAction { get; set; } = new StringName("take");
+    public StringName TakeAction { get; set; } = "take";
 
     [Export]
-    public StringName DropAction { get; set; } = new StringName("drop");
+    public StringName DropAction { get; set; } = "drop";
+
+    [ExportGroup("Movement")]
+    [Export]
+    public Godot.Collections.Array<StringName> LockingActions { get; set; } = ["take", "drop"];
 
     private InteractionInteractor? _interactionInteractor = null;
     private GameplayActionRunner? _gameplayActionRunner = null;
@@ -24,6 +26,7 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
     private bool _wasGrounded;
 
     public InventoryComponent Inventory => _inventory!;
+    public CarryComponent? CarryComponent => _carryComponent;
 
     public new int OwnerPeerId
     {
@@ -89,9 +92,7 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
         bool wasPossessed = _wasPossessed;
         base._PhysicsProcess(delta);
 
-        IsMovementLocked = IsInCarryOperation;
-
-        if (!IsLocalNetworkAuthority || _interactionInteractor == null)
+        if (!IsLocalNetworkAuthority)
         {
             return;
         }
@@ -109,7 +110,7 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
 
         _wasPossessed = true;
 
-        if (_gameplayActionRunner is null)
+        if (_gameplayActionRunner is null || _interactionInteractor is null)
         {
             return;
         }
@@ -118,11 +119,15 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
         {
             _wasGrounded = NetworkIsGrounded;
 
-            if (IsCarrying)
+            if (_carryComponent?.IsCarrying == true)
             {
                 _gameplayActionRunner.InvalidateOwnedAction(DropAction);
             }
         }
+
+        IsMovementLocked = LockingActions.Any(actionId =>
+            _gameplayActionRunner?.IsOwnedActionExecuting(actionId) == true
+        );
 
         // The focused target decides which inputs matter, so binding an action to another key in a
         // scene needs no change here. What the interactor reports is information, not a command:
@@ -181,28 +186,6 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
 
         return null;
     }
-
-    #region ICarrier
-    public StringName? CarriedItemId => _carryComponent?.CarriedItemId;
-    public bool IsCarrying => _carryComponent?.IsCarrying ?? false;
-    public bool IsInCarryOperation => _carryComponent?.IsInCarryOperation ?? false;
-
-    public async Task<bool> TryTakeAsync(
-        StringName itemId,
-        Node3D carriableObject,
-        Action? onCommited = null
-    )
-    {
-        return _carryComponent is not null
-            ? await _carryComponent.TryTakeAsync(itemId, carriableObject, onCommited)
-            : false;
-    }
-
-    public async Task<bool> TryDropAsync(Action? onCommited = null)
-    {
-        return _carryComponent is not null ? await _carryComponent.TryDropAsync(onCommited) : false;
-    }
-    #endregion ICarrier
 
     private void OnCarriedItemChanged()
     {

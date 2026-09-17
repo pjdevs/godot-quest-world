@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using GameplayActionPlugin;
 using GameplayActionPlugin.Runtime.Actions;
@@ -6,48 +7,63 @@ using Godot;
 [GlobalClass]
 public partial class TakeExecutor : GameplayActionExecutor
 {
+    // TODO Move this on interactible object with ICarriable interface providing Item
     [Export]
     public CarriableItemDefinition? Item { get; set; }
-    private Task<bool>? _currentTakeTask = null;
+
+    private GameplayActionContext? _context = null;
+    private ICarrier? _carrier = null;
 
     public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         ICarrier? carrier = context.GetHost<ICarrier>();
-        Node3D? carriableObject = context.GetTarget<Node3D>();
-        if (carriableObject is null || carrier is null || Item is null || Item.Id.IsEmpty)
+        Node3D? carriableItemObject = context.GetTarget<Node3D>();
+        if (
+            carriableItemObject is null
+            || carrier is null
+            || carrier.CarryComponent is null
+            || Item is null
+            || Item.Id.IsEmpty
+        )
         {
             return new GameplayActionExecutionFailed("Carriable pickup context is incomplete.");
         }
 
-        _currentTakeTask = WaitForTakeCompletion(context, carrier, Item.Id, carriableObject);
+        carrier.CarryComponent.TakeOperationCommitted += OnTakeOperationCommited;
+        carrier.CarryComponent.TakeOperationFailed += OnTakeOperationFailed;
+        carrier.CarryComponent.TakeOperationFinished += OnTakeOperationFinished;
+
+        if (!carrier.CarryComponent.TryStartTake(Item.Id, carriableItemObject))
+        {
+            return new GameplayActionExecutionFailed("TryStartTake failed.");
+        }
+
+        _context = context;
+        _carrier = carrier;
 
         return new GameplayActionExecutionRunning();
     }
 
-    private async Task<bool> WaitForTakeCompletion(
-        GameplayActionContext context,
-        ICarrier carrier,
-        StringName itemId,
-        Node3D carriableObject
+    private void OnTakeOperationFinished()
+    {
+        _context?.CompleteExecution();
+    }
+
+    private void OnTakeOperationFailed(string reason)
+    {
+        _context?.FailExecution(reason);
+    }
+
+    private void OnTakeOperationCommited()
+    {
+        _context?.ReleaseRequesterDependency();
+    }
+
+    protected internal override void OnExecutionCancelled(
+        in GameplayActionContext context,
+        string reason
     )
     {
-        bool result = await carrier.TryTakeAsync(
-            itemId,
-            carriableObject,
-            () => context.ReleaseRequesterDependency()
-        );
-
-        if (result)
-        {
-            context.CompleteExecution();
-        }
-        else
-        {
-            context.FailExecution("Could not take carriable object.");
-        }
-
-        _currentTakeTask = null;
-
-        return result;
+        _carrier?.CarryComponent?.CancelCurrentOperation();
     }
 }

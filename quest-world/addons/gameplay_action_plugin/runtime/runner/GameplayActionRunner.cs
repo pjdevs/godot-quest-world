@@ -447,6 +447,19 @@ public partial class GameplayActionRunner : Node
     public void ValidateSustainedExecutions() => _requests.ValidateSustainedExecutions();
 
     /// <summary>
+    /// Returns true if an action is executing on the given component, else false.
+    /// </summary>
+    public bool IsActionExecuting(GameplayActionComponent component, StringName actionId) =>
+        _requests.IsActionExecuting(component, actionId);
+
+    /// <summary>
+    /// Returns true if an action is executing on the owned action component if any, else false.
+    /// </summary>
+    public bool IsOwnedActionExecuting(StringName actionId) =>
+        OwnedActionComponent is not null
+        && _requests.IsActionExecuting(OwnedActionComponent, actionId);
+
+    /// <summary>
     /// Marks a running requested execution as committed so requester presence is no longer required.
     /// </summary>
     internal bool ReleaseRequesterDependency(
