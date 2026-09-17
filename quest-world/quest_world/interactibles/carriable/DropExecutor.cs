@@ -5,9 +5,6 @@ using Godot;
 [GlobalClass]
 public partial class DropExecutor : GameplayActionExecutor
 {
-    private GameplayActionContext? _context = null;
-    private ICarrier? _carrier = null;
-
     public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         ICarrier? carrier = context.GetHost<ICarrier>();
@@ -16,31 +13,40 @@ public partial class DropExecutor : GameplayActionExecutor
             return new GameplayActionExecutionFailed("Carriable drop context is incomplete.");
         }
 
-        carrier.CarryComponent.DropOperationFailed += OnDropOperationFailed;
-        carrier.CarryComponent.DropOperationFinished += OnDropOperationFinished;
-
-        if (!carrier.CarryComponent.TryStartDrop())
+        CarryOperation? operation = carrier.CarryComponent.TryStartDrop();
+        if (operation is null)
         {
-            Cleanup();
             return new GameplayActionExecutionFailed("TryStartDrop failed.");
         }
 
-        _context = context;
-        _carrier = carrier;
+        GameplayActionContext executionContext = context;
+
+        void Cleanup()
+        {
+            operation.Finished -= OnDropOperationFinished;
+            operation.Failed -= OnDropOperationFailed;
+            operation.Cancelled -= OnDropOperationCancelled;
+        }
+
+        void OnDropOperationFinished()
+        {
+            executionContext.CompleteExecution();
+            Cleanup();
+        }
+
+        void OnDropOperationFailed(string reason)
+        {
+            executionContext.FailExecution(reason);
+            Cleanup();
+        }
+
+        void OnDropOperationCancelled() => Cleanup();
+
+        operation.Finished += OnDropOperationFinished;
+        operation.Failed += OnDropOperationFailed;
+        operation.Cancelled += OnDropOperationCancelled;
 
         return new GameplayActionExecutionRunning();
-    }
-
-    private void OnDropOperationFinished()
-    {
-        _context?.CompleteExecution();
-        Cleanup();
-    }
-
-    private void OnDropOperationFailed(string reason)
-    {
-        _context?.FailExecution(reason);
-        Cleanup();
     }
 
     protected internal override void OnExecutionCancelled(
@@ -48,19 +54,6 @@ public partial class DropExecutor : GameplayActionExecutor
         string reason
     )
     {
-        _carrier?.CarryComponent?.CancelCurrentOperation();
-        Cleanup();
-    }
-
-    private void Cleanup()
-    {
-        if (_carrier?.CarryComponent is not null)
-        {
-            _carrier.CarryComponent.DropOperationFailed -= OnDropOperationFailed;
-            _carrier.CarryComponent.DropOperationFinished -= OnDropOperationFinished;
-        }
-
-        _context = null;
-        _carrier = null;
+        context.GetHost<ICarrier>()?.CarryComponent?.CancelCurrentOperation();
     }
 }

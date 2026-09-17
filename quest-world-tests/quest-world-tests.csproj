@@ -27,7 +27,7 @@
     </PackageReference>
   </ItemGroup>
 
-   <Target Name="CreateSymlinks">
+  <Target Name="CreateSymlinks">
     <PropertyGroup>
       <RuntimeRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../quest-world'))</RuntimeRoot>
 
@@ -41,28 +41,32 @@
     <!-- Windows  -->
     <Exec
       Command="if not exist &quot;$(AddonsTarget)&quot; mklink /J &quot;$(AddonsTarget)&quot; &quot;$(AddonsSource)&quot;"
-      Condition="'$(OS)' == 'Windows_NT'" />
+      Condition="'$(OS)' == 'Windows_NT'"
+    />
     <Exec
       Command="if not exist &quot;$(GameTarget)&quot; mklink /J &quot;$(GameTarget)&quot; &quot;$(GameSource)&quot;"
-      Condition="'$(OS)' == 'Windows_NT'" />
+      Condition="'$(OS)' == 'Windows_NT'"
+    />
 
     <!-- macOS / Linux -->
     <Exec
       Command="[ -e '$(AddonsTarget)' ] || ln -s '$(AddonsSource)' '$(AddonsTarget)'"
-      Condition="'$(OS)' != 'Windows_NT'" />
+      Condition="'$(OS)' != 'Windows_NT'"
+    />
     <Exec
       Command="[ -e '$(GameTarget)' ] || ln -s '$(GameSource)' '$(GameTarget)'"
-      Condition="'$(OS)' != 'Windows_NT'" />
+      Condition="'$(OS)' != 'Windows_NT'"
+    />
 
     <Error
       Condition="!Exists('$(AddonsTarget)')"
-      Text="Impossible de créer le lien $(AddonsTarget) -> $(AddonsSource)" />
+      Text="Impossible de créer le lien $(AddonsTarget) -> $(AddonsSource)"
+    />
     <Error
       Condition="!Exists('$(GameTarget)')"
-      Text="Impossible de créer le lien $(GameTarget) -> $(GameSource)" />
+      Text="Impossible de créer le lien $(GameTarget) -> $(GameSource)"
+    />
 
-    <Message
-      Text="Runtime links ready: addons and quest_world"
-      Importance="high" />
+    <Message Text="Runtime links ready: addons and quest_world" Importance="high" />
   </Target>
 </Project>

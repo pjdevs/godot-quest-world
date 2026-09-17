@@ -39,9 +39,7 @@ public sealed class GameSessionTravelTest
         fixture.GameSession.WorldLoaded += (travelId, _) => events.Add($"loaded:{travelId}");
         fixture.GameSession.TravelCompleted += (travelId, _) => events.Add($"completed:{travelId}");
 
-        PackedScene world = GD.Load<PackedScene>(
-            "res://game_session_tests/fixtures/WorldA.tscn"
-        );
+        PackedScene world = GD.Load<PackedScene>("res://game_session_tests/fixtures/WorldA.tscn");
         AssertThat(fixture.GameSession.Travel(world)).IsTrue();
         await runner.SimulateFrames(2);
 

@@ -8,9 +8,9 @@ script = ExtResource("1_uknef")
 TakeAnimationName = &"PickUp_Kneeling"
 DropAnimationName = &"PickUp_Kneeling"
 TakeAnimationCommitTimeSec = 0.7
-TakeAnimationEndTimeSec = 0.2
+TakeAnimationEndTimeSec = 0.7
 DropAnimationCommitTimeSec = 0.7
-DropAnimationEndTimeSec = 0.2
+DropAnimationEndTimeSec = 0.7
 metadata/_custom_type_script = "uid://b5v2j4gt0cpkn"
 
 [resource]

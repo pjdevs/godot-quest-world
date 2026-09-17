@@ -7,7 +7,10 @@ public partial class CarryItemRule : GameplayActionRule
 {
     public override GameplayActionAvailability Evaluate(in GameplayActionContext context)
     {
-        if (context.GetHost<ICarrier>() is ICarrier carrier && carrier.IsCarrying)
+        if (
+            context.GetHost<ICarrier>() is ICarrier carrier
+            && carrier.CarryComponent?.IsCarrying is true
+        )
         {
             return new GameplayActionAllowed();
         }

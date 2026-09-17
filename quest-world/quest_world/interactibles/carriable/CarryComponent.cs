@@ -9,24 +9,6 @@ public partial class CarryComponent : Node
     [Signal]
     public delegate void CarriedItemChangedEventHandler();
 
-    [Signal]
-    public delegate void TakeOperationCommittedEventHandler();
-
-    [Signal]
-    public delegate void DropOperationCommittedEventHandler();
-
-    [Signal]
-    public delegate void TakeOperationFailedEventHandler(string reason);
-
-    [Signal]
-    public delegate void DropOperationFailedEventHandler(string reason);
-
-    [Signal]
-    public delegate void TakeOperationFinishedEventHandler();
-
-    [Signal]
-    public delegate void DropOperationFinishedEventHandler();
-
     [Export]
     public Node3D? CarriableAnchor { get; set; }
 
@@ -61,7 +43,7 @@ public partial class CarryComponent : Node
     public bool IsCarrying => CarriedItemId is not null;
 
     private CarryOperation? _currentCarryOperation;
-    private (StringName ItemId, Node3D CarriableItemObject)? _pendingTakeOperation;
+    private CarryOperation.TakeOperation? _pendingTakeOperation;
     private StringName? _carriedItemId;
     private Node3D? _itemVisualInstance;
 
@@ -80,7 +62,7 @@ public partial class CarryComponent : Node
         }
     }
 
-    public bool TryStartTake(StringName itemId, Node3D carriableItemObject)
+    public CarryOperation? TryStartTake(StringName itemId, Node3D carriableItemObject)
     {
         if (
             !IsAuthoritative
@@ -89,7 +71,7 @@ public partial class CarryComponent : Node
             || Inventory is null
         )
         {
-            return false;
+            return null;
         }
 
         CarryKindAnimationConfig? config = AnimationConfig?.GetConfigForKind(definition.CarryKind);
@@ -108,15 +90,44 @@ public partial class CarryComponent : Node
 
         if (IsCarrying)
         {
-            _pendingTakeOperation = (itemId, carriableItemObject);
-            return TryStartDrop();
+            _pendingTakeOperation = takeOperation;
+            if (TryStartDrop() is not null)
+            {
+                return takeOperation;
+            }
+
+            _pendingTakeOperation = null;
+            takeOperation.Fail("TryStartDrop failed.");
+            return null;
         }
 
-        _currentCarryOperation = takeOperation;
-
-        if (config is not null)
+        if (!TryActivateTakeOperation(takeOperation))
         {
-            Rpc(nameof(PlayAnimation), config.TakeAnimationName);
+            takeOperation.Fail("TryStartTake failed.");
+            return null;
+        }
+
+        return takeOperation;
+    }
+
+    private bool TryActivateTakeOperation(CarryOperation.TakeOperation operation)
+    {
+        if (
+            !IsAuthoritative
+            || !IsInstanceValid(operation.CarriableItemObject)
+            || !TryGetCarriableDefinition(operation.ItemId, out _)
+            || Inventory is null
+            || IsCarrying
+        )
+        {
+            return false;
+        }
+
+        _currentCarryOperation = operation;
+
+        if (operation.AnimationConfig is not null)
+        {
+            Rpc(nameof(PlayAnimation), operation.AnimationConfig.TakeAnimationName);
         }
 
         return true;
@@ -146,7 +157,7 @@ public partial class CarryComponent : Node
         return true;
     }
 
-    public bool TryStartDrop()
+    public CarryOperation? TryStartDrop()
     {
         if (
             !IsAuthoritative
@@ -156,7 +167,7 @@ public partial class CarryComponent : Node
             || !TryGetCarriableDefinition(CarriedItemId, out CarriableItemDefinition definition)
         )
         {
-            return false;
+            return null;
         }
 
         CarryKindAnimationConfig? config = AnimationConfig?.GetConfigForKind(definition.CarryKind);
@@ -171,9 +182,10 @@ public partial class CarryComponent : Node
             Rpc(nameof(PlayAnimation), config.DropAnimationName);
         }
 
-        _currentCarryOperation = CarryOperation.Drop(config);
+        CarryOperation.DropOperation dropOperation = CarryOperation.Drop(config);
+        _currentCarryOperation = dropOperation;
 
-        return true;
+        return dropOperation;
     }
 
     private bool TryCommitDrop()
@@ -216,100 +228,97 @@ public partial class CarryComponent : Node
 
     public void CancelCurrentOperation()
     {
+        CarryOperation? currentOperation = _currentCarryOperation;
+        CarryOperation.TakeOperation? pendingTakeOperation = _pendingTakeOperation;
+
         _currentCarryOperation = null;
         _pendingTakeOperation = null;
+
+        currentOperation?.Cancel();
+        pendingTakeOperation?.Cancel();
     }
 
     public override void _Process(double delta)
     {
-        if (!IsAuthoritative || _currentCarryOperation is null)
+        CarryOperation? currentOperation = _currentCarryOperation;
+        if (!IsAuthoritative || currentOperation is null)
         {
             return;
         }
 
-        _currentCarryOperation.Elapsed += delta;
+        currentOperation.Elapsed += delta;
 
         if (
-            !_currentCarryOperation.HasCommited
-            && _currentCarryOperation.Elapsed >= _currentCarryOperation.CommitTimeSec
+            !currentOperation.HasCommited
+            && currentOperation.Elapsed >= currentOperation.CommitTimeSec
         )
         {
-            switch (_currentCarryOperation)
+            switch (currentOperation)
             {
                 case CarryOperation.TakeOperation takeOperation:
-                    if (TryCommitTake(
-                        takeOperation.ItemId,
-                        takeOperation.CarriableItemObject
-                    ))
+                    if (TryCommitTake(takeOperation.ItemId, takeOperation.CarriableItemObject))
                     {
-                        EmitSignal(SignalName.TakeOperationCommitted);
-                        _currentCarryOperation.HasCommited = true;
+                        currentOperation.Commit();
                     }
                     else
                     {
-                        EmitSignal(SignalName.TakeOperationFailed, "TryCommitTake failed.");
+                        currentOperation.Fail("TryCommitTake failed.");
                         _currentCarryOperation = null;
                     }
                     break;
                 case CarryOperation.DropOperation:
                     if (TryCommitDrop())
                     {
-                        EmitSignal(SignalName.DropOperationCommitted);
-                        _currentCarryOperation.HasCommited = true;
+                        currentOperation.Commit();
                     }
                     else
                     {
-                        EmitSignal(SignalName.DropOperationFailed);
+                        currentOperation.Fail("TryCommitDrop failed.");
                         _currentCarryOperation = null;
+
+                        _pendingTakeOperation?.Fail("TryStartTake failed after drop.");
                         _pendingTakeOperation = null;
                     }
                     break;
                 default:
-                    throw new Exception(
-                        $"Unhandled carry operation {_currentCarryOperation.GetType()}"
-                    );
+                    throw new Exception($"Unhandled carry operation {currentOperation.GetType()}");
             }
         }
         else if (
-            _currentCarryOperation.HasCommited
-            && _currentCarryOperation.Elapsed >= _currentCarryOperation.EndTimeSec
+            currentOperation.HasCommited
+            && currentOperation.Elapsed >= currentOperation.EndTimeSec
         )
         {
-            switch (_currentCarryOperation)
+            switch (currentOperation)
             {
                 case CarryOperation.TakeOperation:
-                    EmitSignal(SignalName.TakeOperationFinished);
                     _currentCarryOperation = null;
+                    currentOperation.Finish();
                     break;
                 case CarryOperation.DropOperation:
-                    EmitSignal(SignalName.DropOperationFinished);
+                    _currentCarryOperation = null;
+                    currentOperation.Finish();
 
                     if (
                         _pendingTakeOperation is not null
-                        && IsInstanceValid(_pendingTakeOperation.Value.CarriableItemObject)
+                        && IsInstanceValid(_pendingTakeOperation.CarriableItemObject)
                     )
                     {
-                        if (!TryStartTake(
-                            _pendingTakeOperation.Value.ItemId,
-                            _pendingTakeOperation.Value.CarriableItemObject
-                        ))
-                        {
-                            EmitSignal(SignalName.TakeOperationFailed, "TryStartTake failed after drop.");
-                            _currentCarryOperation = null;
-                        }
-
+                        CarryOperation.TakeOperation pendingTakeOperation = _pendingTakeOperation;
                         _pendingTakeOperation = null;
+                        if (!TryActivateTakeOperation(pendingTakeOperation))
+                        {
+                            pendingTakeOperation.Fail("TryStartTake failed after drop.");
+                        }
                     }
                     else
                     {
-                        _currentCarryOperation = null;
+                        _pendingTakeOperation?.Fail("Carriable item is no longer valid.");
                         _pendingTakeOperation = null;
                     }
                     break;
                 default:
-                    throw new Exception(
-                        $"Unhandled carry operation {_currentCarryOperation.GetType()}"
-                    );
+                    throw new Exception($"Unhandled carry operation {currentOperation.GetType()}");
             }
         }
     }
