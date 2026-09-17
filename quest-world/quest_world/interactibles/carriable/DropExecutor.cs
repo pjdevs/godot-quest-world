@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using GameplayActionPlugin;
 using GameplayActionPlugin.Runtime.Actions;
 using Godot;
@@ -22,7 +21,8 @@ public partial class DropExecutor : GameplayActionExecutor
 
         if (!carrier.CarryComponent.TryStartDrop())
         {
-            return new GameplayActionExecutionFailed("TryStartTake failed.");
+            Cleanup();
+            return new GameplayActionExecutionFailed("TryStartDrop failed.");
         }
 
         _context = context;
@@ -34,11 +34,13 @@ public partial class DropExecutor : GameplayActionExecutor
     private void OnDropOperationFinished()
     {
         _context?.CompleteExecution();
+        Cleanup();
     }
 
     private void OnDropOperationFailed(string reason)
     {
         _context?.FailExecution(reason);
+        Cleanup();
     }
 
     protected internal override void OnExecutionCancelled(
@@ -47,5 +49,18 @@ public partial class DropExecutor : GameplayActionExecutor
     )
     {
         _carrier?.CarryComponent?.CancelCurrentOperation();
+        Cleanup();
+    }
+
+    private void Cleanup()
+    {
+        if (_carrier?.CarryComponent is not null)
+        {
+            _carrier.CarryComponent.DropOperationFailed -= OnDropOperationFailed;
+            _carrier.CarryComponent.DropOperationFinished -= OnDropOperationFinished;
+        }
+
+        _context = null;
+        _carrier = null;
     }
 }

@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using GameplayActionPlugin;
 using GameplayActionPlugin.Runtime.Actions;
 using Godot;
@@ -7,23 +5,19 @@ using Godot;
 [GlobalClass]
 public partial class TakeExecutor : GameplayActionExecutor
 {
-    // TODO Move this on interactible object with ICarriable interface providing Item
-    [Export]
-    public CarriableItemDefinition? Item { get; set; }
-
     private GameplayActionContext? _context = null;
     private ICarrier? _carrier = null;
 
     public override GameplayActionExecutionResult Execute(in GameplayActionContext context)
     {
         ICarrier? carrier = context.GetHost<ICarrier>();
-        Node3D? carriableItemObject = context.GetTarget<Node3D>();
+        Carriable? carriableItemObject = context.GetTarget<Carriable>();
         if (
             carriableItemObject is null
             || carrier is null
             || carrier.CarryComponent is null
-            || Item is null
-            || Item.Id.IsEmpty
+            || carriableItemObject.Item is null
+            || carriableItemObject.Item.Id.IsEmpty
         )
         {
             return new GameplayActionExecutionFailed("Carriable pickup context is incomplete.");
@@ -33,8 +27,9 @@ public partial class TakeExecutor : GameplayActionExecutor
         carrier.CarryComponent.TakeOperationFailed += OnTakeOperationFailed;
         carrier.CarryComponent.TakeOperationFinished += OnTakeOperationFinished;
 
-        if (!carrier.CarryComponent.TryStartTake(Item.Id, carriableItemObject))
+        if (!carrier.CarryComponent.TryStartTake(carriableItemObject.Item.Id, carriableItemObject))
         {
+            Cleanup();
             return new GameplayActionExecutionFailed("TryStartTake failed.");
         }
 
@@ -47,11 +42,13 @@ public partial class TakeExecutor : GameplayActionExecutor
     private void OnTakeOperationFinished()
     {
         _context?.CompleteExecution();
+        Cleanup();
     }
 
     private void OnTakeOperationFailed(string reason)
     {
         _context?.FailExecution(reason);
+        Cleanup();
     }
 
     private void OnTakeOperationCommited()
@@ -65,5 +62,19 @@ public partial class TakeExecutor : GameplayActionExecutor
     )
     {
         _carrier?.CarryComponent?.CancelCurrentOperation();
+        Cleanup();
+    }
+
+    private void Cleanup()
+    {
+        if (_carrier?.CarryComponent is not null)
+        {
+            _carrier.CarryComponent.TakeOperationCommitted -= OnTakeOperationCommited;
+            _carrier.CarryComponent.TakeOperationFailed -= OnTakeOperationFailed;
+            _carrier.CarryComponent.TakeOperationFinished -= OnTakeOperationFinished;
+        }
+
+        _context = null;
+        _carrier = null;
     }
 }

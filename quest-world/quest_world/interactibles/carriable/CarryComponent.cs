@@ -1,5 +1,4 @@
 using System;
-using System.Linq.Expressions;
 using DummyCharacterPlugin;
 using Godot;
 using InventoryPlugin;
@@ -40,13 +39,6 @@ public partial class CarryComponent : Node
     [Export]
     public CarryAnimationConfig? AnimationConfig { get; set; }
 
-    public IWorldSpawner? WorldSpawner { get; set; }
-
-    public IOriented? Carrier { get; set; }
-
-    private CarryOperation? _currentCarryOperation;
-    private CarryOperation.TakeOperation? _pendingTakeOperation;
-
     [Export]
     public StringName? CarriedItemId
     {
@@ -64,8 +56,12 @@ public partial class CarryComponent : Node
         }
     }
 
+    public IWorldSpawner? WorldSpawner { get; set; }
+    public IOriented? Carrier { get; set; }
     public bool IsCarrying => CarriedItemId is not null;
 
+    private CarryOperation? _currentCarryOperation;
+    private (StringName ItemId, Node3D CarriableItemObject)? _pendingTakeOperation;
     private StringName? _carriedItemId;
     private Node3D? _itemVisualInstance;
 
@@ -112,7 +108,7 @@ public partial class CarryComponent : Node
 
         if (IsCarrying)
         {
-            _pendingTakeOperation = takeOperation;
+            _pendingTakeOperation = (itemId, carriableItemObject);
             return TryStartDrop();
         }
 
@@ -241,27 +237,25 @@ public partial class CarryComponent : Node
             switch (_currentCarryOperation)
             {
                 case CarryOperation.TakeOperation takeOperation:
-                    bool hasTakeSucceeded = TryCommitTake(
+                    if (TryCommitTake(
                         takeOperation.ItemId,
                         takeOperation.CarriableItemObject
-                    );
-
-                    if (hasTakeSucceeded)
+                    ))
                     {
                         EmitSignal(SignalName.TakeOperationCommitted);
+                        _currentCarryOperation.HasCommited = true;
                     }
                     else
                     {
-                        EmitSignal(SignalName.TakeOperationFailed);
+                        EmitSignal(SignalName.TakeOperationFailed, "TryCommitTake failed.");
                         _currentCarryOperation = null;
                     }
                     break;
                 case CarryOperation.DropOperation:
-                    bool hasDropSucceeded = TryCommitDrop();
-
-                    if (hasDropSucceeded)
+                    if (TryCommitDrop())
                     {
                         EmitSignal(SignalName.DropOperationCommitted);
+                        _currentCarryOperation.HasCommited = true;
                     }
                     else
                     {
@@ -278,7 +272,6 @@ public partial class CarryComponent : Node
         }
         else if (
             _currentCarryOperation.HasCommited
-            && !_currentCarryOperation.HasFinished
             && _currentCarryOperation.Elapsed >= _currentCarryOperation.EndTimeSec
         )
         {
@@ -293,10 +286,18 @@ public partial class CarryComponent : Node
 
                     if (
                         _pendingTakeOperation is not null
-                        && IsInstanceValid(_pendingTakeOperation.CarriableItemObject)
+                        && IsInstanceValid(_pendingTakeOperation.Value.CarriableItemObject)
                     )
                     {
-                        _currentCarryOperation = _pendingTakeOperation;
+                        if (!TryStartTake(
+                            _pendingTakeOperation.Value.ItemId,
+                            _pendingTakeOperation.Value.CarriableItemObject
+                        ))
+                        {
+                            EmitSignal(SignalName.TakeOperationFailed, "TryStartTake failed after drop.");
+                            _currentCarryOperation = null;
+                        }
+
                         _pendingTakeOperation = null;
                     }
                     else

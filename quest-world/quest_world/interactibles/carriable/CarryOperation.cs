@@ -6,7 +6,6 @@ public abstract class CarryOperation
     public double EndTimeSec { get; private set; }
     public double Elapsed { get; set; } = 0f;
     public bool HasCommited { get; set; } = false;
-    public bool HasFinished { get; set; } = false;
 
     private CarryOperation(double commitTimeSec, double endTimeSec)
     {
@@ -26,7 +25,8 @@ public abstract class CarryOperation
     }
 
     public sealed class DropOperation(double commitTimeSec, double endTimeSec)
-        : CarryOperation(commitTimeSec, endTimeSec) { }
+        : CarryOperation(commitTimeSec, endTimeSec)
+    { }
 
     public static TakeOperation Take(
         StringName itemId,
@@ -41,5 +41,5 @@ public abstract class CarryOperation
         );
 
     public static DropOperation Drop(CarryKindAnimationConfig? config) =>
-        new(config?.TakeAnimationCommitTimeSec ?? 0.0, config?.TakeAnimationEndTimeSec ?? 0.0);
+        new(config?.DropAnimationCommitTimeSec ?? 0.0, config?.DropAnimationEndTimeSec ?? 0.0);
 }
