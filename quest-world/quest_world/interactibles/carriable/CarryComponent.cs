@@ -64,6 +64,11 @@ public partial class CarryComponent : Node
 
     public CarryOperation? TryStartTake(StringName itemId, Node3D carriableItemObject)
     {
+        if (_currentCarryOperation is not null)
+        {
+            return null;
+        }
+
         if (
             !IsAuthoritative
             || carriableItemObject is null
@@ -159,6 +164,11 @@ public partial class CarryComponent : Node
 
     public CarryOperation? TryStartDrop()
     {
+        if (_currentCarryOperation is not null)
+        {
+            return null;
+        }
+
         if (
             !IsAuthoritative
             || Inventory is null
