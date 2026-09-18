@@ -10,6 +10,7 @@ public partial class TimedTransitionStateGameplayActionExecutor
     : TransitionStateGameplayActionExecutor
 {
     private readonly TimedExecution _timedExecution = new();
+    private GameplayActionContext? _timedContext;
 
     /// <summary>Gets or sets the default authoritative running duration in seconds.</summary>
     [Export]
@@ -32,6 +33,9 @@ public partial class TimedTransitionStateGameplayActionExecutor
         );
         if (startResult == TimedExecutionStartResult.Started)
         {
+            _timedContext = context;
+            _timedExecution.Expired -= OnTimedExecutionExpired;
+            _timedExecution.Expired += OnTimedExecutionExpired;
             return base.StartRunning(context);
         }
 
@@ -45,7 +49,7 @@ public partial class TimedTransitionStateGameplayActionExecutor
 
     protected internal override void OnExecutionCompleted(in GameplayActionContext context)
     {
-        _timedExecution.Stop(context.ExecutionId);
+        StopTimer(context.ExecutionId);
         base.OnExecutionCompleted(context);
     }
 
@@ -54,7 +58,7 @@ public partial class TimedTransitionStateGameplayActionExecutor
         string reason
     )
     {
-        _timedExecution.Stop(context.ExecutionId);
+        StopTimer(context.ExecutionId);
         base.OnExecutionCancelled(context, reason);
     }
 
@@ -63,8 +67,27 @@ public partial class TimedTransitionStateGameplayActionExecutor
         string reason
     )
     {
-        _timedExecution.Stop(context.ExecutionId);
+        StopTimer(context.ExecutionId);
         base.OnExecutionFailed(context, reason);
+    }
+
+    private void OnTimedExecutionExpired()
+    {
+        GameplayActionContext? context = _timedContext;
+        _timedContext = null;
+        _timedExecution.Expired -= OnTimedExecutionExpired;
+        context?.CompleteExecution();
+    }
+
+    private void StopTimer(ulong executionId)
+    {
+        if (_timedContext?.ExecutionId == executionId)
+        {
+            _timedContext = null;
+            _timedExecution.Expired -= OnTimedExecutionExpired;
+        }
+
+        _timedExecution.Stop(executionId);
     }
 
     private static string StartFailureReason(TimedExecutionStartResult result) =>

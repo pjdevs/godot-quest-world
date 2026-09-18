@@ -133,8 +133,9 @@ resolver.
 
 Hold is a selection gesture, not execution duration. Candidate bindings are captured at the press
 edge; `TryGetBindingHoldProgress()` exposes progress for that captured binding only. A timed gameplay
-execution is a separate lifecycle owned by `TimedGameplayActionExecutor` or compositional
-`TimedExecution`.
+execution is a separate lifecycle owned by `TimedGameplayActionExecutor` or driven by the compositional
+`TimedExecution` clock. The clock freezes progress at `1.0` and emits `Expired`; its consumer decides
+whether expiry completes the action or reaches an intermediate gameplay commit.
 
 Request access is resolved independently from action ownership. `ConfiguredAccessProviderId` is
 authorable on every `GameplayAction` and feeds its effective `AccessProviderId`: an action with no
@@ -277,8 +278,9 @@ protocol.
 ### AD-09 — Progress is presentation, completion is gameplay
 
 Generic progress can be discrete, callable or time-derived, but it never decides whether an execution
-has completed. `TimedExecution` is an explicit execution policy that owns a real deadline; arbitrary
-progress remains a read model.
+has completed. `TimedExecution` owns a real deadline and emits expiry without choosing terminal
+lifecycle. `TimedGameplayActionExecutor` remains the explicit policy that completes on that expiry;
+arbitrary progress remains a read model.
 
 ### AD-10 — Availability, execution and relation stay separate
 

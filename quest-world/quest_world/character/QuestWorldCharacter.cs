@@ -1,11 +1,17 @@
 using System.Linq;
+using AnimatedInteractionPlugin.Runtime;
 using DummyCharacterPlugin;
 using GameplayActionPlugin.Runtime.Runner;
 using Godot;
 using InteractionPlugin.Runtime.Interactor;
 using InventoryPlugin;
 
-public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner, ICarrier
+public partial class QuestWorldCharacter
+    : Character,
+        IOriented,
+        IInventoryOwner,
+        ICarrier,
+        IAnimatedInteractor
 {
     [ExportGroup("Carry")]
     [Export]
@@ -22,11 +28,14 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
     private GameplayActionRunner? _gameplayActionRunner = null;
     private InventoryComponent? _inventory = null;
     private CarryComponent? _carryComponent = null;
+    private AnimatedInteractionComponent? _animatedInteractionComponent = null;
     private bool _wasPossessed;
     private bool _wasGrounded;
 
     public InventoryComponent Inventory => _inventory!;
     public CarryComponent? CarryComponent => _carryComponent;
+    public AnimatedInteractionComponent? AnimatedInteractionComponent =>
+        _animatedInteractionComponent;
 
     public new int OwnerPeerId
     {
@@ -73,6 +82,16 @@ public partial class QuestWorldCharacter : Character, IOriented, IInventoryOwner
         {
             GD.PushError($"{GetPath()}: project Character requires a CarryComponent child.");
             return;
+        }
+
+        _animatedInteractionComponent = GetNodeOrNull<AnimatedInteractionComponent>(
+            "AnimatedInteractionComponent"
+        );
+        if (_animatedInteractionComponent == null)
+        {
+            GD.PushError(
+                $"{GetPath()}: project Character requires an AnimatedInteractionComponent child."
+            );
         }
     }
 

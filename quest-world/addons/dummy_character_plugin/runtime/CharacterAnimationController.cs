@@ -212,6 +212,32 @@ public partial class CharacterAnimationController : Node
         return true;
     }
 
+    public bool TryGetOneShotDuration(StringName animation, out double durationSeconds)
+    {
+        durationSeconds = 0.0;
+        if (!_initialized || !_animationPlayer.HasAnimation(animation))
+        {
+            return false;
+        }
+
+        Animation clip = _animationPlayer.GetAnimation(animation);
+        durationSeconds = clip.Length / Mathf.Max(PlaybackSpeed, 0.01f);
+        return double.IsFinite(durationSeconds) && durationSeconds > 0.0;
+    }
+
+    public void StopOneShot()
+    {
+        if (!_initialized)
+        {
+            return;
+        }
+
+        _animationTree.Set(
+            GenericOneShotRequestPath,
+            (int)AnimationNodeOneShot.OneShotRequest.FadeOut
+        );
+    }
+
     private bool ValidateAnimations()
     {
         bool valid = true;

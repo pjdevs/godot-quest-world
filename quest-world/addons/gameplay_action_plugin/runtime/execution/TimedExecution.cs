@@ -26,6 +26,9 @@ public enum TimedExecutionStartResult
 /// <summary>Composable authoritative deadline and linear-progress policy for a running action.</summary>
 public sealed class TimedExecution : IDisposable
 {
+    /// <summary>Raised after progress reaches one, without completing the gameplay action.</summary>
+    public event Action? Expired;
+
     private GameplayActionComponent? _component;
     private SceneTree? _sceneTree;
     private double _startedAt;
@@ -170,8 +173,9 @@ public sealed class TimedExecution : IDisposable
         {
             GameplayActionComponent component = _component;
             ulong executionId = ExecutionId;
-            component.CompleteExecution(executionId);
             Stop(executionId);
+            component.ReportExecutionProgress(executionId, 1.0f);
+            Expired?.Invoke();
             return;
         }
 

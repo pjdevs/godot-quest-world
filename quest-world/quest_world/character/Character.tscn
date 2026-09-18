@@ -20,6 +20,8 @@
 [ext_resource type="Script" uid="uid://u7x7xha33xn" path="res://addons/gameplay_action_plugin/presentation/ui/GameplayActionPresenter.cs" id="16_cv4cp"]
 [ext_resource type="Resource" uid="uid://dn8hvo70ospl3" path="res://quest_world/interactibles/carriable/CharacterCarryAnimationConfig.tres" id="17_gl8e6"]
 [ext_resource type="PackedScene" uid="uid://dq3n5v8xkw2b7" path="res://addons/gameplay_action_plugin/scenes/GameplayActionPrompt.tscn" id="17_xgwmf"]
+[ext_resource type="Script" path="res://quest_world/core/CharacterAnimatedInteractionPlayback.cs" id="18_animated_playback"]
+[ext_resource type="Script" path="res://addons/animated_interaction_plugin/runtime/AnimatedInteractionComponent.cs" id="19_animated_component"]
 
 [sub_resource type="Resource" id="Resource_o4r6d"]
 script = ExtResource("6_o4r6d")
@@ -216,5 +218,13 @@ metadata/_custom_type_script = "uid://daxwfb5jn63w3"
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="CarryComponent" index="0" unique_id=1461336339]
 replication_config = SubResource("SceneReplicationConfig_xgwmf")
+
+[node name="AnimatedInteractionPlayback" type="Node" parent="." index="13" node_paths=PackedStringArray("AnimationController")]
+script = ExtResource("18_animated_playback")
+AnimationController = NodePath("../AnimationController")
+
+[node name="AnimatedInteractionComponent" type="Node" parent="." index="14" node_paths=PackedStringArray("PlaybackNode")]
+script = ExtResource("19_animated_component")
+PlaybackNode = NodePath("../AnimatedInteractionPlayback")
 
 [editable path="Visual/UALCharacter"]

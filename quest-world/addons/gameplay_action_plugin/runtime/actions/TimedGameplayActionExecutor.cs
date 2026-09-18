@@ -16,6 +16,7 @@ public abstract partial class TimedGameplayActionExecutor : GameplayActionExecut
     public float CorrectionInterval { get; set; } = 0.5f;
 
     private readonly TimedExecution _timedExecution = new();
+    private GameplayActionContext? _timedContext;
 
     /// <summary>Gets whether this executor currently owns a running timer.</summary>
     protected bool IsTimerActive => _timedExecution.IsActive;
@@ -36,14 +37,20 @@ public abstract partial class TimedGameplayActionExecutor : GameplayActionExecut
             ComputeTimedDuration(context),
             CorrectionInterval
         );
-        return startResult == TimedExecutionStartResult.Started
-            ? new GameplayActionExecutionRunning()
-            : new GameplayActionExecutionFailed(StartFailureReason(startResult));
+        if (startResult != TimedExecutionStartResult.Started)
+        {
+            return new GameplayActionExecutionFailed(StartFailureReason(startResult));
+        }
+
+        _timedContext = context;
+        _timedExecution.Expired -= OnTimedExecutionExpired;
+        _timedExecution.Expired += OnTimedExecutionExpired;
+        return new GameplayActionExecutionRunning();
     }
 
     protected internal override void OnExecutionCompleted(in GameplayActionContext context)
     {
-        _timedExecution.Stop(context.ExecutionId);
+        StopTimer(context.ExecutionId);
         base.OnExecutionCompleted(context);
     }
 
@@ -52,7 +59,7 @@ public abstract partial class TimedGameplayActionExecutor : GameplayActionExecut
         string reason
     )
     {
-        _timedExecution.Stop(context.ExecutionId);
+        StopTimer(context.ExecutionId);
         base.OnExecutionCancelled(context, reason);
     }
 
@@ -61,8 +68,27 @@ public abstract partial class TimedGameplayActionExecutor : GameplayActionExecut
         string reason
     )
     {
-        _timedExecution.Stop(context.ExecutionId);
+        StopTimer(context.ExecutionId);
         base.OnExecutionFailed(context, reason);
+    }
+
+    private void OnTimedExecutionExpired()
+    {
+        GameplayActionContext? context = _timedContext;
+        _timedContext = null;
+        _timedExecution.Expired -= OnTimedExecutionExpired;
+        context?.CompleteExecution();
+    }
+
+    private void StopTimer(ulong executionId)
+    {
+        if (_timedContext?.ExecutionId == executionId)
+        {
+            _timedContext = null;
+            _timedExecution.Expired -= OnTimedExecutionExpired;
+        }
+
+        _timedExecution.Stop(executionId);
     }
 
     private static string StartFailureReason(TimedExecutionStartResult result) =>
